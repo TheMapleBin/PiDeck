@@ -40,7 +40,7 @@
   - [📑 Table of Contents](#-table-of-contents)
   - [✨ Highlights](#-highlights)
   - [📋 Changelog](#-changelog)
-    - [v0.7.5-beta Release Highlights](#v075-beta-release-highlights)
+    - [v0.7.5 Release Highlights](#v075-release-highlights)
   - [🧩 Features](#-features)
     - [Workspace & Projects](#workspace--projects)
     - [Sessions & Conversation](#sessions--conversation)
@@ -79,13 +79,21 @@
 
 ## 📋 Changelog
 
-> **Latest: v0.7.5-beta** (2026-09-09)
+> **Latest: v0.7.5** (2026-09-11)
 
-### v0.7.5-beta Release Highlights
+### v0.7.5 Release Highlights
 - 🚀 **Inline reference chips aligned with Proma and self-contained persistence**
 - 🚀 **Sidebar session hover preview card**
 - 🚀 **Configurable Git executable path with detection**
 - 🚀 **Built-in prompt templates restored and AtomGit mirror added**
+- 🚀 **DeepSeek DSH runtime upgraded to 0.1.5 (Typert Remote)**
+- 🚀 **DSH sessions stream their thinking again, and tool cards show results**
+- 🚀 **DSH runtime version gate**
+- 🚀 **Scheduled tasks (Automation)**
+- 🚀 **In-app update log**
+- 🚀 **Update source now prefers AtomGit**
+- 🚀 **Per-session proxy settings**
+- 🚀 **`pi-deck-trash-guard` built-in extension**
 - ✨ **Kimi Coding multi-window quotas and booster wallet**
 - ✨ **Web Ask prompt missing and sidebar pending-question badge**
 - ✨ **Accent colors no longer bleed into session status lights**

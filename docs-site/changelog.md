@@ -5,14 +5,22 @@
 - [中文 CHANGELOG](https://github.com/ayuayue/PiDeck/blob/main/CHANGELOG.zh-CN.md)
 - [English CHANGELOG](https://github.com/ayuayue/PiDeck/blob/main/CHANGELOG.md)
 
-## v0.7.5-beta
+## v0.7.5
 
-发布时间：2026-09-09
+发布时间：2026-09-11
 
 - 🚀 **行内引用 chip 对齐 Proma 并自包含持久化**
 - 🚀 **侧栏会话悬浮预览卡片**
 - 🚀 **设置页 Git 可执行文件路径配置与检测**
 - 🚀 **恢复内置 prompt 模板并补充 AtomGit 镜像**
+- 🚀 **DeepSeek DSH 运行时升级到 0.1.5（Typert Remote 架构）**
+- 🚀 **DSH 会话恢复思考过程与工具结果**
+- 🚀 **DSH 运行时版本门控**
+- 🚀 **定时任务（Automation）**
+- 🚀 **应用内更新日志**
+- 🚀 **更新源首选 AtomGit**
+- 🚀 **按会话配置代理**
+- 🚀 **内置扩展 `pi-deck-trash-guard`**
 - ✨ **Kimi Coding 多窗口额度与加速包余额**
 - ✨ **Web 端 Ask 题干缺失与侧栏待确认徽章**
 - ✨ **主题色不再污染会话状态灯**
