@@ -1,0 +1,150 @@
+/**
+ * 吸底跟随的唯一状态机（纯函数，无 DOM / React）。
+ *
+ * 跟随态只有两种：following / browsing。
+ * 能改状态的入口只有两类：
+ * 1. 用户输入：wheel / touch / 键盘 / 滚动条拖动 / 非折叠拖选；
+ * 2. 显式命令：scrollToBottom（回底）、stopScroll / restoreAt（解锁）。
+ *
+ * 布局 scroll、ResizeObserver、弹簧动画只校正几何，不改跟随态。
+ * 上滚逃逸看「读者自己走了多远」，不看距物理底还有多远——流式弹簧滞后
+ * 常欠 30–40px，那不是浏览；把欠账算进距底会让 1px 触控板抖动永久逃逸。
+ */
+
+/** 距底 <= 该值仍视为贴在实时尾部。下滚重锁、上滚累计逃逸共用这一带宽。 */
+export const AT_BOTTOM_TOLERANCE_PX = 25;
+
+/** 近底带：只用于几何判断（是否还看得到尾部），不单独决定跟随态。 */
+export const STICK_TO_BOTTOM_OFFSET_PX = 70;
+
+/** 上滚累计窗口：间隔超过此时长视为一次新手势，避免流式里 1px 噪声慢慢加满。 */
+export const READER_UP_ACCUMULATE_MS = 250;
+
+/** 方向键一次约等于一行；Page/Home/End 另算。 */
+export const KEYBOARD_LINE_PX = 40;
+
+/** overlay / scrollbar-gutter 预留槽：命中视口右缘这一带宽即视为拖滚动条。 */
+export const SCROLLBAR_HIT_SLOP_PX = 12;
+
+export type FollowDirection = "up" | "down";
+
+export type FollowDecision =
+	| { action: "none" }
+	| { action: "escape"; report: "up" }
+	| { action: "relock"; report: "down" }
+	| { action: "intent"; report: "down" };
+
+/** wheel 在位移前触发：用这次 delta 将到达的距底做下滚重锁。 */
+export function distanceAfterWheelDelta(
+	distanceFromBottom: number,
+	deltaY: number,
+): number {
+	return Math.max(0, distanceFromBottom - deltaY);
+}
+
+export function shouldRelockFromDownInput(
+	distanceFromBottom: number,
+	tolerancePx = AT_BOTTOM_TOLERANCE_PX,
+): boolean {
+	return distanceFromBottom <= tolerancePx;
+}
+
+/**
+ * 把本次输入折进读者上滚累计。下滚清零；间隔超过窗口也清零。
+ */
+export function nextReaderUpPx(input: {
+	previous: number;
+	previousAt: number;
+	now: number;
+	direction: FollowDirection;
+	thisInputPx: number;
+	windowMs?: number;
+}): { readerUpPx: number; at: number } {
+	if (input.direction === "down") {
+		return { readerUpPx: 0, at: input.now };
+	}
+	const windowMs = input.windowMs ?? READER_UP_ACCUMULATE_MS;
+	const fresh = input.now - input.previousAt > windowMs;
+	return {
+		readerUpPx: (fresh ? 0 : input.previous) + Math.max(0, input.thisInputPx),
+		at: input.now,
+	};
+}
+
+export function readerDisplacementFromKey(
+	key: string,
+	clientHeight: number,
+): number {
+	if (key === "PageUp" || key === "PageDown") {
+		return Math.max(1, clientHeight);
+	}
+	if (key === "Home" || key === "End") {
+		return Number.POSITIVE_INFINITY;
+	}
+	return KEYBOARD_LINE_PX;
+}
+
+/**
+ * 由一次已确认的用户输入决定是否逃逸 / 重锁。
+ * 布局滚动不得调用本函数。
+ *
+ * 上滚：只看 readerDisplacementPx（读者自己的位移累计）。
+ * 下滚：只看 distanceFromBottom（是否已经回到物理底）。
+ */
+export function decideFollowFromUserInput(input: {
+	direction: FollowDirection;
+	readerDisplacementPx: number;
+	distanceFromBottom: number;
+	ignoreEscapes?: boolean;
+	canScroll?: boolean;
+}): FollowDecision {
+	if (input.ignoreEscapes) {
+		return { action: "none" };
+	}
+	if (input.direction === "up") {
+		if (input.canScroll === false) {
+			return { action: "none" };
+		}
+		if (input.readerDisplacementPx > AT_BOTTOM_TOLERANCE_PX) {
+			return { action: "escape", report: "up" };
+		}
+		return { action: "none" };
+	}
+	if (shouldRelockFromDownInput(input.distanceFromBottom)) {
+		return { action: "relock", report: "down" };
+	}
+	return { action: "intent", report: "down" };
+}
+
+const SCROLL_UP_KEYS = new Set(["ArrowUp", "PageUp", "Home"]);
+const SCROLL_DOWN_KEYS = new Set(["ArrowDown", "PageDown", "End"]);
+
+/** 键盘滚动键映射为输入方向；其它键不参与跟随态。 */
+export function followDirectionFromKey(key: string): FollowDirection | undefined {
+	if (SCROLL_UP_KEYS.has(key)) return "up";
+	if (SCROLL_DOWN_KEYS.has(key)) return "down";
+	return undefined;
+}
+
+/**
+ * 竖直方向是否可滚。必须看 overflowY 长写，不能看 overflow 简写：
+ * `.message-timeline` 是 overflow-x:hidden + overflow-y:auto，
+ * computed overflow 为 "hidden auto"，includes("auto") 永远失败，
+ * 真实滚轮打在正文上会整段丢掉。
+ */
+export function isVerticallyScrollableOverflow(overflowY: string): boolean {
+	return overflowY === "auto" || overflowY === "scroll";
+}
+
+/**
+ * 经典滚动条槽在 clientWidth 外侧；overlay / stable gutter 画在右缘内侧。
+ * 两种都认，避免 macOS overlay 下拖滚动条永远无法改跟随态。
+ */
+export function isScrollbarGutterHit(
+	clientX: number,
+	viewportLeft: number,
+	clientWidth: number,
+	slopPx = SCROLLBAR_HIT_SLOP_PX,
+): boolean {
+	return clientX >= viewportLeft + clientWidth - slopPx;
+}

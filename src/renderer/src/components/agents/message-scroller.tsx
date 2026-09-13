@@ -45,13 +45,8 @@ export interface MessageScrollerProps extends ComponentPropsWithRef<"div"> {
   smooth?: boolean;
   /** Reports when the reader leaves or returns to the live edge. */
   onFollowChange?: (following: boolean) => void;
-  /**
-   * 引擎判定的用户滚动意图（wheel/触摸/滚动条等真实输入）：
-   * 布局 resize/动画/程序化定位不会触发——时间线据此区分「浏览历史」与「布局滚动」，
-   * 修复内容收缩 clamp 被误判为用户上滑导致脱离吸底的问题。
-   */
-  /** 引擎上报的真实用户滚动意图（wheel/触摸/滚动条）。source 区分真实输入与
-   *  scroll 派生（程序化滚动抑制），controller 据此决定是否终止在途定位动画。 */
+  /** 引擎上报的真实用户滚动意图（wheel/触摸/键盘/滚动条）。
+   *  布局 resize/动画/程序化定位不会上报。 */
   onUserScrollIntent?: (intent: "up" | "down", source: "scroll" | "input") => void;
   /** Accessible label for the scrollable transcript. */
   label?: string;
@@ -129,6 +124,7 @@ export function MessageScroller({
   const engineRestoreAt = stick.restoreAt;
   const engineStopScroll = stick.stopScroll;
   const engineScrollByWheel = stick.scrollByWheel;
+  const engineNoteWheel = stick.noteWheel;
 
   // 把引擎能力挂到外部 ref，供 SessionTimelineController 的回底按钮/历史位置恢复使用。
   useEffect(() => {
@@ -225,6 +221,7 @@ export function MessageScroller({
         onViewportScroll?.(event);
       }}
       onWheel={(event) => {
+        engineNoteWheel(event.deltaY, event.target);
         onViewportWheel?.(event);
       }}
       onTouchStart={(event) => {

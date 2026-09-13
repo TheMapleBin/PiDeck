@@ -16,6 +16,8 @@ import type { ElectronApplication, Page } from "@playwright/test";
  * 说明：Playwright dispatch 的合成 WheelEvent 不会产生原生滚动位移，
  * 与现有 steer-scroll-repro 一致：dispatch wheel（触发引擎意图/逃逸判定）后再
  * 手动调整 scrollTop（触发原生 scroll 事件），两者时序就是真实滚轮的时序。
+ * wheel 必须打在正文节点（.turn-row），不能打在 .message-timeline 自己身上——
+ * 真实滚轮的 target 是段落，只打 section 会漏掉 overflowY 回溯回归。
  */
 async function sendPrompt(window: Page, text: string) {
 	const composer = window.locator(".composer .rich-input");
@@ -121,13 +123,104 @@ async function pulseShrink(window: Page, pixels = 120) {
 	}, pixels);
 }
 
+/**
+ * 让输入栏固有高度变大，模拟 todo / 修改文件 / 子代理卡在流式期间出现。
+ * 消息内容高度保持不变；吸底必须响应 viewport 的 clientHeight 变化。
+ */
+async function resizeComposerSibling(window: Page, growBy: number) {
+	return window.locator(".session-v-composer").evaluate(async (composer, delta) => {
+		const timeline = document.querySelector<HTMLElement>(".message-timeline");
+		if (!timeline) throw new Error("timeline missing");
+		const previousMinHeight = composer.style.minHeight;
+		const before = {
+			clientHeight: timeline.clientHeight,
+			scrollHeight: timeline.scrollHeight,
+		};
+		composer.style.minHeight = `${composer.getBoundingClientRect().height + delta}px`;
+		await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+		await new Promise((resolve) => setTimeout(resolve, 120));
+		const result = {
+			before,
+			after: {
+				clientHeight: timeline.clientHeight,
+				scrollHeight: timeline.scrollHeight,
+				dist: timeline.scrollHeight - timeline.scrollTop - timeline.clientHeight,
+			},
+			buttonVisible: Boolean(
+				document.querySelector<HTMLElement>(
+					"button[aria-label='移动到最新'], button[aria-label='Scroll to bottom']",
+				)?.offsetParent,
+			),
+		};
+		composer.style.minHeight = previousMinHeight;
+		await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+		return result;
+	}, growBy);
+}
+
+/**
+ * 普通点击只会留下 collapsed selection，并不表示用户正在拖选正文。
+ * 若此时刚好收到布局 scroll 事件，引擎不得把这次点击误判成上滚逃逸。
+ */
+async function dispatchCollapsedSelectionScroll(window: Page) {
+	await window.locator(".message-timeline").evaluate(async (timeline) => {
+		const target = timeline.querySelector<HTMLElement>(".turn-row") ?? timeline;
+		const selection = window.getSelection();
+		if (!selection) throw new Error("selection unavailable");
+		const range = document.createRange();
+		range.selectNodeContents(target);
+		range.collapse(true);
+		selection.removeAllRanges();
+		selection.addRange(range);
+
+		// 先消费可能由前一次回底留下的 ignoreScrollToTop，再模拟点击与布局 scroll 重合。
+		timeline.dispatchEvent(new Event("scroll"));
+		await new Promise((resolve) => setTimeout(resolve, 20));
+		target.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+		timeline.dispatchEvent(new Event("scroll"));
+		await new Promise((resolve) => setTimeout(resolve, 20));
+		document.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+		selection.removeAllRanges();
+	});
+}
+
+/**
+ * 模拟流式弹簧欠账后再来一次 1px 上滚：布局位移本身不得改跟随态，
+ * 读者自身位移也未过带宽，按钮必须继续隐藏。
+ */
+async function onePixelNudgeDuringLag(window: Page, lagPx = 36) {
+	return window.locator(".message-timeline").evaluate(async (timeline, lag) => {
+		const maxTop = Math.max(0, timeline.scrollHeight - timeline.clientHeight);
+		timeline.scrollTop = Math.max(0, maxTop - lag);
+		await new Promise((resolve) => setTimeout(resolve, 20));
+		const content = timeline.querySelector(".turn-row") ?? timeline.querySelector("p") ?? timeline;
+		content.dispatchEvent(
+			new WheelEvent("wheel", { deltaY: -1, bubbles: true, cancelable: true }),
+		);
+		timeline.scrollTop = Math.max(0, timeline.scrollTop - 1);
+		await new Promise((resolve) => setTimeout(resolve, 80));
+		const buttonVisible = Boolean(
+			document.querySelector<HTMLElement>(
+				"button[aria-label='移动到最新'], button[aria-label='Scroll to bottom']",
+			)?.offsetParent,
+		);
+		timeline.scrollTop = Math.max(0, timeline.scrollHeight - timeline.clientHeight);
+		await new Promise((resolve) => setTimeout(resolve, 20));
+		return {
+			dist: timeline.scrollHeight - timeline.scrollTop - timeline.clientHeight,
+			buttonVisible,
+		};
+	}, lagPx);
+}
+
 /** dispatch wheel（引擎意图判定）+ 手动位移（原生 scroll 事件），模拟真实滚轮。 */
 async function wheel(window: Page, deltaY: number, steps = 14, stepPx = 160) {
 	return window.locator(".message-timeline").evaluate(
 		async (timeline, { delta, n, px }) => {
 			const maxTop = () => Math.max(0, timeline.scrollHeight - timeline.clientHeight);
 			for (let i = 0; i < n; i += 1) {
-				timeline.dispatchEvent(
+				const content = timeline.querySelector(".turn-row") ?? timeline.querySelector("p") ?? timeline;
+				content.dispatchEvent(
 					new WheelEvent("wheel", { deltaY: delta, bubbles: true, cancelable: true }),
 				);
 				const next = timeline.scrollTop + (delta > 0 ? px : -px);
@@ -170,6 +263,29 @@ test("go-bottom survives shrink clamp; real browsing still expands and relocks",
 	const bottom = await geometry(window);
 	expect(bottom.dist, "after go-bottom viewport should be at the physical bottom").toBeLessThanOrEqual(2);
 
+	await dispatchCollapsedSelectionScroll(window);
+	await expect(
+		bottomButton(window),
+		"a plain click overlapping layout scroll must not show the go-bottom button",
+	).toHaveCount(0);
+
+	// 输入栏兄弟增高只会压缩 timeline viewport，不改变消息 content 高度。旧引擎只观察
+	// contentRef，因此 clientHeight 变小后 scrollTop 留在旧值，视觉上脱离吸底。
+	const composerResize = await resizeComposerSibling(window, 72);
+	expect(
+		composerResize.after.clientHeight,
+		"composer growth must shrink the timeline viewport",
+	).toBeLessThan(composerResize.before.clientHeight);
+	expect(
+		Math.abs(composerResize.after.scrollHeight - composerResize.before.scrollHeight),
+		"the regression requires unchanged message content height",
+	).toBeLessThanOrEqual(2);
+	expect(
+		composerResize.after.dist,
+		"viewport-only resize must stay physically pinned to the bottom",
+	).toBeLessThanOrEqual(2);
+	expect(composerResize.buttonVisible, "viewport-only resize must not escape follow mode").toBe(false);
+
 	// ── 活动 run 内容收缩（clamp scrollTop 上移）：不得误扩窗或弹出按钮 ──
 	await composer.click();
 	await composer.fill("SLOW THINK TOOL 活动运行中的收缩回归");
@@ -192,11 +308,17 @@ test("go-bottom survives shrink clamp; real browsing still expands and relocks",
 	await expect(bottomButton(window), "active shrink clamp must not re-show the go-bottom button").toHaveCount(0);
 	const afterShrink = await geometry(window);
 	expect(afterShrink.dist, "viewport stays at the bottom after active shrink").toBeLessThanOrEqual(2);
+
+	// 流式弹簧滞后 ~36px 时，1px 触控板抖动不得逃逸（commit 56dc1d90 回归）。
+	const jitter = await onePixelNudgeDuringLag(window, 36);
+	expect(jitter.buttonVisible, "1px up-nudge during stream lag must not escape follow").toBe(false);
+	await expect(window.getByRole("button", { name: "停止" })).toBeVisible();
+
 	await expect(window.locator(".composer-send-primary")).toHaveAttribute("aria-label", "发送", {
 		timeout: 15_000,
 	});
-	// 等既有 500ms 流式增长逃逸保护带结束，再验证明确的历史浏览手势。
-	await window.waitForTimeout(650);
+	// 等 live→settled 交接收束，再验证明确的历史浏览手势。
+	await window.waitForTimeout(400);
 	expect(await window.locator(".turn-row").count(), "live-to-settled handoff must keep the tail window").toBe(3);
 	await expect(bottomButton(window), "live-to-settled handoff must keep following").toHaveCount(0);
 

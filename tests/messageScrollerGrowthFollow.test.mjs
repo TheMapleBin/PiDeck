@@ -25,12 +25,11 @@ test("follow scroll only on content growth, not on shrink", () => {
   // 引擎在 ResizeObserver 回调里区分正/负 resize：增长才 scrollToBottom
   assert.match(engineSource, /const difference = height - \(previousHeight \?\? height\);/);
   assert.match(engineSource, /if \(difference >= 0\) \{/);
-  // 收缩（negative resize）：不主动滚动；仅在「已近底且用户未逃逸」时维持锁底状态，
-  // 逃逸用户（上滚读历史）不被负增长误重锁（与 handleScroll 的守卫规则一致）。
-  // 断言锚定到负增长分支（} else {）内，避免误匹配 handleScroll 里已有的同形守卫。
-  assert.match(
+  // 收缩只记录几何，不得借负增长把已浏览用户拽回锁底。
+  assert.match(engineSource, /内容收缩只记录几何，不改跟随态/);
+  assert.doesNotMatch(
     engineSource,
-    /\} else \{\s*\/\*\*[\s\S]*?if \(!state\.escapedFromLock && state\.isNearBottom\) \{/,
+    /if \(!state\.escapedFromLock && state\.isNearBottom\) \{\s*setEscapedFromLock\(false\);\s*setIsAtBottom\(true\);/,
   );
   // 增长时追底保留期（350ms）与弹簧物理由引擎管理，避免"收缩弹到底"的旧 bug
   assert.match(engineSource, /RETAIN_ANIMATION_DURATION_MS/);
