@@ -18,6 +18,15 @@ const MAX_USER_INPUT_CHARS = 1600;
 const MAX_ASSISTANT_INPUT_CHARS = 600;
 const TITLE_TIMEOUT_MS = 30_000;
 const MAX_TITLE_ATTEMPTS = 2;
+/**
+ * 标题请求的输出预算（token）。
+ * 必须给推理型模型留出思考空间：这类模型会先花掉输出预算产 thinking 块再输出正文，
+ * 预算太小时正文一个 token 都拿不到（stopReason="length" + 纯 thinking），自动命名静默失效
+ * （2026-09-13 现场：jiyuan/deepseek-flash 默认开启推理，64 token 全被思考吃掉）。
+ */
+const TITLE_MAX_TOKENS = 512;
+/** 首轮预算被推理吃光时的升级预算：长思考模型至少还有一轮完整的正文空间。 */
+const TITLE_MAX_TOKENS_ESCALATED = 2048;
 
 const TITLE_SYSTEM_PROMPT = `You generate a concise title for a coding assistant conversation.
 Return only one plain-text title on one line, with no explanation, quotes, Markdown, emoji, or "Title:" prefix.
@@ -177,6 +186,14 @@ export function buildTitleInput(branch: readonly SessionEntry[]): TitleInput | u
 	};
 }
 
+/**
+ * 判断响应是否「输出预算被推理吃光」：显式截断（stopReason="length"）且没有任何正文。
+ * 只有这种情况值得升预算重发；其它空响应（模型返回空、命中清洗规则）重发结果一样。
+ */
+export function isOutputBudgetExhausted(response: AssistantMessage): boolean {
+	return response.stopReason === "length" && extractText(response.content).trim().length === 0;
+}
+
 /** 构造独立请求的 Context；该 Context 与主 agent 的上下文完全无关。 */
 export function buildTitleContext(input: TitleInput): Context {
 	const assistantSection = input.assistantText
@@ -314,25 +331,31 @@ async function requestTitle(
 		const auth = await withTimeout(authPromise, controller, TITLE_TIMEOUT_MS);
 		if (!auth?.ok) return undefined;
 
-		const remaining = Math.max(1, TITLE_TIMEOUT_MS - (Date.now() - startedAt));
 		// OAuth/凭据可能为当前请求提供临时 baseUrl（例如 Copilot）；不能只传 apiKey，
 		// 否则独立标题请求会落到模型的旧端点并失败。模型对象只在本次旁路调用中覆盖。
 		const titleModel = auth.baseUrl ? { ...model, baseUrl: auth.baseUrl } : model;
-		const response = await withTimeout(
-			Promise.resolve().then(() => completeSimple(titleModel, buildTitleContext(input), {
-				apiKey: auth.apiKey,
-				headers: auth.headers,
-				env: auth.env,
-				signal: controller.signal,
-				maxTokens: 64,
-				maxRetries: 0,
-				timeoutMs: remaining,
-			})),
-			controller,
-			remaining,
-		);
-		if (response.stopReason === "error" || response.stopReason === "aborted") return undefined;
-		return cleanTitle(extractText(response.content));
+		// 两次尝试共享同一个 TITLE_TIMEOUT_MS 总预算：升级重发不会让旁路拖得更久。
+		for (const budget of [TITLE_MAX_TOKENS, TITLE_MAX_TOKENS_ESCALATED]) {
+			const remaining = Math.max(1, TITLE_TIMEOUT_MS - (Date.now() - startedAt));
+			const response = await withTimeout(
+				Promise.resolve().then(() => completeSimple(titleModel, buildTitleContext(input), {
+					apiKey: auth.apiKey,
+					headers: auth.headers,
+					env: auth.env,
+					signal: controller.signal,
+					maxTokens: budget,
+					maxRetries: 0,
+					timeoutMs: remaining,
+				})),
+				controller,
+				remaining,
+			);
+			if (response.stopReason === "error" || response.stopReason === "aborted") return undefined;
+			const title = cleanTitle(extractText(response.content));
+			if (title || budget >= TITLE_MAX_TOKENS_ESCALATED) return title;
+			if (!isOutputBudgetExhausted(response)) return undefined;
+		}
+		return undefined;
 	} catch {
 		// 标题是非关键的旁路请求：认证失败、超时、取消或模型异常都回落到 PiDeck 原有标题。
 		return undefined;
