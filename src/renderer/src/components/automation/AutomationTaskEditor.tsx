@@ -32,6 +32,10 @@ import type {
 
 interface AutomationTaskEditorProps {
 	task?: AutomationTask | null;
+	/** Project scope preselects this project for new tasks. */
+	defaultProjectId?: string;
+	/** A project-owned task table must not silently move tasks to another workspace. */
+	lockProject?: boolean;
 	onSave: () => void;
 	onCancel: () => void;
 }
@@ -67,6 +71,8 @@ type TaskBackend = "pi" | "dsh";
  */
 export function AutomationTaskEditor({
 	task,
+	defaultProjectId,
+	lockProject = false,
 	onSave,
 	onCancel,
 }: AutomationTaskEditorProps) {
@@ -74,7 +80,7 @@ export function AutomationTaskEditor({
 
 	const [name, setName] = useState(task?.name ?? "");
 	const [projectId, setProjectId] = useState(
-		task?.projectId ?? (projects[0]?.id || ""),
+		task?.projectId ?? defaultProjectId ?? (projects[0]?.id || ""),
 	);
 	const [cronExpression, setCronExpression] = useState(
 		task?.schedule.type === "cron" ? task.schedule.expression : "0 9 * * 1-5",
@@ -116,6 +122,16 @@ export function AutomationTaskEditor({
 	const [cronPreviews, setCronPreviews] = useState<number[]>([]);
 	const [cronError, setCronError] = useState<string | null>(null);
 	const [isSubmitting, setIsSubmitting] = useState(false);
+
+	// Project inventory may arrive after the editor mounts. Project-scoped creation
+	// must retain its explicit owner rather than falling back to the first project.
+	useEffect(() => {
+		if (task || projectId) return;
+		const fallbackProjectId = defaultProjectId ?? projects[0]?.id;
+		if (fallbackProjectId) setProjectId(fallbackProjectId);
+	}, [defaultProjectId, projectId, projects, task?.id]);
+
+	const lockedProjectName = projects.find((project) => project.id === projectId)?.name ?? projectId;
 
 	// DSH runtime 安装态：未安装/损坏/过旧时拦截发送，编辑器据此提示「先去设置安装」
 	// （同一拦截函数与 App 发送链路共用，保证口径一致）。
@@ -313,18 +329,27 @@ export function AutomationTaskEditor({
 					<Label htmlFor="task-project" className="text-xs font-medium">
 						{t("automation.project")} <span className="text-destructive">*</span>
 					</Label>
-					<Select value={projectId} onValueChange={setProjectId}>
-						<SelectTrigger id="task-project" className="h-8 text-xs">
-							<SelectValue placeholder={t("automation.projectSelect")} />
-						</SelectTrigger>
-						<SelectContent>
-							{projects.map((p) => (
-								<SelectItem key={p.id} value={p.id} className="text-xs">
-									{p.name}
-								</SelectItem>
-							))}
-						</SelectContent>
-					</Select>
+					{lockProject ? (
+						<Input
+							id="task-project"
+							value={lockedProjectName}
+							className="h-8 text-xs"
+							disabled
+						/>
+					) : (
+						<Select value={projectId} onValueChange={setProjectId}>
+							<SelectTrigger id="task-project" className="h-8 text-xs">
+								<SelectValue placeholder={t("automation.projectSelect")} />
+							</SelectTrigger>
+							<SelectContent>
+								{projects.map((p) => (
+									<SelectItem key={p.id} value={p.id} className="text-xs">
+										{p.name}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+					)}
 				</div>
 			</div>
 
