@@ -3649,6 +3649,8 @@ export const zhCN = {
   "health.check.proxy.consistency.hint": "开了代理开关却没填地址，会导致所有网络请求失败。",
   "health.check.wsl.config": "WSL 兜底配置",
   "health.check.wsl.config.hint": "Windows 上开启 WSL 兜底却未填发行版，兜底永远不会生效。",
+  "health.check.instance.locks": "单实例锁状态",
+  "health.check.instance.locks.hint": "检查实例锁文件是否残留。旧版本升级被中断会留下锁文件，导致再次启动「双击图标没反应」，需手动删除 ~/.config/pi-desktop/instance-locks 下的锁。",
   ...mainProcessZhCN,
   "update.openRelease": "打开 Release",
   "update.viewInSettings": "查看设置",

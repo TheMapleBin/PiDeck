@@ -3685,6 +3685,8 @@ export const enUS: Record<TranslationKey, string> = {
   "health.check.proxy.consistency.hint": "Enabling a proxy without an address makes all network requests fail.",
   "health.check.wsl.config": "WSL fallback config",
   "health.check.wsl.config.hint": "On Windows, enabling WSL fallback without a distro means the fallback never takes effect.",
+  "health.check.instance.locks": "Instance lock state",
+  "health.check.instance.locks.hint": "Checks for leftover instance lock files. An interrupted upgrade in older versions left locks behind, making the app appear unresponsive on launch until the files under ~/.config/pi-desktop/instance-locks were removed.",
   ...mainProcessEnUS,
   "update.openRelease": "Open Release",
   "update.viewInSettings": "View in Settings",
