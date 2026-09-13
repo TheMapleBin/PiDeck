@@ -1461,10 +1461,12 @@ export function createPreviewApi(): PiDesktopApi {
 				schedule: input.schedule,
 				enabled: input.enabled !== false,
 				budget: {
-					timeoutMs: input.budget?.timeoutMs ?? 30 * 60_000,
-					maxTokens: input.budget?.maxTokens,
-					maxCostUsd: input.budget?.maxCostUsd,
-					maxSteps: input.budget?.maxSteps,
+					// 预览桩模拟主进程 normalizeBudget 的落盘形态：null/缺省键不输出（=不限），
+					// 既不在预览里伪造默认值，也保持与 AutomationTask.budget（无 null）同型。
+					...(input.budget?.timeoutMs == null ? {} : { timeoutMs: input.budget.timeoutMs }),
+					...(input.budget?.maxTokens == null ? {} : { maxTokens: input.budget.maxTokens }),
+					...(input.budget?.maxCostUsd == null ? {} : { maxCostUsd: input.budget.maxCostUsd }),
+					...(input.budget?.maxSteps == null ? {} : { maxSteps: input.budget.maxSteps }),
 				},
 				createdAt: Date.now(),
 				updatedAt: Date.now(),

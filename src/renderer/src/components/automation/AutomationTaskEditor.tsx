@@ -227,11 +227,14 @@ export function AutomationTaskEditor({
 		setIsSubmitting(true);
 		try {
 			const timeoutMinNum = timeoutMinutes.trim() ? Number(timeoutMinutes) : undefined;
+			// 留空 = 不限：显式传 null 而非 undefined——Electron IPC structured-clone
+			// 会丢弃对象里的 undefined 键，主进程把「键缺失」归一化为默认值（外部 API
+			// 兼容语义），只有显式 null 才能表达「不限」并穿透到存储层。
 			const budget = {
-				timeoutMs: timeoutMinNum ? timeoutMinNum * 60000 : 30 * 60000,
-				maxTokens: maxTokens.trim() ? Number(maxTokens) : undefined,
-				maxCostUsd: maxCostUsd.trim() ? Number(maxCostUsd) : undefined,
-				maxSteps: maxSteps.trim() ? Number(maxSteps) : undefined,
+				timeoutMs: timeoutMinNum ? timeoutMinNum * 60000 : null,
+				maxTokens: maxTokens.trim() ? Number(maxTokens) : null,
+				maxCostUsd: maxCostUsd.trim() ? Number(maxCostUsd) : null,
+				maxSteps: maxSteps.trim() ? Number(maxSteps) : null,
 			};
 
 			// IPC/JSON 会丢掉 undefined 键。更新时用空对象/空串表示「恢复默认」，

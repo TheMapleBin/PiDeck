@@ -29,13 +29,28 @@ export type AutomationRunStatus =
 	| "interrupted";
 
 export type AutomationBudget = {
-	/** Hard wall-clock limit for one agent turn. */
-	timeoutMs: number;
-	/** Cumulative input + output token limit reported by the runtime. */
+	/**
+	 * 单回合硬墙钟上限（ms）。null / 缺省 = 不限（编辑器留空就是不限）；
+	 * 外部调用方不给 budget 时由主进程输入层兜底 DEFAULT_AUTOMATION_BUDGET（保守默认）。
+	 */
+	timeoutMs?: number | null;
+	/** 累计输入 + 输出 token 上限（runtime 实报）；null / 缺省 = 不限。 */
+	maxTokens?: number | null;
+	/** 累计供应商花费上限（runtime 实报）；null / 缺省 = 不限。 */
+	maxCostUsd?: number | null;
+	/** 单次运行允许的工具执行起始边数；null / 缺省 = 不限。 */
+	maxSteps?: number | null;
+};
+
+/**
+ * 归一化后的预算（null 已被剔除，键缺省即不限）：
+ * 任务持久化、运行态、IPC 返回给 UI 的都是此形态（AutomationTask.budget）。
+ * 可空输入形态见 AutomationBudget（编辑器/外部入参）。
+ */
+export type NormalizedAutomationBudget = {
+	timeoutMs?: number;
 	maxTokens?: number;
-	/** Cumulative provider cost limit reported by the runtime. */
 	maxCostUsd?: number;
-	/** Number of tool-execution start edges allowed in one run. */
 	maxSteps?: number;
 };
 
@@ -57,7 +72,8 @@ export type AutomationTask = {
 	mode?: AutomationTaskMode;
 	/** DSH-only permission preset; pi ignores this field through the existing session contract. */
 	permissionPreset?: string;
-	budget: AutomationBudget;
+	/** 归一化后预算：null 已被剔除，键缺省即不限（运行态/持久化统一形态）。 */
+	budget: NormalizedAutomationBudget;
 	createdAt: number;
 	updatedAt: number;
 	/** Last cron occurrence acknowledged by the scheduler, including skipped overlaps. */

@@ -14,6 +14,7 @@ import type {
 	AutomationTaskMode,
 	AutomationTaskSummary,
 	CreateAutomationTaskInput,
+	NormalizedAutomationBudget,
 	UpdateAutomationSettingsInput,
 	UpdateAutomationTaskInput,
 } from "../../shared/types";
@@ -24,7 +25,7 @@ import { trimAutomationRunHistory } from "./automationPolicy";
 const SCHEMA_VERSION = 1;
 const MAX_RUN_EVENTS = 200;
 
-export const DEFAULT_AUTOMATION_BUDGET: AutomationBudget = {
+export const DEFAULT_AUTOMATION_BUDGET: NormalizedAutomationBudget = {
 	timeoutMs: 30 * 60_000,
 	maxTokens: 200_000,
 	maxCostUsd: 2,
@@ -161,6 +162,11 @@ export class AutomationStore {
 				: patch.permissionPreset,
 			budget: { ...current.budget, ...(patch.budget ?? {}) },
 		}, now);
+		// 预算用持久化层语义重归一化：{ ...current.budget, ...patch.budget } 已完整表达
+		// 「最终预算」，缺失键只可能是 current 本来就没有（= 用户留空的不限任务）——
+		// 再走输入层 normalizeBudget 会把缺失键用 DEFAULT 兜底填回默认值，导致
+		// 「留空不限」任务每次编辑保存后预算悄悄变回 30min/200K（本次修复的核心回归点）。
+		merged.budget = normalizePersistedBudget({ ...current.budget, ...(patch.budget ?? {}) });
 		const scheduleChanged = JSON.stringify(current.schedule) !== JSON.stringify(merged.schedule);
 		const reEnabled = !current.enabled && merged.enabled;
 		// 不能先铺 current 再铺 merged：model / thinkingLevel 被清空时 merged 会省略该键，
@@ -383,6 +389,9 @@ function normalizePersistedTask(value: unknown): AutomationTask | undefined {
 		return {
 			id: value.id,
 			...normalized,
+			// 预算必须走持久化层语义：读盘时缺失/null 键 = 不限（用户保存的「留空不限」），
+			// 不能用输入层的 DEFAULT 兜底把「不限」伪造回默认值。
+			budget: normalizePersistedBudget(value.budget),
 			createdAt,
 			updatedAt: finiteNumber(value.updatedAt, createdAt, 0),
 			...(typeof value.lastScheduledAt === "number" && Number.isFinite(value.lastScheduledAt)
@@ -493,14 +502,33 @@ function normalizeSchedule(value: unknown): AutomationTask["schedule"] {
 	return { type: "cron", expression };
 }
 
-function normalizeBudget(value: unknown, _now: number): AutomationBudget {
+/**
+ * 预算归一化的两种语义（同一份钳制规则，区别在「键缺失」时的处理）：
+ * - 输入层（createTask/updateTask）：null=不限；数字→钳制；键缺失/非法→DEFAULT 兜底，
+ *   外部调用方不传 budget 时仍有一组保守默认保护，避免任务无限挂起。
+ * - 持久化层（读盘）：null/键缺失=不限，只钳制数字——绝不能给「不限」任务伪造默认值，
+ *   否则用户保存的「留空不限」重启一次就变回默认值。
+ */
+function normalizeBudget(value: unknown, _now: number): NormalizedAutomationBudget {
 	const record = isRecord(value) ? value : {};
-	const timeoutMs = boundedNumber(record.timeoutMs, DEFAULT_AUTOMATION_BUDGET.timeoutMs, 10_000, 7 * 24 * 60 * 60_000);
-	const maxTokens = optionalBoundedNumber(record.maxTokens, 1, 100_000_000, DEFAULT_AUTOMATION_BUDGET.maxTokens);
-	const maxCostUsd = optionalBoundedNumber(record.maxCostUsd, 0.000001, 1_000_000, DEFAULT_AUTOMATION_BUDGET.maxCostUsd);
-	const maxSteps = optionalBoundedNumber(record.maxSteps, 1, 100_000, DEFAULT_AUTOMATION_BUDGET.maxSteps);
+	return normalizeBudgetRecord(record, DEFAULT_AUTOMATION_BUDGET);
+}
+
+function normalizePersistedBudget(value: unknown): NormalizedAutomationBudget {
+	const record = isRecord(value) ? value : {};
+	return normalizeBudgetRecord(record, undefined);
+}
+
+function normalizeBudgetRecord(
+	record: Record<string, unknown>,
+	defaults: NormalizedAutomationBudget | undefined,
+): NormalizedAutomationBudget {
+	const timeoutMs = optionalBoundedNumber(record.timeoutMs, 10_000, 7 * 24 * 60 * 60_000, defaults?.timeoutMs);
+	const maxTokens = optionalBoundedNumber(record.maxTokens, 1, 100_000_000, defaults?.maxTokens);
+	const maxCostUsd = optionalBoundedNumber(record.maxCostUsd, 0.000001, 1_000_000, defaults?.maxCostUsd);
+	const maxSteps = optionalBoundedNumber(record.maxSteps, 1, 100_000, defaults?.maxSteps);
 	return {
-		timeoutMs,
+		...(timeoutMs === undefined ? {} : { timeoutMs }),
 		...(maxTokens === undefined ? {} : { maxTokens: Math.floor(maxTokens) }),
 		...(maxCostUsd === undefined ? {} : { maxCostUsd }),
 		...(maxSteps === undefined ? {} : { maxSteps: Math.floor(maxSteps) }),
