@@ -25,6 +25,8 @@ import { ConfirmDialog } from "../ui-shadcn/ConfirmDialog";
 import { isAutomationRunTerminal, type AutomationRun } from "../../../../shared/types";
 
 interface AutomationHistoryListProps {
+	/** Omit for the global run inbox; a project task page only exposes its own runs. */
+	projectId?: string;
 	/** 点击查看执行会话时的回调 */
 	onViewSession?: (projectId: string, sessionId: string) => void;
 }
@@ -53,9 +55,14 @@ function formatTime(timestamp?: number) {
  * 删除/清空只作用于已结束记录：queued/starting/running 必须留在看板上，否则无法中止。
  */
 export function AutomationHistoryList({
+	projectId,
 	onViewSession,
 }: AutomationHistoryListProps) {
-	const runs = useAtomValue(automationRunsAtom);
+	const allRuns = useAtomValue(automationRunsAtom);
+	const runs = useMemo(
+		() => projectId ? allRuns.filter((run) => run.projectId === projectId) : allRuns,
+		[allRuns, projectId],
+	);
 	const projects = useAtomValue(projectInventoryAtom);
 
 	const [abortingRunIds, setAbortingRunIds] = useState<Set<string>>(new Set());
@@ -245,15 +252,17 @@ export function AutomationHistoryList({
 						{t("common.deleteSelected")}
 						{selectedIds.size > 0 ? ` (${selectedIds.size})` : ""}
 					</Button>
-					<Button
-						variant="ghost"
-						size="sm"
-						className="h-6 px-2 text-[11px]"
-						disabled={terminalRuns.length === 0 || busy}
-						onClick={() => setConfirm("clear")}
-					>
-						{t("automation.clearHistory")}
-					</Button>
+					{!projectId && (
+						<Button
+							variant="ghost"
+							size="sm"
+							className="h-6 px-2 text-[11px]"
+							disabled={terminalRuns.length === 0 || busy}
+							onClick={() => setConfirm("clear")}
+						>
+							{t("automation.clearHistory")}
+						</Button>
+					)}
 				</div>
 			</div>
 
@@ -282,12 +291,14 @@ export function AutomationHistoryList({
 									<span className="truncate text-xs font-medium text-foreground">
 										{run.taskName}
 									</span>
-									<Badge
-										variant="outline"
-										className="h-4 px-1 text-[10px] font-normal text-muted-foreground"
-									>
-										{projectName}
-									</Badge>
+									{!projectId && (
+										<Badge
+											variant="outline"
+											className="h-4 px-1 text-[10px] font-normal text-muted-foreground"
+										>
+											{projectName}
+										</Badge>
+									)}
 									{renderStatusBadge(run.status)}
 									<span className="font-mono text-[11px] text-muted-foreground">
 										{run.trigger}

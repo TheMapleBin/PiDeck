@@ -272,6 +272,11 @@ function makeFakeHost({ muxFrames = [], failRespond = false, modelsValue = undef
 		getHomeDir() {
 			return "C:\\fake-dsh-home";
 		},
+		/** 冷读会话 cursor（0.1.5 session/page 的 throughSeq 来源）：夹具按日志长度模拟。 */
+		async readSessionCursor(sessionId) {
+			const log = historyBySession.get(sessionId) ?? [];
+			return log.length - 1;
+		},
 		/** 模拟 host 进程退出（崩溃）：置位 + 中断在途 mux，同 DshHost 的 exit → abortAllPending 联动。 */
 		triggerExit() {
 			hostState.running = false;
@@ -318,6 +323,11 @@ function makeColdStartHost() {
 			await this.ensureStarted();
 			return inner.host.resolveWorkspaceId(cwd);
 		},
+		/** 冷读 cursor 与桥同步：真实 DshHost.bridgeRpc 先 ensureStarted，冷启动下同样要等。 */
+		async readSessionCursor(sessionId) {
+			await this.ensureStarted();
+			return inner.host.readSessionCursor(sessionId);
+		},
 	};
 	// 冷启动 host 必须最后展开：inner 里也带 host 键（fake host，getClient 恒返回 client），
 	// 若先展开 host 会被 inner 覆盖 → 测试拿到的是「温 host」，冷启动回归永远测不到。
@@ -341,6 +351,25 @@ const PROJECT = { id: "project-1", path: "C:\\work" };
 
 /** 构造与 DSH 实测一致的 SessionEvent。 */
 const event = (type, seq, data = {}) => ({ type, seq, time: 1700000000000 + seq, data });
+
+test("第二个 runtime 的 follow 泵也必须创建（共享 mux 已在跑不得提前 return）", async () => {
+	// 回归（2026-09-12）：startMux 的 ensureFollowPump 曾放在共享 mux 启动路径里，
+	// 第二个会话 startMux 时 mux 已在跑、提前 return 把 follow 泵整个吞掉——
+	// 0.1.5 会话 journal 事件只走 follow 泵，于是新会话发送后 host 正常跑完回合
+	// 但 PiDeck 收不到任何事件（无流式、无收口、无报错，页面空白）。
+	const { host, client } = makeFakeHost();
+	let followOpens = 0;
+	const innerFollow = client.sessionsFollow.bind(client);
+	client.sessionsFollow = (...args) => {
+		followOpens += 1;
+		return innerFollow(...args);
+	};
+	const manager = new DshAgentManager(host, () => PROJECT);
+	const first = await manager.create({ projectId: "project-1", backend: "dsh" });
+	const second = await manager.create({ projectId: "project-1", backend: "dsh" });
+	assert.notEqual(first.id, second.id);
+	assert.equal(followOpens, 2, "每个 runtime 各开一条 session/follow 泵");
+});
 
 test("create 新建 DSH 会话并注册 runtime（无 dshSessionId 时）", async () => {
 	const { host, calls, createPayloads } = makeFakeHost();

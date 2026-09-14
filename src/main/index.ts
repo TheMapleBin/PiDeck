@@ -255,6 +255,7 @@ import {
 	readDeclaredDshVersion,
 } from "./dsh/runtime/DshRuntimeManager";
 import { DshRuntimeInstaller } from "./dsh/runtime/DshRuntimeInstaller";
+import { autoUpdateDshRuntimeIfOutdated } from "./dsh/runtime/dshRuntimeAutoUpdate";
 import { createNetDownloader, createTarExtractor, fetchDshRuntimeIndex } from "./dsh/runtime/dshRuntimeIo";
 import { credentialValueFromDocument } from "./dsh/dshCredentials";
 import { DshAgentManager } from "./dsh/DshAgentManager";
@@ -303,7 +304,14 @@ import { XuePromptManager } from "./prompts/XuePromptManager";
 import { SkillManager } from "./skills/SkillManager";
 import { readSkillContent } from "./skills/readSkillContent";
 import { ExtensionManager } from "./extensions/ExtensionManager";
+import { BuiltInExtensionsUpdater } from "./extensions/builtInExtensionsUpdater";
+import {
+	resolveBuiltInExtensionsDir,
+	resolveBuiltInExtensionsOverlayDir,
+	type BuiltInExtensionPathRoots,
+} from "./extensions/builtInExtensions";
 import { createPiProcessExtensionResolvers } from "./extensions/piProcessExtensionResolvers";
+import { registerBuiltInExtensionIpc } from "./ipc/builtInExtensionIpc";
 import { createPiProcessSkillResolvers } from "./skills/piProcessSkillResolvers";
 import { createPiProcessPromptResolvers } from "./prompts/piProcessPromptResolvers";
 import { ProjectResourceManager } from "./projects/ProjectResourceManager";
@@ -388,6 +396,7 @@ import { LogBundleExporter } from "./health/LogBundleExporter";
 import { QuitCleanupRegistry } from "./lifecycle/QuitCleanupRegistry";
 import type { FeishuChatBinding } from "../shared/types";
 import { createRealAutoUpdater } from "./update/createAutoUpdater";
+import { installAtomgitNoCacheBypass, UPDATER_PARTITION_NAME } from "./update/atomgitNoCacheBypass";
 import { createMacManualUpdateChecker } from "./update/macManualUpdate";
 import { UPDATE_REPO, UPDATE_REPO_OWNER } from "./update/releaseRepo";
 import { UpdateService } from "./update/UpdateService";
@@ -1857,16 +1866,40 @@ function currentMainProcessLocale(): MainProcessLocale {
  *   utilityProcess（约 200MB）。下次要用 DSH 时 ensureStarted 会自动用新 runtime fork。
  * - host 本来在跑说明用户在用 DSH，重启后要重新拉起，否则活跃会话静默失效。
  */
-async function restartDshHostAfterRuntimeChange(): Promise<void> {
-	if (!dshHost.isStarted()) return;
+/**
+ * 磁盘操作（runtime 安装/导入/卸载）前释放 DSH host 的文件锁。Windows 上 host 进程把
+ * runtime 里的 .node 原生模块（如 koffi.node）映射成 DLL 句柄，进程存活时替换/删除
+ * 同版本 runtime 目录必报 EPERM（文件被占用）。停活跃会话 + dispose host 释放锁。
+ * 返回 host 原本是否在跑：操作结束后用 startDshHostAfterRuntimeDiskOperation 拉回。
+ */
+async function stopDshHostForRuntimeDiskOperation(): Promise<boolean> {
+	const wasRunning = dshHost.isStarted() || dshHost.isHostProcessRunning();
+	if (!wasRunning) return false;
 	try {
-		// 与 restartDshHost IPC 同一顺序：先停活跃会话（host 侧会话仍持久化，
-		// 重开时 attach 恢复），避免旧 mux 悬挂在已 dispose 的 transport 上。
-		await dshAgentManager.stopAll();
+		// 会话只在 boot 完成后才存在（isStarted 为真时停）；进程存活就 dispose。
+		if (dshHost.isStarted()) await dshAgentManager.stopAll();
 		await dshHost.restart();
+	} catch (error) {
+		// 停 host 失败不阻塞磁盘操作：rm 自带退避重试，锁仍在则返回结构化错误。
+		void appLogger?.warn("dsh-runtime", "stop host before runtime disk operation failed", {
+			error: error instanceof Error ? error.message : String(error),
+		});
+	}
+	return wasRunning;
+}
+
+/**
+ * 磁盘操作后按需把 host 拉回来（仅当操作前 host 在跑）。
+ * 为什么必须重启而不是继续用旧 host：host 的 runtime 路径在 fork 时经
+ * `--dsh-node-modules` 固化，替换 runtime 后旧进程仍指向旧路径；ensureStarted
+ * 会用新 runtime 重新 fork。host 没在跑就不白起（下次用时自动 fork）。
+ */
+async function startDshHostAfterRuntimeDiskOperation(wasRunning: boolean): Promise<void> {
+	if (!wasRunning) return;
+	try {
 		await dshHost.ensureStarted();
 	} catch (error) {
-		void appLogger?.warn("dsh-runtime", "restart host after runtime change failed", {
+		void appLogger?.warn("dsh-runtime", "restart host after runtime disk operation failed", {
 			error: error instanceof Error ? error.message : String(error),
 		});
 	}
@@ -2326,6 +2359,22 @@ async function sendAgentPromptWithIntegrations(
 	return result;
 }
 
+/**
+ * 内置扩展磁盘根：随包分发目录 + userData 覆盖层（热更新落点）。
+ *
+ * 三处调用点必须同源（ExtensionManager 列表/版本、热更新器写盘、-e 注入路径解析），
+ * 各拼一次路径迟早会漂移成「更新成功但会话仍加载旧扩展」，故统一走这里。
+ * 须在 app ready 后调用（app.getPath("userData") 此时才反映 dev 隔离目录）。
+ */
+function resolveBuiltInExtensionRoots(): BuiltInExtensionPathRoots {
+	return {
+		appPath: app.getAppPath(),
+		resourcesPath: process.resourcesPath,
+		isDev: !app.isPackaged,
+		overlayDir: resolveBuiltInExtensionsOverlayDir(app.getPath("userData")),
+	};
+}
+
 function registerIpc() {
 	// 用量统计：业务在 UsageStatsService，handler 薄层只校验/适配
 	registerUsageStatsIpc(ipcMain, usageStatsService);
@@ -2575,15 +2624,19 @@ function registerIpc() {
 			// 安装/导入/卸载后必须重探测并广播：否则 UI 还停在旧状态，
 			// 用户会看到「刚装完但仍提示未安装」。
 			installDshRuntime: async () => {
+				// 同版本重装时 host 可能仍持有 runtime 内 .node 原生模块的 DLL 句柄，
+				// 落位 rm 必报 EPERM：与卸载同一套路，先停会话 + dispose host 释放锁。
+				const wasRunning = await stopDshHostForRuntimeDiskOperation();
 				const result = await dshRuntimeInstaller.installFromIndex();
 				dshRuntimeStatus.refresh();
-				if (result.ok) await restartDshHostAfterRuntimeChange();
+				if (result.ok) await startDshHostAfterRuntimeDiskOperation(wasRunning);
 				return result;
 			},
 			importDshRuntime: async (filePath: string) => {
+				const wasRunning = await stopDshHostForRuntimeDiskOperation();
 				const result = await dshRuntimeInstaller.installFromLocalFile(filePath);
 				dshRuntimeStatus.refresh();
-				if (result.ok) await restartDshHostAfterRuntimeChange();
+				if (result.ok) await startDshHostAfterRuntimeDiskOperation(wasRunning);
 				// 失败时把内部错误码映射为用户可读文案（配置页直接展示 error 字段）。
 				// 只映射已知校验码；未知错误（如磁盘满、权限）保留原始信息以便排查。
 				if (!result.ok) return { ok: false, error: dshRuntimeErrorCopy(result.error) };
@@ -2594,30 +2647,10 @@ function registerIpc() {
 				// 已映射成 DLL 句柄，进程存活时删目录必报 EPERM（文件被占用）。所以先停
 				// 活跃会话、杀掉 host 释放文件锁，再删；删完若原本在用 DSH 就把 host 拉回
 				// 来（删失败时旧目录还在，重启 fork 仍走旧 runtime，用户可稍后重试卸载）。
-				const wasRunning = dshHost.isStarted() || dshHost.isHostProcessRunning();
-				if (wasRunning) {
-					try {
-						// 会话只在 boot 完成后才存在（isStarted 为真时停）；进程存活就杀。
-						if (dshHost.isStarted()) await dshAgentManager.stopAll();
-						await dshHost.restart();
-					} catch (error) {
-						// 停 host 失败不阻塞卸载：rmSync 自带重试，锁仍在则返回结构化错误。
-						void appLogger?.warn("dsh-runtime", "stop host before uninstall failed", {
-							error: error instanceof Error ? error.message : String(error),
-						});
-					}
-				}
+				const wasRunning = await stopDshHostForRuntimeDiskOperation();
 				const result = await dshRuntimeInstaller.uninstall();
 				dshRuntimeStatus.refresh();
-				if (wasRunning) {
-					try {
-						await dshHost.ensureStarted();
-					} catch (error) {
-						void appLogger?.warn("dsh-runtime", "restart host after runtime uninstall failed", {
-							error: error instanceof Error ? error.message : String(error),
-						});
-					}
-				}
+				await startDshHostAfterRuntimeDiskOperation(wasRunning);
 				return result;
 			},
 			describeDshSettings: () => dshHost.describeSettings(),
@@ -2704,6 +2737,7 @@ function registerIpc() {
 			// G13 深化：动态 Cordis 插件管理（进程内临时扩展，define/run/stop/undefine）
 			listDshDynamicPlugins: () => dshHost.listDynamicPlugins(),
 			listDshStaticPlugins: () => dshHost.listStaticPlugins(),
+			uninstallDshUserPlugin: (input) => dshHost.uninstallUserPlugin(input),
 			installDshPlugin: (input) => dshHost.installDynamicPlugin(input),
 			runDshPlugin: (input) => dshHost.runDynamicPlugin(input),
 			stopDshPlugin: (input) => dshHost.stopDynamicPlugin(input),
@@ -2800,9 +2834,24 @@ function registerIpc() {
 		source: () => settingsStore.get().updateSource,
 		customHost: () => settingsStore.get().customUpdateSourceUrl,
 	});
+	// 内置扩展热更新：版本号不跟 PiDeck 应用版本走（见 resources/extensions/extensions-manifest.json），
+	// 打包态 resources 只读，更新写进 userData 覆盖层，路径解析侧覆盖层优先 → 重启会话即生效。
+	const builtInExtensionRoots = resolveBuiltInExtensionRoots();
+	const builtInExtensionsUpdater = new BuiltInExtensionsUpdater({
+		userDataDir: app.getPath("userData"),
+		builtinExtensionsDir: resolveBuiltInExtensionsDir(builtInExtensionRoots),
+		// 与模型目录/应用更新共用 settings.updateSource：默认 AtomGit，切 GitHub 后 raw 直连优先。
+		source: () => settingsStore.get().updateSource,
+	});
 	// 后台更新检查：Windows / 支持自动升级的发行物走 electron-updater；
 	// macOS 当前未签 Developer ID，不能承诺稳定的替换/重启，因此只检测 Release 并交给用户手动安装。
 	// 两条路径都由同一个 UpdateService 快照推送渲染层，设置页能明确表达能力边界。
+	// AtomGit 镜像源对 query string 返回 404，而 electron-updater 检查必带 noCache 参数：
+	// 在 updater 首次发起请求前注册 webRequest 剥除器（幂等）。注意必须挂在
+	// electron-updater 的独立 partition session（"electron-updater"）上，而不是 defaultSession
+	// —— updater 的 ElectronHttpExecutor 用 session.fromPartition("electron-updater") 发请求，
+	// 挂在 defaultSession 会拦不到（0.7.5 曾因此漏修）。
+	installAtomgitNoCacheBypass(() => session.fromPartition(UPDATER_PARTITION_NAME, { cache: false }));
 	const updateServiceBase = {
 		settingsStore,
 		checkPiUpdate: () => extensionManager.checkPiUpdate(),
@@ -2849,6 +2898,7 @@ function registerIpc() {
 	}
 	updateService.start();
 	registerCatalogIpc(catalogUpdater);
+	registerBuiltInExtensionIpc(builtInExtensionsUpdater);
 	// TokenDance 目录 store 是共享实例：渲染层目录展示与一键安装（写入配置）读同一份缓存。
 	const tokendanceCatalogStore = new TokendanceCatalogStore({
 		getCachePath: () => join(app.getPath("userData"), "tokendance-models.json"),
@@ -3210,11 +3260,9 @@ app.whenReady().then(async () => {
 		() => settingsStore.get(),
 		(patch) => settingsStore.update(patch),
 		mainCopy,
-		{
-			appPath: app.getAppPath(),
-			resourcesPath: process.resourcesPath,
-			isDev: !app.isPackaged,
-		},
+		// 与热更新器/-e 注入共用同一套根（含 overlayDir），列表里的内置扩展路径与版本
+		// 才能反映「当前真正生效」的那一份。
+		resolveBuiltInExtensionRoots(),
 	);
 	projectResourceManager = new ProjectResourceManager(
 		(projectId) => projectStore.get(projectId),
@@ -3633,6 +3681,7 @@ app.whenReady().then(async () => {
 		// S6.5：Web 端 DSH 插件管理（动态 Cordis 插件，与桌面配置页同源）
 		listDshDynamicPlugins: () => dshHost.listDynamicPlugins(),
 		listDshStaticPlugins: () => dshHost.listStaticPlugins(),
+		uninstallDshUserPlugin: (input) => dshHost.uninstallUserPlugin(input),
 		installDshPlugin: (input) => dshHost.installDynamicPlugin(input),
 		runDshPlugin: (input) => dshHost.runDynamicPlugin(input),
 		stopDshPlugin: (input) => dshHost.stopDynamicPlugin(input),
@@ -3645,7 +3694,9 @@ app.whenReady().then(async () => {
 			const result = await sessionRuntimeCoordinator.restartRuntime(target);
 			if (result.ok) {
 				if (!result.value.session.noSession) emitSessionRuntimeDetach(target);
-				emitReplacementState(result.value.runtime, false);
+				// 与桌面 IPC 同规约：新 runtime 的消息窗口在绑定前 flush 会被丢弃，
+				// 重启后必须重下发（id 已由会话级身份延续保持稳定，不触发整窗 remount）。
+				emitReplacementState(result.value.runtime, true);
 			}
 			return result;
 		},
@@ -3834,6 +3885,9 @@ app.whenReady().then(async () => {
 			});
 			notification.show();
 		},
+		// catalog 变更广播：automation createDraft / dispatch 接受后让侧栏静默重拉，
+		// 避免新会话行延迟出现、DSH agent 行先落成孤儿条目（复用 DSH 刷新同一条 IPC 通道）。
+		notifySessionCatalogChanged: (projectId) => notifyDshCatalogRefreshed([projectId]),
 	});
 	automationScheduler = new AutomationScheduler(automationStore);
 	automationScheduler.setTriggerHandler(async (task, scheduledFor, trigger) => {
@@ -3951,6 +4005,36 @@ app.whenReady().then(async () => {
 	void cleanupPasteFiles?.().catch((error: unknown) => {
 		void appLogger.warn("app", "Paste file cleanup failed during startup", error);
 	});
+	// DSH runtime 自动更新（打包态）：升级 PiDeck 后若已装 runtime 与声明版本不一致
+	// （outdated，被硬门控挡住无法启动 host），启动期后台自动重装配套版本并回收旧
+	// 版本目录——与其让用户手动点「重新安装」，不如升级后首次启动自动完成。
+	// notInstalled 不自动装（用户未选择使用 DSH，保持安装引导）；dev 跳过（项目
+	// node_modules 即声明版本，且 dev 禁止在线下载）。fire-and-forget，不挡首帧。
+	void autoUpdateDshRuntimeIfOutdated({
+		getStatus: () => dshRuntimeStatus.getStatus(),
+		refresh: () => dshRuntimeStatus.refresh(),
+		install: () => dshRuntimeInstaller.installFromIndex(),
+		listInstalled: () => dshRuntimeManager.listInstalled(),
+		resolveActiveDirName: () => dshRuntimeManager.resolveActive()?.dirName,
+		uninstall: async (dirName) => {
+			await dshRuntimeManager.uninstall(dirName);
+		},
+		appVersion: () => app.getVersion(),
+		isPackaged: () => app.isPackaged,
+		// 自动更新完成前 warmup 因 outdated 被跳过：装好且默认后端是 dsh 时补一次预热。
+		onRuntimeReady: () => {
+			startDshHostInBackground(dshHost, appLogger, {
+				enabled:
+					settingsStore.get().defaultAgentBackend === "dsh" && dshRuntimeStatus.canCreateDshSession(),
+			});
+		},
+		log: (scope, message, detail) => void appLogger.info(scope, message, detail),
+	}).catch((error: unknown) => {
+		void appLogger.warn("dsh-runtime", "DSH runtime auto-update crashed", {
+			error: error instanceof Error ? error.message : String(error),
+		});
+	});
+
 	// 窗口已可用后再按需预热 DSH：默认后端是 dsh 且 runtime 可用才后台 boot，
 	// 避免纯 pi 用户空转 utilityProcess（约 200MB），也避免 runtime 不在时 boot 必然失败。
 	// 发送/历史/配置路径仍由 ensureStarted 兜底。

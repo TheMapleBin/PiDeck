@@ -184,16 +184,16 @@ test("real up-scroll before settle keeps the manual history position", async ({ 
 	await expect(window.locator(".message-timeline")).toContainText(LONG_REPLY.slice(0, 24), { timeout: 20_000 });
 	await expect(window.locator(".composer-send-primary")).toHaveAttribute("aria-label", "发送", { timeout: 20_000 });
 
-	// 等尾部正增长守卫带（500ms）过期再上滚：run 刚结束时 settle 重排仍在刷新
-	// lastPositiveResizeAt，守卫带会吞掉合成上滚的逃逸意图（按钮不出现）。
-	// 700ms 仍在 1.5s 阅读停顿窗口内，场景语义（tick 前上滚）不变。
+	// 等 settle 折叠动画收束再上滚。700ms 仍在 1.5s 阅读停顿窗口内，
+	// 场景语义（tick 前上滚）不变。
 	await window.waitForTimeout(700);
 
 	// 真实上滚进入历史（wheel + 手动位移模拟滚轮时序，同 timeline-gobottom-lock）
 	await ensureWindowVisible(app);
 	const before = await window.locator(".message-timeline").evaluate(async (timeline) => {
 		for (let i = 0; i < 10; i += 1) {
-			timeline.dispatchEvent(
+			const content = timeline.querySelector(".turn-row") ?? timeline.querySelector("p") ?? timeline;
+			content.dispatchEvent(
 				new WheelEvent("wheel", { deltaY: -160, bubbles: true, cancelable: true }),
 			);
 			timeline.scrollTop = Math.max(0, timeline.scrollTop - 160);

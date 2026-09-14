@@ -8,6 +8,11 @@ import type { GitExecutableInfo } from "../shared/types/git";
 import type { ImageGenConfigFile, ImageGenRequest, ImageGenResult, ImageGenSaveResult } from "../shared/types/imagegen";
 import type { CatalogCheckResult, CatalogUpdateResult, CatalogUpdateStatus } from "../shared/types/catalog";
 import type {
+	BuiltInExtensionsCheckResult,
+	BuiltInExtensionsUpdateResult,
+	BuiltInExtensionsUpdateStatus,
+} from "../shared/types/extensionsUpdate";
+import type {
 	VoiceTranscriptionPublicConfig,
 	VoiceTranscriptionRequest,
 	VoiceTranscriptionResult,
@@ -717,9 +722,12 @@ const api = {
 		/** DSH 动态插件清单（G13 深化：进程内临时扩展，重启即失；按会话归属）。 */
 		listDshDynamicPlugins: () =>
 			ipcRenderer.invoke(ipcChannels.dshPluginList) as Promise<import("../shared/types").DshPluginView[]>,
-		/** DSH 静态 Loader 条目清单（只读：moduleName/enabled/fiberPhase）。 */
+		/** DSH 静态 Loader 条目清单（origin 标注 user/builtin 来源）。 */
 		listDshStaticPlugins: () =>
 			ipcRenderer.invoke(ipcChannels.dshPluginStaticList) as Promise<import("../shared/types").DshStaticPluginView[]>,
+		/** DSH 用户自装静态插件卸载（移除用户补丁层行 + 可选回收插件目录；host 重启后生效）。 */
+		uninstallDshUserPlugin: (input: import("../shared/types").DshUserPluginUninstallInput) =>
+			ipcRenderer.invoke(ipcChannels.dshPluginUserUninstall, input) as Promise<import("../shared/types").DshUserPluginUninstallResult>,
 		/** DSH 动态插件安装（define：定义源码包，不运行）。 */
 		installDshPlugin: (input: import("../shared/types").DshPluginInstallInput) =>
 			ipcRenderer.invoke(ipcChannels.dshPluginInstall, input) as Promise<unknown>,
@@ -1490,6 +1498,20 @@ const api = {
 			ipcRenderer.invoke(ipcChannels.extensionsUpdateOne, source) as Promise<PiCliUpdateResult>,
 		catalog: (query: import("../shared/types").PiPackageCatalogQuery) =>
 			ipcRenderer.invoke(ipcChannels.extensionsCatalog, query) as Promise<import("../shared/types").PiPackageCatalog>,
+		// ── 内置扩展热更新（版本号不跟应用版本走；检测走 AtomGit，更新写 userData 覆盖层）──
+		builtInStatus: () =>
+			ipcRenderer.invoke(ipcChannels.extensionsBuiltInUpdateStatus) as Promise<BuiltInExtensionsUpdateStatus>,
+		builtInCheck: (branch?: "main" | "dev") =>
+			ipcRenderer.invoke(ipcChannels.extensionsBuiltInUpdateCheck, branch) as Promise<BuiltInExtensionsCheckResult>,
+		builtInUpdate: (branch?: "main" | "dev") =>
+			ipcRenderer.invoke(ipcChannels.extensionsBuiltInUpdateApply, branch) as Promise<BuiltInExtensionsUpdateResult>,
+		builtInRestore: () =>
+			ipcRenderer.invoke(ipcChannels.extensionsBuiltInUpdateRestore) as Promise<BuiltInExtensionsUpdateResult>,
+		builtInRestorePrevious: () =>
+			ipcRenderer.invoke(ipcChannels.extensionsBuiltInUpdateRestorePrevious) as Promise<BuiltInExtensionsUpdateResult>,
+		/** 用系统默认程序打开当前生效的内置扩展目录（覆盖层优先，否则随包目录） */
+		builtInOpenDir: () =>
+			ipcRenderer.invoke(ipcChannels.extensionsBuiltInOpenDir) as Promise<void>,
 	},
 	settings: {
 		get: () =>

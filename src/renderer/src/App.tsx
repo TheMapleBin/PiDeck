@@ -39,7 +39,7 @@ import { type SidebarActions } from "./components/sidebar/SidebarContent";
 import { AppSidebar } from "./components/sidebar/AppSidebar";
 import { AppBootstrap } from "./components/app/AppBootstrap";
 import { SettingsFeatureRoot } from "./components/app/SettingsFeatureRoot";
-import { AutomationModal } from "./components/automation/AutomationModal";
+import { AutomationWorkspace } from "./components/automation/AutomationWorkspace";
 import { useRename } from "./hooks/useRename";
 import { useProjectRuntimeCapabilities } from "./hooks/useRuntimeCapabilities";
 import { useSessionRuntimeBridge } from "./hooks/useSessionRuntimeBridge";
@@ -165,6 +165,8 @@ import {
 import { ProjectEmptyState } from "./components/session/ProjectEmptyState";
 import { FileLinkBaseProvider } from "./components/session/FileLinkBase";
 import { useSessionWorkspaceChrome } from "./hooks/useSessionWorkspaceChrome";
+import { useWorkspaceSurface } from "./hooks/useWorkspaceSurface";
+import { DEFAULT_AUTOMATION_WORKSPACE_ROUTE } from "./utils/workspaceSurface";
 import { ScratchPadOverlay } from "./components/overlays/ScratchPadOverlay";
 import { AskPanelOverlay } from "./components/overlays/AskPanelOverlay";
 import { TerminalDockPanel } from "./components/terminal/TerminalDockPanel";
@@ -1482,6 +1484,7 @@ export function App() {
     currentSessionId,
     activeProjectId,
   });
+  const workspaceSurface = useWorkspaceSurface();
 
   const {
     selectProject: selectProjectCommand,
@@ -1511,6 +1514,7 @@ export function App() {
     removeSessionComposerState,
     closeTabs: workspaceChrome.closeTabs,
     refreshProjectSessions,
+    onWorkspaceSelection: workspaceSurface.showSession,
     api,
     showToast,
     // 新建会话默认后端：跟随设置项（默认 pi，可切换 dsh），经 DSH runtime 安装态钳制
@@ -3185,6 +3189,7 @@ export function App() {
         return openOpenCodeImport(project);
       },
       manageResources: (project) => setProjectResourcesProject(project),
+      manageAutomations: (projectId) => workspaceSurface.showAutomation(projectId),
       toggleWorktree: toggleProjectWorktree,
       copyPath: async (project) => {
         await navigator.clipboard.writeText(project.path);
@@ -3789,6 +3794,27 @@ export function App() {
     />
   ) : null;
 
+  const automationWorkspaceNode = (
+    <AutomationWorkspace
+      route={
+        workspaceSurface.surface.kind === "automation"
+          ? workspaceSurface.surface.route
+          : DEFAULT_AUTOMATION_WORKSPACE_ROUTE
+      }
+      projectId={
+        workspaceSurface.surface.kind === "automation"
+          ? workspaceSurface.surface.projectId
+          : undefined
+      }
+      onRouteChange={workspaceSurface.setAutomationRoute}
+      onClose={workspaceSurface.showSession}
+      onViewSession={(projectId, sessionId) => {
+        workspaceSurface.showSession();
+        void openSidebarSessionByIdWithTab(projectId, sessionId, "permanent");
+      }}
+    />
+  );
+
   const chatPaneContentNode = (
     <WorkbenchStage
       chrome={sessionTabsBarNode}
@@ -3796,6 +3822,10 @@ export function App() {
       hasContent={workbenchHasContent}
       session={chatPaneSessionNode}
       content={workbenchContentNode}
+      utility={{
+        active: workspaceSurface.isAutomationWorkspace,
+        content: automationWorkspaceNode,
+      }}
       onContentWidthChange={handleWorkbenchContentWidth}
     />
   );
@@ -4232,13 +4262,6 @@ export function App() {
     {openCodeImportProject && <ImportOverlayHost kind="opencode" project={openCodeImportProject} controller={openCodeImportController} onClose={() => setOpenCodeImportProject(null)} />}
     {zcodeImportProject && <ImportOverlayHost kind="zcode" project={zcodeImportProject} controller={zcodeImportController} onClose={() => setZcodeImportProject(null)} />}
     {workbuddyImportProject && <ImportOverlayHost kind="workbuddy" project={workbuddyImportProject} controller={workbuddyImportController} onClose={() => setWorkbuddyImportProject(null)} />}
-
-    {/* 定时任务与自动化管理中心全功能弹窗 */}
-    <AutomationModal
-      onViewSession={(projectId, sessionId) => {
-        void openSidebarSessionByIdWithTab(projectId, sessionId, "permanent");
-      }}
-    />
 
     {/* Scratch Pad（草稿本）：根级渲染，避免受 chat-pane grid 影响定位 */}
     <ScratchPadOverlay controller={scratchPad} />

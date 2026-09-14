@@ -109,7 +109,8 @@ async function wheelDownAndCheckJumpBack(
 						}, settleMsArg);
 						return;
 					}
-					timeline.dispatchEvent(
+					const content = timeline.querySelector(".turn-row") ?? timeline.querySelector("p") ?? timeline;
+					content.dispatchEvent(
 						new WheelEvent("wheel", { deltaY: deltaArg, bubbles: true, cancelable: true }),
 					);
 					timeline.scrollTop += deltaArg;

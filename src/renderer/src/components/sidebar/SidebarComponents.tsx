@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo, type ReactNode } from "react";
-import { Archive, Boxes, Check, CircleAlert, CircleDot, CircleStop, Code2, Copy, Download, FileDown, FileText, Filter, Folder, FolderSearch, GitBranch, Link2, List, LoaderCircle, MessageCircle, Pencil, Pin, PinOff, Play, Plus, Power, Radio, RefreshCw, RotateCw, ScrollText, Settings2, SquarePen, Trash2, UserPlus, XCircle } from "lucide-react";
+import { Archive, Boxes, Check, CircleAlert, CircleDot, CircleStop, Clock, Code2, Copy, Download, FileDown, FileText, Filter, Folder, FolderSearch, GitBranch, Link2, List, LoaderCircle, MessageCircle, Pencil, Pin, PinOff, Play, Plus, Power, Radio, RefreshCw, RotateCw, ScrollText, Settings2, SquarePen, Trash2, UserPlus, XCircle } from "lucide-react";
 import { t } from "../../i18n";
 import {
 	canRunSessionAction,
@@ -572,6 +572,18 @@ export function SessionSourceFilterMenu(props: {
 	// 过滤类别 = 来源 + DSH 后端（DSH 会话 source 恒为 pi，必须按 backend 独立归类，
 	// 否则「只选 Pi」会继续显示 DSH 会话，用户无法单独过滤）。
 	const sources = SESSION_FILTER_PILLS;
+	// 品牌名与图标并列展示：纯图标列用户分不清哪个徽标对应哪个来源（用户反馈）。
+	// 模块级求值与 SessionSourceBadge 的 SOURCE_LABELS 同一惯例。
+	const pillLabels: Record<SessionFilterPill, string> = {
+		pi: t("sessionSource.pi"),
+		codex: t("sessionSource.codex"),
+		claude: t("sessionSource.claude"),
+		opencode: t("sessionSource.opencode"),
+		zcode: t("sessionSource.zcode"),
+		workbuddy: t("sessionSource.workbuddy"),
+		dsh: t("sessionBackend.dsh"),
+		imagegen: t("sessionBackend.imagegen"),
+	};
 	// 过滤菜单需要连续勾选，onSelect preventDefault 保持菜单打开
 	return (
 		<MenuShell x={props.menu.x} y={props.menu.y} onClose={props.onClose} className="min-w-44">
@@ -598,6 +610,7 @@ export function SessionSourceFilterMenu(props: {
 					) : (
 						<SessionSourceBadge source={pill} />
 					)}
+					<span className="text-body">{pillLabels[pill]}</span>
 				</DropdownMenuCheckboxItem>
 			))}
 		</MenuShell>
@@ -617,6 +630,7 @@ export function ProjectContextMenu(props: {
 	onImportZCodeSessions: () => void;
 	onImportWorkBuddySessions: () => void;
 	onManageProjectResources: () => void;
+	onManageAutomations: () => void;
 	onManageSessions: () => void;
 	onFilterSessions: () => void;
 	onToggleWorktree: () => void;
@@ -678,6 +692,10 @@ export function ProjectContextMenu(props: {
 			<DropdownMenuItem onSelect={props.onManageSessions}>
 				<List className="size-3.5" aria-hidden="true" />
 				{t("menu.manageSessions")}
+			</DropdownMenuItem>
+			<DropdownMenuItem onSelect={props.onManageAutomations}>
+				<Clock className="size-3.5" aria-hidden="true" />
+				{t("automation.title")}
 			</DropdownMenuItem>
 			{/* 内置聊天项目没有 .pi/.agents 资源目录，不暴露项目管理入口，避免打开即报
 			    "Chat 项目不支持项目级资源"（由弹窗本体兜底） */}

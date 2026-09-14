@@ -1,6 +1,10 @@
 {
   "name": "pi-desktop",
   "version": "0.7.5",
+<<<<<<< HEAD
+=======
+  "dshRuntimeVersion": "0.1.5-rc.1",
+>>>>>>> e29db8e76fd5b7cf521ba901d5356df74680b7ed
   "description": "PiDeck is an open-source desktop workbench to manage multiple pi AI coding agents across local project folders with session history, Git integration, terminal, and config management.",
   "private": true,
   "license": "MIT",
@@ -54,15 +58,19 @@
   "main": "out/main/index.js",
   "scripts": {
     "dev": "node scripts/dev.js",
-    "build": "npm run build:packages && npm run generate:pi-ai-catalog && npm run runtime:pack && npm run runtime:check && npm run check:xueprompts && tsc --noEmit --skipLibCheck --incremental && electron-vite build",
+    "build": "npm run sync:dsh-version && npm run build:packages && npm run generate:pi-ai-catalog && npm run generate:extensions-manifest && npm run runtime:pack && npm run runtime:check && npm run check:xueprompts && tsc --noEmit --skipLibCheck --incremental && electron-vite build",
     "build:packages": "node scripts/build-local-packages.js",
-    "build:fast": "npm run generate:pi-ai-catalog && electron-vite build",
+    "build:fast": "npm run generate:pi-ai-catalog && npm run generate:extensions-manifest && electron-vite build",
+    "build:main": "electron-vite build --config electron.vite.main.mjs",
     "runtime:pack": "node scripts/pack-dsh-runtime.mjs",
+    "sync:dsh-version": "node scripts/sync-dsh-declared-version.mjs",
     "runtime:pack:lite": "node scripts/pack-dsh-runtime.mjs --lite",
     "runtime:check": "node scripts/check-dsh-asar.mjs",
     "runtime:check:boot": "node scripts/check-dsh-boot.mjs",
     "generate:pi-ai-catalog": "node scripts/generate-pi-ai-catalog.mjs",
     "check:pi-ai-catalog": "node scripts/generate-pi-ai-catalog.mjs --check",
+    "generate:extensions-manifest": "node scripts/generate-extensions-manifest.mjs",
+    "check:extensions-manifest": "node scripts/generate-extensions-manifest.mjs --check",
     "build:announcements": "node scripts/build-announcements.js",
     "check:announcements": "node scripts/build-announcements.js --check",
     "check:xueprompts": "node scripts/check-xueprompts.mjs",
@@ -144,7 +152,8 @@
         "from": "resources/extensions",
         "to": "extensions",
         "filter": [
-          "*.ts"
+          "*.ts",
+          "extensions-manifest.json"
         ]
       },
       {

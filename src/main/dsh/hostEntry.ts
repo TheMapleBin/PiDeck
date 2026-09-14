@@ -18,7 +18,7 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
-import { installHiddenConsolePatch, installHostHiddenConsole } from "./hideChildConsoles";
+import { installHiddenConsolePatch, installHostHiddenConsole, installRunnerNodeModeEnv, installRunnerPreloadEnv, getHiddenConsoleMode } from "./hideChildConsoles";
 import { agentPresetsRow, dshSubagentModelSelectionSettingsRow, dshWebAgentPlaneDisableRows, hostCompositionPath } from "./dshPresetComposition";
 import {
 	PIDECK_PLUGIN_BRIDGE_PATH,
@@ -28,6 +28,10 @@ import {
 	PIDECK_COMMANDS_BRIDGE_PATH,
 	handleCommandsBridgeFetch,
 } from "./pideckCommandsBridge";
+import {
+	PIDECK_SESSION_BRIDGE_PATH,
+	handleSessionBridgeFetch,
+} from "./pideckSessionBridge";
 
 // utilityProcess 的 parentPort：electron 包类型里有（Electron.ParentPort）。
 import type { ParentPort } from "electron";
@@ -87,8 +91,29 @@ async function main(): Promise<void> {
 	// 2) installHiddenConsolePatch：隐藏控制台分配失败时退回 windowsHide 注入兜底；
 	//    并对沙箱 runner 的 spawn 注入 NODE_OPTIONS preload（runner 是 GUI 进程、
 	//    不继承 host 控制台，需在 runner 进程内自建隐藏控制台——见 runnerConsolePreload.ts）。
+	// 3) installRunnerNodeModeEnv：把 ELECTRON_RUN_AS_NODE=1 写进 host 自己的
+	//    process.env。沙箱链路是 host → subprocess-local runner → windows-acl runner
+	//    的两级 electron.exe，第二级（ACL runner）的 env 由 dsh-subprocess-local 从
+	//    **host 进程环境**经 IPC 下发，spawn 补丁够不着；不置该变量它就以 GUI 模式跑
+	//    → 事件循环永不退出 → 每条沙箱命令挂满 120s 工具超时（2026-09-12 进程树实证，
+	//    详见 hideChildConsoles.installRunnerNodeModeEnv）。
+	// 4) installRunnerPreloadEnv：把 runner preload 的 NODE_OPTIONS 同样写进 host
+	//    process.env（与 3) 同一缺口）：第二级 ACL runner 拿不到 preload 就没有
+	//    可继承的控制台，它用 CreateProcessAsUserW（无 CREATE_NO_WINDOW）拉起 pwsh
+	//    时 Windows 会新建【可见】控制台——命令秒回但每条弹黑窗口（2026-09-12 实测）。
 	installHostHiddenConsole();
 	installHiddenConsolePatch();
+	installRunnerNodeModeEnv();
+	installRunnerPreloadEnv();
+	// 诊断（黑窗口排查入口）：host 的 stdout 不被 DshHostProcess 转发（只接 stderr），
+	// 因此这条也用 console.error 落主进程日志。mode 见 hideChildConsoles 的
+	// HiddenConsoleMode——inherited-windowless 是 ConPTY 场景（正常）；failed 表示
+	// 退回 windowsHide 兜底，若此时仍弹窗，下一步看 runner spawn policy 日志。
+	console.error(
+		`[dsh-host-entry] windows console policy: mode=${getHiddenConsoleMode()} ` +
+			`runnerNodeMode=${process.env.ELECTRON_RUN_AS_NODE === "1"} ` +
+			`runnerPreloadEnv=${String(process.env.NODE_OPTIONS?.includes("runnerConsolePreload") === true)}`,
+	);
 
 	// ── 组合：base 补丁 + 覆盖层（Connection/Gateway/remotes + storage + picker stub + 遥测关）──
 	// require base 用宿主 node_modules 目录（DshHost 传 --dsh-node-modules 的 file URL）：
@@ -171,6 +196,10 @@ async function main(): Promise<void> {
 			// /pideck-command/rpc 暴露给主进程，Composer `/` 补全拿到 live 命令
 			// （含用户/插件注册的命令），执行仍走 pideck-slash-bridge。
 			{ id: "pideck-command-bridge", name: join(__dirname, "pideckCommandsBridge.js") },
+			// 会话冷读元数据桥（0.1.5 历史分页 cursor）：/pideck-session/rpc 暴露
+			// sessionQuery observation cursor（不激活会话），供历史浏览/补帧等
+			// 冷读路径计算 session/page 的合法 throughSeq。
+			{ id: "pideck-session-bridge", name: join(__dirname, "pideckSessionBridge.js") },
 			// 用量采集（G16）：成熟第三方 dsh-bill。无 web 硬依赖，钩 llm/stream
 			// 落盘 $DSH_HOME/dsh-bill/records.jsonl；PiDeck 费用页只读该日志。
 			// inject 为空：headless host 没有 webServer 也能继续记账。
@@ -352,6 +381,15 @@ async function main(): Promise<void> {
 		}
 		if (url.pathname === PIDECK_COMMANDS_BRIDGE_PATH) {
 			return handleCommandsBridgeFetch(ctx, {
+				method: init?.method,
+				headers: init?.headers as Record<string, string> | undefined,
+				body: typeof init?.body === "string" ? init.body : undefined,
+			});
+		}
+		// 会话冷读元数据桥（0.1.5 历史分页 throughSeq cursor 的来源；不激活会话）：
+		// 读 cursor 走 observeSession（与 session/page 内部同一数据源），冷读不 promote。
+		if (url.pathname === PIDECK_SESSION_BRIDGE_PATH) {
+			return handleSessionBridgeFetch(ctx, {
 				method: init?.method,
 				headers: init?.headers as Record<string, string> | undefined,
 				body: typeof init?.body === "string" ? init.body : undefined,
