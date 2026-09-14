@@ -711,6 +711,15 @@ export const cacheSessionMessagesAtom = atom(
   },
 );
 
+/**
+ * disk 来源历史消息数组的驻留上限（2026 内存排查：浏览历史时 atom 数组无界增长）。
+ * 预算：单条消息均值约 2-8KB，2400 条 ≈ 200 轮 ≈ 10MB 封顶；
+ * 超限时丢弃最旧溢出部分并把数值游标前移（页内下标连续：nextBefore = 页最旧下标），
+ * 被丢弃段仍可通过「显示更早」从主进程缓存/文件重新拉取。
+ * DOM 窗口由 turnRenderWindow 独立控制（TIMELINE_MOUNTED_TURN_LIMIT），此处只管数据层封顶。
+ */
+export const DISK_HISTORY_MESSAGE_LIMIT = 2400;
+
 export const prependSessionMessagePageAtom = atom(
   null,
   (get, set, input: {
@@ -728,14 +737,35 @@ export const prependSessionMessagePageAtom = atom(
     ) {
       return false;
     }
-    const messages = [...input.page.messages, ...current.messages];
+    // 重叠防御：游标回退/并发翻页返回的页与已驻留段重复时按 entryId 滤掉页尾重叠部分
+    // （正常路径无重叠，过滤是幂等保险）。
+    const existingKeys = new Set(current.messages.map(messageEntryKey));
+    const freshMessages = input.page.messages.filter(
+      (message) => !existingKeys.has(messageEntryKey(message)),
+    );
+    const messages = [...freshMessages, ...current.messages];
+    // 条数封顶：只允许丢弃新页头部（current 是用户当前视窗，不能截断）；
+    // 游标换算：页内下标连续，部分丢弃 → 旧游标 + 丢弃数；整页丢弃 → 回到请求游标。
+    let nextBefore = input.page.nextBefore;
+    const overflow = messages.length - DISK_HISTORY_MESSAGE_LIMIT;
+    if (overflow > 0 && freshMessages.length > 0) {
+      const dropCount = Math.min(overflow, freshMessages.length);
+      messages.splice(0, dropCount);
+      if (overflow >= freshMessages.length) {
+        // 整页都丢：保留段最旧一条的下标 = 请求游标（页尾之后第一条）
+        nextBefore = input.before;
+      } else if (input.page.nextBefore !== null) {
+        // 部分丢弃：保留段最旧一条 = 页最旧下标 + 丢弃条数
+        nextBefore = input.page.nextBefore + dropCount;
+      }
+    }
     releaseSessionOutlineProjection(input.sessionId);
     set(sessionMessagesCacheAtom, {
       ...get(sessionMessagesCacheAtom),
       [input.sessionId]: {
         ...current,
         messages,
-        page: { total: input.page.total, nextBefore: input.page.nextBefore },
+        page: { total: input.page.total, nextBefore },
         updatedAt: Date.now(),
         outlineRevision: allocateSessionMessageOutlineRevision(),
         outlineLastUserIndex: findLastUserMessageIndex(messages),

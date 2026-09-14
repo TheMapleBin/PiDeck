@@ -3,7 +3,7 @@
  * Phase 3.7: extracted from src/main/index.ts registerIpc().
  */
 
-import { app, ipcMain, shell } from "electron";
+import { app, dialog, ipcMain, shell } from "electron";
 import { ipcChannels } from "../../shared/ipc";
 import { UPDATE_REPO, UPDATE_REPO_OWNER } from "../update/releaseRepo";
 import { probeAllMirrors, type MirrorHealthResult } from "../update/mirrorHealth";
@@ -36,6 +36,11 @@ import type { RpcLogger } from "../logging/RpcLogger";
 import type { SessionRuntimeCoordinator } from "../sessions/SessionRuntimeCoordinator";
 import { resolveConfigProxyTarget } from "../sessions/sessionProxyPolicy";
 import { setConfiguredGitPath } from "../git/gitExecutable";
+import { detectDshRunnerNode } from "../dsh/dshRunnerNode";
+import { DSH_RUNNER_NODE_ENV } from "../dsh/dshRunnerNodeSidecar";
+import { installDshRunnerNodeSidecar } from "../dsh/dshRunnerNodeInstall";
+import { createNetDownloader, fetchDshRunnerNodeIndex } from "../dsh/runtime/dshRuntimeIo";
+import { refreshShortcutBindings } from "../appShortcuts";
 import type { ConfigProxyMode } from "../../shared/types/fetchedModel";
 import type { SkillManager } from "../skills/SkillManager";
 import { fetchModelList, getCachedModelList, invalidateModelListCache, modelsFromPiConfig, refreshModelCatalogStore, refreshModelList, resolveModelListReport } from "../pi/modelListCache";
@@ -213,6 +218,10 @@ export type SystemIpcDeps = {
 	restartWebService?: (settings: AppSettings) => Promise<void>;
 	/** Session catalog set identity context */
 	setSessionCatalogIdentityContext?: (ctx: { wslDistro?: string; wslUser?: string }) => void;
+	/** DSH host 重启（改 runner node 路径后写入 fork env）。 */
+	restartDshHost?: () => Promise<boolean>;
+	/** host 是否已 fork；未启动时改路径不必立刻重启。 */
+	dshHostIsStarted?: () => boolean;
 	/** Configure WSL for various services — null 表示切回本机路径 */
 	configureSkillManagerWsl?: (env: import("../wsl/WslPaths").WslEnvironment | null) => void;
 	configurePromptManagerWsl?: (env: import("../wsl/WslPaths").WslEnvironment | null) => void;
@@ -324,6 +333,8 @@ export function registerSystemIpc(deps: SystemIpcDeps): void {
 		applyWebServiceSettings,
 		restartWebService,
 		setSessionCatalogIdentityContext,
+		restartDshHost,
+		dshHostIsStarted,
 		configureSkillManagerWsl,
 		configurePromptManagerWsl,
 		configureExtensionManagerWsl,
@@ -1257,14 +1268,90 @@ export function registerSystemIpc(deps: SystemIpcDeps): void {
 
 	// ── 设置 ─────────────────────────────────────────────────────────
 
+	ipcMain.handle(ipcChannels.dshDetectRunnerNode, async (_event, configuredPath?: unknown) => {
+		const configured =
+			typeof configuredPath === "string" ? configuredPath : settingsStore.get().dshRunnerNodePath;
+		return detectDshRunnerNode({
+			configuredPath: configured,
+			envPath: process.env[DSH_RUNNER_NODE_ENV],
+			userDataPath: app.getPath("userData"),
+			resourcesPath: process.resourcesPath,
+			appPath: app.getAppPath(),
+		});
+	});
+	let runnerNodeInstallInflight: Promise<import("../../shared/types/dshRunnerNode").DshRunnerNodeInstallResult> | null = null;
+	ipcMain.handle(ipcChannels.dshInstallRunnerNode, async () => {
+		if (process.platform !== "win32") {
+			return { ok: false, error: "仅 Windows 需要单独的 Node 24 沙箱副本" };
+		}
+		if (runnerNodeInstallInflight) return runnerNodeInstallInflight;
+		runnerNodeInstallInflight = (async () => {
+			const settings = settingsStore.get();
+			const result = await installDshRunnerNodeSidecar({
+				userDataPath: app.getPath("userData"),
+				platform: process.platform,
+				updateSource: normalizeUpdateSource(settings.updateSource),
+				indexUrl: process.env.DSH_RUNNER_NODE_INDEX_URL || settings.dshRunnerNodeIndexUrl,
+				download: createNetDownloader((scope, message, detail) => {
+					void appLogger.info(scope, message, detail);
+				}),
+				fetchIndex: (url) =>
+					fetchDshRunnerNodeIndex(url, (scope, message, detail) => {
+						void appLogger.info(scope, message, detail);
+					}),
+			});
+			if (result.ok && restartDshHost && dshHostIsStarted?.()) {
+				void restartDshHost().catch((error) => {
+					void appLogger.warn("dsh", "Failed to restart DSH host after installing runner node", {
+						error: error instanceof Error ? error.message : String(error),
+					});
+				});
+			}
+			return result;
+		})().finally(() => {
+			runnerNodeInstallInflight = null;
+		});
+		return runnerNodeInstallInflight;
+	});
+	ipcMain.handle(ipcChannels.dshChooseRunnerNode, async () => {
+		const options = {
+			properties: ["openFile" as const],
+			filters: process.platform === "win32"
+				? [
+						{ name: "Node", extensions: ["exe"] },
+						{ name: "All Files", extensions: ["*"] },
+					]
+				: [{ name: "All Files", extensions: ["*"] }],
+		};
+		const mainWindow = getMainWindow();
+		const result = mainWindow
+			? await dialog.showOpenDialog(mainWindow, options)
+			: await dialog.showOpenDialog(options);
+		return result.canceled ? null : result.filePaths[0] ?? null;
+	});
+
 	ipcMain.handle(ipcChannels.settingsGet, () => settingsStore.get());
 
 	ipcMain.handle(ipcChannels.settingsUpdate, async (_event, patch: Partial<AppSettings>) => {
 		const prevSettings = settingsStore.get();
 		const settings = await settingsStore.update(patch);
+		// 全局快捷键覆盖：保存后立即刷新主进程生效绑定，无需重启即可用新键（见 appShortcuts.ts）
+		if ("shortcuts" in patch) {
+			refreshShortcutBindings(settings);
+		}
 		// Git 可执行文件路径：立即同步给 git 子进程解析器，保存后无需重启即生效。
 		if ("gitExecutablePath" in patch) {
 			setConfiguredGitPath(settings.gitExecutablePath);
+		}
+		// DSH runner 的 node 路径写入 host fork env：已运行的 host 必须重启才生效。
+		if ("dshRunnerNodePath" in patch && prevSettings.dshRunnerNodePath !== settings.dshRunnerNodePath) {
+			if (restartDshHost && dshHostIsStarted?.()) {
+				void restartDshHost().catch((error) => {
+					void appLogger.warn("dsh", "Failed to restart DSH host after runner node path change", {
+						error: error instanceof Error ? error.message : String(error),
+					});
+				});
+			}
 		}
 		// 自动下载更新开关：立即下发到 electron-updater（含检查期间的 autoDownload 切换）。
 		if ("autoDownloadUpdates" in patch) {

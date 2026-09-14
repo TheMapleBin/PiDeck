@@ -32,12 +32,16 @@
 .timeline-marker-node-active {
   color: var(--color-accent);
   background: var(--color-accent);
-  animation: timeline-node-pulse 1.8s ease-in-out infinite;
+  /* 2026-09 perf：原动画扩散 box-shadow 光环（0→4px），box-shadow 动画每帧触发 paint，
+     且该节点在会话视图常驻（只要用户停留在会话就一直在跑）。改为静态光环 + opacity
+     呼吸（合成层动画，几乎零开销），周期从 1.8s 放慢到 2.4s。 */
+  box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 20%, transparent);
+  animation: timeline-node-pulse 2.4s ease-in-out infinite;
 }
 @keyframes timeline-node-pulse {
   0%,
-  100% { box-shadow: 0 0 0 1px color-mix(in srgb, currentColor 28%, transparent); }
-  50% { box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 12%, transparent); }
+  100% { opacity: 1; }
+  50% { opacity: 0.55; }
 }
 .timeline-marker-node-success {
   color: var(--color-success);
@@ -385,7 +389,10 @@
   pointer-events: none;
   background: linear-gradient(105deg, transparent 20%, color-mix(in srgb, var(--color-accent) 13%, transparent) 48%, transparent 72%);
   transform: translateX(-100%);
-  animation: tool-activity-sheen 2.4s ease-in-out infinite;
+  /* 2026-09 perf：原 2.4s infinite 持续扫光——活动卡在任务运行期间常驻，
+     全卡宽渐变伪元素每帧参与合成。改为进入时扫一遍（1.6s，fill both 定格在
+     扫出位），运行态静默；运行感由 pulse 点/图标呼吸承担。 */
+  animation: tool-activity-sheen 1.6s ease-out 1 both;
 }
 .tool-activity-icon {
   display: grid;
@@ -436,8 +443,9 @@
   to { opacity: 1; }
 }
 @keyframes tool-activity-sheen {
-  0%, 35% { transform: translateX(-100%); }
-  70%, 100% { transform: translateX(100%); }
+  0%,
+  30% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
 }
 @keyframes tool-activity-icon {
   0%, 100% { transform: translateY(0) rotate(0deg); opacity: 0.72; }

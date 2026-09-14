@@ -16,6 +16,7 @@ import {
 import { useId, type RefObject } from "react";
 import { useAtomValue, useStore } from "jotai";
 import type { ImageContent } from "../../../../shared/types";
+import { imageContentSrc } from "../../../../shared/imageContentSrc";
 import { formatBytes } from "../../../../shared/formatBytes";
 import { replaceExpandedRefBlocksWithLabels } from "./composer/quoteChip";
 import type { PastedTextFile } from "../../atoms";
@@ -57,10 +58,14 @@ export function ComposerAttachmentBar(props: {
   if (!hasImages && !hasPasteFiles) return null;
   return (
     <div className="image-preview-area w-full">
-      {props.images.map((image, index) => (
+      {props.images.map((image, index) => {
+        // 附件栏图片来自内存（内联 base64）；重发历史生图时是落盘引用，统一解析
+        const src = imageContentSrc(image);
+        if (!src) return null;
+        return (
         <div key={index} className="image-preview-item">
           <img
-            src={`data:${image.mimeType};base64,${image.data}`}
+            src={src}
             alt={t("app.imageAlt", { index: index + 1 })}
             onClick={() => props.onPreview(image)}
             style={{ cursor: "pointer" }}
@@ -73,7 +78,8 @@ export function ComposerAttachmentBar(props: {
             <X size={12} strokeWidth={2.4} aria-hidden="true" />
           </Button>
         </div>
-      ))}
+        );
+      })}
       {props.pasteFiles?.map((file, index) => (
         <div
           key={file.id}

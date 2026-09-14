@@ -7,6 +7,8 @@ export const mainProcessZhCN = {
 	"diagnostic.extensionsDisabledFallback": "扩展加载失败，已禁用扩展运行。可在本会话把下面的错误信息发给 AI，协助排查扩展问题。",
 	"diagnostic.skillWhitelistSkipped":
 		"技能数量过多（{count} 个），已跳过「禁用技能」设置：本次启动由 pi 自动加载全部技能（禁用技能仍可被模型自动调用）。减少技能后重启会话即可恢复。",
+	"diagnostic.modelPreferenceIgnored":
+		"会话保存的模型偏好 {provider}/{model} 已不存在（可能已被重命名或删除），本次发送沿用当前模型。请打开模型选择器重新选择。",
 	"diagnostic.agentStopped": "Agent 进程已停止，请重启 Agent 后重试",
 	"diagnostic.messageRequired": "消息不能为空",
 	"diagnostic.promptRejected": "消息发送失败。",
@@ -236,6 +238,8 @@ export const mainProcessEnUS: Record<MainProcessTranslationKey, string> = {
 	"diagnostic.extensionsDisabledFallback": "Extensions failed to load, so the Agent is running with extensions disabled. Paste the error details below into this chat and ask the AI to help diagnose them.",
 	"diagnostic.skillWhitelistSkipped":
 		"Too many skills ({count}). The disabled-skill list was skipped for this launch, so pi loaded every skill (disabled ones can still be invoked by the model). Reduce the number of skills and restart the session to restore it.",
+	"diagnostic.modelPreferenceIgnored":
+		"The saved model preference {provider}/{model} no longer exists (it may have been renamed or removed). This message was sent with the current model. Pick a model again in the model selector.",
 	"diagnostic.agentStopped": "The Agent process has stopped. Restart the Agent and try again.",
 	"diagnostic.messageRequired": "The message cannot be empty.",
 	"diagnostic.promptRejected": "Failed to send the message.",

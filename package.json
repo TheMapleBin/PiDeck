@@ -1,6 +1,6 @@
 {
   "name": "pi-desktop",
-  "version": "0.7.5",
+  "version": "0.7.6-beta",
   "dshRuntimeVersion": "0.1.5-rc.1",
   "description": "PiDeck is an open-source desktop workbench to manage multiple pi AI coding agents across local project folders with session history, Git integration, terminal, and config management.",
   "private": true,
@@ -55,11 +55,12 @@
   "main": "out/main/index.js",
   "scripts": {
     "dev": "node scripts/dev.js",
-    "build": "npm run sync:dsh-version && npm run build:packages && npm run generate:pi-ai-catalog && npm run generate:extensions-manifest && npm run runtime:pack && npm run runtime:check && npm run check:xueprompts && tsc --noEmit --skipLibCheck --incremental && electron-vite build",
+    "build": "npm run sync:dsh-version && npm run build:packages && npm run generate:pi-ai-catalog && npm run generate:extensions-manifest && npm run generate:prompts-manifest && npm run generate:skills-manifest && npm run runtime:pack && npm run runtime:check && npm run check:xueprompts && tsc --noEmit --skipLibCheck --incremental && electron-vite build",
     "build:packages": "node scripts/build-local-packages.js",
-    "build:fast": "npm run generate:pi-ai-catalog && npm run generate:extensions-manifest && electron-vite build",
+    "build:fast": "npm run generate:pi-ai-catalog && npm run generate:extensions-manifest && npm run generate:prompts-manifest && npm run generate:skills-manifest && electron-vite build",
     "build:main": "electron-vite build --config electron.vite.main.mjs",
     "runtime:pack": "node scripts/pack-dsh-runtime.mjs",
+    "runner-node:pack": "node scripts/pack-dsh-runner-node.mjs",
     "sync:dsh-version": "node scripts/sync-dsh-declared-version.mjs",
     "runtime:pack:lite": "node scripts/pack-dsh-runtime.mjs --lite",
     "runtime:check": "node scripts/check-dsh-asar.mjs",
@@ -68,6 +69,10 @@
     "check:pi-ai-catalog": "node scripts/generate-pi-ai-catalog.mjs --check",
     "generate:extensions-manifest": "node scripts/generate-extensions-manifest.mjs",
     "check:extensions-manifest": "node scripts/generate-extensions-manifest.mjs --check",
+    "generate:prompts-manifest": "node scripts/generate-content-manifests.mjs --domain prompts",
+    "check:prompts-manifest": "node scripts/generate-content-manifests.mjs --domain prompts --check",
+    "generate:skills-manifest": "node scripts/generate-content-manifests.mjs --domain skills",
+    "check:skills-manifest": "node scripts/generate-content-manifests.mjs --domain skills --check",
     "build:announcements": "node scripts/build-announcements.js",
     "check:announcements": "node scripts/build-announcements.js --check",
     "check:xueprompts": "node scripts/check-xueprompts.mjs",
@@ -80,6 +85,7 @@
     "dist:fast": "node scripts/dist-fast.js",
     "dist:mac": "npm run build && electron-builder --mac dmg zip",
     "dist:linux": "npm run build && electron-builder --linux AppImage deb tar.gz",
+    "dist:linux:arm64": "npm run build && electron-builder --linux AppImage deb tar.gz --arm64",
     "preview": "electron-vite preview",
     "test": "node --test --test-concurrency=4 \"tests/*.test.mjs\"",
     "test:serial": "node --test --test-concurrency=1 \"tests/*.test.mjs\"",
@@ -100,6 +106,7 @@
     "@larksuiteoapi/node-sdk": "^1.67.0",
     "electron-updater": "^6.8.9",
     "ignore": "^5.3.2",
+    "koffi": "^3.2.1",
     "minimatch": "^10.2.5",
     "node-pty": "^1.1.0",
     "sql.js": "^1.14.1",
@@ -156,6 +163,13 @@
       {
         "from": "resources/skills",
         "to": "skills",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "resources/prompts",
+        "to": "prompts",
         "filter": [
           "**/*"
         ]

@@ -5,10 +5,15 @@ import {
   ChevronRight,
   CircleStop,
   CircleX,
+  Copy,
+  FileDown,
+  FileText,
   Folder,
   Globe,
+  Link2,
   MessagesSquare,
   MoreHorizontal,
+  Pencil,
   PanelLeft,
   PanelRight,
   Pin,
@@ -217,6 +222,25 @@ export type SessionTabsBarProps = {
    * undefined = 无当前会话或宿主不支持（如 DSH 共享 host）。
    */
   onOpenProxySetting?: () => void;
+  /**
+   * 当前会话的「会话操作」组：重命名 / 复制会话 / 导出 HTML / 复制会话文件路径 / 打开会话文件。
+   * 搜索定位到的会话可能不在侧栏可见（侧栏只渲染部分行），⋯ 菜单是唯一稳定入口；
+   * 可见性判定与侧栏会话右键菜单同一套（DSH 历史会话无宿主文件 → 隐藏复制/导出/路径组）。
+   * undefined = 无当前会话（引导页等），整组不渲染。
+   */
+  sessionActions?: {
+    /** 复制会话：live 走 clone 分流（DSH 亦可），历史走 copyRecord；草稿会话隐藏 */
+    canCopySession: boolean;
+    /** 导出 HTML：DSH 无实现，隐藏 */
+    canExportHtml: boolean;
+    /** 有会话文件：无（草稿/DSH）则隐藏「复制路径 / 打开文件」 */
+    hasFilePath: boolean;
+    onCopySession: () => void;
+    onCopySessionFilePath: () => void;
+    onOpenSessionFile?: () => void;
+    onExportSessionHtml?: () => void;
+    onRenameSession?: () => void;
+  };
 };
 
 export function SessionTabsBar(props: SessionTabsBarProps) {
@@ -692,7 +716,8 @@ export function SessionTabsBar(props: SessionTabsBarProps) {
       {props.onToggleDrawer ||
       props.actions != null ||
       (props.toolActions && props.toolActions.length > 0) ||
-      props.runControl ? (
+      props.runControl ||
+      props.sessionActions ? (
         <div className="session-tabs-actions flex shrink-0 items-center gap-1 border-l border-border/30 pl-1">
           {props.actions}
           <DropdownMenu>
@@ -719,12 +744,65 @@ export function SessionTabsBar(props: SessionTabsBarProps) {
                   <DropdownMenuSeparator />
                 </>
               )}
+              {/* 当前会话操作组：重命名 / 复制会话 / 导出 HTML / 复制会话文件路径 / 打开会话文件。
+                  与侧栏会话右键菜单同源同语义；搜索定位的会话不在侧栏可见时，
+                  ⋯ 菜单是唯一稳定入口（本组由此补齐）。 */}
+              {props.sessionActions && (
+                <>
+                  {!props.runControl?.capabilities && (
+                    <DropdownMenuLabel>{t("tabs.currentSessionGroup")}</DropdownMenuLabel>
+                  )}
+                  {props.sessionActions.onRenameSession && (
+                    <DropdownMenuItem onSelect={props.sessionActions.onRenameSession}>
+                      <span className="inline-flex items-center gap-2">
+                        <Pencil className="size-3.5" aria-hidden="true" />
+                        {t("common.rename")}
+                      </span>
+                    </DropdownMenuItem>
+                  )}
+                  {props.sessionActions.canCopySession && (
+                    <DropdownMenuItem onSelect={props.sessionActions.onCopySession}>
+                      <span className="inline-flex items-center gap-2">
+                        <Copy className="size-3.5" aria-hidden="true" />
+                        {t("menu.copySession")}
+                      </span>
+                    </DropdownMenuItem>
+                  )}
+                  {props.sessionActions.canExportHtml && props.sessionActions.onExportSessionHtml && (
+                    <DropdownMenuItem onSelect={props.sessionActions.onExportSessionHtml}>
+                      <span className="inline-flex items-center gap-2">
+                        <FileDown className="size-3.5" aria-hidden="true" />
+                        {t("menu.exportHtml")}
+                      </span>
+                    </DropdownMenuItem>
+                  )}
+                  {props.sessionActions.hasFilePath && (
+                    <>
+                      <DropdownMenuItem onSelect={props.sessionActions.onCopySessionFilePath}>
+                        <span className="inline-flex items-center gap-2">
+                          <Link2 className="size-3.5" aria-hidden="true" />
+                          {t("menu.copySessionFilePath")}
+                        </span>
+                      </DropdownMenuItem>
+                      {props.sessionActions.onOpenSessionFile && (
+                        <DropdownMenuItem onSelect={props.sessionActions.onOpenSessionFile}>
+                          <span className="inline-flex items-center gap-2">
+                            <FileText className="size-3.5" aria-hidden="true" />
+                            {t("menu.openSessionFile")}
+                          </span>
+                        </DropdownMenuItem>
+                      )}
+                    </>
+                  )}
+                  {props.onOpenProxySetting ? <DropdownMenuSeparator /> : null}
+                </>
+              )}
               {/* 会话代理（网络代理）：与侧栏同名入口一致；保存后自动重启 runtime 生效。
                   放在工具开关组之前，语义上属于「会话级配置」而非「面板开关」。
                   无运行控制能力时（如极端降级场景）补一个组标签，避免菜单项裸奔。 */}
               {props.onOpenProxySetting && (
                 <>
-                  {!props.runControl?.capabilities && (
+                  {!props.runControl?.capabilities && !props.sessionActions && (
                     <DropdownMenuLabel>{t("tabs.currentSessionGroup")}</DropdownMenuLabel>
                   )}
                   <DropdownMenuItem onSelect={() => props.onOpenProxySetting?.()}>
@@ -950,6 +1028,16 @@ function SessionTab(props: {
     isReloading: props.isReloading,
   });
   const title = sessionDisplayName(record?.title, record?.forked) || t("common.untitled");
+  // DSH/生图徽标与计划/目标模式 chip 都是不可压缩的固定宽度内容。tab 上限 128px 时
+  // 这些前置徽章 + 关闭按钮就能占满整块宽度，标题（flex-1 min-w-0）会被压到 0 宽度
+  // 完全消失（2026-09 浅色主题 + 目标模式实测）。有前置徽章时放宽上限到 176px，
+  // 给标题留出可读空间；无徽章的普通 tab 维持 128px 紧凑上限。
+  const hasLeadingBadges = Boolean(
+    record?.backend === "dsh" ||
+      record?.backend === "imagegen" ||
+      runtime?.state?.planModeActive ||
+      (runtime?.state?.goal && runtime.state.goal.phase !== "complete"),
+  );
   // Tab 级操作（固定/关闭等）改为右键菜单（ContextMenu，光标处弹出）；Tab 本体点击仍是切换，
   // 拖拽排序与中键关闭与菜单互不干扰（drag/auxclick 不触发 click）。
   // 运行控制（停止/重启/重新加载）只作用于当前会话，已上收右上角 ⋯ 更多操作菜单。
@@ -981,9 +1069,10 @@ function SessionTab(props: {
         }}
         className={cn(
           "session-tab group relative flex h-7 shrink-0 cursor-pointer select-none items-center rounded-md border px-2 text-caption transition-[color,background-color,border-color,box-shadow,transform] duration-200",
-          // 固定 Tab 与普通 Tab 同宽策略（按内容收缩，上限 128px）：固定 Tab 无关闭按钮，
-          // hover 不会因按钮出现而跳动，无需 w-20 占位；固定宽度反而让 Pin 图标挤占标题空间
-          "w-fit max-w-32",
+          // 固定 Tab 与普通 Tab 同宽策略（按内容收缩）：固定 Tab 无关闭按钮，
+          // hover 不会因按钮出现而跳动，无需 w-20 占位；固定宽度反而让 Pin 图标挤占标题空间。
+          // 有 DSH/生图徽标或模式 chip 时放宽上限（见上方 hasLeadingBadges 注释）。
+          hasLeadingBadges ? "w-fit max-w-44" : "w-fit max-w-32",
           dragging && "opacity-50",
           // 选中态：灰色柔和实底（bg-accent = --color-bg-active，与左侧 SessionTree 选中行一致），
           // 背景由下方共享 layoutId 的 motion.span spring 滑到当前 Tab；不做黑色实底/阴影/底部条。
@@ -1022,7 +1111,10 @@ function SessionTab(props: {
         )}
         {runtime?.state?.goal && runtime.state.goal.phase !== "complete" && (
           <span
-            className="shrink-0 rounded bg-accent/15 px-1 text-[10px] font-medium leading-4 text-primary"
+            // 底色与 plan chip 同用 bg-primary/15：不能用 bg-accent/15——激活 tab 的
+            // 滑动背景就是实底 bg-accent，accent/15 叠上去完全不可见，chip 会退化成裸文字
+            //（浅色主题下尤其明显）。淡蓝底在明暗主题的激活/非激活 tab 上均可读。
+            className="shrink-0 rounded bg-primary/15 px-1 text-[10px] font-medium leading-4 text-primary"
             title={t("app.composerModeGoal")}
           >
             {t("app.composerModeGoal")}

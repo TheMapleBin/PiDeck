@@ -26,6 +26,7 @@ import { DirtyMarker, SettingRow, SettingSwitchRow } from "./SettingRows";
 import { UpdateSourceSetting } from "./UpdateSourceSetting";
 import { DiagnosticsPanel } from "./DiagnosticsPanel";
 import { CatalogSection } from "./CatalogSection";
+import { DshRunnerNodeRow } from "./DshRunnerNodeRow";
 
 type DevTabProps = {
   draft: AppSettings;
@@ -378,6 +379,9 @@ export const DevTab = memo(function DevTab(props: DevTabProps) {
             </small>
           )}
         </div>
+        {props.appInfo.platform === "win32" && (
+          <DshRunnerNodeRow draft={draft} updateDraft={updateDraft} isDirty={isDirty} />
+        )}
       </SettingsSection>
 
       {/* 版本与更新（electron-updater 快照驱动：检测/下载/安装状态一览，语义对齐 Netcatty 设置卡片） */}

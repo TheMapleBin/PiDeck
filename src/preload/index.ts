@@ -5,13 +5,19 @@ import type { AnnouncementState } from "../shared/types/announcement";
 import type { RpcLogBatch, RpcLogEntry } from "../shared/types/rpcLog";
 import type { DshRuntimeStatus, DshRuntimeInstallProgress } from "../shared/types/dshRuntime";
 import type { GitExecutableInfo } from "../shared/types/git";
-import type { ImageGenConfigFile, ImageGenRequest, ImageGenResult, ImageGenSaveResult } from "../shared/types/imagegen";
+import type { DshRunnerNodeInfo, DshRunnerNodeInstallResult } from "../shared/types/dshRunnerNode";
+import type { ImageBlobPayload, ImageGenConfigFile, ImageGenRequest, ImageGenResult, ImageGenSaveResult } from "../shared/types/imagegen";
 import type { CatalogCheckResult, CatalogUpdateResult, CatalogUpdateStatus } from "../shared/types/catalog";
 import type {
 	BuiltInExtensionsCheckResult,
 	BuiltInExtensionsUpdateResult,
 	BuiltInExtensionsUpdateStatus,
 } from "../shared/types/extensionsUpdate";
+import type {
+	BuiltinContentCheckResult,
+	BuiltinContentUpdateResult,
+	BuiltinContentUpdateStatus,
+} from "../shared/types/contentUpdate";
 import type {
 	VoiceTranscriptionPublicConfig,
 	VoiceTranscriptionRequest,
@@ -462,6 +468,15 @@ const api = {
 				homeDir: string;
 				bootError?: string | null;
 			}>,
+		/** 探测本机 CUI node（DSH 沙箱 runner）。传草稿路径可在保存前预览。 */
+		detectDshRunnerNode: (configuredPath?: string) =>
+			ipcRenderer.invoke(ipcChannels.dshDetectRunnerNode, configuredPath) as Promise<DshRunnerNodeInfo>,
+		/** 打开文件选择框挑 node.exe；取消返回 null。 */
+		chooseDshRunnerNode: () =>
+			ipcRenderer.invoke(ipcChannels.dshChooseRunnerNode) as Promise<string | null>,
+		/** 下载 Node 24 到应用数据目录（不改系统 PATH）。 */
+		installDshRunnerNode: () =>
+			ipcRenderer.invoke(ipcChannels.dshInstallRunnerNode) as Promise<DshRunnerNodeInstallResult>,
 		/**
 		 * DSH runtime 安装态（AgentRuntimeProvider 阶段 1）：notInstalled/broken 时
 		 * DSH UI 整体降级为安装引导，新建 dsh 会话被拒。
@@ -1360,6 +1375,11 @@ const api = {
 			) as Promise<import("../shared/types").ChangelogPayload>,
 		onOpenInBrowser: (callback: (url: string) => void) =>
 			subscribe(ipcChannels.appOpenInBrowser, callback),
+		onOpenSettings: (callback: () => void) =>
+			subscribe(ipcChannels.appOpenSettings, callback),
+		/** 全局快捷键命中广播（新建会话/搜索会话）；回调收到 ShortcutId，渲染层自行判断是否执行 */
+		onShortcutTriggered: (callback: (id: import("../shared/shortcuts").ShortcutId) => void) =>
+			subscribe(ipcChannels.appShortcutTriggered, callback),
 		restart: () => ipcRenderer.invoke(ipcChannels.appRestart) as Promise<void>,
 		quit: () => ipcRenderer.invoke(ipcChannels.appQuit) as Promise<void>,
 		// 打开 PiDeck 数据目录（配置/会话/诊断），文件管理器由主进程按平台选择
@@ -1512,6 +1532,35 @@ const api = {
 		/** 用系统默认程序打开当前生效的内置扩展目录（覆盖层优先，否则随包目录） */
 		builtInOpenDir: () =>
 			ipcRenderer.invoke(ipcChannels.extensionsBuiltInOpenDir) as Promise<void>,
+	},
+	// ── 提示词商店官方模板 / 内置技能热更新（与内置扩展同构：sha256 比对 + userData 覆盖层）──
+	contentStore: {
+		promptsStatus: () =>
+			ipcRenderer.invoke(ipcChannels.promptsStoreUpdateStatus) as Promise<BuiltinContentUpdateStatus>,
+		promptsCheck: (branch?: "main" | "dev") =>
+			ipcRenderer.invoke(ipcChannels.promptsStoreUpdateCheck, branch) as Promise<BuiltinContentCheckResult>,
+		promptsUpdate: (branch?: "main" | "dev") =>
+			ipcRenderer.invoke(ipcChannels.promptsStoreUpdateApply, branch) as Promise<BuiltinContentUpdateResult>,
+		promptsRestore: () =>
+			ipcRenderer.invoke(ipcChannels.promptsStoreUpdateRestore) as Promise<BuiltinContentUpdateResult>,
+		promptsRestorePrevious: () =>
+			ipcRenderer.invoke(ipcChannels.promptsStoreUpdateRestorePrevious) as Promise<BuiltinContentUpdateResult>,
+		/** 用系统默认程序打开当前生效的官方模板目录（覆盖层优先，否则随包目录） */
+		promptsOpenDir: () =>
+			ipcRenderer.invoke(ipcChannels.promptsStoreOpenDir) as Promise<void>,
+		skillsStatus: () =>
+			ipcRenderer.invoke(ipcChannels.skillsStoreUpdateStatus) as Promise<BuiltinContentUpdateStatus>,
+		skillsCheck: (branch?: "main" | "dev") =>
+			ipcRenderer.invoke(ipcChannels.skillsStoreUpdateCheck, branch) as Promise<BuiltinContentCheckResult>,
+		skillsUpdate: (branch?: "main" | "dev") =>
+			ipcRenderer.invoke(ipcChannels.skillsStoreUpdateApply, branch) as Promise<BuiltinContentUpdateResult>,
+		skillsRestore: () =>
+			ipcRenderer.invoke(ipcChannels.skillsStoreUpdateRestore) as Promise<BuiltinContentUpdateResult>,
+		skillsRestorePrevious: () =>
+			ipcRenderer.invoke(ipcChannels.skillsStoreUpdateRestorePrevious) as Promise<BuiltinContentUpdateResult>,
+		/** 用系统默认程序打开当前生效的内置技能目录（覆盖层优先，否则随包目录） */
+		skillsOpenDir: () =>
+			ipcRenderer.invoke(ipcChannels.skillsStoreOpenDir) as Promise<void>,
 	},
 	settings: {
 		get: () =>
@@ -2048,6 +2097,9 @@ const api = {
 			ipcRenderer.invoke(ipcChannels.imagegenGetConfig) as Promise<ImageGenConfigFile>,
 		saveConfig: (config: ImageGenConfigFile) =>
 			ipcRenderer.invoke(ipcChannels.imagegenSaveConfig, config) as Promise<ImageGenSaveResult>,
+		/** 按 blob 引用名取回落盘图片 base64（历史消息只带 ref，展示走 pideck-img://） */
+		readImageBlob: (ref: string) =>
+			ipcRenderer.invoke(ipcChannels.imagegenReadImageBlob, ref) as Promise<ImageBlobPayload | null>,
 	},
 
 	voiceTranscription: {

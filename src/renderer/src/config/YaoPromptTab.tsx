@@ -6,6 +6,7 @@ import type { YaoPromptListResult, YaoPromptItem, YaoPromptDetailResult, PiPromp
 import { t } from "../i18n";
 import { desktopApi } from "../desktopApi";
 import { StoreSearchBar } from "./StoreSearchBar";
+import { ContentStoreUpdatePanel } from "./ContentStoreUpdatePanel";
 import { Pagination } from "../components/ui-shadcn/pagination";
 const PAGE_SIZE = 20;
 
@@ -136,6 +137,12 @@ export function YaoPromptTab(props: {
 	const totalPages = data?.total ? Math.ceil(data.total / PAGE_SIZE) : 0;
 	const activePrompts = data?.prompts ?? [];
 
+	// 官方模板热更新后，覆盖层内的新模板/新分类需重新拉取才能出现在列表里
+	const handleStoreApplied = () => {
+		void loadCategories();
+		void loadPrompts();
+	};
+
 	// 预览详情视图
 	if (previewItem) {
 		return (
@@ -180,6 +187,23 @@ export function YaoPromptTab(props: {
 
 	return (
 		<div className="store-sub-tab">
+			{/* 官方模板热更新面板：随包模板可同步远端最新版（覆盖层优先） */}
+			<ContentStoreUpdatePanel
+				api={{
+					status: () => desktopApi.contentStore.promptsStatus(),
+					check: (branch) => desktopApi.contentStore.promptsCheck(branch),
+					update: (branch) => desktopApi.contentStore.promptsUpdate(branch),
+					restore: () => desktopApi.contentStore.promptsRestore(),
+					restorePrevious: () => desktopApi.contentStore.promptsRestorePrevious(),
+					openDir: () => desktopApi.contentStore.promptsOpenDir(),
+				}}
+				text={{
+					title: t("config.contentStore.prompts.title"),
+					description: t("config.contentStore.prompts.description"),
+					restartHint: t("config.contentStore.prompts.restartHint"),
+				}}
+				onApplied={handleStoreApplied}
+			/>
 			{/* 工具栏：搜索（输入即搜，无独立搜索按钮，统一 StoreSearchBar 胶囊外观） */}
 			<StoreSearchBar
 				value={searchQuery}

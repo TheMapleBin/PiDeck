@@ -8,7 +8,16 @@ import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 const require = createRequire(import.meta.url);
 const childProcess = require("node:child_process");
 
-const { hiddenConsoleOptions, installHiddenConsolePatch, installHostHiddenConsole, installRunnerNodeModeEnv, installRunnerPreloadEnv, getHiddenConsoleMode } = loadTsCommonJs(
+const {
+	hiddenConsoleOptions,
+	installHiddenConsolePatch,
+	installHostHiddenConsole,
+	installRunnerNodeModeEnv,
+	installRunnerPreloadEnv,
+	getHiddenConsoleMode,
+	configureDshRunnerNodeSidecar,
+	getDshRunnerNodeSidecar,
+} = loadTsCommonJs(
 	"src/main/dsh/hideChildConsoles.ts",
 );
 
@@ -653,4 +662,64 @@ test("win32 补丁：execFile（带 callback）与 exec 在兜底模式注入、
 	assert.equal("windowsHide" in activeCalls[1][1][2], false);
 	assert.equal("windowsHide" in activeCalls[2][1][1], false);
 	assert.equal(activeCalls[1][1][2].encoding, "utf8", "原 options 原样透传");
+});
+
+test("CUI sidecar：host 隐藏控制台生效时把 electron.exe runner 改写成 node.exe，且 windowsHide=false", () => {
+	installHostHiddenConsole("win32", makeFfi({ getResults: [0, 0xabc] }).koffi);
+	configureDshRunnerNodeSidecar("C:\\app\\resources\\dsh-runner-node\\node.exe");
+	assert.equal(getDshRunnerNodeSidecar(), "C:\\app\\resources\\dsh-runner-node\\node.exe");
+	const originalSpawn = childProcess.spawn;
+	const calls = [];
+	childProcess.spawn = (...args) => {
+		calls.push(args);
+		return {};
+	};
+	const restore = installHiddenConsolePatch("win32", "C:\\app\\out\\main\\runnerConsolePreload.js");
+	try {
+		childProcess.spawn(
+			"C:\\app\\electron.exe",
+			["C:\\app\\node_modules\\@deepseek-ai\\dsh-sandbox-windows-acl\\lib\\runner.js", "--workspace", "C:\\work", "--", "pwsh.exe", "-Command", "$PID"],
+			{ env: { PATH: "x" }, windowsHide: true },
+		);
+		childProcess.spawn("git", ["status"], { env: { PATH: "g" } });
+	} finally {
+		restore();
+		configureDshRunnerNodeSidecar(undefined);
+		childProcess.spawn = originalSpawn;
+	}
+	assert.equal(calls[0][0], "C:\\app\\resources\\dsh-runner-node\\node.exe", "runner 可执行文件换成 CUI sidecar");
+	assert.equal(calls[0][2].windowsHide, false, "必须继承 host 控制台，不能 CREATE_NO_WINDOW");
+	assert.equal(
+		calls[0][2].env.NODE_OPTIONS,
+		`--require="C:\\\\app\\\\out\\\\main\\\\runnerConsolePreload.js"`,
+		"sidecar 仍注入 preload：第一级 runner 内部 spawn 第二级时关掉 windowsHide",
+	);
+	assert.equal("ELECTRON_RUN_AS_NODE" in calls[0][2].env, false, "node.exe 不需要 RUN_AS_NODE");
+	assert.equal(calls[1][0], "git", "非 runner spawn 不改写");
+});
+
+test("CUI sidecar：host 隐藏控制台失败时不改写（GUI 拉起 node.exe 会新建可见窗口）", () => {
+	installHostHiddenConsole("win32", makeFfi({ getResults: [0], allocResult: 0 }).koffi);
+	configureDshRunnerNodeSidecar("C:\\app\\resources\\dsh-runner-node\\node.exe");
+	const originalSpawn = childProcess.spawn;
+	const calls = [];
+	childProcess.spawn = (...args) => {
+		calls.push(args);
+		return {};
+	};
+	const restore = installHiddenConsolePatch("win32", "C:\\app\\out\\main\\runnerConsolePreload.js");
+	try {
+		childProcess.spawn(
+			"C:\\app\\electron.exe",
+			["C:\\app\\node_modules\\@deepseek-ai\\dsh-sandbox-windows-acl\\lib\\runner.js"],
+			{ env: { PATH: "x" } },
+		);
+	} finally {
+		restore();
+		configureDshRunnerNodeSidecar(undefined);
+		childProcess.spawn = originalSpawn;
+	}
+	assert.equal(calls[0][0], "C:\\app\\electron.exe", "失败模式保持 electron.exe + 旧 preload 路径");
+	assert.equal(calls[0][2].windowsHide, true);
+	assert.equal(calls[0][2].env.ELECTRON_RUN_AS_NODE, "1");
 });

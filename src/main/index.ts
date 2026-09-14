@@ -39,7 +39,9 @@ import {
 	readSingleInstancePreference,
 } from "./settings/SettingsStore";
 import { acquireVersionSingleInstance, type FocusPayload } from "./singleInstance";
+import { mainProcessJsFlags, rendererHeapAdditionalArguments } from "./v8HeapLimits";
 import { isDevToolsShortcut, toggleMainWindowDevTools } from "./devTools";
+import { isShortcutInput, refreshShortcutBindings } from "./appShortcuts";
 import {
 	DEFAULT_DEV_USER_DATA_NAME,
 	isSharedDevBranch,
@@ -122,12 +124,13 @@ if (!electronChromiumSandboxEnabled) {
 	app.commandLine.appendSwitch("no-sandbox");
 }
 
-// V8 老生代堆上限（渲染进程 + 主进程 + worker 一并生效）：
+// V8 老生代堆上限（分层，见 v8HeapLimits.ts 注释）：
 // Chromium 默认上限 ≈ 物理内存 60%（8GB 机器 ≈ 4.8GB），V8 没有压力就不主动收缩，
 // 会话消息/代码块高亮等大对象把堆撑大后 committed 空间长期不归还 OS（内存采样实测：
 // V8 总 55MB → 210MB 不回落，RSS 基线随每次操作抬升）。
-// 设 384MB：留 2 倍于实测 JS used 峰值（~185MB）的余量，超限即强制 GC 收缩。
-app.commandLine.appendSwitch("js-flags", "--max-old-space-size=384");
+// 这里的 384MB 是**主进程**档位；渲染进程不能跟着吃这个值（会被 msg 体量打爆 V8，
+// #213），所以每个窗口额外用 additionalArguments 抬到 RENDERER_MAX_OLD_SPACE_MB。
+app.commandLine.appendSwitch("js-flags", mainProcessJsFlags());
 
 // Windows 系统通知必须设置 AppUserModelID，否则通知不显示、点击事件不触发。
 // dev 与正式版使用不同 AppID，避免通知中心归属混淆（与 dev userData 隔离思路一致）。
@@ -312,6 +315,13 @@ import {
 } from "./extensions/builtInExtensions";
 import { createPiProcessExtensionResolvers } from "./extensions/piProcessExtensionResolvers";
 import { registerBuiltInExtensionIpc } from "./ipc/builtInExtensionIpc";
+import {
+	PROMPTS_STORE_CHANNELS,
+	SKILLS_STORE_CHANNELS,
+	registerContentStoreIpc,
+} from "./ipc/contentStoreIpc";
+import { PromptStoreUpdater } from "./prompts/promptStoreUpdater";
+import { SkillStoreUpdater } from "./skills/skillStoreUpdater";
 import { createPiProcessSkillResolvers } from "./skills/piProcessSkillResolvers";
 import { createPiProcessPromptResolvers } from "./prompts/piProcessPromptResolvers";
 import { ProjectResourceManager } from "./projects/ProjectResourceManager";
@@ -335,6 +345,8 @@ import { registerVisionIpc } from "./ipc/visionIpc";
 import { registerImageGenIpc } from "./ipc/imagegenIpc";
 import { ImageGenService } from "./imagegen/ImageGenService";
 import { ImageSessionStore } from "./imagegen/ImageSessionStore";
+import { ImageBlobStore } from "./imagegen/ImageBlobStore";
+import { registerImageGenImageProtocol } from "./imagegen/ImageGenImageProtocol";
 import { ImageGenConfigStore } from "./imagegen/ImageGenConfigStore";
 import { registerVoiceTranscriptionIpc } from "./ipc/voiceTranscriptionIpc";
 import { VoiceTranscriptionConfigStore } from "./voice/VoiceTranscriptionConfigStore";
@@ -865,6 +877,15 @@ async function copyCatalogSession(sessionId: string) {
 		forked: true,
 	});
 	return { cancelled: false, targetSessionId: copied.id };
+}
+
+/**
+ * 生图独立存储的两个磁盘根：sessions（会话 JSONL 索引）+ blobs（图片二进制）。
+ * 统一在这里解析，避免「列表读 A、写盘写 B、协议从 C 读」这类路径漂移。
+ */
+function resolveImageGenStorageRoots(): { sessions: string; blobs: string } {
+	const root = join(app.getPath("userData"), "imagegen");
+	return { sessions: join(root, "sessions"), blobs: join(root, "blobs") };
 }
 
 async function exportCatalogSessionHtml(sessionId: string): Promise<{ path: string }> {
@@ -1494,6 +1515,8 @@ function configureBrowserPanelWebviewHost(window: BrowserWindow): void {
 
 		webPreferences.partition = BROWSER_PANEL_PARTITION;
 		webPreferences.sandbox = true;
+		// 内置浏览器是第三方页面，同样不能被主进程的 384MB 档位锁住（#213）
+		webPreferences.additionalArguments = rendererHeapAdditionalArguments();
 		webPreferences.nodeIntegration = false;
 		webPreferences.nodeIntegrationInWorker = false;
 		webPreferences.nodeIntegrationInSubFrames = false;
@@ -1533,9 +1556,17 @@ function configureBrowserPanelWebviewHost(window: BrowserWindow): void {
 		});
 
 		// webview guest 是独立 webContents，按键到不了主窗口的 before-input-event；
-		// 转发 DevTools 快捷键到主窗口开关，避免焦点在内置浏览器面板时 F12 无响应。
+		// 转发全局快捷键到主窗口：DevTools 开关、打开设置（唤起窗口并广播），
+		// 键位按用户配置匹配（见 appShortcuts.ts / shared/shortcuts.ts）。
 		guest.on("before-input-event", (event, input) => {
-			if (!isDevToolsShortcut(input)) return;
+			if (isShortcutInput("openSettings", input)) {
+				event.preventDefault();
+				if (!window || window.isDestroyed()) return;
+				if (!window.isVisible()) window.show();
+				window.webContents.send(ipcChannels.appOpenSettings);
+				return;
+			}
+			if (!isShortcutInput("toggleDevTools", input)) return;
 			event.preventDefault();
 			toggleMainWindowDevTools(window);
 		});
@@ -1609,6 +1640,8 @@ async function createWindow() {
 			contextIsolation: true,
 			nodeIntegration: false,
 			webviewTag: true,
+			// 渲染进程 V8 堆上限：必须覆盖 Chromium 透传的全局 `--js-flags`（#213）
+			additionalArguments: rendererHeapAdditionalArguments(),
 		},
 	});
 	const createdWindow = mainWindow;
@@ -1763,11 +1796,30 @@ async function createWindow() {
 		}
 	});
 
-	// 监听浏览器标准快捷键打开开发者工具（F12 / Ctrl+Shift+I / Ctrl+Shift+J，
-	// macOS 变体与开关逻辑集中在 devTools.ts，主窗口/webview/设置 IPC 共用）
+	// 监听全局快捷键（打开设置 / 开发者工具 / 新建会话 / 搜索会话，键位见 shared/shortcuts.ts，
+	// 可设置页自定义）；devTools 组合键的 macOS 变体与开关逻辑集中在 devTools.ts，
+	// 主窗口/webview/设置 IPC 共用。新建/搜索是渲染层 UI 动作（引导页/命令面板），
+	// 这里只做命中与广播，由渲染层按焦点状态决定是否执行（输入框聚焦时忽略）。
 	mainWindow.webContents.on("before-input-event", (event, input) => {
 		if (!mainWindow || mainWindow.isDestroyed()) return;
-		if (isDevToolsShortcut(input)) {
+		if (isShortcutInput("openSettings", input)) {
+			event.preventDefault();
+			// 快捷键可能命中在窗口隐藏（托盘）期间：先唤起窗口，再让渲染层打开设置页
+			if (!mainWindow.isVisible()) mainWindow.show();
+			mainWindow.webContents.send(ipcChannels.appOpenSettings);
+			return;
+		}
+		if (isShortcutInput("openNewSession", input)) {
+			event.preventDefault();
+			mainWindow.webContents.send(ipcChannels.appShortcutTriggered, "openNewSession");
+			return;
+		}
+		if (isShortcutInput("openSearch", input)) {
+			event.preventDefault();
+			mainWindow.webContents.send(ipcChannels.appShortcutTriggered, "openSearch");
+			return;
+		}
+		if (isShortcutInput("toggleDevTools", input)) {
 			event.preventDefault();
 			toggleMainWindowDevTools(mainWindow);
 		}
@@ -2469,9 +2521,18 @@ function registerIpc() {
 	});
 	// 生图 session 独立存储：无 pi 会话文件的纯生图草稿把历史落盘到这里（重启可恢复），
 	// 不依赖 pi 会话文件也不进 pi 的 sessions 目录（PiDeck userData/imagegen/sessions）。
+	// 图片二进制单独落 blobs：JSONL 只留引用，否则几十轮生图就能把会话文件堆到 200 MB+，
+	// 渲染进程加载即 OOM（2026-09 白屏事故）。两个根必须同源解析，各拼一次路径会漂移成
+	// 「图片写进了 A 目录、协议从 B 目录读」。
+	const imageGenRoots = resolveImageGenStorageRoots();
+	const imageBlobStore = new ImageBlobStore({ getBlobsPath: () => imageGenRoots.blobs });
+	void imageBlobStore.ensureDir();
 	const imageSessionStore = new ImageSessionStore({
-		getStorePath: () => join(app.getPath("userData"), "imagegen", "sessions"),
+		getStorePath: () => imageGenRoots.sessions,
+		blobs: imageBlobStore,
 	});
+	// pideck-img:// 必须在 app ready 后注册（scheme 特权声明在文件底部 ready 前完成）
+	registerImageGenImageProtocol(imageBlobStore);
 	registerImageGenIpc({
 		imageGen: new ImageGenService({
 			getProviderCredentials: async (provider) => {
@@ -2483,6 +2544,7 @@ function registerIpc() {
 		}),
 		imageGenConfig: imageGenConfigStore,
 		log: (message, ...args) => appLogger.info("imagegen", message, ...args),
+		readImageBlob: (ref) => imageBlobStore.readPayload(ref),
 		// 生图记录落盘：user 提示词 + assistant 图片两条消息写入 pi 会话文件，
 		// 让「不走 pi/dsh 直连 API」的生图结果也进会话历史（重启后可见）。
 		// DSH 会话无 pi 会话文件且 host 无消息追加 API，跳过（生图仍正常返回）。
@@ -2927,6 +2989,17 @@ function registerIpc() {
 		// 进程监控停止 agent：按 agentId 走完整会话停止链路（含 detach 推送）
 		stopAgentFromMonitor,
 		getDshHostPid: () => dshHost.getHostPid(),
+		restartDshHost: async () => {
+			await dshAgentManager.stopAll();
+			await dshHost.restart();
+			try {
+				await dshHost.ensureStarted();
+				return dshHost.isHostProcessRunning() && dshHost.isHostReady();
+			} catch {
+				return false;
+			}
+		},
+		dshHostIsStarted: () => dshHost.isStarted(),
 		providerMigration: {
 			configManager,
 			dshHost,
@@ -3069,6 +3142,8 @@ function registerIpc() {
 			// 恢复写回的是磁盘文件：pideck 设置需重新 load 进内存（其它 store 仍持旧值，
 			// UI 会提示重启生效）；pi 模型目录缓存刷新，避免恢复后仍用旧模型列表。
 			await settingsStore.load();
+			// 快捷键覆盖可能随备份一起被恢复：同步刷新主进程生效绑定，无需重启
+			refreshShortcutBindings(settingsStore.get());
 			void piModelCapabilityCache?.refresh().catch(() => undefined);
 		},
 	});
@@ -3137,11 +3212,13 @@ async function detectExternalEditorsOnFirstLaunch() {
 	void appLogger.info("editor", "External editors detected on first launch", { count: detected.length });
 }
 
-// 换肤背景图/宠物雪碧图/声音提醒协议：自定义 scheme 必须在 ready 前注册特权声明（secure 以便渲染层 CSS/图片/音频引用）
+// 换肤背景图/宠物雪碧图/声音提醒/生图历史图片协议：自定义 scheme 必须在 ready 前注册特权声明（secure 以便渲染层 CSS/图片/音频引用）
 protocol.registerSchemesAsPrivileged([
 	{ scheme: "pideck-bg", privileges: { secure: true, standard: true, corsEnabled: false, supportFetchAPI: true, stream: false } },
 	{ scheme: "pideck-pet", privileges: { secure: true, standard: true, corsEnabled: false, supportFetchAPI: true, stream: false } },
 	{ scheme: "pideck-sound", privileges: { secure: true, standard: true, corsEnabled: false, supportFetchAPI: true, stream: true } },
+	// 生图历史图片：渲染层 <img> 直接加载落盘 blob，避免把 base64 搬回渲染进程堆
+	{ scheme: "pideck-img", privileges: { secure: true, standard: true, corsEnabled: false, supportFetchAPI: true, stream: true } },
 ]);
 
 app.whenReady().then(async () => {
@@ -3217,8 +3294,38 @@ app.whenReady().then(async () => {
 		() => settingsStore.get(),
 		(patch) => settingsStore.update(patch),
 	);
-	xuePromptManager = new XuePromptManager();
+	// 提示词商店官方模板 / 内置技能热更新：与内置扩展同一套「resources 只读 → userData 覆盖层」机制。
+	// 覆盖层供查询侧（XuePromptManager / SkillManager）叠加解析：远端新增/修改的模板与技能免发版生效。
+	const promptStoreUpdater = new PromptStoreUpdater({
+		userDataDir: app.getPath("userData"),
+		// 随包根与 skills/xueprompts.db 同一约定：dev 读 app.getAppPath()/resources，
+		// 打包读 process.resourcesPath —— extraResources 的 `to` 已经把目录铺到
+		// <app>/resources/<to>，这里再拼一层 "resources" 会指向不存在的路径。
+		builtinPromptsDir: app.isPackaged
+			? join(process.resourcesPath, "prompts")
+			: join(app.getAppPath(), "resources", "prompts"),
+		// 与内置扩展/模型目录共用 settings.updateSource：默认 AtomGit，切 GitHub 后 raw 直连优先。
+		source: () => settingsStore.get().updateSource,
+	});
+	const skillStoreUpdater = new SkillStoreUpdater({
+		userDataDir: app.getPath("userData"),
+		// 与 SkillManager.installTemplate 的 root 解析严格对齐：打包态 process.resourcesPath
+		// 已是 <app>/resources，再拼一层会变成 <app>/resources/resources/skills。
+		builtinSkillsDir: app.isPackaged
+			? join(process.resourcesPath, "skills")
+			: join(app.getAppPath(), "resources", "skills"),
+		source: () => settingsStore.get().updateSource,
+	});
+	registerContentStoreIpc(promptStoreUpdater, PROMPTS_STORE_CHANNELS);
+	registerContentStoreIpc(skillStoreUpdater, SKILLS_STORE_CHANNELS);
+	xuePromptManager = new XuePromptManager(
+		undefined,
+		// 官方模板覆盖层叠加：热更新后商店列表/详情立即显示覆盖层版本
+		() => promptStoreUpdater.resolveEffectiveOverlayDir(),
+	);
 	skillManager = new SkillManager(undefined, mainCopy);
+	// 内置技能覆盖层叠加：安装内置技能模板时覆盖层优先（修 bug/新增技能免发版）
+	skillManager.configureSkillOverlay(() => skillStoreUpdater.resolveEffectiveOverlayDir());
 	// 注入设置读写：技能开关同步持久化禁用列表（--no-skills/--skill 白名单模式的依据），
 	// 跨重启保留，不再只依赖 SKILL.md frontmatter（该标记仅阻止模型自动调用）。
 	skillManager.configureSettings(
@@ -3476,6 +3583,7 @@ app.whenReady().then(async () => {
 		() => dshRuntimeStatus.resolveAppRoot(),
 		// 永久删除归档目录：统一走系统回收站（与 pi 会话删除同语义，可恢复；拒绝静默硬删）。
 		async (path) => { await shell.trashItem(path); },
+		() => settingsStore.get().dshRunnerNodePath ?? "",
 	);
 	dshAgentManager = new DshAgentManager(
 		dshHost,
@@ -3773,6 +3881,8 @@ app.whenReady().then(async () => {
 	quitCleanup.register("terminal", () => terminalManager?.closeAll());
 
 	await settingsStore.load();
+	// 快捷键覆盖从磁盘载入后立即刷新主进程生效绑定（此后 settings:update 路径实时刷新）
+	refreshShortcutBindings(settingsStore.get());
 	piModelCapabilityCache = new PiModelCapabilityCache({
 		// 模型能力水合分两档（详见 docs/pi-model-capability-plan.md）：
 		// - 快速档（默认，loadExtensions=false）：--no-extensions。实测 418 模型下

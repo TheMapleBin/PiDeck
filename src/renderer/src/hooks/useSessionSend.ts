@@ -37,7 +37,7 @@ import {
   stripQuoteTokens,
 } from "../components/session/composer/quoteChip";
 import { t, translateI18nDescriptor } from "../i18n";
-import { DSH_INSTALL_SETTINGS_TARGET, showDshRuntimeBlockHint } from "../utils/dshRuntimeHint";
+import { DSH_INSTALL_SETTINGS_TARGET, maybeHintMissingDshRunnerNode, showDshRuntimeBlockHint } from "../utils/dshRuntimeHint";
 import { dshSendBlockReason } from "../../../shared/types/dshRuntime";
 
 export type EnqueuePromptSnapshot = {
@@ -238,6 +238,7 @@ export function useSessionSend(options: UseSessionSendOptions) {
         );
         return;
       }
+      maybeHintMissingDshRunnerNode(() => store.set(openSettingsAtom, { tab: "dev", section: "dsh-runner-node" }));
     }
 
     const resolveSendMode = (targetSessionId: string): ComposerAgentMode => {

@@ -13,6 +13,7 @@ import {
 import { createDefaultExternalEditorSettings, createDefaultSoundAlertSettings, DEFAULT_PET_SCALE, normalizeSoundAlertSettings, type AppSettings } from "../../shared/types";
 import { normalizePinnedSessionIds } from "../../shared/pinnedSessions";
 import { parseBusySendDelivery } from "../../shared/busySendDelivery";
+import { sanitizeShortcutOverrides } from "../../shared/shortcuts";
 import { normalizeThemeSchedule } from "../../shared/themeSchedule";
 import { getAppLogger } from "../logging/sharedLogger";
 import { setConfiguredGitPath } from "../git/gitExecutable";
@@ -91,6 +92,8 @@ const defaultSettings: AppSettings = {
   useNativeTitleBar: false,
   showNativeMenu: false,
   sendShortcut: "enter-send",
+  // 全局快捷键覆盖：空对象 = 全部走平台默认（见 shared/shortcuts.ts SHORTCUT_DEFS）
+  shortcuts: {},
   theme: "system",
   themeScheduleLightStart: "07:00",
   themeScheduleDarkStart: "19:00",
@@ -135,6 +138,7 @@ Gitmoji 对应关系：
   gitCommitMessageModel: "",
   // 空串 = 自动解析（PATH 中的 git → 各平台已知安装位置）；用户可在 Git 设置页显式指定。
   gitExecutablePath: "",
+  dshRunnerNodePath: "",
   closeToTray: true,
   // 默认单实例：托盘隐藏后再次点击快捷方式会唤起原窗口，而不是再开一个进程
   singleInstance: true,
@@ -354,6 +358,11 @@ export class SettingsStore {
       // 避免 spawn 拿到非字符串路径把整个 Git 面板打挂。
       this.settings.gitExecutablePath =
         typeof parsed.gitExecutablePath === "string" ? parsed.gitExecutablePath.trim() : "";
+      this.settings.dshRunnerNodePath =
+        typeof parsed.dshRunnerNodePath === "string" ? parsed.dshRunnerNodePath.trim() : "";
+      // 快捷键覆盖来自旧 settings.json 时可能是脏值（未知 id / 非法 accelerator）；
+      // 统一清洗，坏条目回落平台默认，避免主进程匹配读到无效键。
+      this.settings.shortcuts = sanitizeShortcutOverrides(parsed.shortcuts, process.platform);
     } catch {
       this.settings = { ...defaultSettings };
     }
@@ -427,6 +436,10 @@ export class SettingsStore {
     // IPC 入参不可信：自动标题开关只接受布尔值，非法值保持原有设置。
     if ("autoSessionTitle" in safePatch && typeof safePatch.autoSessionTitle !== "boolean") {
       delete safePatch.autoSessionTitle;
+    }
+    // 全局快捷键覆盖来自渲染层，入参不可信：只保留已知 id + 合法 accelerator 的条目。
+    if ("shortcuts" in safePatch) {
+      safePatch.shortcuts = sanitizeShortcutOverrides(safePatch.shortcuts, process.platform);
     }
     // 更新源 id 归一化（只允许已知枚举：atomgit 第一首选，github 官方；其余历史值回退 atomgit）。
     if ("updateSource" in safePatch) {

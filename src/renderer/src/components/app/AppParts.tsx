@@ -477,12 +477,36 @@ function loadDevBranch(): Promise<string | undefined> {
 /**
  * Brand lockup：官方 pi 风格 canvas logo + 两行字标（beUI Animated Sidebar 头部风格的文字排布）。
  * 分支名下探为副标题行（仅开发分支时显示，避免视觉噪声）；视觉变形只作用于字标，
- * 品牌语义仍由外层 aria-label 承载。字标用 beUI TextShimmer（纯 CSS 动画、无平台分支）。
+ * 品牌语义仍由外层 aria-label 承载。字标扫光做占空比最小化：每 60s 扫一轮
+ * （2.5s），其余时间定格为静态渐变、零帧生产——常驻 infinite 循环会在
+ * 高分辨率 × 高刷新率窗口下逼 GPU 进程逐帧合成整窗（实测空闲占约 1 核），
+ * 放慢周期不省帧，只有拉长静止间隔才有效。
  */
 export function BrandLockup(props: { replayToken?: number } = {}) {
 	const [branch, setBranch] = useState<string | undefined>(undefined);
 	useEffect(() => {
 		void loadDevBranch().then(setBranch);
+	}, []);
+	// 字标扫光占空循环：扫 2.5s（一轮）→ 静止 60s → 重复。
+	const [shimmerOn, setShimmerOn] = useState(true);
+	useEffect(() => {
+		const SWEEP_MS = 2500;
+		const REST_MS = 60_000;
+		let cancelled = false;
+		let timer: number | undefined;
+		const schedule = (ms: number, on: boolean) => {
+			timer = window.setTimeout(() => {
+				if (cancelled) return;
+				setShimmerOn(on);
+				schedule(on ? REST_MS : SWEEP_MS, !on);
+			}, ms);
+		};
+		setShimmerOn(true);
+		schedule(SWEEP_MS, false);
+		return () => {
+			cancelled = true;
+			if (timer !== undefined) clearTimeout(timer);
+		};
 	}, []);
 	const brandTitle = branch ? `PiDeck · ${branch}` : "PiDeck";
 	// macOS 窗口左上角已有原生交通灯，π logo + 字标挤在同一行视觉过重；
@@ -494,6 +518,7 @@ export function BrandLockup(props: { replayToken?: number } = {}) {
 			<span className="flex min-w-0 flex-col justify-center gap-1">
 				<TextShimmer
 					as="span"
+					enabled={shimmerOn}
 					className="brand-wordmark truncate text-[18px] font-[PiDeckDepartureMono] font-bold uppercase leading-none"
 				>
 					PiDeck

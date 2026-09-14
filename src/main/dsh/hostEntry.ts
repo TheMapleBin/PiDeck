@@ -18,7 +18,9 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
-import { installHiddenConsolePatch, installHostHiddenConsole, installRunnerNodeModeEnv, installRunnerPreloadEnv, getHiddenConsoleMode } from "./hideChildConsoles";
+import { installHiddenConsolePatch, installHostHiddenConsole, installRunnerNodeModeEnv, installRunnerPreloadEnv, getHiddenConsoleMode, configureDshRunnerNodeSidecar, getDshRunnerNodeSidecar } from "./hideChildConsoles";
+import { DSH_RUNNER_NODE_ENV } from "./dshRunnerNodeSidecar";
+import type { Win32Ffi } from "./hideChildConsoles";
 import { agentPresetsRow, dshSubagentModelSelectionSettingsRow, dshWebAgentPlaneDisableRows, hostCompositionPath } from "./dshPresetComposition";
 import {
 	PIDECK_PLUGIN_BRIDGE_PATH,
@@ -85,6 +87,17 @@ async function main(): Promise<void> {
 	// Windows 黑窗口治理（必须在下面任何 @deepseek-ai/* 动态 import 之前安装——
 	// dsh-subprocess-local 等模块加载时会捕获 child_process.spawn 的引用，
 	// 补丁先于加载才覆盖得到）：
+	// 0) koffi 解析（2026-09-14 黑窗口根因）：koffi 是 @deepseek-ai/dsh-subprocess-local
+	//    的传递依赖，此前不在应用 dependencies 里——开发态从仓库 node_modules 向上
+	//    解析没问题，打包版 app.asar 里根本没有它 → installHostHiddenConsole 与
+	//    runnerConsolePreload 里的 koffi 加载全部静默失败（日志实证 mode=failed）→
+	//    host 与 runner 都拿不到隐藏控制台 → runner（electron.exe GUI，不继承控制台）
+	//    用 CreateProcessW(1028) 拉起 rg/pwsh 时 Windows 新建【可见】控制台 = 黑窗口。
+	//    修复分三层：a) koffi 进应用 dependencies（随包分发，见 package.json）；
+	//    b) 这里优先从 runtime node_modules 解析（runtime 必带 koffi，最可靠），
+	//       并把解析结果写进 PIDECK_KOFFI_MODULE 供 runner preload 兜底；
+	//    c) preload 侧按 PIDECK_KOFFI_MODULE → __dirname 解析链兜底（见
+	//       runnerConsolePreload.ts）。
 	// 1) installHostHiddenConsole：给 host 分配隐藏控制台。utilityProcess 无控制台，
 	//    child_process.spawn 拉起控制台子程序时 libuv 自动 CREATE_NO_WINDOW（本地
 	//    路径本就不弹窗）；分配隐藏控制台后所有子进程/孙进程继承它，整棵树零弹窗。
@@ -101,7 +114,18 @@ async function main(): Promise<void> {
 	//    process.env（与 3) 同一缺口）：第二级 ACL runner 拿不到 preload 就没有
 	//    可继承的控制台，它用 CreateProcessAsUserW（无 CREATE_NO_WINDOW）拉起 pwsh
 	//    时 Windows 会新建【可见】控制台——命令秒回但每条弹黑窗口（2026-09-12 实测）。
-	installHostHiddenConsole();
+	let koffiFfi: Win32Ffi | undefined;
+	try {
+		const runtimeRequire = createRequire(join(fileURLToPath(nodeModulesUrl), "package.json"));
+		const koffiEntry = runtimeRequire.resolve("koffi") as string;
+		process.env.PIDECK_KOFFI_MODULE = koffiEntry;
+		koffiFfi = runtimeRequire(koffiEntry) as Win32Ffi;
+	} catch {
+		// runtime 里没有 koffi（异常形态）：退回 app 内解析——koffi 已进应用依赖，
+		// 打包版从 asar 内 createRequire(__dirname) 可解析（native 落 asar.unpacked）。
+	}
+	configureDshRunnerNodeSidecar(process.env[DSH_RUNNER_NODE_ENV]);
+	installHostHiddenConsole(undefined, koffiFfi);
 	installHiddenConsolePatch();
 	installRunnerNodeModeEnv();
 	installRunnerPreloadEnv();
@@ -112,7 +136,9 @@ async function main(): Promise<void> {
 	console.error(
 		`[dsh-host-entry] windows console policy: mode=${getHiddenConsoleMode()} ` +
 			`runnerNodeMode=${process.env.ELECTRON_RUN_AS_NODE === "1"} ` +
-			`runnerPreloadEnv=${String(process.env.NODE_OPTIONS?.includes("runnerConsolePreload") === true)}`,
+			`runnerPreloadEnv=${String(process.env.NODE_OPTIONS?.includes("runnerConsolePreload") === true)} ` +
+			`runnerSidecar=${getDshRunnerNodeSidecar() ?? "none"} ` +
+			`koffiModule=${process.env.PIDECK_KOFFI_MODULE ?? "unresolved"}`,
 	);
 
 	// ── 组合：base 补丁 + 覆盖层（Connection/Gateway/remotes + storage + picker stub + 遥测关）──

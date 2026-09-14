@@ -591,3 +591,81 @@ test("DSH run succeeds via agents:state running then idle without isTurnActive",
 		await rm(dir, { recursive: true, force: true });
 	}
 });
+
+test("AutomationRunCoordinator 预算全留空（不限）不误杀：run 正常走到 succeeded", async () => {
+	const dir = await mkdtemp(join(tmpdir(), "pideck-coord-unlimited-"));
+	const storePath = join(dir, "automation.json");
+	try {
+		const store = new AutomationStore(storePath);
+		await store.load(1_000);
+
+		// 编辑器留空形态：四字段显式 null → store 归一化为「不限」（无 timeoutMs 键）
+		const { deps, coordinator, run, sessionId } = await createStartedCoordinator(store, {
+			budget: { timeoutMs: null, maxTokens: null, maxCostUsd: null, maxSteps: null },
+		});
+		assert.equal(store.listTasks()[0].budget.timeoutMs, undefined);
+
+		// 回归守卫：若 timeout watch 被错误地以 setTimeout(fn, undefined) 挂上（0ms 立即触发），
+		// run 会在 dispatch 后瞬间被判 timed-out；正常路径应不受影响走到 succeeded。
+		coordinator.observeRuntimeEvent(runtimeStateEvent(sessionId, {
+			inputTokens: 10,
+			outputTokens: 5,
+			cost: 0.001,
+			isTurnActive: true,
+			isExecutingTool: false,
+		}));
+		await new Promise((r) => setTimeout(r, 30));
+		assert.notEqual(store.getRun(run.id).status, "timed-out");
+
+		deps.setRuntimeState({ inputTokens: 10, outputTokens: 5, cost: 0.001 });
+		coordinator.observeRuntimeEvent(tabStateEvent(sessionId, "idle"));
+		await new Promise((r) => setTimeout(r, 20));
+		assert.equal(store.getRun(run.id).status, "succeeded");
+
+		coordinator.dispose();
+	} finally {
+		await rm(dir, { recursive: true, force: true });
+	}
+});
+
+test("each automation run creates a fresh session while retaining task linkage", async () => {
+	const dir = await mkdtemp(join(tmpdir(), "pideck-coord-fresh-session-"));
+	const storePath = join(dir, "automation.json");
+	try {
+		const store = new AutomationStore(storePath);
+		await store.load(1_000);
+		const { task, deps, coordinator, run, sessionId } = await createStartedCoordinator(store);
+
+		coordinator.observeRuntimeEvent(runtimeStateEvent(sessionId, {
+			isTurnActive: true,
+			isExecutingTool: false,
+		}));
+		coordinator.observeRuntimeEvent(tabStateEvent(sessionId, "idle"));
+		assert.equal(
+			await waitFor(() => store.getRun(run.id)?.status === "succeeded"),
+			true,
+			"the first run should settle before starting the next occurrence",
+		);
+
+		const secondRun = await coordinator.runNow(task.id, 2_000);
+		assert.equal(
+			await waitFor(() => {
+				const persisted = store.getRun(secondRun.id);
+				return deps.createdSessions.length === 2 && Boolean(persisted?.sessionId);
+			}),
+			true,
+			"a second occurrence should receive its own session",
+		);
+
+		const secondSessionId = deps.createdSessions[1].id;
+		const persistedSecondRun = store.getRun(secondRun.id);
+		assert.notEqual(secondSessionId, sessionId);
+		assert.equal(persistedSecondRun.taskId, task.id);
+		assert.equal(persistedSecondRun.projectId, task.projectId);
+		assert.equal(persistedSecondRun.sessionId, secondSessionId);
+
+		coordinator.dispose();
+	} finally {
+		await rm(dir, { recursive: true, force: true });
+	}
+});

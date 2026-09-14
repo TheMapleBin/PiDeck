@@ -152,3 +152,64 @@ test("AutomationStore deleteRuns skips in-progress runs and clearTerminalRuns ke
 		await rm(dir, { recursive: true, force: true });
 	}
 });
+
+test("AutomationStore budget：编辑器留空(null)=不限，重启不伪造默认；外部不带预算仍给默认保护", async () => {
+	const dir = await mkdtemp(join(tmpdir(), "pideck-automation-budget-"));
+	const storePath = join(dir, "automation.json");
+	try {
+		const store = new AutomationStore(storePath);
+		await store.load(1_000);
+
+		// 编辑器留空会显式传 null（IPC 丢 undefined 键，null 才能表达「不限」）
+		const unlimited = await store.createTask({
+			name: "Unlimited Budget",
+			projectId: "project-1",
+			prompt: "noop",
+			schedule: { type: "cron", expression: "0 2 * * *" },
+			budget: { timeoutMs: null, maxTokens: null, maxCostUsd: null, maxSteps: null },
+		}, 1_000);
+		assert.equal(unlimited.budget.timeoutMs, undefined);
+		assert.equal(unlimited.budget.maxTokens, undefined);
+		assert.equal(unlimited.budget.maxCostUsd, undefined);
+		assert.equal(unlimited.budget.maxSteps, undefined);
+
+		// 只改一个字段为 null 不影响其他已设字段（按键合并语义）
+		const resetTokens = await store.updateTask(unlimited.id, {
+			budget: { maxTokens: null },
+		}, 1_100);
+		assert.equal(resetTokens.budget.maxTokens, undefined);
+
+		// 重启后「不限」必须保持：读盘缺键不能再被 DEFAULT 兜底伪造回 30min/200K。
+		// 这是本测试守卫的核心回归——旧实现读盘走输入层 normalizeBudget，会把缺失
+		// 键填成默认值，用户保存的「留空不限」隔一次重启就悄悄变回默认。
+		const persisted = await readFile(storePath, "utf8");
+		assert.ok(!persisted.includes('"timeoutMs"'), "不限任务的预算不应落盘 timeoutMs 键");
+		const reloaded = new AutomationStore(storePath);
+		await reloaded.load(2_000);
+		const afterReload = reloaded.listTasks().find((task) => task.name === "Unlimited Budget");
+		assert.equal(afterReload.budget.timeoutMs, undefined);
+		assert.equal(afterReload.budget.maxTokens, undefined);
+
+		// 外部调用方不传 budget：仍落默认保护（30min 等），不能因缺省语义变成裸奔
+		const defaulted = await store.createTask({
+			name: "Default Budget",
+			projectId: "project-1",
+			prompt: "noop",
+			schedule: { type: "cron", expression: "0 2 * * *" },
+		}, 1_200);
+		assert.equal(defaulted.budget.timeoutMs, 30 * 60_000);
+
+		// 数值仍钳制到合法区间（最小 10s / 最大 7 天）
+		const clamped = await store.createTask({
+			name: "Clamped Budget",
+			projectId: "project-1",
+			prompt: "noop",
+			schedule: { type: "cron", expression: "0 2 * * *" },
+			budget: { timeoutMs: 5_000, maxSteps: 10_000_000 },
+		}, 1_300);
+		assert.equal(clamped.budget.timeoutMs, 10_000);
+		assert.equal(clamped.budget.maxSteps, 100_000);
+	} finally {
+		await rm(dir, { recursive: true, force: true });
+	}
+});

@@ -29,7 +29,8 @@ type ActiveRunTracker = {
 	runId: string;
 	taskId: string;
 	projectId: string;
-	timeoutMs: number;
+	// 缺省（用户留空）表示不限，coordinator 据此不挂超时 watch，运行可无限挂起。
+	timeoutMs?: number;
 	maxTokens?: number;
 	maxCostUsd?: number;
 	maxSteps?: number;
@@ -278,12 +279,15 @@ export class AutomationRunCoordinator {
 			updatedAt: Date.now(),
 		}, { type: "session-created", message: `Session ${sessionId} created`, at: Date.now() });
 
-		// Setup timeout watch
-		tracker.timeoutHandle = setTimeout(() => {
-			void this.handleTimeout(runId);
-		}, tracker.timeoutMs);
-		if (typeof tracker.timeoutHandle.unref === "function") {
-			tracker.timeoutHandle.unref();
+		// Setup timeout watch：timeoutMs 缺省（留空不限）时不挂 watch——
+		// 若对 undefined 直接 setTimeout，事件循环按 0ms 立即触发，会把运行误杀成 timed-out。
+		if (tracker.timeoutMs !== undefined && tracker.timeoutMs > 0) {
+			tracker.timeoutHandle = setTimeout(() => {
+				void this.handleTimeout(runId);
+			}, tracker.timeoutMs);
+			if (typeof tracker.timeoutHandle.unref === "function") {
+				tracker.timeoutHandle.unref();
+			}
 		}
 
 		const requestId = randomUUID();

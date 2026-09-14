@@ -124,10 +124,23 @@ jobs:
             electron_mirror: ""
             electron_builder_binaries_mirror: ""
           - platform: linux
+            name: Linux x64
             os: ubuntu-latest
-            command: npm run build && npx electron-builder --linux AppImage deb tar.gz --publish never
+            command: npm run build && npx electron-builder --linux AppImage deb tar.gz --x64 --publish never
             electron_mirror: https://npmmirror.com/mirrors/electron/
             electron_builder_binaries_mirror: https://npmmirror.com/mirrors/electron-builder-binaries/
+          # Linux arm64 用原生 arm64 runner（ubuntu-24.04-arm，GA）：node-pty 等原生模块
+          # 在 npm ci 时按 arm64 编译，避免 x64 runner 交叉构建把 x64 二进制打进 arm64 包。
+          # skip_yml=true：不上传本 job 生成的 latest-linux.yml——它只含 arm64 文件，
+          # 会覆盖 x64 job 的 yml，导致 x64 用户升级时按文件名匹配拉到 arm64 包。
+          # arm64 用户暂以手动下载为主（多架构合并 yml 需要单 job 构建，后续可再优化）。
+          - platform: linux
+            name: Linux arm64
+            os: ubuntu-24.04-arm
+            command: npm run build && npx electron-builder --linux AppImage deb tar.gz --arm64 --publish never
+            electron_mirror: https://npmmirror.com/mirrors/electron/
+            electron_builder_binaries_mirror: https://npmmirror.com/mirrors/electron-builder-binaries/
+            skip_yml: true
 
     runs-on: ${{ matrix.os }}
 
@@ -184,4 +197,4 @@ jobs:
             release/*.deb
             release/*.tar.gz
             release/*.blockmap
-            release/latest*.yml
+            ${{ matrix.skip_yml != true && 'release/latest*.yml' || '' }}

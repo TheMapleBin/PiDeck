@@ -71,3 +71,14 @@ export type ImageGenMeta = {
 export type ImageGenSaveResult =
 	| { ok: true; config: ImageGenConfigFile }
 	| { ok: false; error: string };
+
+/**
+ * 按需取回的落盘图片字节（imagegen:read-image-blob）。
+ * 历史生图消息只带 ref 引用，展示交给 pideck-img:// 协议流式加载；
+ * 只有「复制 / 保存 / 重发带回参考图」这类确需字节的路径才走这个通道。
+ */
+export type ImageBlobPayload = {
+	/** base64 图片数据（不含 data URL 前缀） */
+	data: string;
+	mimeType: string;
+};

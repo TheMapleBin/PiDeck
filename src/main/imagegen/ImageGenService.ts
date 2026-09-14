@@ -9,6 +9,7 @@ import type {
 	ImageGenProviderExtraParams,
 	ImageGenReferenceMode,
 } from "../../shared/imageGenConfig";
+import type { ImageContent } from "../../shared/types";
 import type { ImageGenRequest, ImageGenResult } from "../../shared/types/imagegen";
 
 /** 独立生图配置给出的凭据（不再从 models.json 解析） */
@@ -59,7 +60,12 @@ export class ImageGenService {
 				? parseImageGenOutputFormat(request.outputFormat, null)
 				: null;
 			// 参考图门禁：供应商声明 none/未声明时直接拒绝，避免把图发给不认的接口白扣费
-			const refs = request.referenceImages ?? [];
+			// 只有带内联字节的图片能进请求：历史生图消息里的参考图是落盘引用（ref），
+			// 这里过滤掉（渲染层在重发路径已按需回填为 base64）。
+			const refs = (request.referenceImages ?? []).filter(
+				(image): image is ImageContent & { data: string } =>
+					typeof image.data === "string" && image.data.length > 0,
+			);
 			const referenceMode = credentials.referenceMode ?? "none";
 			if (refs.length > 0 && referenceMode === "none") {
 				return { ok: false, error: "referenceUnsupported" };

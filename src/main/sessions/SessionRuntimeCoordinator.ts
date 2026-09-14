@@ -112,6 +112,11 @@ export interface SessionAgentGateway {
 	setThinking(agentId: string, level: string): Promise<unknown>;
 	/** 可选能力：DSH 会话权限预设（/permission 命令）；pi 后端不持有。 */
 	setPermission?(agentId: string, preset: string): Promise<unknown>;
+	/**
+	 * 可选能力：会话内系统提示——catalog 保存的模型偏好已失效（模型被重命名/删除）
+	 * 被跳过，本次沿用 runtime 当前模型。DSH 后端不需要（降级无提示）。
+	 */
+	notifyModelPreferenceIgnored?(agentId: string, provider: string, modelId: string): void;
 	/** 主动推送一次完整 runtime state（get_state）给渲染层：懒启动/重启链路在偏好应用后调用。 */
 	publishRuntimeState(agentId: string): Promise<void>;
 	getForkMessages(agentId: string): Promise<Array<{ entryId: string; text: string }>>;
@@ -424,6 +429,11 @@ export class SessionRuntimeCoordinator {
 		const target = liveTarget ?? (mappedAgentId
 			? { sessionId, agentId: mappedAgentId, runtimeGeneration: mappedGeneration }
 			: undefined);
+		// 会话删除 = 代数作废：generationBySession 按 sessionId 累积且仅随删除回收，
+		// 否则反复创建/删除会话会让键集无界增长（2026 内存排查：慢泄漏）。
+		// 注意不能放到 unbindAgentUnchecked：restart 流程 unbind 旧 agent 后要
+		// bind 新 agent 并代数 +1，提前删会导致旧 runtime 的迟到结果被误接受。
+		this.generationBySession.delete(sessionId);
 		if (!target) {
 			this.deletingSessions.delete(sessionId);
 			return;
@@ -1546,13 +1556,31 @@ export class SessionRuntimeCoordinator {
 			try {
 				await this.agents.setModel(agentId, entry.model.provider, entry.model.modelId);
 			} catch (error) {
-				if (!isDsh) throw error;
-				void this.logger?.warn("session-runtime", "DSH model preference ignored", {
+				// pi 后端：模型既不在本地 models.json 也不在 pi 目录（AgentManager 不带
+				// needsRestart 标记地抛 "Model not found"）= 模型已被重命名/删除。与 DSH
+				// 同语义降级：保留 catalog 偏好、沿用 runtime 当前模型并给会话内系统提示，
+				// 不让整个激活/发送失败——否则每次发送都被 "Failed to apply session
+				// preferences" 挡死（2026-09 用户反馈：models.json 重命名模型后旧会话
+				// 无法再发送，报 Model not found: nacho/gpt-5.6-sol）。
+				// 带 needsRestart 的失败（模型存在但运行中 Agent 快照过期）不降级——
+				// 渲染层会引导用户重启 Agent 加载新配置。
+				const modelGoneOnPi = !isDsh && this.isModelGoneError(error);
+				if (!isDsh && !modelGoneOnPi) throw error;
+				void this.logger?.warn("session-runtime", modelGoneOnPi
+					? "pi model preference ignored: model no longer exists"
+					: "DSH model preference ignored", {
 					sessionId: entry.id,
 					provider: entry.model.provider,
 					modelId: entry.model.modelId,
 					error: errorMessage(error),
 				});
+				if (modelGoneOnPi) {
+					this.agents.notifyModelPreferenceIgnored?.(
+						agentId,
+						entry.model.provider,
+						entry.model.modelId,
+					);
+				}
 			}
 		}
 		if (entry.thinkingLevel) {
@@ -1575,6 +1603,19 @@ export class SessionRuntimeCoordinator {
 		if (entry.permissionPreset && this.agents.setPermission) {
 			await this.agents.setPermission(agentId, entry.permissionPreset);
 		}
+	}
+
+	/**
+	 * set_model 失败是否为「模型已不存在」（被重命名/删除）：AgentManager.setModel
+	 * 只有在本地 models.json 与 pi 模型目录都查不到该模型时才不带 needsRestart
+	 * 标记地抛 "Model not found"。带 needsRestart 的失败（模型存在但运行中 Agent
+	 * 启动快照过期）不算——那应引导重启 Agent 而非降级。
+	 */
+	private isModelGoneError(error: unknown): boolean {
+		if ((error as { needsRestart?: unknown } | null)?.needsRestart === true) {
+			return false;
+		}
+		return /model not found/i.test(errorMessage(error));
 	}
 
 	private async waitUntilReady(initialTab: AgentTab): Promise<AgentTab> {

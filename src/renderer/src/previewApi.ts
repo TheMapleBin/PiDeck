@@ -125,6 +125,7 @@ let previewSettings: AppSettings = {
 	gitCommitMessageProvider: "",
 	gitCommitMessageModel: "",
 	gitExecutablePath: "",
+	dshRunnerNodePath: "",
 	closeToTray: true,
 	singleInstance: true,
 	enableNotifications: true,
@@ -651,6 +652,17 @@ export function createPreviewApi(): PiDesktopApi {
 				homeDir: "",
 				bootError: null,
 			}),
+			detectDshRunnerNode: async () => ({
+				source: "not-found",
+				executable: "",
+				resolvedPath: "",
+				version: "",
+				error: null,
+				compatible: false,
+				system: null,
+			}),
+			chooseDshRunnerNode: async () => null,
+			installDshRunnerNode: async () => ({ ok: false, error: "unavailable in preview" }),
 			// 预览环境无 DSH 后端：按未安装处理（UI 走安装引导，不裸报错）。
 			getDshRuntimeStatus: async () => ({ state: "notInstalled" as const }),
 			onDshRuntimeStatusChanged: () => () => {},
@@ -894,6 +906,9 @@ export function createPreviewApi(): PiDesktopApi {
 			networkAddresses: async () => [{ address: "192.168.1.100", interfaceName: "Wi-Fi", cidr: "192.168.1.100/24", isPrivate: true }],
 			checkUpdate: async () => undefined,
 			onUpdateStatus: () => () => undefined,
+			onOpenSettings: () => () => undefined,
+			// 预览/浏览器模式没有全局快捷键，订阅退化为空操作
+			onShortcutTriggered: () => () => undefined,
 			getUpdateStatus: async () => null,
 			notifyUpdateSeen: async () => undefined,
 			skipUpdateVersion: async () => undefined,
@@ -1091,6 +1106,57 @@ export function createPreviewApi(): PiDesktopApi {
 				updated: false,
 			}),
 			builtInOpenDir: async () => undefined,
+		},
+		// 提示词商店官方模板 / 内置技能热更新（预览/Web 模式不联网、无覆盖层）
+		contentStore: {
+			promptsStatus: async () => ({
+				builtin: { version: "1.0.0", fileCount: 0 },
+				overlay: null,
+				hasOverlayFiles: false,
+				hasBackup: false,
+				effectiveVersion: "1.0.0",
+				overlayDir: null,
+			}),
+			promptsCheck: async () => ({
+				ok: true,
+				remoteVersion: "1.0.0",
+				localVersion: "1.0.0",
+				hasUpdate: false,
+				changedFiles: [],
+			}),
+			promptsUpdate: async () => ({ ok: true, updated: false, version: "1.0.0" }),
+			promptsRestore: async () => ({ ok: true, updated: false }),
+			promptsRestorePrevious: async () => ({
+				ok: false,
+				code: "validation" as const,
+				message: "Preview mode: no previous overlay",
+				updated: false,
+			}),
+			promptsOpenDir: async () => undefined,
+			skillsStatus: async () => ({
+				builtin: { version: "1.0.0", fileCount: 0 },
+				overlay: null,
+				hasOverlayFiles: false,
+				hasBackup: false,
+				effectiveVersion: "1.0.0",
+				overlayDir: null,
+			}),
+			skillsCheck: async () => ({
+				ok: true,
+				remoteVersion: "1.0.0",
+				localVersion: "1.0.0",
+				hasUpdate: false,
+				changedFiles: [],
+			}),
+			skillsUpdate: async () => ({ ok: true, updated: false, version: "1.0.0" }),
+			skillsRestore: async () => ({ ok: true, updated: false }),
+			skillsRestorePrevious: async () => ({
+				ok: false,
+				code: "validation" as const,
+				message: "Preview mode: no previous overlay",
+				updated: false,
+			}),
+			skillsOpenDir: async () => undefined,
 		},
 		prompts: {
 			list: async () => ({ templates: [], globalDir: "C:/Users/preview/.pi/agent/prompts" }),
@@ -1412,11 +1478,12 @@ export function createPreviewApi(): PiDesktopApi {
 			export: async () => false,
 		},
 
-		// 生图预览桩：预览模式不联网，直接返回未配置
+		// 生图预览桩：预览模式不联网、无落盘图片，直接返回未配置 / 空图
 		imagegen: {
 			generate: async (_request) => ({ ok: false, error: "notConfigured" }),
 			getConfig: async () => ({ providers: [], activeProviderId: "", activeModel: "" }),
 			saveConfig: async (config) => ({ ok: true, config }),
+			readImageBlob: async () => null,
 		},
 		voiceTranscription: {
 			getConfig: async () => ({
@@ -1461,10 +1528,12 @@ export function createPreviewApi(): PiDesktopApi {
 				schedule: input.schedule,
 				enabled: input.enabled !== false,
 				budget: {
-					timeoutMs: input.budget?.timeoutMs ?? 30 * 60_000,
-					maxTokens: input.budget?.maxTokens,
-					maxCostUsd: input.budget?.maxCostUsd,
-					maxSteps: input.budget?.maxSteps,
+					// 预览桩模拟主进程 normalizeBudget 的落盘形态：null/缺省键不输出（=不限），
+					// 既不在预览里伪造默认值，也保持与 AutomationTask.budget（无 null）同型。
+					...(input.budget?.timeoutMs == null ? {} : { timeoutMs: input.budget.timeoutMs }),
+					...(input.budget?.maxTokens == null ? {} : { maxTokens: input.budget.maxTokens }),
+					...(input.budget?.maxCostUsd == null ? {} : { maxCostUsd: input.budget.maxCostUsd }),
+					...(input.budget?.maxSteps == null ? {} : { maxSteps: input.budget.maxSteps }),
 				},
 				createdAt: Date.now(),
 				updatedAt: Date.now(),

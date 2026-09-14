@@ -88,6 +88,13 @@ export type AppSettings = {
 	useNativeTitleBar: boolean;
 	showNativeMenu: boolean;
 	sendShortcut: SendShortcutMode;
+	/**
+	 * 全局快捷键用户覆盖：ShortcutId → accelerator（Electron 语法子集，见 shared/shortcuts.ts）。
+	 * 缺省键 = 平台默认值（macOS ⌘, 打开设置 / F12 开发者工具等）；设置页「快捷键管理」
+	 * 修改后写这里，主进程 before-input-event 匹配实时读取（无需重启）。
+	 * 可选以兼容旧 settings.json；未知 id / 非法 accelerator 的条目在保存时丢弃。
+	 */
+	shortcuts?: Record<string, string>;
 	/** 界面主题：system 跟随系统；schedule 按本地时钟在浅色/暗色之间切换 */
 	theme: AppThemeMode;
 	/** 跟随时间：浅色开始（HH:mm，含）。仅 theme=schedule 时生效。 */
@@ -139,6 +146,12 @@ export type AppSettings = {
 	 * 用户显式配置后，所有 git 子进程（含 worktree）都使用该路径。
 	 */
 	gitExecutablePath: string;
+	/**
+	 * DSH 沙箱 runner 用的本机 Node 绝对路径（Windows 必须是 CUI node.exe）。
+	 * 空串 = 自动探测 PATH / 版本管理器 / 应用数据目录里的专用副本。
+	 * 不随包分发，避免安装包再涨 ~86MB；可在开发设置里一键下载到 userData。
+	 */
+	dshRunnerNodePath: string;
 	/** 关闭窗口时隐藏到系统托盘而不是退出 */
 	closeToTray: boolean;
 	/**
@@ -498,6 +511,12 @@ export type AppSettings = {
 	 * 缺省/空串 = 用内置默认地址。sha256 校验始终生效，镜像也不能绕过。
 	 */
 	dshRuntimeIndexUrl?: string;
+
+	/**
+	 * DSH 沙箱 Node 24 下载源索引（覆盖默认 AtomGit/GitHub `dsh-runner-node` tag）。
+	 * 缺省/空串 = 跟随 settings.updateSource。sha256 始终校验。
+	 */
+	dshRunnerNodeIndexUrl?: string;
 
 	/**
 	 * DSH 审批自动放行：开启后 DSH 会话的工具/命令审批（approval/requested）

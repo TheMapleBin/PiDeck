@@ -32,6 +32,10 @@ import type {
 
 interface AutomationTaskEditorProps {
 	task?: AutomationTask | null;
+	/** Project scope preselects this project for new tasks. */
+	defaultProjectId?: string;
+	/** A project-owned task table must not silently move tasks to another workspace. */
+	lockProject?: boolean;
 	onSave: () => void;
 	onCancel: () => void;
 }
@@ -67,6 +71,8 @@ type TaskBackend = "pi" | "dsh";
  */
 export function AutomationTaskEditor({
 	task,
+	defaultProjectId,
+	lockProject = false,
 	onSave,
 	onCancel,
 }: AutomationTaskEditorProps) {
@@ -74,7 +80,7 @@ export function AutomationTaskEditor({
 
 	const [name, setName] = useState(task?.name ?? "");
 	const [projectId, setProjectId] = useState(
-		task?.projectId ?? (projects[0]?.id || ""),
+		task?.projectId ?? defaultProjectId ?? (projects[0]?.id || ""),
 	);
 	const [cronExpression, setCronExpression] = useState(
 		task?.schedule.type === "cron" ? task.schedule.expression : "0 9 * * 1-5",
@@ -116,6 +122,16 @@ export function AutomationTaskEditor({
 	const [cronPreviews, setCronPreviews] = useState<number[]>([]);
 	const [cronError, setCronError] = useState<string | null>(null);
 	const [isSubmitting, setIsSubmitting] = useState(false);
+
+	// Project inventory may arrive after the editor mounts. Project-scoped creation
+	// must retain its explicit owner rather than falling back to the first project.
+	useEffect(() => {
+		if (task || projectId) return;
+		const fallbackProjectId = defaultProjectId ?? projects[0]?.id;
+		if (fallbackProjectId) setProjectId(fallbackProjectId);
+	}, [defaultProjectId, projectId, projects, task?.id]);
+
+	const lockedProjectName = projects.find((project) => project.id === projectId)?.name ?? projectId;
 
 	// DSH runtime 安装态：未安装/损坏/过旧时拦截发送，编辑器据此提示「先去设置安装」
 	// （同一拦截函数与 App 发送链路共用，保证口径一致）。
@@ -227,11 +243,14 @@ export function AutomationTaskEditor({
 		setIsSubmitting(true);
 		try {
 			const timeoutMinNum = timeoutMinutes.trim() ? Number(timeoutMinutes) : undefined;
+			// 留空 = 不限：显式传 null 而非 undefined——Electron IPC structured-clone
+			// 会丢弃对象里的 undefined 键，主进程把「键缺失」归一化为默认值（外部 API
+			// 兼容语义），只有显式 null 才能表达「不限」并穿透到存储层。
 			const budget = {
-				timeoutMs: timeoutMinNum ? timeoutMinNum * 60000 : 30 * 60000,
-				maxTokens: maxTokens.trim() ? Number(maxTokens) : undefined,
-				maxCostUsd: maxCostUsd.trim() ? Number(maxCostUsd) : undefined,
-				maxSteps: maxSteps.trim() ? Number(maxSteps) : undefined,
+				timeoutMs: timeoutMinNum ? timeoutMinNum * 60000 : null,
+				maxTokens: maxTokens.trim() ? Number(maxTokens) : null,
+				maxCostUsd: maxCostUsd.trim() ? Number(maxCostUsd) : null,
+				maxSteps: maxSteps.trim() ? Number(maxSteps) : null,
 			};
 
 			// IPC/JSON 会丢掉 undefined 键。更新时用空对象/空串表示「恢复默认」，
@@ -313,18 +332,27 @@ export function AutomationTaskEditor({
 					<Label htmlFor="task-project" className="text-xs font-medium">
 						{t("automation.project")} <span className="text-destructive">*</span>
 					</Label>
-					<Select value={projectId} onValueChange={setProjectId}>
-						<SelectTrigger id="task-project" className="h-8 text-xs">
-							<SelectValue placeholder={t("automation.projectSelect")} />
-						</SelectTrigger>
-						<SelectContent>
-							{projects.map((p) => (
-								<SelectItem key={p.id} value={p.id} className="text-xs">
-									{p.name}
-								</SelectItem>
-							))}
-						</SelectContent>
-					</Select>
+					{lockProject ? (
+						<Input
+							id="task-project"
+							value={lockedProjectName}
+							className="h-8 text-xs"
+							disabled
+						/>
+					) : (
+						<Select value={projectId} onValueChange={setProjectId}>
+							<SelectTrigger id="task-project" className="h-8 text-xs">
+								<SelectValue placeholder={t("automation.projectSelect")} />
+							</SelectTrigger>
+							<SelectContent>
+								{projects.map((p) => (
+									<SelectItem key={p.id} value={p.id} className="text-xs">
+										{p.name}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+					)}
 				</div>
 			</div>
 

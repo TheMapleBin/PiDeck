@@ -17,6 +17,7 @@ import type {
 	I18nParams,
 	ImageContent,
 	Project,
+	RewindCheckpointHealth,
 	RewindCheckpointPage,
 	RewindCheckpointPageParams,
 	RewindRestoreResult,
@@ -62,7 +63,8 @@ import {
 	type SessionEntryTarget,
 	type SessionFileRef,
 } from "./SessionFileEditor";
-import { SessionHistoryReader, findTurnPageStart } from "./SessionHistoryReader";
+import { SessionHistoryReader, boundTurnWindowStart } from "./SessionHistoryReader";
+import { estimateMessagesPayloadBytes } from "./messagePayloadSize";
 import { StoppedMessageIdentityCache } from "./stoppedMessageIdentity";
 import {
 	currentIndexTree,
@@ -70,6 +72,7 @@ import {
 	diffCheckpoints,
 	loadAllCheckpoints,
 	loadCheckpointFromRef,
+	MIN_CHECKPOINT_INTERVAL_MS,
 	MUTATING_TOOLS,
 	restoreCheckpoint as applyCheckpointRestore,
 	toCheckpointSummary,
@@ -103,6 +106,7 @@ import {
 	inferTitleFromMessages,
 	isDefaultAgentTitle,
 	looksLikePiSessionFileStem,
+	shouldReloadMessagesAfterCompaction,
 } from "./agentUtils";
 import {
   updateActiveToolCalls,
@@ -163,6 +167,8 @@ export class AgentManager {
 	/** 工具完整结果 LRU 缓存：截断下发后完整文本仅存于此（运行期「查看完整输出」走内存，
 	 *  历史会话回退读会话文件）。键为 pi message id，agent 停止时随 clearAgentState 释放。 */
 	private readonly toolFullTextByMessageId = new Map<string, string>();
+	/** 已驻留完整文本的总字节数（字节预算 LRU 淘汰用）。 */
+	private toolFullTextBytes = 0;
 
 	/** 当前流式思考的累积文本，用于实时推送给前端展示 */
 	private readonly streamingThinking = new Map<string, string>();
@@ -206,6 +212,13 @@ export class AgentManager {
 	/** 流式消息 emit 节流状态。 */
 	private readonly messageFlushTimers = new Map<string, NodeJS.Timeout>();
 	private readonly pendingMessageAgents = new Set<string>();
+	/**
+	 * 压缩成功后的在途重载集合（单飞锁）。
+	 * compaction_end 可能连续到达（自动重试/多段压缩/压缩与用户发消息几乎同时完成），
+	 * 每次 loadMessages 都要把整段 12 轮窗口重新读盘 + 投影 + 全量下发；叠加多份在途重载
+	 * 会把内存峰值翻倍（#213）。同一 agent 压缩重载只保留一次在途，其后到达的合并到本次。
+	 */
+	private readonly compactionReloadInFlight = new Set<string>();
 	/** 增量消息 flush 的脏下标：自上次 flush 以来最早的变化位置（取多次标记的最小值）。
 	 *  只在流式 upsert/append 高频路径显式标记；编辑/删除/截断/重载不标记 → flush 回退全量。 */
 	private readonly messageDirtyFromByAgent = new Map<string, number>();
@@ -264,6 +277,13 @@ export class AgentManager {
 	/** 激活显示窗口轮数：renderer atom 常驻最近 9 轮，DOM 仍按 3 轮窗口渐进挂载；更早历史走轮次分页。 */
 	private static readonly DISPLAY_WINDOW_TURNS = 9;
 	/**
+	 * 激活显示窗口的条目预算（9 轮窗口之上叠的硬上限）。
+	 * flush 会把窗口段全量下发一次，窗口越大单次 IPC payload 越大；1200 给正常
+	 * 重工具会话留足余量，仅在「单轮几百条」的极端会话里把窗口缩到更少轮次（#213）。
+	 * 缩窗口不丢内容：滑出的轮次走 pendingSlideOut → 渲染层历史前缀，仍可翻回。
+	 */
+	private static readonly MAX_DISPLAY_WINDOW_ENTRIES = 1200;
+	/**
 	 * agent_end 后等待 agent_settled 的超时时间（毫秒）。
 	 * 如果 Pi 在此时间内未发送 agent_settled，桌面端将主动查询 get_state 并尝试恢复 idle。
 	 * 这补偿了 Pi 在某些边缘情况下不发送 agent_settled 导致动画永久卡住的问题。
@@ -278,6 +298,11 @@ export class AgentManager {
 	/** 工具完整结果 LRU 上限（见 toolFullTextByMessageId）。 */
 	private static readonly TOOL_FULL_TEXT_LRU_LIMIT = 200;
 	/**
+	 * 工具完整结果总字节预算（2026 内存排查）：单条可达数百 KB，
+	 * 200 条全是大结果时仍可驻留数十 MB；超预算时按最旧先淘汰。
+	 */
+	private static readonly TOOL_FULL_TEXT_MAX_BYTES = 32 * 1024 * 1024;
+	/**
 	 * 大会话直接从文件尾部读取时，最多保留的最近消息轮次（每条 user 消息算一轮）。
 	 * 12 轮 = 4 次 3 轮翻页，覆盖绝大多数回看需求；更早历史走磁盘轮次分页。
 	 */
@@ -287,6 +312,13 @@ export class AgentManager {
 	 * 12 轮覆盖激活显示窗口（9 轮）外再缓存 1 页历史（3 轮）；更早历史随时可从文件分页读回。
 	 */
 	private static readonly MAX_RUNTIME_CACHE_TURNS = 12;
+	/**
+	 * 运行期消息缓存的条目预算（12 轮之上叠的硬上限）。
+	 * 主进程数组是内存占用最大的一份消息拷贝（带完整 tool 结果），只按轮数裁在
+	 * 「单轮几百条」的会话里依然无界；与加载窗口同口径（1600），超预算时少留几轮，
+	 * 更早历史随时可从文件分页读回。
+	 */
+	private static readonly MAX_RUNTIME_CACHE_ENTRIES = 1600;
 	/**
 	 * 工具结果文本截断阈值（字符数）。工具结果（如 bash 输出、文件读取）可能达数十 KB，
 	 * 若完整存入 ChatMessage.meta 并随流式 emit 反复全量传输，会显著放大 IPC payload
@@ -330,6 +362,28 @@ export class AgentManager {
 	 * pi 事件流没有 turnIndex 概念，用本地计数近似 pi-rewind 的 turn 语义。
 	 */
 	private readonly rewindTurnCounters = new Map<string, number>();
+	/**
+	 * 自动打点节流状态（per agent）：最小间隔 + 在途合并。
+	 * 每个文件类工具动作结束都请求打点，不节流时高频 bash 循环下中位间隔仅 6.3s
+	 * （2026-09-13 用户报告：两个会话并排施工把磁盘读满整机卡死）。与字节预算构成
+	 * 双重防线：预算限「单次多贵」，这里限「单位时间打几次」。
+	 */
+	private readonly rewindSchedules = new Map<
+		string,
+		{
+			/** 最近一次打点发起（成功开始创建）时刻 */
+			lastAt: number;
+			inFlight: boolean;
+			/** 在途/间隔期内的合并请求：当前快照完成后补拍一次最新状态 */
+			pending: boolean;
+			timer: NodeJS.Timeout | null;
+		}
+	>();
+	/**
+	 * 自动打点健康状态（per 工作目录）：失败态上屏用。
+	 * 此前失败只写日志，用户以为有快照、真要回滚才发现全是空的。
+	 */
+	private readonly rewindHealthByRoot = new Map<string, RewindCheckpointHealth>();
 	/** 正在执行模型配置刷新的 agent，用于退出处理器中忽略进程退出事件 */
 	private readonly modelRefreshingAgents = new Set<string>();
 	/** 用户主动停止的 agent，用于退出处理器中跳过自动重连 */
@@ -1027,7 +1081,12 @@ export class AgentManager {
 			SessionHistoryReader.maxTurnPageSize(),
 		);
 		const roles = list.map((m) => ({ role: m.role, byteLength: 0 }));
-		const start = findTurnPageStart(roles, pos, turnCount);
+		const start = boundTurnWindowStart(
+			roles,
+			pos,
+			turnCount,
+			SessionHistoryReader.maxPageWindowEntries(),
+		);
 		if (start >= pos) return null;
 		const page = list.slice(start, pos);
 		const oldest = page[0] ?? list[0];
@@ -1245,6 +1304,8 @@ export class AgentManager {
 			skipEntries,
 			rawMessages: rawMessages.length,
 			trimmedMessages: trimmed.length,
+			// 下发体量（近似字节）：判断「渲染进程为何崩」的关键字段（#213）
+			payloadBytes: estimateMessagesPayloadBytes(messages),
 			requestMs: t1 - t0,
 			convertMs: t2 - t1,
 			totalMs: t2 - t0,
@@ -1273,15 +1334,9 @@ export class AgentManager {
 		this.rebindInFlightMessages(agentId, nextMessages, messages);
 		this.messages.set(agentId, nextMessages);
 		// 显示窗口 = 尾部 9 轮（DOM 3 / atom 9 / main 12 模型；轮次起点对齐 user 消息，
-		// 与 disk 轮次分页同一约定；单轮再大也整轮显示，折叠完整性优先）
-		this.displayWindowStartByAgent.set(
-			agentId,
-			findTurnPageStart(
-				nextMessages.map((m) => ({ role: m.role, byteLength: 0 })),
-				nextMessages.length,
-				AgentManager.DISPLAY_WINDOW_TURNS,
-			),
-		);
+		// 与 disk 轮次分页同一约定；单轮再大也整轮显示，折叠完整性优先），
+		// 但叠了条目预算：极端会话下窗口缩轮也不切半轮（#213）。
+		this.displayWindowStartByAgent.set(agentId, this.computeDisplayWindowStart(nextMessages));
 		// 文件版本随本次加载快照：压缩/外部改写会改变 mtime:size，渲染层据此丢弃 disk 前缀
 		if (runtime.tab.sessionPath) {
 			try {
@@ -1294,6 +1349,41 @@ export class AgentManager {
 		this.refreshAutoTitle(agentId);
 		this.scheduleMessageEmit(agentId, true);
 		return nextMessages;
+	}
+
+	/**
+	 * 压缩成功后的消息重载（单飞）。
+	 *
+	 * 为什么需要单飞：一次重载 = 读盘整段窗口 + 投影 + 全量下发，是内存峰值最高的路径。
+	 * compaction_end 是 RPC 事件，可能在同一时间窗内连发（自动重试的多次压缩、压缩与
+	 * 用户发消息、与 agent_settled 后的 trimRuntimeCache 重叠），叠加在途重载会把峰值
+	 * 翻好几倍（#213）。这里同一 agent 只保留一次在途：重载本身总在读文件，
+	 * 期间到达的后续请求不需要再排一次（晚到的更新由下一次事件或本次读到的尾部覆盖）。
+	 */
+	/**
+	 * 计算激活显示窗口起点：尾部 DISPLAY_WINDOW_TURNS 轮，且总条目数不超 MAX_DISPLAY_WINDOW_ENTRIES。
+	 *
+	 * 统一入口：loadMessages / flushMessageEmit / trimRuntimeCache 三处口径必须一致，
+	 * 否则窗口坐标与 windowStartFilePos（渲染层「加载更多」的数值游标）会错位。
+	 * 页边界永远对齐完整轮次（单轮再大也整轮保留，至少保最后一轮）。
+	 */
+	private computeDisplayWindowStart(messages: ReadonlyArray<{ role?: string }>): number {
+		return boundTurnWindowStart(
+			messages.map((message) => ({ role: message.role, byteLength: 0 })),
+			messages.length,
+			AgentManager.DISPLAY_WINDOW_TURNS,
+			AgentManager.MAX_DISPLAY_WINDOW_ENTRIES,
+		);
+	}
+
+	private reloadMessagesAfterCompaction(agentId: string) {
+		if (this.compactionReloadInFlight.has(agentId)) return;
+		this.compactionReloadInFlight.add(agentId);
+		void this.loadMessages(agentId)
+			.catch(() => undefined)
+			.finally(() => {
+				this.compactionReloadInFlight.delete(agentId);
+			});
 	}
 
 	async create(rawInput: CreateAgentInput) {
@@ -2499,6 +2589,22 @@ export class AgentManager {
 		return this.getRuntimeState(agentId);
 	}
 
+	/**
+	 * 会话内系统提示：catalog 保存的模型偏好已失效被跳过（模型被重命名/删除，
+	 * 不在本地 models.json 也不在 pi 模型目录）。不阻断发送，沿用 runtime 当前
+	 * 模型；由 SessionRuntimeCoordinator.applyPreferences 在降级时调用。
+	 */
+	notifyModelPreferenceIgnored(agentId: string, provider: string, modelId: string): void {
+		if (!this.agents.has(agentId)) return;
+		this.addLocalizedMessage(
+			agentId,
+			"system",
+			"diagnostic.modelPreferenceIgnored",
+			`会话保存的模型偏好 ${provider}/${modelId} 已不存在（可能已被重命名或删除），本次发送沿用当前模型。请打开模型选择器重新选择。`,
+			{ params: { provider, model: modelId } },
+		);
+	}
+
 	/** 本地 models.json 是否包含指定 provider/modelId。 */
 	private async localModelsContains(provider: string, modelId: string): Promise<boolean> {
 		try {
@@ -3103,8 +3209,18 @@ export class AgentManager {
 		this.pendingStartupDiagnostics.delete(agentId);
 		this.agentStartedFirstRun.delete(agentId);
 		this.clearStreamGate(agentId);
+		// 数值游标与回合计数随生命周期清理（2026 内存排查补漏）：
+		// agentId 每次 spawn 都是 randomUUID，漏删 = 每次 stop/restart 永久留一个键（慢泄漏）。
+		this.messageHeadOffsetByAgent.delete(agentId);
+		this.rewindTurnCounters.delete(agentId);
+		// 打点节流状态随生命周期清理；pending 补拍自然终止（runRewindCheckpoint
+		// 运行时会重新校验 agent 存活），timer 未触发也要清掉防悬挂回调。
+		const rewindSchedule = this.rewindSchedules.get(agentId);
+		if (rewindSchedule?.timer) clearTimeout(rewindSchedule.timer);
+		this.rewindSchedules.delete(agentId);
 		// 工具完整结果缓存是运行期性能优化（回退读文件等价），agent 停止时整体释放
 		this.toolFullTextByMessageId.clear();
+		this.toolFullTextBytes = 0;
 	}
 
 	/**
@@ -3353,14 +3469,18 @@ export class AgentManager {
 			? (params!.beforeTimestamp as number)
 			: Number.POSITIVE_INFINITY;
 		const filtered = all.filter((cp) => cp.timestamp < before);
+		// 附带自动打点健康状态：失败态渲染层显示警示条（此前失败完全静默，
+		// 用户以为有快照、真要回滚才发现列表是空的）。
+		const health = this.rewindHealthByRoot.get(runtime.tab.cwd);
 		// 未传 limit（如 rewind-to-message 需要全量最近检查点）时返回全部；
 		// 否则按 limit 截取一页，并据此判断是否还有更早的检查点。
 		if (params?.limit === undefined) {
-			return { items: filtered, hasMore: false };
+			return { items: filtered, hasMore: false, health };
 		}
 		return {
 			items: filtered.slice(0, limit),
 			hasMore: filtered.length > limit,
+			health,
 		};
 	}
 
@@ -3444,28 +3564,118 @@ export class AgentManager {
 	 * 文件类工具（write/edit/bash）执行结束后异步创建文件检查点（fire-and-forget）。
 	 * 打点放在 tool_execution_end：此时文件系统已静默，快照内容稳定，不会与进行中的
 	 * 写入竞争；恢复语义为「回到该工具执行完成后的状态」。失败不影响 agent 主链路
-	 * （纯旁路快照），只记日志。
+	 * （纯旁路快照），记日志并更新健康状态供界面提示。
+	 *
+	 * 节流（MIN_CHECKPOINT_INTERVAL_MS + 在途合并）：
+	 * - 在途时有新请求 → 置 pending，当前快照完成后立即补拍一次（合并到最新状态）；
+	 * - 距上次打点不足间隔 → 挂 trailing 定时器到点补拍（间隔内的多次请求合并成一次）；
+	 * - before-restore 等关键快照不走此路径，不受节流影响。
 	 */
 	private scheduleRewindCheckpoint(agentId: string, toolName: string, turnIndex: number): void {
 		const runtime = this.agents.get(agentId);
 		const root = runtime?.tab.cwd;
 		const sessionId = runtime?.tab.sessionId;
 		if (!root || !sessionId) return;
-		void createCheckpoint({
-			root,
-			// id 拼进 git ref 名，必须是 isRewindCheckpointId 允许的安全字符。
-			id: `tool-${sessionId}-${turnIndex}-${Date.now()}`,
-			sessionId,
-			trigger: "tool",
-			turnIndex,
-			toolName,
-		}).catch((error: unknown) => {
+		const state =
+			this.rewindSchedules.get(agentId) ??
+			{ lastAt: 0, inFlight: false, pending: false, timer: null as NodeJS.Timeout | null };
+		this.rewindSchedules.set(agentId, state);
+
+		if (state.inFlight) {
+			state.pending = true;
+			return;
+		}
+		const elapsed = Date.now() - state.lastAt;
+		if (elapsed < MIN_CHECKPOINT_INTERVAL_MS) {
+			// 间隔内：已有 trailing 定时器就无需重复挂（到点拍的本来就是最新状态）。
+			if (state.timer) return;
+			state.timer = setTimeout(() => {
+				state.timer = null;
+				if (state.inFlight) {
+					state.pending = true;
+					return;
+				}
+				void this.runRewindCheckpoint(agentId, state, toolName, turnIndex);
+			}, MIN_CHECKPOINT_INTERVAL_MS - elapsed);
+			state.timer.unref?.();
+			return;
+		}
+		void this.runRewindCheckpoint(agentId, state, toolName, turnIndex);
+	}
+
+	/** 实际执行打点：成功/失败都更新健康状态；完成后处理 pending 合并补拍。 */
+	private async runRewindCheckpoint(
+		agentId: string,
+		state: { lastAt: number; inFlight: boolean; pending: boolean; timer: NodeJS.Timeout | null },
+		toolName: string,
+		turnIndex: number,
+	): Promise<void> {
+		const runtime = this.agents.get(agentId);
+		const root = runtime?.tab.cwd;
+		const sessionId = runtime?.tab.sessionId;
+		// agent 已停止/换 runtime：丢弃补拍（节流 map 已随生命周期清理兜底）。
+		if (!root || !sessionId) return;
+		state.inFlight = true;
+		state.lastAt = Date.now();
+		try {
+			const result = await createCheckpoint({
+				root,
+				// id 拼进 git ref 名，必须是 isRewindCheckpointId 允许的安全字符。
+				id: `tool-${sessionId}-${turnIndex}-${Date.now()}`,
+				sessionId,
+				trigger: "tool",
+				turnIndex,
+				toolName,
+			});
+			this.recordRewindHealth(root, null);
+			// 被剔除的路径只在开发诊断时有用：有值记一条 debug 级摘要（不刷屏）。
+			if (result.droppedPaths) {
+				this.appLogger?.warn("rewind", "checkpoint added with dropped paths", {
+					agentId,
+					toolName,
+					dropped: result.droppedPaths.length,
+					sample: result.droppedPaths.slice(0, 5).join(", "),
+				});
+			}
+		} catch (error: unknown) {
+			this.recordRewindHealth(root, error);
+			// 错误串可能极长（git add 会把全部路径 + CRLF 警告写进一条消息，实测 9KB+），
+			// 截断后再进日志，防止失败风暴时日志膨胀（一天 2.4MB 的教训）。
+			const rawError = error instanceof Error ? error.message : String(error);
 			this.appLogger?.warn("rewind", "checkpoint creation failed", {
 				agentId,
 				toolName,
-				error: error instanceof Error ? error.message : String(error),
+				error: rawError.length > 500 ? `${rawError.slice(0, 500)}…(${rawError.length} chars)` : rawError,
 			});
-		});
+		} finally {
+			state.inFlight = false;
+			if (state.pending) {
+				state.pending = false;
+				if (this.agents.has(agentId)) {
+					void this.runRewindCheckpoint(agentId, state, toolName, turnIndex);
+				}
+			}
+		}
+	}
+
+	/** 更新工作目录的打点健康状态（成功清零；失败累计并保留最近原因）。 */
+	private recordRewindHealth(root: string, error: unknown): void {
+		const health =
+			this.rewindHealthByRoot.get(root) ?? { consecutiveFailures: 0 };
+		if (error === null) {
+			health.lastSuccessAt = Date.now();
+			health.consecutiveFailures = 0;
+			health.lastError = undefined;
+			health.lastErrorAt = undefined;
+			health.lastErrorKind = undefined;
+		} else {
+			const message = (error instanceof Error ? error.message : String(error)).slice(0, 300);
+			health.lastErrorAt = Date.now();
+			health.consecutiveFailures += 1;
+			health.lastError = message;
+			health.lastErrorKind = /not a git repository/i.test(message) ? "no-git" : "other";
+		}
+		this.rewindHealthByRoot.set(root, health);
 	}
 
 	private async promptMatchesRegisteredExtensionCommand(runtime: AgentRuntime, message: string): Promise<boolean> {
@@ -4179,9 +4389,13 @@ export class AgentManager {
 		if (typed.type === "compaction_end") {
 			this.rpcCompactingAgents.delete(agentId);
 			if (runtime) {
-				// compaction 会向 session JSONL 写入新的边界记录；立即重载消息，
-				// 避免前端仍展示压缩前分支，下一轮继续对话时看起来像“断在旧会话”。
-				void this.loadMessages(agentId).catch(() => undefined);
+				// compaction 成功时才会向 session JSONL 写入新的边界记录；只有此时才需要重载，
+				// 否则前端仍展示压缩前分支，下一轮继续对话时看起来像“断在旧会话”。
+				// 失败/中止的压缩不改写文件（见 shouldReloadMessagesAfterCompaction），
+				// 重载只会把同一份巨型 JSONL 再读一遍并全量下发一次（#213 渲染进程 OOM 主因）。
+				if (shouldReloadMessagesAfterCompaction(typed)) {
+					this.reloadMessagesAfterCompaction(agentId);
+				}
 				// 用户已主动中止或出错时不重新激活 running 状态
 				if (!this.recentlyAborted.has(agentId) && runtime.tab.status !== "error") {
 					// compaction_end 之后 Pi 仍可能因 overflow retry 或 queued follow-up 自动继续。
@@ -5374,11 +5588,28 @@ export class AgentManager {
 		if (detailDelivery.truncated) {
 			const fullText = this.messageProjector.extractToolResultText(result) || this.messageProjector.safeJson(result);
 			if (fullText) {
+				// 字节 + 条数双预算：单条工具结果可达数百 KB，仅按条数封顶时
+				// 200 条大结果仍可驻留数十 MB（2026 内存排查）。
+				this.toolFullTextBytes += fullText.length;
+				while (
+					this.toolFullTextBytes > AgentManager.TOOL_FULL_TEXT_MAX_BYTES &&
+					this.toolFullTextByMessageId.size > 0
+				) {
+					const oldest = this.toolFullTextByMessageId.keys().next().value;
+					if (oldest === undefined) break;
+					const removed = this.toolFullTextByMessageId.get(oldest);
+					if (removed !== undefined) this.toolFullTextBytes -= removed.length;
+					this.toolFullTextByMessageId.delete(oldest);
+				}
 				this.toolFullTextByMessageId.set(messageId, fullText);
 				if (this.toolFullTextByMessageId.size > AgentManager.TOOL_FULL_TEXT_LRU_LIMIT) {
 					// LRU 淘汰最旧（Map 迭代序 = 插入序）
 					const oldest = this.toolFullTextByMessageId.keys().next().value;
-					if (oldest !== undefined) this.toolFullTextByMessageId.delete(oldest);
+					if (oldest !== undefined) {
+						const removed = this.toolFullTextByMessageId.get(oldest);
+						if (removed !== undefined) this.toolFullTextBytes -= removed.length;
+						this.toolFullTextByMessageId.delete(oldest);
+					}
 				}
 			}
 		}
@@ -6058,11 +6289,7 @@ export class AgentManager {
 		const lastComputedLength = this.displayWindowComputedLengthByAgent.get(agentId) ?? -1;
 		let nextWindowStart = currentWindowStart;
 		if (all.length !== lastComputedLength) {
-			nextWindowStart = findTurnPageStart(
-				all.map((message) => ({ role: message.role, byteLength: 0 })),
-				all.length,
-				AgentManager.DISPLAY_WINDOW_TURNS,
-			);
+			nextWindowStart = this.computeDisplayWindowStart(all);
 			this.displayWindowComputedLengthByAgent.set(agentId, all.length);
 		}
 		if (nextWindowStart > currentWindowStart) {
@@ -6145,15 +6372,16 @@ export class AgentManager {
 		const list = this.messages.get(agentId);
 		if (!list || list.length === 0) return;
 		const summaryCards = leadingSummaryCards(list, list.length);
-		const trimmedStart = turnTrimStartIndex(list, AgentManager.MAX_RUNTIME_CACHE_TURNS);
+		const trimmedStart = boundTurnWindowStart(
+			list.map((m) => ({ role: m.role, byteLength: 0 })),
+			list.length,
+			AgentManager.MAX_RUNTIME_CACHE_TURNS,
+			AgentManager.MAX_RUNTIME_CACHE_ENTRIES,
+		);
 		const trimmed = list.slice(trimmedStart);
 		const didTrim = trimmed.length !== list.length;
 		const currentWindowStart = this.displayWindowStartByAgent.get(agentId) ?? 0;
-		const nextWindowStartInList = findTurnPageStart(
-			list.map((m) => ({ role: m.role, byteLength: 0 })),
-			list.length,
-			AgentManager.DISPLAY_WINDOW_TURNS,
-		);
+		const nextWindowStartInList = this.computeDisplayWindowStart(list);
 		// 不超过 12 轮时也要校准尾部 9 轮窗口。通常 settled 前的 flush 已经做过这步，
 		// 这里保留独立调用时的兜底，避免新会话在 12 轮以内把全部消息留在 atom。
 		if (!didTrim) {
@@ -6184,14 +6412,7 @@ export class AgentManager {
 		this.messages.set(agentId, next);
 		// 裁剪后数组下标空间前移，尾部 9 轮的身份不变但数值起点改变；
 		// 先重置坐标，再用全量 flush 校准 renderer。
-		this.displayWindowStartByAgent.set(
-			agentId,
-			findTurnPageStart(
-				next.map((m) => ({ role: m.role, byteLength: 0 })),
-				next.length,
-				AgentManager.DISPLAY_WINDOW_TURNS,
-			),
-		);
+		this.displayWindowStartByAgent.set(agentId, this.computeDisplayWindowStart(next));
 		this.markMessagesDirtyFrom(agentId, 0);
 		this.flushMessageEmit(agentId);
 	}

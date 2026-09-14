@@ -1,3 +1,43 @@
+## v0.7.6-beta - 2026-09-14
+
+### 🚀 New Features
+- **Customizable global shortcuts** — Settings gains a Shortcuts tab: Open Settings / New Session / Search / DevTools can all be rebound. Click Edit to record a key, Esc to cancel, Delete to restore the default; conflicting bindings disable save. Matching lives in the main process and applies immediately after save or backup restore; sidebar kbd hints follow the real binding, and the built-in browser webview forwards the same shortcuts.
+- **Hot updates for official prompt templates and built-in skills** — Official templates and bundled skills reuse the built-in-extension overlay (read-only `resources` → userData overlay): remote manifest + per-file sha256, atomic replace, AtomGit / GitHub dual sources; writes take effect without a restart. The settings store panel can check and one-click update.
+- **WB enhancement prompt templates in the store** — Ships “general enhancement” and “deep enhancement” WB templates, available directly from the prompt store.
+- **Project-scoped scheduled tasks, management as a modal** — Automation tasks can be scoped to a project. The manager is now a modal instead of covering the session workspace, so opening it does not interrupt the current session or split panes.
+- **Session tab “current session actions”** — The ⋯ menu gains the same actions as the sidebar context menu: rename / duplicate / export HTML / copy session file path / open session file. When search lands on a session the sidebar has not rendered, the ⋯ menu is the stable entry.
+- **Ask cards submit on Enter** — Single and batch cards submit with Enter after an answer (including “select then Enter”). IME composition Enter only confirms a candidate and never submits; the editor still uses Enter for newline and Ctrl/Cmd+Enter to submit.
+
+### 🐛 Fixes
+- **Image-gen sessions no longer OOM the renderer from inline base64** — Images are content-addressed blobs plus refs; base64 no longer lands in JSONL. Reads use a bounded tail window, and the old format self-migrates on first open. The `reason:"oom"` crash-reload loop and blank window from repeated image gen are gone.
+- **Layered renderer OOM controls** — Main-process heap stays at 384MB while session windows rise to 2GB. History windows add an entry budget on top of “last N turns”; a turn’s fold mounts only the tail steps by default; failed compaction no longer unconditionally reloads the whole transcript.
+- **Resident caches gain byte budgets** — Log-line cache, session-history full-text LRU, and on-disk history messages now have byte / count caps, closing four unbounded-growth paths.
+- **Packaged DSH black console window (koffi)** — koffi is now an app dependency with a complete runtime resolve chain, so host/runner can hide the console after packaging and no longer spawn a visible black window.
+- **DSH sandbox runner uses local Node 24** — On Windows the sandbox runner no longer starts as electron.exe (GUI). It reuses the machine’s `node.exe` (detect / set the path in Developer settings, including nvm/fnm/mise/Scoop). The installer does not ship Node; if none is found you can one-click download a PiDeck-only copy from the app update source (AtomGit/GitHub `dsh-runner-node` tag). PATH stays unchanged.
+
+- **Linux “double-click does nothing” after an update** — The single-instance lock now handshakes and checks whether the lock owner still responds. Stale upgrade locks, PID reuse, and zombie owners no longer make the second instance exit silently. Problem-feedback health checks now report lock status.
+- **Stopping a session kills the whole subagent tree** — Child processes spawned by pi-subagents / acp_delegate are cleaned up with the parent, so orphans no longer keep burning tokens.
+- **Stale model preferences no longer block send** — If a saved model was renamed or deleted, the runtime keeps its current model and the timeline prompts a re-pick, instead of failing every send with “Failed to apply session preferences”.
+- **Empty new-session history is no longer a load error** — ENOENT before the first JSONL write is treated as empty history. Live-runtime subagent panels reconcile against this generation’s start time, so leftover history rows no longer show as still running.
+- **Timeline stick-to-bottom no longer leaves on layout growth** — Growing thinking blocks / tool cards / the composer only correct geometry; stick-to-bottom is left only by a real user scroll up.
+- **Auto-title works again on reasoning models** — The title sidecar’s output budget was too small and got spent entirely on thinking. Budget 64→512, with one retry at 2048 when truncated with no visible text.
+- **Empty automation budgets stay unlimited** — Saving “unlimited” no longer silently snaps back to 30min / 200K / 200 steps on the next edit.
+- **Announcements drop jsDelivr** — Fetch prefers the AtomGit contents API with GitHub raw as fallback, so a CDN snapshot (up to 24h stale) can no longer hide new announcements even after a manual refresh.
+- **Brand shimmer no longer occupies the GPU while idle** — The wordmark plays a finite number of shimmer loops after launch, then freezes as a static gradient, so high-resolution high-refresh windows no longer keep compositing the whole frame while idle.
+
+### 🙏 Thanks
+
+Special thanks to **微时佬友** for providing the Grok model service used in our
+software development 🎉
+
+Thanks to **sgafxh, r0y1z2, c834292137, bfzha, lerrorgk** and all contributors for their code contributions 🙏
+
+Thanks to all group members who submitted suggestions and bug reports! 🙏
+
+Thanks to everyone who filed issues and feature requests on GitHub! 🙏
+
+> 💬 **QQ feedback group: 1026218644**
+
 ## v0.7.5 - 2026-09-12
 
 ### 🚀 New Features
@@ -5,17 +45,17 @@
 - **Sidebar session hover preview card** — Hovering a sidebar session row for 1.5s opens a preview card (debounced against races), so you can confirm a session's content without opening it first.
 - **Configurable Git executable path with detection** — A new `gitExecutablePath` setting: empty means auto-resolve (PATH → common install locations), and a configured value applies to every Git operation (GitService / WorktreeService / checkpoint / git init). The Git tab gains a path input with detect / browse / reset buttons showing source, version and path; saving applies immediately without a restart.
 - **Built-in prompt templates restored and AtomGit mirror added** — Built-in prompt templates are back in the prompt store; the README and docs-site link to the AtomGit mirror.
-- **DSH runtime upgraded to 0.1.5 (Typert Remote)** — The embedded DeepSeek Harness runtime moves from 0.1.1-rc.2 to 0.1.5-rc.1: the HTTP ApiProxy is replaced by the carrier-neutral Typert Remote / Connection RPC (generated endpoint descriptors, agent-scoped `agentId` parameters, an 84-endpoint surface), bundled agent presets now resolve against the shipped runtime, and migration leftovers in the session link are fixed.
-- **Scheduled tasks and automation** — New Automation support: scheduled and scheduled-mode runs with visual Cron editing, work modes (normal / plan / goal), run history, and rewritten completion detection; DSH-backend sessions can also run scheduled tasks.
-- **AtomGit-first update source** — Update checks prefer AtomGit with GitHub official as fallback; existing users have `updateSource` migrated to `atomgit` in one pass; AtomGit Release auto / manual sync is supported.
-- **In-app update changelog** — The update dialog shows the changelog fetched from the AtomGit OpenAPI with local caching, reachable from two entries.
-- **pi-deck-trash-guard built-in extension** — New built-in extension that backs files up to the system recycle bin before deletion.
+- **DeepSeek DSH runtime upgraded to 0.1.5 (Typert Remote)** — The bundled DSH backend runtime moves from 0.1.1-rc.2 to 0.1.5-rc.1 and adopts the new Connection / Gateway Remote transport. Every domain the desktop talks to (session, settings, credentials, LLM, workspace, skills, goals, subagents) is re-mapped onto the new wire contract, with a descriptor-level payload checker (`npm run check:dsh-wire`) guarding field names, nesting and required fields against the runtime's own schemas. The bundled agent-preset roster works again — standard / code / minimal compose with the subagent model-selection host service mounted, the static plugin inventory lists the loader entries of the host composition, and the composition file now lives inside the runtime install so preset package rows resolve from the right `node_modules`.
+- **DSH sessions stream their thinking again, and tool cards show results** — Assistant deltas no longer live in the session log in 0.1.5; the follow stream now opts into the live assistant channel, so the thinking process streams in real time and long answers appear incrementally. Tool results carry their content again (the new `tool-result` wrapper block is unwrapped), so tool cards show what actually came back instead of only which tool ran.
+- **DSH runtime version gate** — If the installed runtime does not match the version this PiDeck build pairs with, DSH is disabled outright with a guided reinstall prompt — no more starting a runtime whose bridge protocol may have changed underneath, which previously surfaced as loader or plugin-tree crashes.
+- **Scheduled tasks (Automation)** — Cron-based scheduled tasks with a visual cron editor, entry point moved to the sidebar, run-history management, stop, and floating status cards; each task runs in normal / plan / goal mode, completion detection was rewritten (fixing blank sessions, runs that never ended and missing notifications), and DSH-backed sessions can run scheduled tasks as well.
+- **In-app update log** — A changelog viewer fetches `CHANGELOG.md` / `CHANGELOG.zh-CN.md` from the AtomGit OpenAPI with a local cache, reachable from two entry points.
+- **Update source now prefers AtomGit** — The update source order becomes AtomGit (first choice) plus GitHub official; releases sync to AtomGit automatically (or manually, with tag batching and hosts-accelerated transfers), and existing users' `updateSource` migrates from GitHub to AtomGit once.
+- **Per-session proxy settings** — Proxy can be configured for a single session (follow global / on / off) without affecting others; saving applies immediately, entries were added to the session tab bar and the Agent menu, and the dialog host is consolidated into the App layer.
+- **`pi-deck-trash-guard` built-in extension** — File deletions are backed up to the system recycle bin first, so an agent's over-eager delete is recoverable.
 - **Built-in extension remote hot updates** — Built-in extensions can now be updated without shipping a new release: the repo maintains an `extensions-manifest.json` (per-file sha256, package-level version gating); the client fetches and verifies it, writes a userData overlay with atomic replacement and a `.bak` fallback, validates the overlay as a complete set (partial overlays never activate), and the extension manager gains an update-check / one-click-update panel.
-- **Notice toast truncation with details dialog** — Long notice messages are truncated inline and open a full-text details dialog.
-- **Session proxies save-in-effect with full run-state control** — Proxy edits apply immediately; session run control is fully state-driven; proxy entry points are added to the Tab bar and the Agent menu with the dialog host centralized in the App layer.
-- **Faster model list and save feedback** — Extension-backed models no longer hydrate by default (restore via the refresh button); saving a model gives instant feedback with pi verification moved to the background.
-- **Linux arm64 release artifacts** — The release pipeline now builds deb / AppImage / tar.gz for arm64 (#201).
-- **Sidebar “show more” counts right-aligned** — The “show more” row splits its counts into right-aligned columns and drops the per-item quantifier.
+- **Release pipeline & docs site** — The release pipeline builds Linux arm64 artifacts (deb / AppImage / tar.gz) and the manual builder accepts an explicit branch and architecture; the docs site gains VitePress scaffolding.
+- **Smaller UI polish** — Notice toasts truncate long messages with a details dialog; the sidebar "show more" row splits its counts into right-aligned columns; dock entry tooltips are unified; extension-backed models no longer hydrate by default (restore via the refresh button), and saving a model gives instant feedback.
 
 ### 🐛 Fixes
 - **AtomGit mirror update checks no longer return 404** — The AtomGit/GitCode `releases/download` route rejects any query string, while electron-updater always appends a `?noCache=` cache-buster when checking for updates, so the AtomGit update source could never reach `latest.yml` and always failed with a 404. Update requests are now stripped of the `noCache` parameter at the session level via `webRequest` interception on the updater's own partition session (electron-updater sends requests on a dedicated `"electron-updater"` partition, not the default session); the official GitHub update source is unaffected.
@@ -37,14 +77,15 @@
 - **Usage dialog built-in badge no longer stretched** — Fixed the flex-col stretch turning the “built-in” badge into a full-width grey bar; it now sits inline with its label.
 - **Context menu failing to open and project-open flow** — Stopped pre-escaping the registry command value (which caused the Windows “cannot access the specified device” error); cold start / second instance now waits for projectStore before resolving the project directory; adding a project from the context menu broadcasts a sidebar refresh.
 - **Problem-feedback copy no longer mentions email** — Removed the leftover half-sentence about sending email (#194).
+- **DSH preset composition could not resolve bundled plugins** — 24 shipped preset rows (persona, tool-fs, plan-mode, subagent, workflow…) failed to resolve because the host composition file lived under the user data directory, where the node_modules lookup walk never reaches the runtime; the composition now lives inside the runtime install and the preset roster composes normally.
+- **DSH session chain payload and streaming defects** — `session/prompt` was missing its mandatory `requestId` (the host's idempotency key, also used to bind attachments), `session/page` payloads were not wrapped in `request`, `session/list` used the wrong wire name, and the plugin static inventory always showed 0 entries because an async host call was not awaited.
+- **Skill Hub install failing on Node 24 / Windows** — Directly spawning a `.cmd` raised EINVAL; the call is now wrapped through `cmd.exe /d /s /c`.
+- **Ask badges** — The pending-question badge moved down to the session row so several waiting sessions can be told apart, and missing badges on the Chat / activity pages were restored; store search misses and the locked default category were fixed too.
+- **Sent bubble corruption on special characters** — `/skill:`, `/permit`, `@` and `&` in a sent message no longer render incorrectly.
+- **Store hot-keyword chips losing their label on hover** — The accent surface colour was being used as the text colour.
+- **Danger-menu icon colour and sidebar hover-preview fallback** — Corrected the icon colour inside destructive menus and the preview card's summary fallback.
 - **Resend after session restart no longer reports “message not found”** — Restarting a session and resending now works without the stale-message error.
 - **WSL global skills honor the Linux home whitelist** — WSL mode now merges global skills from the Linux home directory into the whitelist (issue #203).
-- **Bubbles render special symbols correctly** — Fixed broken rendering of messages starting with `/skill:`, `/permit`, `@` or containing `&` after sending.
-- **Pending-ask badges reach every surface** — The pending-ask badge moves down into the session row so multiple waiting sessions stay locatable; missing badges on the Chat / Activity pages, store search misses, and the locked default category are fixed too.
-- **Store hot-word chip hover text stays visible** — Fix for hot-word chips in the store losing their text on hover (accent background color was used as text color).
-- **Danger-menu icon colors and hover-card summary fallback** — Fixed icon color in the danger action menu; sidebar session hover cards fall back to a summary gracefully.
-- **Dock entries share unified hover tooltips** — All four dock entries now use the same styled Tooltip on hover.
-- **skill-hub installs on Node 24 Windows** — Fixed skill-hub install failure (direct `.cmd` spawn raised EINVAL on Windows); win32 now wraps through `cmd.exe /d /s /c`.
 - **nicobailon subagent async dispatch no longer mis-marks completion** — Async pi-subagents dispatch no longer marks tasks complete before they finish, and panel entries show the task description (thanks @lerrorgk, PR #206).
 
 ### 🙏 Thanks

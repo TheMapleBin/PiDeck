@@ -40,7 +40,7 @@
   - [📑 Table of Contents](#-table-of-contents)
   - [✨ Highlights](#-highlights)
   - [📋 Changelog](#-changelog)
-    - [v0.7.5-beta Release Highlights](#v075-beta-release-highlights)
+    - [v0.7.5 Release Highlights](#v075-release-highlights)
   - [🧩 Features](#-features)
     - [Workspace & Projects](#workspace--projects)
     - [Sessions & Conversation](#sessions--conversation)
@@ -79,13 +79,31 @@
 
 ## 📋 Changelog
 
+<<<<<<< HEAD
+> **Latest: v0.7.5** (2026-09-11)
+=======
 > **Latest: v0.7.5** (2026-09-12)
+>>>>>>> e29db8e76fd5b7cf521ba901d5356df74680b7ed
 
 ### v0.7.5 Release Highlights
 - 🚀 **Inline reference chips aligned with Proma and self-contained persistence**
 - 🚀 **Sidebar session hover preview card**
 - 🚀 **Configurable Git executable path with detection**
 - 🚀 **Built-in prompt templates restored and AtomGit mirror added**
+<<<<<<< HEAD
+- 🚀 **DeepSeek DSH runtime upgraded to 0.1.5 (Typert Remote)**
+- 🚀 **DSH sessions stream their thinking again, and tool cards show results**
+- 🚀 **DSH runtime version gate**
+- 🚀 **Scheduled tasks (Automation)**
+- 🚀 **In-app update log**
+- 🚀 **Update source now prefers AtomGit**
+- 🚀 **Per-session proxy settings**
+- 🚀 **`pi-deck-trash-guard` built-in extension**
+- ✨ **Kimi Coding multi-window quotas and booster wallet**
+- ✨ **Web Ask prompt missing and sidebar pending-question badge**
+- ✨ **Accent colors no longer bleed into session status lights**
+- ✨ **Dark-mode selected states no longer render white-on-white**
+=======
 - 🚀 **DSH runtime upgraded to 0.1.5 (Typert Remote)**
 - 🚀 **Scheduled tasks and automation**
 - 🚀 **AtomGit-first update source**
@@ -98,6 +116,7 @@
 - ✨ **Second and subsequent DSH sessions respond again**
 - ✨ **DSH journal replay no longer duplicates messages and traces**
 - ✨ **DSH model discovery no longer always reports "0 models fetched"**
+>>>>>>> e29db8e76fd5b7cf521ba901d5356df74680b7ed
 
 [View Full Changelog →](CHANGELOG.md)
 

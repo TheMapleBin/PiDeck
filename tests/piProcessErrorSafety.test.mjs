@@ -75,10 +75,14 @@ function loadPiProcess(spawnImpl) {
 			if (id === "../logging/sharedLogger") {
 				return { getAppLogger: () => null };
 			}
-			if (id === "../sessions/sessionProxyPolicy") {
-				return { applyPiProxyMode: (env) => env };
-			}
-			return require(id);
+		if (id === "../sessions/sessionProxyPolicy") {
+			return { applyPiProxyMode: (env) => env };
+		}
+		// killProcessTree（子代理整树终止）：gitProcess.ts 是纯 Node 模块，可直接加载。
+		if (id === "../git/gitProcess") {
+			return require("../src/main/git/gitProcess.ts");
+		}
+		return require(id);
 		},
 	};
 	vm.runInNewContext(transpile("src/main/pi/PiProcess.ts"), sandbox, {

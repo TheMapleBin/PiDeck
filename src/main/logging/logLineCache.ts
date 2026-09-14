@@ -35,12 +35,16 @@ export class LogLineCache {
 	private readonly deps: LogLineCacheDeps;
 	private readonly maxFiles: number;
 	private readonly maxLinesPerFile: number;
+	/** 单文件驻留字节预算（2026 内存排查：日志行可超 100B（堆栈/JSON），
+	 *  仅按行数截断时 200K 行 × 32 文件可达数百 MB 常驻）。 */
+	private readonly maxBytesPerFile: number;
 	private readonly cache = new Map<string, CachedLines>();
 
-	constructor(deps: LogLineCacheDeps, maxFiles = 32, maxLinesPerFile = 200_000) {
+	constructor(deps: LogLineCacheDeps, maxFiles = 32, maxLinesPerFile = 200_000, maxBytesPerFile = 8 * 1024 * 1024) {
 		this.deps = deps;
 		this.maxFiles = maxFiles;
 		this.maxLinesPerFile = maxLinesPerFile;
+		this.maxBytesPerFile = maxBytesPerFile;
 	}
 
 	/** 文件的尾部行（指纹未变时零 IO 复用缓存）。 */
@@ -51,7 +55,17 @@ export class LogLineCache {
 			return hit.lines;
 		}
 		const raw = await this.deps.readFile(filePath).catch(() => "");
-		const lines = raw.split(/\r?\n/).filter(Boolean).slice(-this.maxLinesPerFile);
+		const rawLines = raw.split(/\r?\n/).filter(Boolean);
+		// 行数 + 字节双预算：从尾部向前累积（日志只关心最近），
+		// 至少保留一行；line.length 为 UTF-16 单元近似字节数，预算本身是粗粒度防护。
+		const lines: string[] = [];
+		let bytes = 0;
+		for (let index = rawLines.length - 1; index >= 0 && lines.length < this.maxLinesPerFile; index -= 1) {
+			const line = rawLines[index];
+			if (lines.length > 0 && bytes + line.length > this.maxBytesPerFile) break;
+			lines.unshift(line);
+			bytes += line.length;
+		}
 		this.cache.set(filePath, { fingerprint, lines });
 		this.evictIfNeeded();
 		return lines;
