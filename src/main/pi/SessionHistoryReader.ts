@@ -305,7 +305,14 @@ export class SessionHistoryReader {
 	private static readonly INDEX_PARSE_YIELD_EVERY = 400;
 	/** 完整消息文本 LRU 缓存（「查看完整输出」按需读取结果）：键 `${sessionPath}#${messageId}`。 */
 	private readonly fullTextCache = new Map<string, string>();
+	/** 已驻留完整文本的总字节数（字节预算 LRU 淘汰用，命中刷新不增减）。 */
+	private fullTextCacheBytes = 0;
 	private static readonly FULL_TEXT_CACHE_LIMIT = 200;
+	/**
+	 * 完整文本总字节预算（2026 内存排查）：单条工具结果可达数百 KB，
+	 * 200 条全是大结果时仍可驻留数十 MB；超预算时按最旧先淘汰。
+	 */
+	private static readonly FULL_TEXT_CACHE_MAX_BYTES = 32 * 1024 * 1024;
 	/**
 	 * 轮次分页预取缓存（2026-09 上滚丝滑）：disk 路径翻页时在后台读取下一页
 	 * 并暂存（键含文件版本/游标/页大小，pi 追加消息后自动失效），用户继续上滚时
@@ -386,11 +393,18 @@ export class SessionHistoryReader {
 		if (!text) {
 			throw new Error(`Message ${messageId} has no extractable text content`);
 		}
-		if (this.fullTextCache.size >= SessionHistoryReader.FULL_TEXT_CACHE_LIMIT) {
+		if (this.fullTextCache.size >= SessionHistoryReader.FULL_TEXT_CACHE_LIMIT
+			|| this.fullTextCacheBytes + text.length > SessionHistoryReader.FULL_TEXT_CACHE_MAX_BYTES) {
+			// 条数/字节双预算：按最旧先淘汰（Map 迭代序 = 插入序）
 			const oldest = this.fullTextCache.keys().next().value;
-			if (oldest !== undefined) this.fullTextCache.delete(oldest);
+			if (oldest !== undefined) {
+				const removed = this.fullTextCache.get(oldest);
+				if (removed !== undefined) this.fullTextCacheBytes -= removed.length;
+				this.fullTextCache.delete(oldest);
+			}
 		}
 		this.fullTextCache.set(cacheKey, text);
+		this.fullTextCacheBytes += text.length;
 		return { text };
 	}
 

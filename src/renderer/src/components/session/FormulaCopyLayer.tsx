@@ -152,8 +152,17 @@ function initFormulaButtons() {
 	ensureFormulaButtons(document.body);
 	const observer = new MutationObserver((mutations) => {
 		for (const mutation of mutations) {
+			if (mutation.type !== "childList") continue;
 			for (const node of mutation.addedNodes) {
-				if (node instanceof Element) ensureFormulaButtons(node);
+				if (!(node instanceof Element)) continue;
+				// 快速粗筛（2026 内存排查）：observer 挂在 document.body 上，
+				// 侧栏/文件树/流式 tick 等任何 DOM 增删都会进回调；多数与公式无关，
+				// 先短路判断节点自身/子树是否带 .katex/.math-display 再进扫描，
+				// 避免每次 tick 对无关子树跑完整挂载逻辑。
+				const hasMath =
+					node.matches?.(".katex, .math-display") ||
+					Boolean(node.querySelector?.(".katex, .math-display"));
+				if (hasMath) ensureFormulaButtons(node);
 			}
 		}
 	});

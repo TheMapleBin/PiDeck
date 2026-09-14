@@ -87,6 +87,25 @@ test("lines are tail-truncated to maxLinesPerFile", async () => {
 	}
 });
 
+test("lines are tail-truncated to maxBytesPerFile (byte budget)", async () => {
+	const { dir, file } = await makeCache();
+	try {
+		// 12 字节预算：从尾部累积（8+2 ≤ 12），再多一行（8）即截断——
+		// 防「日志行很长的堆栈/JSON 单行撑爆行数上限」的字节级驻留（2026 内存排查）。
+		const cache = new LogLineCache(
+			{ readFile: (p) => import("node:fs/promises").then((m) => m.readFile(p, "utf8")), stat },
+			8,
+			100,
+			12,
+		);
+		await writeFile(file, ["aaaaaaaa", "bb", "cccccccc"].join("\n"));
+		const lines = await cache.linesOf(file);
+		assert.deepEqual(lines, ["bb", "cccccccc"], "超预算的最旧行被截断，尾部保留");
+	} finally {
+		await rm(dir, { recursive: true, force: true });
+	}
+});
+
 test("clear() drops cached lines (log clear must not resurrect old content)", async () => {
 	const { dir, file, cache } = await makeCache();
 	try {

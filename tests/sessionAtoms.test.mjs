@@ -1483,3 +1483,100 @@ test("same-generation snapshots keep flowing while the binding is alive", () => 
     "final",
   );
 });
+
+test("prependSessionMessagePageAtom trims overflowing oldest messages and advances cursor", () => {
+  const atoms = loadAtoms();
+  const store = createStore();
+  const entry = () => store.get(atoms.sessionMessagesCacheAtom)["session-a"];
+  const LIMIT = atoms.DISK_HISTORY_MESSAGE_LIMIT;
+  const makeMessages = (count, prefix, start) => Array.from({ length: count }, (_, i) => ({
+    id: `${prefix}${start + i}`,
+    role: "user",
+    text: `${prefix}${start + i}`,
+    meta: { entryId: `e${start + i}` },
+  }));
+
+  // 初始 disk 缓存恰好差 1 条到上限（游标 = 文件下标空间，nextBefore = 最旧下标）
+  store.set(atoms.cacheSessionMessagesAtom, {
+    sessionId: "session-a",
+    messages: makeMessages(LIMIT - 1, "m", 0),
+    source: "disk",
+    page: { total: LIMIT + 5, nextBefore: LIMIT - 1 },
+  });
+  assert.equal(entry().messages.length, LIMIT - 1);
+
+  // prepend 3 条更早页 → 溢出 2 条，只丢新页头部 2 条：
+  // 保留段最旧一条的下标 = 页最旧下标(2396) + 丢弃数(2) = 2398
+  assert.equal(store.set(atoms.prependSessionMessagePageAtom, {
+    sessionId: "session-a",
+    expectedRevision: entry().revision,
+    before: LIMIT - 1,
+    page: {
+      messages: makeMessages(3, "h", -3),
+      total: LIMIT + 5,
+      nextBefore: LIMIT - 4,
+    },
+  }), true);
+  assert.equal(entry().messages.length, LIMIT, "裁剪后不超过上限");
+  assert.equal(entry().messages[0].id, "h-1", "最旧的溢出条被丢弃，第三条保留");
+  assert.equal(entry().page.nextBefore, LIMIT - 4 + 2, "部分丢弃：游标 = 页最旧下标 + 丢弃数");
+  assert.equal(entry().messages[LIMIT - 1].id, "m2398", "当前视窗尾部不受影响");
+
+  // 整页丢弃：再 prepend 2 条更早页（无重叠）→ 溢出 2 条恰好等于整页，
+  // 游标回到请求游标（= 保留段最旧一条的文件下标）
+  const beforeCursor = entry().page.nextBefore;
+  assert.equal(store.set(atoms.prependSessionMessagePageAtom, {
+    sessionId: "session-a",
+    expectedRevision: entry().revision,
+    before: beforeCursor,
+    page: {
+      messages: makeMessages(2, "g", -5),
+      total: LIMIT + 5,
+      nextBefore: beforeCursor - 2,
+    },
+  }), true);
+  assert.equal(entry().messages.length, LIMIT);
+  assert.equal(entry().page.nextBefore, beforeCursor, "整页丢弃：游标回到请求游标");
+  assert.equal(entry().messages[0].id, "h-1", "新页整体丢弃，原视窗原样保留");
+});
+
+test("prependSessionMessagePageAtom dedupes overlapping pages by entryId", () => {
+  const atoms = loadAtoms();
+  const store = createStore();
+  const entry = () => store.get(atoms.sessionMessagesCacheAtom)["session-a"];
+  const LIMIT = atoms.DISK_HISTORY_MESSAGE_LIMIT;
+
+  store.set(atoms.cacheSessionMessagesAtom, {
+    sessionId: "session-a",
+    messages: [
+      { id: "m1", role: "user", text: "q1", meta: { entryId: "e1" } },
+      { id: "m2", role: "assistant", text: "a1", meta: { entryId: "e2" } },
+    ],
+    source: "disk",
+    page: { total: 4, nextBefore: 2 },
+  });
+
+  // 页尾 e1/e2 与缓存头部重复（游标回退场景）→ 只并入新的 e0
+  assert.equal(store.set(atoms.prependSessionMessagePageAtom, {
+    sessionId: "session-a",
+    expectedRevision: entry().revision,
+    before: 2,
+    page: {
+      messages: [
+        { id: "m0", role: "user", text: "q0", meta: { entryId: "e0" } },
+        { id: "m1", role: "user", text: "q1", meta: { entryId: "e1" } },
+        { id: "m2", role: "assistant", text: "a1", meta: { entryId: "e2" } },
+      ],
+      total: 4,
+      nextBefore: 0,
+    },
+  }), true);
+  // vm realm 数组与字面量数组原型不同，需展开为本 realm 数组再比
+  assert.deepEqual(
+    [...entry().messages.map((m) => m.meta.entryId)],
+    ["e0", "e1", "e2"],
+    "重叠部分按 entryId 去重，不重复显示",
+  );
+  assert.equal(entry().messages.length, 3);
+  assert.equal(entry().page.nextBefore, 0);
+});
