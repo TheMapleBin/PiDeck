@@ -201,6 +201,7 @@ import {
 // ProjectResourcesModal 仅在打开资源弹层时加载
 const ProjectResourcesModal = lazy(() => import("./components/app/ProjectResourcesModal").then((m) => ({ default: m.ProjectResourcesModal })));
 import { createDefaultExternalEditorSettings, createDefaultSoundAlertSettings, DEFAULT_PET_SCALE } from "../../shared/types";
+import { hydrateImageContents } from "../../shared/imageContentSrc";
 import type {
   AgentRuntimeState,
   AgentTab,
@@ -2771,9 +2772,18 @@ export function App() {
     //（重发目标就是这轮消息自身，不需要前插保留——那是失败后保留用户新粘贴图的场景）。
     restoreImageGenTurn: (sessionId, text, images) => {
       setSessionDraft({ sessionId, value: text });
-      if (images?.length) {
-        setSessionAttachments({ sessionId, value: images });
-      }
+      if (!images?.length) return;
+      // 历史消息里的参考图是落盘引用（ref），附件栏与后续请求体要的是 base64：
+      // 异步回填，取不到字节的条目丢掉（不阻断提示词回填）。
+      void hydrateImageContents(images, (ref) => window.piDesktop.imagegen.readImageBlob(ref))
+        .then((hydrated) => {
+          if (hydrated.length > 0) {
+            setSessionAttachments({ sessionId, value: hydrated });
+            return;
+          }
+          if (images.length > 0) showToast(t("imagegen.referenceUnavailable"));
+        })
+        .catch(() => showToast(t("imagegen.referenceUnavailable")));
     },
   });
 

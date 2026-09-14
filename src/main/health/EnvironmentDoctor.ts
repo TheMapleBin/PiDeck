@@ -4,7 +4,9 @@ import { freemem, release, totalmem } from "node:os";
 import type { ConfigManager } from "../config/ConfigManager";
 import type { AppLogger } from "../logging/AppLogger";
 import type { PiLocator } from "../pi/PiLocator";
+import { readSingleInstancePreference } from "../settings/SettingsStore";
 import type { SettingsStore } from "../settings/SettingsStore";
+import { inspectInstanceLocks, locksDirIn } from "../instanceLockFile";
 import type {
 	HealthEnvironment,
 	HealthLogFile,
@@ -15,12 +17,14 @@ import {
 	checkAppMemory,
 	checkConfigParsable,
 	checkDiskSpace,
+	checkInstanceLocks,
 	checkLogErrors,
 	checkPiInstalled,
 	checkProxyConfig,
 	checkWslConfig,
 	sortChecksBySeverity,
 	toConfigDiagnostics,
+	type InstanceLockSummary,
 } from "./healthProbes";
 import { createPathMasker, redactSecrets, truncateText } from "./redact";
 
@@ -70,6 +74,10 @@ export class EnvironmentDoctor {
 				environment.platform,
 				Boolean(environment.pi?.installed),
 			),
+			checkInstanceLocks(this.collectInstanceLocks(), {
+				ownPid: process.pid,
+				singleInstanceEnabled: readSingleInstancePreference(),
+			}),
 		]);
 		return { generatedAt, environment, checks, logSummary, logFiles };
 	}
@@ -217,6 +225,25 @@ export class EnvironmentDoctor {
 			};
 		} catch {
 			return empty;
+		}
+	}
+
+	/**
+	 * 实例锁快照。
+	 * 只带版本号/pid/状态，不带锁文件路径：报告会对 home 路径脱敏，
+	 * 但锁目录本身没有必要出现在用户可分享的报告里。
+	 * 返回 null 表示采集失败（体检项降级为 skipped，而不是误报 ok）。
+	 */
+	private collectInstanceLocks(): InstanceLockSummary[] | null {
+		try {
+			const { locks } = inspectInstanceLocks(locksDirIn(app.getPath("userData")));
+			return locks.map((lock) => ({
+				version: lock.version,
+				pid: lock.payload?.pid ?? 0,
+				state: lock.payload === null ? "corrupt" : lock.stale ? "stale" : "live",
+			}));
+		} catch {
+			return null;
 		}
 	}
 

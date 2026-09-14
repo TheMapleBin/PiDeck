@@ -5,13 +5,18 @@ import type { AnnouncementState } from "../shared/types/announcement";
 import type { RpcLogBatch, RpcLogEntry } from "../shared/types/rpcLog";
 import type { DshRuntimeStatus, DshRuntimeInstallProgress } from "../shared/types/dshRuntime";
 import type { GitExecutableInfo } from "../shared/types/git";
-import type { ImageGenConfigFile, ImageGenRequest, ImageGenResult, ImageGenSaveResult } from "../shared/types/imagegen";
+import type { ImageBlobPayload, ImageGenConfigFile, ImageGenRequest, ImageGenResult, ImageGenSaveResult } from "../shared/types/imagegen";
 import type { CatalogCheckResult, CatalogUpdateResult, CatalogUpdateStatus } from "../shared/types/catalog";
 import type {
 	BuiltInExtensionsCheckResult,
 	BuiltInExtensionsUpdateResult,
 	BuiltInExtensionsUpdateStatus,
 } from "../shared/types/extensionsUpdate";
+import type {
+	BuiltinContentCheckResult,
+	BuiltinContentUpdateResult,
+	BuiltinContentUpdateStatus,
+} from "../shared/types/contentUpdate";
 import type {
 	VoiceTranscriptionPublicConfig,
 	VoiceTranscriptionRequest,
@@ -1513,6 +1518,35 @@ const api = {
 		builtInOpenDir: () =>
 			ipcRenderer.invoke(ipcChannels.extensionsBuiltInOpenDir) as Promise<void>,
 	},
+	// ── 提示词商店官方模板 / 内置技能热更新（与内置扩展同构：sha256 比对 + userData 覆盖层）──
+	contentStore: {
+		promptsStatus: () =>
+			ipcRenderer.invoke(ipcChannels.promptsStoreUpdateStatus) as Promise<BuiltinContentUpdateStatus>,
+		promptsCheck: (branch?: "main" | "dev") =>
+			ipcRenderer.invoke(ipcChannels.promptsStoreUpdateCheck, branch) as Promise<BuiltinContentCheckResult>,
+		promptsUpdate: (branch?: "main" | "dev") =>
+			ipcRenderer.invoke(ipcChannels.promptsStoreUpdateApply, branch) as Promise<BuiltinContentUpdateResult>,
+		promptsRestore: () =>
+			ipcRenderer.invoke(ipcChannels.promptsStoreUpdateRestore) as Promise<BuiltinContentUpdateResult>,
+		promptsRestorePrevious: () =>
+			ipcRenderer.invoke(ipcChannels.promptsStoreUpdateRestorePrevious) as Promise<BuiltinContentUpdateResult>,
+		/** 用系统默认程序打开当前生效的官方模板目录（覆盖层优先，否则随包目录） */
+		promptsOpenDir: () =>
+			ipcRenderer.invoke(ipcChannels.promptsStoreOpenDir) as Promise<void>,
+		skillsStatus: () =>
+			ipcRenderer.invoke(ipcChannels.skillsStoreUpdateStatus) as Promise<BuiltinContentUpdateStatus>,
+		skillsCheck: (branch?: "main" | "dev") =>
+			ipcRenderer.invoke(ipcChannels.skillsStoreUpdateCheck, branch) as Promise<BuiltinContentCheckResult>,
+		skillsUpdate: (branch?: "main" | "dev") =>
+			ipcRenderer.invoke(ipcChannels.skillsStoreUpdateApply, branch) as Promise<BuiltinContentUpdateResult>,
+		skillsRestore: () =>
+			ipcRenderer.invoke(ipcChannels.skillsStoreUpdateRestore) as Promise<BuiltinContentUpdateResult>,
+		skillsRestorePrevious: () =>
+			ipcRenderer.invoke(ipcChannels.skillsStoreUpdateRestorePrevious) as Promise<BuiltinContentUpdateResult>,
+		/** 用系统默认程序打开当前生效的内置技能目录（覆盖层优先，否则随包目录） */
+		skillsOpenDir: () =>
+			ipcRenderer.invoke(ipcChannels.skillsStoreOpenDir) as Promise<void>,
+	},
 	settings: {
 		get: () =>
 			ipcRenderer.invoke(ipcChannels.settingsGet) as Promise<AppSettings>,
@@ -2048,6 +2082,9 @@ const api = {
 			ipcRenderer.invoke(ipcChannels.imagegenGetConfig) as Promise<ImageGenConfigFile>,
 		saveConfig: (config: ImageGenConfigFile) =>
 			ipcRenderer.invoke(ipcChannels.imagegenSaveConfig, config) as Promise<ImageGenSaveResult>,
+		/** 按 blob 引用名取回落盘图片 base64（历史消息只带 ref，展示走 pideck-img://） */
+		readImageBlob: (ref: string) =>
+			ipcRenderer.invoke(ipcChannels.imagegenReadImageBlob, ref) as Promise<ImageBlobPayload | null>,
 	},
 
 	voiceTranscription: {

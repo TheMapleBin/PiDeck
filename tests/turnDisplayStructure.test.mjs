@@ -38,8 +38,14 @@ test("TurnRow renders a single process summary toggle plus order-preserving flat
   assert.match(turnRowSource, /hidden=\{!stepsVisible\}/);
   // 折叠区内 settled 中间段一律 process（同正文尺寸 + my-3 间距）；live 在容器外走 answer
   assert.match(turnRowSource, /variant="process"/);
-  // 中间内容收进执行过程折叠容器（foldableItems），最终回答常驻容器外（finalItems）
-  assert.match(turnRowSource, /foldableItems\.map/);
+  // 中间内容收进执行过程折叠容器（foldableItems），最终回答常驻容器外（finalItems）。
+  // #213：折叠区先过 boundMountedSteps 挂载预算（默认只挂尾部 N 条），渲染源仍是
+  // foldableItems 的尾部切片——顺序不变；同时锁住「显示更早步骤」入口存在，
+  // 否则预算会把早期步骤变成不可达内容。
+  assert.match(turnRowSource, /boundMountedSteps\(foldableItems, TIMELINE_MOUNTED_STEP_LIMIT/);
+  assert.match(turnRowSource, /mountedSteps\.items\.map/);
+  assert.match(turnRowSource, /mountedSteps\.hiddenCount > 0/);
+  assert.match(turnRowSource, /timeline\.showEarlierSteps/);
   assert.match(turnRowSource, /finalItems\.map/);
   // 折叠容器用 Radix CollapsibleContent（高度过渡动画），不再 display:none 突变
   assert.match(turnRowSource, /<Collapsible/);

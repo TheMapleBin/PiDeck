@@ -17,15 +17,21 @@ const bridge = readFileSync(
 );
 
 test("message images decode lazily via IntersectionObserver", () => {
-  // base64 data URL 字符串无法省（已在消息对象），但解码位图是内存大头：
+  // 两级内存策略：历史生图图片只带 ref（落盘 blob，走 pideck-img:// 协议由 Chromium
+  // 流式加载，base64 根本不进消息对象——这是 246 MB OOM 事故的根本修复）；
+  // 内联 base64 的图（正在生成/发送）仍受按需解码约束：解码位图是内存大头，
   // 视口外不设 src（不解码），进入视口（200px 提前量）才挂载；占位高度防滚动跳动。
   assert.match(surface, /function MessageImage\(/);
   assert.match(surface, /src=\{inView \? props\.src : undefined\}/);
   assert.match(surface, /rootMargin: \"200px\"/);
   assert.match(surface, /decoding=\"async\"/);
   assert.match(surface, /placeholderClass=\"min-h-24\"/);
-  // 图片预览弹层不受影响（用户主动打开时必须即时显示）
-  assert.match(surface, /src={`data:\$\{props\.image\.mimeType\};base64,\$\{props\.image\.data\}`}/);
+  // 回归守卫：图片源必须经 imageContentSrc 解析。手写 data:${mimeType};base64,${data}
+  // 会让 ref 形态的历史图渲染成 `base64,undefined`（不报错、只是白图，极难排查）。
+  assert.match(surface, /import \{ imageContentSrc \} from "\.\.\/\.\.\/\.\.\/\.\.\/shared\/imageContentSrc";/);
+  assert.doesNotMatch(surface, /src=\{`data:\$\{/);
+  // 图片预览弹层不受影响（用户主动打开时必须即时显示，不套 IntersectionObserver）
+  assert.match(surface, /const src = imageContentSrc\(props\.image\);/);
 });
 
 test("agentId atom families are released on agent exit", () => {

@@ -62,7 +62,8 @@ import {
 	type SessionEntryTarget,
 	type SessionFileRef,
 } from "./SessionFileEditor";
-import { SessionHistoryReader, findTurnPageStart } from "./SessionHistoryReader";
+import { SessionHistoryReader, boundTurnWindowStart } from "./SessionHistoryReader";
+import { estimateMessagesPayloadBytes } from "./messagePayloadSize";
 import { StoppedMessageIdentityCache } from "./stoppedMessageIdentity";
 import {
 	currentIndexTree,
@@ -103,6 +104,7 @@ import {
 	inferTitleFromMessages,
 	isDefaultAgentTitle,
 	looksLikePiSessionFileStem,
+	shouldReloadMessagesAfterCompaction,
 } from "./agentUtils";
 import {
   updateActiveToolCalls,
@@ -206,6 +208,13 @@ export class AgentManager {
 	/** 流式消息 emit 节流状态。 */
 	private readonly messageFlushTimers = new Map<string, NodeJS.Timeout>();
 	private readonly pendingMessageAgents = new Set<string>();
+	/**
+	 * 压缩成功后的在途重载集合（单飞锁）。
+	 * compaction_end 可能连续到达（自动重试/多段压缩/压缩与用户发消息几乎同时完成），
+	 * 每次 loadMessages 都要把整段 12 轮窗口重新读盘 + 投影 + 全量下发；叠加多份在途重载
+	 * 会把内存峰值翻倍（#213）。同一 agent 压缩重载只保留一次在途，其后到达的合并到本次。
+	 */
+	private readonly compactionReloadInFlight = new Set<string>();
 	/** 增量消息 flush 的脏下标：自上次 flush 以来最早的变化位置（取多次标记的最小值）。
 	 *  只在流式 upsert/append 高频路径显式标记；编辑/删除/截断/重载不标记 → flush 回退全量。 */
 	private readonly messageDirtyFromByAgent = new Map<string, number>();
@@ -264,6 +273,13 @@ export class AgentManager {
 	/** 激活显示窗口轮数：renderer atom 常驻最近 9 轮，DOM 仍按 3 轮窗口渐进挂载；更早历史走轮次分页。 */
 	private static readonly DISPLAY_WINDOW_TURNS = 9;
 	/**
+	 * 激活显示窗口的条目预算（9 轮窗口之上叠的硬上限）。
+	 * flush 会把窗口段全量下发一次，窗口越大单次 IPC payload 越大；1200 给正常
+	 * 重工具会话留足余量，仅在「单轮几百条」的极端会话里把窗口缩到更少轮次（#213）。
+	 * 缩窗口不丢内容：滑出的轮次走 pendingSlideOut → 渲染层历史前缀，仍可翻回。
+	 */
+	private static readonly MAX_DISPLAY_WINDOW_ENTRIES = 1200;
+	/**
 	 * agent_end 后等待 agent_settled 的超时时间（毫秒）。
 	 * 如果 Pi 在此时间内未发送 agent_settled，桌面端将主动查询 get_state 并尝试恢复 idle。
 	 * 这补偿了 Pi 在某些边缘情况下不发送 agent_settled 导致动画永久卡住的问题。
@@ -287,6 +303,13 @@ export class AgentManager {
 	 * 12 轮覆盖激活显示窗口（9 轮）外再缓存 1 页历史（3 轮）；更早历史随时可从文件分页读回。
 	 */
 	private static readonly MAX_RUNTIME_CACHE_TURNS = 12;
+	/**
+	 * 运行期消息缓存的条目预算（12 轮之上叠的硬上限）。
+	 * 主进程数组是内存占用最大的一份消息拷贝（带完整 tool 结果），只按轮数裁在
+	 * 「单轮几百条」的会话里依然无界；与加载窗口同口径（1600），超预算时少留几轮，
+	 * 更早历史随时可从文件分页读回。
+	 */
+	private static readonly MAX_RUNTIME_CACHE_ENTRIES = 1600;
 	/**
 	 * 工具结果文本截断阈值（字符数）。工具结果（如 bash 输出、文件读取）可能达数十 KB，
 	 * 若完整存入 ChatMessage.meta 并随流式 emit 反复全量传输，会显著放大 IPC payload
@@ -1027,7 +1050,12 @@ export class AgentManager {
 			SessionHistoryReader.maxTurnPageSize(),
 		);
 		const roles = list.map((m) => ({ role: m.role, byteLength: 0 }));
-		const start = findTurnPageStart(roles, pos, turnCount);
+		const start = boundTurnWindowStart(
+			roles,
+			pos,
+			turnCount,
+			SessionHistoryReader.maxPageWindowEntries(),
+		);
 		if (start >= pos) return null;
 		const page = list.slice(start, pos);
 		const oldest = page[0] ?? list[0];
@@ -1245,6 +1273,8 @@ export class AgentManager {
 			skipEntries,
 			rawMessages: rawMessages.length,
 			trimmedMessages: trimmed.length,
+			// 下发体量（近似字节）：判断「渲染进程为何崩」的关键字段（#213）
+			payloadBytes: estimateMessagesPayloadBytes(messages),
 			requestMs: t1 - t0,
 			convertMs: t2 - t1,
 			totalMs: t2 - t0,
@@ -1273,15 +1303,9 @@ export class AgentManager {
 		this.rebindInFlightMessages(agentId, nextMessages, messages);
 		this.messages.set(agentId, nextMessages);
 		// 显示窗口 = 尾部 9 轮（DOM 3 / atom 9 / main 12 模型；轮次起点对齐 user 消息，
-		// 与 disk 轮次分页同一约定；单轮再大也整轮显示，折叠完整性优先）
-		this.displayWindowStartByAgent.set(
-			agentId,
-			findTurnPageStart(
-				nextMessages.map((m) => ({ role: m.role, byteLength: 0 })),
-				nextMessages.length,
-				AgentManager.DISPLAY_WINDOW_TURNS,
-			),
-		);
+		// 与 disk 轮次分页同一约定；单轮再大也整轮显示，折叠完整性优先），
+		// 但叠了条目预算：极端会话下窗口缩轮也不切半轮（#213）。
+		this.displayWindowStartByAgent.set(agentId, this.computeDisplayWindowStart(nextMessages));
 		// 文件版本随本次加载快照：压缩/外部改写会改变 mtime:size，渲染层据此丢弃 disk 前缀
 		if (runtime.tab.sessionPath) {
 			try {
@@ -1294,6 +1318,41 @@ export class AgentManager {
 		this.refreshAutoTitle(agentId);
 		this.scheduleMessageEmit(agentId, true);
 		return nextMessages;
+	}
+
+	/**
+	 * 压缩成功后的消息重载（单飞）。
+	 *
+	 * 为什么需要单飞：一次重载 = 读盘整段窗口 + 投影 + 全量下发，是内存峰值最高的路径。
+	 * compaction_end 是 RPC 事件，可能在同一时间窗内连发（自动重试的多次压缩、压缩与
+	 * 用户发消息、与 agent_settled 后的 trimRuntimeCache 重叠），叠加在途重载会把峰值
+	 * 翻好几倍（#213）。这里同一 agent 只保留一次在途：重载本身总在读文件，
+	 * 期间到达的后续请求不需要再排一次（晚到的更新由下一次事件或本次读到的尾部覆盖）。
+	 */
+	/**
+	 * 计算激活显示窗口起点：尾部 DISPLAY_WINDOW_TURNS 轮，且总条目数不超 MAX_DISPLAY_WINDOW_ENTRIES。
+	 *
+	 * 统一入口：loadMessages / flushMessageEmit / trimRuntimeCache 三处口径必须一致，
+	 * 否则窗口坐标与 windowStartFilePos（渲染层「加载更多」的数值游标）会错位。
+	 * 页边界永远对齐完整轮次（单轮再大也整轮保留，至少保最后一轮）。
+	 */
+	private computeDisplayWindowStart(messages: ReadonlyArray<{ role?: string }>): number {
+		return boundTurnWindowStart(
+			messages.map((message) => ({ role: message.role, byteLength: 0 })),
+			messages.length,
+			AgentManager.DISPLAY_WINDOW_TURNS,
+			AgentManager.MAX_DISPLAY_WINDOW_ENTRIES,
+		);
+	}
+
+	private reloadMessagesAfterCompaction(agentId: string) {
+		if (this.compactionReloadInFlight.has(agentId)) return;
+		this.compactionReloadInFlight.add(agentId);
+		void this.loadMessages(agentId)
+			.catch(() => undefined)
+			.finally(() => {
+				this.compactionReloadInFlight.delete(agentId);
+			});
 	}
 
 	async create(rawInput: CreateAgentInput) {
@@ -4179,9 +4238,13 @@ export class AgentManager {
 		if (typed.type === "compaction_end") {
 			this.rpcCompactingAgents.delete(agentId);
 			if (runtime) {
-				// compaction 会向 session JSONL 写入新的边界记录；立即重载消息，
-				// 避免前端仍展示压缩前分支，下一轮继续对话时看起来像“断在旧会话”。
-				void this.loadMessages(agentId).catch(() => undefined);
+				// compaction 成功时才会向 session JSONL 写入新的边界记录；只有此时才需要重载，
+				// 否则前端仍展示压缩前分支，下一轮继续对话时看起来像“断在旧会话”。
+				// 失败/中止的压缩不改写文件（见 shouldReloadMessagesAfterCompaction），
+				// 重载只会把同一份巨型 JSONL 再读一遍并全量下发一次（#213 渲染进程 OOM 主因）。
+				if (shouldReloadMessagesAfterCompaction(typed)) {
+					this.reloadMessagesAfterCompaction(agentId);
+				}
 				// 用户已主动中止或出错时不重新激活 running 状态
 				if (!this.recentlyAborted.has(agentId) && runtime.tab.status !== "error") {
 					// compaction_end 之后 Pi 仍可能因 overflow retry 或 queued follow-up 自动继续。
@@ -6058,11 +6121,7 @@ export class AgentManager {
 		const lastComputedLength = this.displayWindowComputedLengthByAgent.get(agentId) ?? -1;
 		let nextWindowStart = currentWindowStart;
 		if (all.length !== lastComputedLength) {
-			nextWindowStart = findTurnPageStart(
-				all.map((message) => ({ role: message.role, byteLength: 0 })),
-				all.length,
-				AgentManager.DISPLAY_WINDOW_TURNS,
-			);
+			nextWindowStart = this.computeDisplayWindowStart(all);
 			this.displayWindowComputedLengthByAgent.set(agentId, all.length);
 		}
 		if (nextWindowStart > currentWindowStart) {
@@ -6145,15 +6204,16 @@ export class AgentManager {
 		const list = this.messages.get(agentId);
 		if (!list || list.length === 0) return;
 		const summaryCards = leadingSummaryCards(list, list.length);
-		const trimmedStart = turnTrimStartIndex(list, AgentManager.MAX_RUNTIME_CACHE_TURNS);
+		const trimmedStart = boundTurnWindowStart(
+			list.map((m) => ({ role: m.role, byteLength: 0 })),
+			list.length,
+			AgentManager.MAX_RUNTIME_CACHE_TURNS,
+			AgentManager.MAX_RUNTIME_CACHE_ENTRIES,
+		);
 		const trimmed = list.slice(trimmedStart);
 		const didTrim = trimmed.length !== list.length;
 		const currentWindowStart = this.displayWindowStartByAgent.get(agentId) ?? 0;
-		const nextWindowStartInList = findTurnPageStart(
-			list.map((m) => ({ role: m.role, byteLength: 0 })),
-			list.length,
-			AgentManager.DISPLAY_WINDOW_TURNS,
-		);
+		const nextWindowStartInList = this.computeDisplayWindowStart(list);
 		// 不超过 12 轮时也要校准尾部 9 轮窗口。通常 settled 前的 flush 已经做过这步，
 		// 这里保留独立调用时的兜底，避免新会话在 12 轮以内把全部消息留在 atom。
 		if (!didTrim) {
@@ -6184,14 +6244,7 @@ export class AgentManager {
 		this.messages.set(agentId, next);
 		// 裁剪后数组下标空间前移，尾部 9 轮的身份不变但数值起点改变；
 		// 先重置坐标，再用全量 flush 校准 renderer。
-		this.displayWindowStartByAgent.set(
-			agentId,
-			findTurnPageStart(
-				next.map((m) => ({ role: m.role, byteLength: 0 })),
-				next.length,
-				AgentManager.DISPLAY_WINDOW_TURNS,
-			),
-		);
+		this.displayWindowStartByAgent.set(agentId, this.computeDisplayWindowStart(next));
 		this.markMessagesDirtyFrom(agentId, 0);
 		this.flushMessageEmit(agentId);
 	}

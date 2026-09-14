@@ -1,8 +1,9 @@
 import { Download, Copy, Check, ChevronDown } from "lucide-react";
-import { memo, type RefObject, useState } from "react";
+import { memo, useCallback, type RefObject, useState } from "react";
 import type { ChatMessage, ImageContent } from "../../../../../shared/types";
 import type { ImageGenMeta } from "../../../../../shared/types/imagegen";
 import { IMAGE_GEN_SIZE_UNSET, parseImageGenSize } from "../../../../../shared/imageGenParams";
+import { imageContentSrc, loadImageBase64 } from "../../../../../shared/imageContentSrc";
 import { t } from "../../../i18n";
 import { Button } from "../../ui-shadcn/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../../ui-shadcn/dropdown-menu";
@@ -43,7 +44,19 @@ function ImageGenMessage(props: {
 	// 部分生图 provider 返回 application/octet-stream，但 data 仍是 PNG/JPEG base64；
 	// 不能因此让复制入口把有效图片误判为非图片，展示/复制统一使用图片 MIME 兜底。
 	const imageMimeType = image?.mimeType.startsWith("image/") ? image.mimeType : "image/png";
-	const imageDataUrl = image ? `data:${imageMimeType};base64,${image.data}` : "";
+	// 展示源：新图是内联 base64，历史图是落盘引用（pideck-img://，由协议流式加载，
+	// 不把 200 MB base64 搬回渲染进程堆）。复制/保存需要真实字节，走按需 IPC 取回。
+	const imageSrc = imageContentSrc(image);
+	const readImageBlob = useCallback(
+		(ref: string) => window.piDesktop.imagegen.readImageBlob(ref),
+		[],
+	);
+	/** 取回可复制/可下载的 data URL；取不到返回 null。 */
+	const loadImageDataUrl = async (): Promise<string | null> => {
+		const payload = await loadImageBase64(image, readImageBlob);
+		if (!payload) return null;
+		return `data:${payload.mimeType.startsWith("image/") ? payload.mimeType : imageMimeType};base64,${payload.data}`;
+	};
 	// 未配置分辨率时不渲染右上角尺寸徽标：请求体没发 size，由模型默认决定，
 	// 无法得知实际输出尺寸；"unset" 只是内部哨兵串（历史消息也会带上），不能直接上屏。
 	// 用共享 parser 统一收窄，空/非法值同样隐藏。
@@ -60,8 +73,9 @@ function ImageGenMessage(props: {
 			try {
 				// 不使用 fetch(data:...)：data URL 会被 CSP 当作网络连接拦截。
 				// 统一走 writeClipboardImage，避免 Electron 失焦时 ClipboardItem 静默失败。
-				if (!imageDataUrl) throw new Error("Generated image is empty");
-				const written = await writeClipboardImage(imageDataUrl);
+				const dataUrl = await loadImageDataUrl();
+				if (!dataUrl) throw new Error("Generated image is empty");
+				const written = await writeClipboardImage(dataUrl);
 				if (!written) throw new Error("Unable to write generated image to clipboard");
 				setCopied(true);
 				window.setTimeout(() => setCopied(false), 1600);
@@ -70,13 +84,16 @@ function ImageGenMessage(props: {
 			}
 		};
 		const saveImage = () => {
-			if (!imageDataUrl || !image) return;
-			const link = document.createElement("a");
-			link.href = imageDataUrl;
-			// 扩展名跟 mime，避免 jpeg 结果被存成 .png
-			const ext = image.mimeType === "image/jpeg" ? "jpg" : "png";
-			link.download = `pideck-image-${Date.now()}.${ext}`;
-			link.click();
+			if (!image) return;
+			void loadImageDataUrl().then((dataUrl) => {
+				if (!dataUrl) return;
+				const link = document.createElement("a");
+				link.href = dataUrl;
+				// 扩展名跟 mime，避免 jpeg 结果被存成 .png
+				const ext = image.mimeType === "image/jpeg" ? "jpg" : "png";
+				link.download = `pideck-image-${Date.now()}.${ext}`;
+				link.click();
+			});
 		};
 	return (
 		<div className="py-1">
@@ -89,16 +106,16 @@ function ImageGenMessage(props: {
 				size="fluid"
 				className="max-w-[300px]"
 			>
-				{status === "complete" && image ? (
+				{status === "complete" && image && imageSrc ? (
 					<img
-						src={imageDataUrl}
+						src={imageSrc}
 						alt=""
 						className="cursor-zoom-in"
 						onClick={() => props.onPreviewImage(image)}
 					/>
 				) : undefined}
 			</ImageGeneration>
-			{status === "complete" && image ? (
+			{status === "complete" && image && imageSrc ? (
 				<div className="mt-1 flex items-center">
 					{/* 主按钮和下拉菜单共用同一套图片动作，避免生图消息再显示普通文本复制栏。 */}
 					<div className="flex items-center overflow-hidden rounded-sm border border-transparent hover:border-border">

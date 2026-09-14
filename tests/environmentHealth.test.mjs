@@ -20,6 +20,7 @@ const {
   checkLogErrors,
   checkProxyConfig,
   checkWslConfig,
+  checkInstanceLocks,
   tallyChecks,
   sortChecksBySeverity,
 } = loadTsCommonJs("src/main/health/healthProbes.ts");
@@ -111,6 +112,37 @@ test("checkWslConfig: only meaningful on win32", () => {
   assert.equal(checkWslConfig(settings({ wslEnabled: true }), "darwin", false).status, "skipped");
   const missing = checkWslConfig(settings({ wslEnabled: true }), "win32", false);
   assert.equal(missing.status, "warn");
+});
+
+test("checkInstanceLocks: stale/corrupt locks are reported, live lock is ok", () => {
+  const own = { version: "0.7.6", pid: 100 };
+  const options = { ownPid: 100, singleInstanceEnabled: true };
+
+  assert.equal(
+    checkInstanceLocks([{ ...own, state: "live" }], options).status,
+    "ok",
+  );
+  // 残留锁（升级被中断）必须报出来，用户才能不用手删文件就定位「没反应」
+  const stale = checkInstanceLocks(
+    [{ version: "0.7.5", pid: 3679, state: "stale" }],
+    options,
+  );
+  assert.equal(stale.status, "warn");
+  assert.match(stale.detail, /0\.7\.5\(pid 3679\)/);
+  assert.equal(
+    checkInstanceLocks([{ version: "0.7.5", pid: 0, state: "corrupt" }], options).status,
+    "warn",
+  );
+  // 单实例开着却没有自己的锁 = 写锁失败降级启动（同版本可多开、会话被抢）
+  const noOwn = checkInstanceLocks([{ version: "0.7.4", pid: 55, state: "live" }], options);
+  assert.equal(noOwn.status, "warn");
+  // 关掉单实例时不写锁，不是故障
+  assert.equal(
+    checkInstanceLocks([], { ownPid: 100, singleInstanceEnabled: false }).status,
+    "ok",
+  );
+  // 采集失败降级 skipped，不能报成 ok
+  assert.equal(checkInstanceLocks(null, options).status, "skipped");
 });
 
 test("tallyChecks: computes counts and score from checks", () => {

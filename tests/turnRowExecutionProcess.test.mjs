@@ -24,13 +24,14 @@ const timelineEventCardsSource = readFileSync(
 );
 
 test("renders the run as order-preserving flat display without pulling the last answer to the bottom", () => {
-  assert.ok(
-    turnRowSource.indexOf("foldableItems.map") > 0,
-    "TurnRow must render foldable display items",
-  );
+  // #213：折叠区先过 boundMountedSteps 挂载预算，渲染源仍是 foldableItems 的尾部切片
+  //（顺序不变）。锚点相应地从 foldableItems.map 改为 mountedSteps.items.map。
+  const foldableRenderIndex = turnRowSource.indexOf("mountedSteps.items.map");
+  assert.ok(foldableRenderIndex > 0, "TurnRow must render foldable display items");
+  assert.match(turnRowSource, /boundMountedSteps\(foldableItems/);
   // 顺序忠实：不再抽离时序、不把回答拽到底部，final/interim 都在原位
   assert.doesNotMatch(
-    turnRowSource.slice(turnRowSource.indexOf("foldableItems.map")),
+    turnRowSource.slice(foldableRenderIndex),
     /最终回答（始终可见）/,
   );
   assert.match(turnRowSource, /buildTurnDisplay\(run/);

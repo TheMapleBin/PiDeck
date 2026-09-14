@@ -34,6 +34,42 @@ test("IPC 通道三处同步：generate / get-config / save-config", () => {
 	assert.match(preload, /saveConfig: \(config: ImageGenConfigFile\)/);
 });
 
+test("IPC 通道三处同步：read-image-blob（按需取回落盘图片）", () => {
+	assert.match(ipc, /imagegenReadImageBlob: "imagegen:read-image-blob"/);
+	assert.match(imagegenIpc, /ipcChannels\.imagegenReadImageBlob/);
+	assert.match(preload, /ipcChannels\.imagegenReadImageBlob/);
+	assert.match(preload, /readImageBlob: \(ref: string\)/);
+	// 入参在 IPC 边界收窄成非空字符串（渲染层数据不可信）
+	assert.match(imagegenIpc, /typeof ref !== "string" \|\| !ref/);
+});
+
+test("生图图片落盘：blob 存储 + pideck-img 协议 + CSP 允许", () => {
+	const protocol = readFileSync("src/main/imagegen/ImageGenImageProtocol.ts", "utf8");
+	const blobStore = readFileSync("src/main/imagegen/ImageBlobStore.ts", "utf8");
+	const sessionStore = readFileSync("src/main/imagegen/ImageSessionStore.ts", "utf8");
+	const html = readFileSync("src/renderer/index.html", "utf8");
+	// 装配：两个磁盘根同源解析 + 协议注册 + 按需读取回灌
+	assert.match(mainIndex, /new ImageBlobStore\(/);
+	assert.match(mainIndex, /resolveImageGenStorageRoots\(\)/);
+	assert.match(mainIndex, /registerImageGenImageProtocol\(imageBlobStore\)/);
+	assert.match(mainIndex, /scheme: "pideck-img"/);
+	assert.match(mainIndex, /readImageBlob: \(ref\) => imageBlobStore\.readPayload\(ref\)/);
+	// 协议：白名单解析 + 只允许 blobs 目录内的引用名
+	assert.match(protocol, /protocol\.handle\(IMAGE_BLOB_PROTOCOL/);
+	assert.match(protocol, /blobs\.resolvePath\(ref\)/);
+	assert.match(blobStore, /IMAGE_BLOB_REF_RE/);
+	// 会话存储：字节水位 + 旧格式自愈 + base64 不落 JSONL + 追加不重写
+	assert.match(sessionStore, /MAX_SESSION_BYTES/);
+	assert.match(sessionStore, /MAX_READ_BYTES/);
+	assert.match(sessionStore, /migrateLegacyFile/);
+	assert.match(sessionStore, /readTailLines/);
+	// 回归守卫：每轮「全量读 + 全量重写」是 246 MB 事故的直接成因，必须只追加
+	assert.match(sessionStore, /appendFile\(file/);
+	assert.doesNotMatch(sessionStore, /import \{[^}]*readFile[^}]*\} from "node:fs\/promises"/);
+	// CSP：渲染层 <img> 必须被允许加载 pideck-img:
+	assert.match(html, /img-src[^"]*pideck-img:/);
+});
+
 test("主进程装配：ImageGenConfigStore + 独立 userData/imagegen.json", () => {
 	assert.match(mainIndex, /new ImageGenConfigStore\(/);
 	assert.match(mainIndex, /join\(app\.getPath\("userData"\), "imagegen\.json"\)/);

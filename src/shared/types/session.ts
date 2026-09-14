@@ -277,8 +277,20 @@ export type ForkMessage = {
 /** 图片内容格式，与 pi RPC 的 ImageContent 一致 */
 export type ImageContent = {
 	type: "image";
-	data: string; // base64 编码的图片数据
+	/**
+	 * base64 编码的图片数据。
+	 * 历史生图记录（ImageSessionStore）走 ref 落盘引用时缺省——base64 只在
+	 * 「正在生成 / 正在发送」的生命周期里存在，进历史即换成 ref。
+	 * 发给 pi / 生图供应商的图片必须带 data（ref 形态只在展示与历史回读之间流转）。
+	 */
+	data?: string;
 	mimeType: string; // 如 "image/png", "image/jpeg", "image/gif", "image/webp"
+	/**
+	 * 落盘引用：`userData/imagegen/blobs` 下的内容寻址文件名（sha256 + 扩展名）。
+	 * 与 data 二选一，两者同时存在时 data 优先（见 shared/imageContentSrc.ts）。
+	 * 白名单与协议解析见 main/imagegen/ImageBlobStore.ts、ImageGenImageProtocol.ts。
+	 */
+	ref?: string;
 };
 
 export type SendPromptInput = {

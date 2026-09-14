@@ -237,6 +237,9 @@ export function sameChatMessageForRender(previous: ChatMessage, next: ChatMessag
 		previousImages.every(
 			(image, index) =>
 				image.mimeType === nextImages[index]?.mimeType &&
+				// 历史生图图片只有 ref 引用（没有 data）：两个不同的 ref 也必须判为不等，
+				// 否则换图后复用旧引用会导致时间线不刷新。
+				image.ref === nextImages[index]?.ref &&
 				image.data === nextImages[index]?.data,
 		)
 	);

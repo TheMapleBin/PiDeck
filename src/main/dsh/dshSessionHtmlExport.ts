@@ -80,6 +80,8 @@ export function renderExportText(value: string): string {
 
 /** 用户消息图片（base64 data → 内联 data URL；超限跳过并注明，防超大 HTML）。 */
 function renderExportImage(image: ImageContent): string {
+	// DSH 会话图片始终带内联字节；缺字节（异常数据）时跳过而不是导出半截 URL
+	if (!image.data) return "";
 	const dataUrl = `data:${image.mimeType};base64,${image.data}`;
 	if (dataUrl.length > EXPORT_IMAGE_MAX_DATA_URL_CHARS) {
 		return `<div class="image-skipped">(image omitted: too large for export)</div>`;

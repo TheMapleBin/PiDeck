@@ -15,6 +15,7 @@ import { formatDuration, stripAnsi, stripThinkingTags } from "../TimelineFormat"
 import { LiveDuration } from "../LiveDuration";
 import { CopyMenu, stripMarkdown } from "../SurfaceComponents";
 import { buildTurnDisplay, hasFoldableContent } from "../timeline/buildTurnDisplay";
+import { boundMountedSteps, TIMELINE_MOUNTED_STEP_LIMIT } from "../timeline/turnMountBudget";
 import { resolveLiveInterimId } from "../timeline/liveMount";
 import { buildProcessSummary } from "../timeline/segmentSummary";
 import type {
@@ -256,6 +257,15 @@ export const TurnRow = memo(
 		() => displayItems.filter((item) => item.kind === "final-answer"),
 		[displayItems],
 	);
+	// 单轮步骤挂载预算（2026-08 #213）：极端轮次（单轮上百个工具/思考条目）默认只挂尾部
+	// LIMIT 条，顶部给「显示更早 N 条步骤」入口——内容仍在 foldableItems 里，点开即全量挂载。
+	// 用 run.id 而非布尔量做「已展开」状态：换 run 自然重置，不需要额外 effect。
+	const [expandedStepsRunId, setExpandedStepsRunId] = useState<string | undefined>(undefined);
+	const stepsFullyExpanded = expandedStepsRunId === run.id;
+	const mountedSteps = useMemo(
+		() => boundMountedSteps(foldableItems, TIMELINE_MOUNTED_STEP_LIMIT, stepsFullyExpanded),
+		[foldableItems, stepsFullyExpanded],
+	);
 	// 收集本轮所有 assistant 消息（按 run.items 的时序保持原始顺序）
 	const assistantMessages = run.items.filter(
 		(item): item is MessageItem =>
@@ -333,7 +343,20 @@ export const TurnRow = memo(
 							    2. live 流式轮（agentRunning=true）折叠时仍保持挂载（display:none）——
 							       卸载会重置打字机动画状态，恢复展开时思考/工具重播。
 							    代价：Radix 高度渐变动画在历史轮退化为瞬时展开/收起。 */}
-							{(stepsVisible || props.agentRunning === true) && foldableItems.map((item) => {
+							{(stepsVisible || props.agentRunning === true) && mountedSteps.hiddenCount > 0 && (
+								// 超出挂载预算的早期步骤入口：与 execution-summary-toggle 同款观感，
+								// 用 Tailwind utility 对齐旧 CSS 的 token（不新增手写 class）。
+								<button
+									type="button"
+									className="mt-1 inline-flex h-[26px] items-center gap-2 self-start rounded-[var(--radius-md)] border border-border-subtle bg-[var(--color-chat-card-bg)] px-3 text-[length:var(--font-size-caption)] font-medium text-text-secondary transition-colors hover:border-border-strong hover:bg-bg-hover hover:text-text-primary"
+									onClick={() => setExpandedStepsRunId(run.id)}
+									title={t("timeline.showEarlierSteps", { count: mountedSteps.hiddenCount })}
+								>
+									<ChevronUp size={12} aria-hidden="true" />
+									<span>{t("timeline.showEarlierSteps", { count: mountedSteps.hiddenCount })}</span>
+								</button>
+							)}
+							{(stepsVisible || props.agentRunning === true) && mountedSteps.items.map((item) => {
 								let content: ReactNode;
 								let itemKey: string;
 								if (item.kind === "process-entry") {

@@ -44,6 +44,8 @@ const TITLES = {
   "commit-split": "按功能拆分提交提示词（编程）",
   "pi-system": "查看 pi 系统提示词（编程）",
   "skill-discipline": "技能执行纪律提示词（编程）",
+  "enhance-prompt": "提示词增强（编程）",
+  "enhance-prompt-deep": "提示词深度增强（编程）",
 };
 
 /**
@@ -63,6 +65,8 @@ const DESCRIPTIONS = {
   "commit-split": "提交所有改动，按功能拆分为多个 commit",
   "pi-system": "查看 pi 的默认系统提示词（身份、工具、行为准则）",
   "skill-discipline": "技能执行纪律：何时及如何触发 agent 技能的规则",
+  "enhance-prompt": "将需求草稿改写为更清晰、更具体、更可执行的提示词（保留原有意图，语言一致，不超过 800 字）",
+  "enhance-prompt-deep": "将开放型需求实质性扩展为丰富、具体、可执行的提示词（代码/路径等精确内容原样保留，无长度限制）",
 };
 
 /** 剥离 markdown frontmatter（--- 包裹的元数据），只留正文；与渲染层 stripFrontmatter 同一规则 */

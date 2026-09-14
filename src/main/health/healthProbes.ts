@@ -147,6 +147,57 @@ export function checkWslConfig(
 	return { id: "wsl.config", status: "ok", detail: settings.wslDistro.trim() || "default" };
 }
 
+/**
+ * 实例锁快照项。state 由 instanceLockFile 的进程身份判定映射而来：
+ * live = 主人还活着；stale = 死进程/僵尸/PID 复用留下的残留锁；corrupt = 文件半截或非本格式。
+ */
+export type InstanceLockState = "live" | "stale" | "corrupt";
+export type InstanceLockSummary = { version: string; pid: number; state: InstanceLockState };
+
+type InstanceLockCheckOptions = {
+	/** 当前主进程 pid；用于识别「单实例开启但本进程没拿到锁」（锁目录不可写等降级场景） */
+	ownPid: number;
+	singleInstanceEnabled: boolean;
+};
+
+/**
+ * 实例锁文件是否健康。
+ *
+ * 为什么不只是「锦上添花」：0.7.5 及以前，升级时被中断留下的锁文件会让
+ * 再次启动「双击图标没反应」（无窗口、无报错、退出码 0），只能靠手删文件恢复。
+ * 把「锁目录里有什么」变成体检项后，这类反馈不再依赖用户自己会看日志。
+ */
+export function checkInstanceLocks(
+	locks: InstanceLockSummary[] | null,
+	options: InstanceLockCheckOptions,
+): HealthCheckItem {
+	if (locks === null) {
+		// 锁目录读不到（权限/不存在）：采集失败，不作为故障上报
+		return { id: "instance.locks", status: "skipped", detail: "" };
+	}
+	const stale = locks.filter((item) => item.state === "stale");
+	const corrupt = locks.filter((item) => item.state === "corrupt");
+	const summary = (items: InstanceLockSummary[]) =>
+		truncateText(items.map((item) => `${item.version}(pid ${item.pid})`).join(", "), 160);
+
+	if (stale.length > 0) {
+		// 残留锁说明上一次退出不是干净退出（崩溃/被 kill/升级中断），值得提醒
+		return { id: "instance.locks", status: "warn", detail: summary(stale) };
+	}
+	if (corrupt.length > 0) {
+		return { id: "instance.locks", status: "warn", detail: summary(corrupt) };
+	}
+	if (options.singleInstanceEnabled && options.ownPid > 0) {
+		const own = locks.find((item) => item.pid === options.ownPid);
+		if (!own) {
+			// 单实例开着却没有自己的锁：写锁失败（只读盘/权限）已降级为无锁启动，
+			// 表现是「同版本能开两个窗口、会话被抢」，这是必须看见的诊断结论。
+			return { id: "instance.locks", status: "warn", detail: "no lock for current process" };
+		}
+	}
+	return { id: "instance.locks", status: "ok", detail: `${locks.length} lock file(s)` };
+}
+
 /** 把 ConfigManager 的诊断结果压成检查项需要的形状（不含路径，只留文件名与信息）。 */
 export function toConfigDiagnostics(
 	results: Array<{ diagnostic?: ConfigFileDiagnostic | null }>,

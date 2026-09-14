@@ -39,12 +39,22 @@ export class SkillManager {
 	/** PiDeck 设置的读取/写入（禁用列表持久化）；未配置时开关仅写 frontmatter（旧行为）。 */
 	private settingsProvider: (() => AppSettings) | null = null;
 	private settingsPatcher: ((patch: Partial<AppSettings>) => Promise<AppSettings>) | null = null;
+	/**
+	 * 内置技能覆盖层目录提供器（SkillStoreUpdater 热更新落盘目录）：
+	 * 返回有效覆盖层时，安装模板优先读覆盖层里的 <name>/SKILL.md，实现技能修 bug/新增技能免发版。
+	 */
+	private skillOverlayProvider: (() => string | null) | null = null;
 
 	constructor(
 		home?: string,
 		private readonly translate: SkillCopy = () => "Skill operation failed.",
 	) {
 		this.locations = this.buildLocations(home ?? homedir());
+	}
+
+	/** 注入内置技能覆盖层目录提供器（启动装配时由 SkillStoreUpdater 提供）。 */
+	configureSkillOverlay(provider: () => string | null) {
+		this.skillOverlayProvider = provider;
 	}
 
 	/** 注入 PiDeck 设置读写：启用后 toggle 同步持久化禁用列表（技能白名单模式的依据）。 */
@@ -171,8 +181,13 @@ export class SkillManager {
 		{ success: true; path: string } | { success: false; error: string }
 	> {
 		try {
+			// 覆盖层优先：热更新把有差异的技能写进 userData/skills-overlay（结构同
+			// <builtin>/skills/<name>/SKILL.md），安装时读生效源，避免「更新成功但装旧模板」。
+			const overlayDir = this.skillOverlayProvider?.() ?? null;
 			const root = app.isPackaged ? process.resourcesPath : join(app.getAppPath(), "resources");
-			const templatePath = join(root, "skills", skillName, SKILL_FILE);
+			const templatePath = overlayDir
+				? join(overlayDir, skillName, SKILL_FILE)
+				: join(root, "skills", skillName, SKILL_FILE);
 			const content = await readFile(templatePath, "utf8");
 			const targetDir = join(this.locations[0].path, skillName);
 			await mkdir(targetDir, { recursive: true });

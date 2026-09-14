@@ -243,3 +243,25 @@ export function isDefaultAgentTitle(
 		trimmed === "New session"
 	);
 }
+
+/**
+ * compaction_end 之后是否需要重载消息（纯函数，单独可测）。
+ *
+ * 业务规则：pi 只在压缩**成功**时向会话 JSONL 写入新的边界记录与摘要，失败/中止的压缩
+ * 不改写文件。因此失败时重载读到的还是同一份文件，属于纯重复开销：
+ * 整段窗口重新读盘 + 投影 + 全量下发，反而把内存峰值重新抬高一次。
+ *
+ * 2026-08 #213：压缩失败（上下文超限，压缩请求本身也超限）后仍无条件重载，
+ * 与紧随其后的用户发消息重载叠加，直接把渲染进程推到 OOM。
+ *
+ * 边界：`result` 缺失（旧版 pi 不上报结果）按「不重载」处理——宁可少刷一次卡片，
+ * 也不要在未知成败时用全量读盘赌内存；压缩成功后紧跟的 agent 事件仍会带来一次刷新。
+ *
+ * 返回值取真值而不是 `=== true`：pi 成功时给的是**对象**
+ * （`{summary, firstKeptEntryId, tokensBefore, usage}`，见 pi docs/rpc.md
+ * 「compaction_start / compaction_end」），失败/中止时才是 `null`。
+ * 写成 `=== true` 会变成“永远不重载”，前端停在压缩前分支——正是本函数要修的现象。
+ */
+export function shouldReloadMessagesAfterCompaction(event: { result?: unknown }): boolean {
+	return Boolean(event.result);
+}
