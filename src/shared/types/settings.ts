@@ -146,6 +146,11 @@ export type AppSettings = {
 	 * 用户显式配置后，所有 git 子进程（含 worktree）都使用该路径。
 	 */
 	gitExecutablePath: string;
+	/**
+	 * DSH 沙箱 runner 用的本机 Node 绝对路径（Windows 必须是 CUI node.exe）。
+	 * 空串 = 自动探测 PATH / 常见安装位置。不随包分发，避免安装包再涨 ~86MB。
+	 */
+	dshRunnerNodePath: string;
 	/** 关闭窗口时隐藏到系统托盘而不是退出 */
 	closeToTray: boolean;
 	/**

@@ -208,6 +208,10 @@ export const ipcChannels = {
 	dshListProviders: "dsh:list-providers",
 	/** DSH 配置管理页状态（host 启动状态 + 目录 + providers + 模型目录）。 */
 	dshGetStatus: "dsh:get-status",
+	/** 探测本机 CUI node（DSH 沙箱 runner）；传草稿路径可在保存前预览。 */
+	dshDetectRunnerNode: "dsh:detect-runner-node",
+	/** 打开文件选择框挑 node.exe；取消返回 null。 */
+	dshChooseRunnerNode: "dsh:choose-runner-node",
 	/** DSH settings.describe（脱敏 namespace 视图 + schema，渲染配置表单）。 */
 	dshConfigDescribe: "dsh:config-describe",
 	/** DSH settings.update（合并 patch 到 namespace 用户层）。 */

@@ -138,6 +138,7 @@ Gitmoji 对应关系：
   gitCommitMessageModel: "",
   // 空串 = 自动解析（PATH 中的 git → 各平台已知安装位置）；用户可在 Git 设置页显式指定。
   gitExecutablePath: "",
+  dshRunnerNodePath: "",
   closeToTray: true,
   // 默认单实例：托盘隐藏后再次点击快捷方式会唤起原窗口，而不是再开一个进程
   singleInstance: true,
@@ -357,6 +358,8 @@ export class SettingsStore {
       // 避免 spawn 拿到非字符串路径把整个 Git 面板打挂。
       this.settings.gitExecutablePath =
         typeof parsed.gitExecutablePath === "string" ? parsed.gitExecutablePath.trim() : "";
+      this.settings.dshRunnerNodePath =
+        typeof parsed.dshRunnerNodePath === "string" ? parsed.dshRunnerNodePath.trim() : "";
       // 快捷键覆盖来自旧 settings.json 时可能是脏值（未知 id / 非法 accelerator）；
       // 统一清洗，坏条目回落平台默认，避免主进程匹配读到无效键。
       this.settings.shortcuts = sanitizeShortcutOverrides(parsed.shortcuts, process.platform);

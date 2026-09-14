@@ -1028,6 +1028,16 @@ function SessionTab(props: {
     isReloading: props.isReloading,
   });
   const title = sessionDisplayName(record?.title, record?.forked) || t("common.untitled");
+  // DSH/生图徽标与计划/目标模式 chip 都是不可压缩的固定宽度内容。tab 上限 128px 时
+  // 这些前置徽章 + 关闭按钮就能占满整块宽度，标题（flex-1 min-w-0）会被压到 0 宽度
+  // 完全消失（2026-09 浅色主题 + 目标模式实测）。有前置徽章时放宽上限到 176px，
+  // 给标题留出可读空间；无徽章的普通 tab 维持 128px 紧凑上限。
+  const hasLeadingBadges = Boolean(
+    record?.backend === "dsh" ||
+      record?.backend === "imagegen" ||
+      runtime?.state?.planModeActive ||
+      (runtime?.state?.goal && runtime.state.goal.phase !== "complete"),
+  );
   // Tab 级操作（固定/关闭等）改为右键菜单（ContextMenu，光标处弹出）；Tab 本体点击仍是切换，
   // 拖拽排序与中键关闭与菜单互不干扰（drag/auxclick 不触发 click）。
   // 运行控制（停止/重启/重新加载）只作用于当前会话，已上收右上角 ⋯ 更多操作菜单。
@@ -1059,9 +1069,10 @@ function SessionTab(props: {
         }}
         className={cn(
           "session-tab group relative flex h-7 shrink-0 cursor-pointer select-none items-center rounded-md border px-2 text-caption transition-[color,background-color,border-color,box-shadow,transform] duration-200",
-          // 固定 Tab 与普通 Tab 同宽策略（按内容收缩，上限 128px）：固定 Tab 无关闭按钮，
-          // hover 不会因按钮出现而跳动，无需 w-20 占位；固定宽度反而让 Pin 图标挤占标题空间
-          "w-fit max-w-32",
+          // 固定 Tab 与普通 Tab 同宽策略（按内容收缩）：固定 Tab 无关闭按钮，
+          // hover 不会因按钮出现而跳动，无需 w-20 占位；固定宽度反而让 Pin 图标挤占标题空间。
+          // 有 DSH/生图徽标或模式 chip 时放宽上限（见上方 hasLeadingBadges 注释）。
+          hasLeadingBadges ? "w-fit max-w-44" : "w-fit max-w-32",
           dragging && "opacity-50",
           // 选中态：灰色柔和实底（bg-accent = --color-bg-active，与左侧 SessionTree 选中行一致），
           // 背景由下方共享 layoutId 的 motion.span spring 滑到当前 Tab；不做黑色实底/阴影/底部条。
@@ -1100,7 +1111,10 @@ function SessionTab(props: {
         )}
         {runtime?.state?.goal && runtime.state.goal.phase !== "complete" && (
           <span
-            className="shrink-0 rounded bg-accent/15 px-1 text-[10px] font-medium leading-4 text-primary"
+            // 底色与 plan chip 同用 bg-primary/15：不能用 bg-accent/15——激活 tab 的
+            // 滑动背景就是实底 bg-accent，accent/15 叠上去完全不可见，chip 会退化成裸文字
+            //（浅色主题下尤其明显）。淡蓝底在明暗主题的激活/非激活 tab 上均可读。
+            className="shrink-0 rounded bg-primary/15 px-1 text-[10px] font-medium leading-4 text-primary"
             title={t("app.composerModeGoal")}
           >
             {t("app.composerModeGoal")}

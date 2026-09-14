@@ -2989,6 +2989,17 @@ function registerIpc() {
 		// 进程监控停止 agent：按 agentId 走完整会话停止链路（含 detach 推送）
 		stopAgentFromMonitor,
 		getDshHostPid: () => dshHost.getHostPid(),
+		restartDshHost: async () => {
+			await dshAgentManager.stopAll();
+			await dshHost.restart();
+			try {
+				await dshHost.ensureStarted();
+				return dshHost.isHostProcessRunning() && dshHost.isHostReady();
+			} catch {
+				return false;
+			}
+		},
+		dshHostIsStarted: () => dshHost.isStarted(),
 		providerMigration: {
 			configManager,
 			dshHost,
@@ -3572,6 +3583,7 @@ app.whenReady().then(async () => {
 		() => dshRuntimeStatus.resolveAppRoot(),
 		// 永久删除归档目录：统一走系统回收站（与 pi 会话删除同语义，可恢复；拒绝静默硬删）。
 		async (path) => { await shell.trashItem(path); },
+		() => settingsStore.get().dshRunnerNodePath ?? "",
 	);
 	dshAgentManager = new DshAgentManager(
 		dshHost,

@@ -5,6 +5,7 @@ import type { AnnouncementState } from "../shared/types/announcement";
 import type { RpcLogBatch, RpcLogEntry } from "../shared/types/rpcLog";
 import type { DshRuntimeStatus, DshRuntimeInstallProgress } from "../shared/types/dshRuntime";
 import type { GitExecutableInfo } from "../shared/types/git";
+import type { DshRunnerNodeInfo } from "../shared/types/dshRunnerNode";
 import type { ImageBlobPayload, ImageGenConfigFile, ImageGenRequest, ImageGenResult, ImageGenSaveResult } from "../shared/types/imagegen";
 import type { CatalogCheckResult, CatalogUpdateResult, CatalogUpdateStatus } from "../shared/types/catalog";
 import type {
@@ -467,6 +468,12 @@ const api = {
 				homeDir: string;
 				bootError?: string | null;
 			}>,
+		/** 探测本机 CUI node（DSH 沙箱 runner）。传草稿路径可在保存前预览。 */
+		detectDshRunnerNode: (configuredPath?: string) =>
+			ipcRenderer.invoke(ipcChannels.dshDetectRunnerNode, configuredPath) as Promise<DshRunnerNodeInfo>,
+		/** 打开文件选择框挑 node.exe；取消返回 null。 */
+		chooseDshRunnerNode: () =>
+			ipcRenderer.invoke(ipcChannels.dshChooseRunnerNode) as Promise<string | null>,
 		/**
 		 * DSH runtime 安装态（AgentRuntimeProvider 阶段 1）：notInstalled/broken 时
 		 * DSH UI 整体降级为安装引导，新建 dsh 会话被拒。

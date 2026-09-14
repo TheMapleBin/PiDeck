@@ -26,6 +26,7 @@ import { join } from "node:path";
 
 import {
 	createCheckpoint,
+	addPathsToIndex,
 	restoreCheckpoint,
 	loadCheckpointFromRef,
 	loadAllCheckpoints,
@@ -42,6 +43,7 @@ import {
 	sanitizeForRef,
 	findClosestCheckpoint,
 } from "../src/main/rewind/checkpointFilter.ts";
+import { MAX_UNTRACKED_TOTAL_BYTES } from "../src/main/rewind/checkpointConstants.ts";
 
 const LARGE_BYTES = 10 * 1024 * 1024 + 1;
 const UUID_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -446,6 +448,13 @@ test("纯过滤函数", () => {
 	assert.ok(shouldIgnoreForSnapshot("build/out.js"));
 	assert.ok(!shouldIgnoreForSnapshot("src/app.ts"));
 	assert.ok(!shouldIgnoreForSnapshot("docs/README.md"));
+	// PiDeck 侧扩展的产物目录（2026-09-13 用户报告的 .runs 类场景）
+	assert.ok(shouldIgnoreForSnapshot(".runs/shot-1.png"));
+	assert.ok(shouldIgnoreForSnapshot("sub/.runs/deep/file.bin"));
+	assert.ok(shouldIgnoreForSnapshot("out/app.js"));
+	assert.ok(shouldIgnoreForSnapshot("target/debug/thing"));
+	assert.ok(shouldIgnoreForSnapshot("shots/001.png"));
+	assert.ok(!shouldIgnoreForSnapshot("src/main.rs"));
 
 	assert.equal(normalizeGitPath(".\\foo\\bar"), "foo/bar");
 	assert.equal(normalizeGitPath("foo/"), "foo");
@@ -466,4 +475,104 @@ test("纯过滤函数", () => {
 	assert.equal(findClosestCheckpoint(cps, 250).timestamp, 200);
 	assert.equal(findClosestCheckpoint(cps, 100).timestamp, 100);
 	assert.equal(findClosestCheckpoint([], 100), undefined);
+});
+
+test("addPathsToIndex：批次内坏路径被剔除，好路径不受牵连（回归：坏 pathspec fatal 整条命令丢快照）", async (t) => {
+	const { dir, git } = makeRepo();
+	t.after(() => rmSync(dir, { recursive: true, force: true }));
+
+	writeFileSync(join(dir, "good.txt"), "good\n");
+	writeFileSync(join(dir, "good2.txt"), "good2\n");
+	writeFileSync(join(dir, ".gitignore"), "ignore-me.txt\n");
+	// ghost.txt 不存在（枚举后被删除的场景）
+
+	const dropped = await addPathsToIndex(dir, {}, [
+		"good.txt",
+		"good2.txt",
+		"ignore-me.txt",
+		"ghost.txt",
+	]);
+	assert.deepEqual(
+		[...dropped].sort(),
+		["ghost.txt", "ignore-me.txt"],
+		"被 .gitignore 命中与不存在的路径应被剔除，其余保留",
+	);
+	const staged = git(["diff", "--cached", "--name-only"]).toString().trim();
+	assert.ok(staged.includes("good.txt"), "好路径 1 应被暂存");
+	assert.ok(staged.includes("good2.txt"), "好路径 2 应被暂存");
+	assert.ok(!staged.includes("ignore-me.txt"), "忽略路径不得进 index");
+});
+
+test("未跟踪总字节预算：超预算文件跳过快照、受恢复保护、元数据可往返（回归：.runs 类大量小文件读满磁盘）", async (t) => {
+	const { dir, git } = makeRepo();
+	t.after(() => rmSync(dir, { recursive: true, force: true }));
+
+	writeFileSync(join(dir, "a.txt"), "v1\n");
+	commitAll(git, "init");
+
+	// 70 个 1MiB 文件 = 70MiB > 64MiB 预算：排在后面的文件被整体跳过。
+	// 每个文件 1MiB，远低于单文件 10MiB 阈值（旧闸门挡不住的场景）。
+	const FILE_COUNT = 70;
+	for (let i = 0; i < FILE_COUNT; i++) {
+		writeFileSync(join(dir, `f${String(i).padStart(3, "0")}.bin`), Buffer.alloc(1024 * 1024, 0x61));
+	}
+
+	const cp = await createCheckpoint({
+		root: dir,
+		id: cpId(UUID_A, 1),
+		sessionId: UUID_A,
+		trigger: "turn",
+		turnIndex: 1,
+	});
+
+	assert.ok(cp.skippedOverBudgetFiles, "超预算跳过名单应有值");
+	const skipped = cp.skippedOverBudgetFiles;
+	assert.ok(skipped.length > 0 && skipped.length < FILE_COUNT, `应部分跳过，实际 ${skipped.length}/${FILE_COUNT}`);
+	// 实际进快照树的 f*.bin（ls-tree 数）+ 跳过的 = 全部未跟踪文件（无遗漏）。
+	// 注意 preexistingUntrackedFiles 是恢复保护名单，超预算文件也在其中（设计如此），
+	// 不能用它数"进了快照树"的数量。
+	const treeOut = git(["ls-tree", "-r", "--name-only", cp.worktreeTreeSha]).toString();
+	const indexedInTree = treeOut.split("\n").filter((p) => /^f\d+\.bin$/.test(p)).length;
+	assert.equal(indexedInTree + skipped.length, FILE_COUNT);
+	// 实际纳入 index 的字节量不超预算：跳过名单之外每个文件都是 1MiB
+	assert.ok(
+		indexedInTree * 1024 * 1024 <= MAX_UNTRACKED_TOTAL_BYTES + 1024 * 1024,
+		"纳入总量应贴近且不超过预算",
+	);
+	// 但保护名单必须覆盖全部 70 个（恢复时不许删任何一个）
+	const protectedCount = cp.preexistingUntrackedFiles.filter((p) => /^f\d+\.bin$/.test(p)).length;
+	assert.equal(protectedCount, FILE_COUNT);
+
+	// 元数据往返：loadCheckpointFromRef 还原 skippedOverBudgetFiles
+	const loaded = await loadCheckpointFromRef(dir, cp.id);
+	assert.deepEqual(loaded.skippedOverBudgetFiles, skipped);
+
+	// 恢复：超预算文件存在于快照时刻，必须受保护不被 safeClean 误删
+	await restoreCheckpoint(dir, cp);
+	for (const p of skipped) {
+		assert.ok(existsSync(join(dir, p)), `超预算文件 ${p} 恢复时不被误删`);
+	}
+	for (let i = 0; i < FILE_COUNT; i++) {
+		const p = `f${String(i).padStart(3, "0")}.bin`;
+		assert.ok(existsSync(join(dir, p)), `全部未跟踪文件恢复后都应存在（含纳入与跳过）：${p}`);
+	}
+});
+
+test("预算未超时无跳过（正常小仓库行为不变）", async (t) => {
+	const { dir, git } = makeRepo();
+	t.after(() => rmSync(dir, { recursive: true, force: true }));
+
+	writeFileSync(join(dir, "a.txt"), "v1\n");
+	commitAll(git, "init");
+	writeFileSync(join(dir, "small.txt"), "s\n");
+
+	const cp = await createCheckpoint({
+		root: dir,
+		id: cpId(UUID_A, 1),
+		sessionId: UUID_A,
+		trigger: "turn",
+		turnIndex: 1,
+	});
+	assert.equal(cp.skippedOverBudgetFiles, undefined, "预算未超时不应有跳过名单");
+	assert.ok(cp.preexistingUntrackedFiles.includes("small.txt"));
 });

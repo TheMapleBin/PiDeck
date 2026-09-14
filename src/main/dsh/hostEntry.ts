@@ -18,7 +18,8 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
-import { installHiddenConsolePatch, installHostHiddenConsole, installRunnerNodeModeEnv, installRunnerPreloadEnv, getHiddenConsoleMode } from "./hideChildConsoles";
+import { installHiddenConsolePatch, installHostHiddenConsole, installRunnerNodeModeEnv, installRunnerPreloadEnv, getHiddenConsoleMode, configureDshRunnerNodeSidecar, getDshRunnerNodeSidecar } from "./hideChildConsoles";
+import { DSH_RUNNER_NODE_ENV } from "./dshRunnerNodeSidecar";
 import type { Win32Ffi } from "./hideChildConsoles";
 import { agentPresetsRow, dshSubagentModelSelectionSettingsRow, dshWebAgentPlaneDisableRows, hostCompositionPath } from "./dshPresetComposition";
 import {
@@ -123,6 +124,7 @@ async function main(): Promise<void> {
 		// runtime 里没有 koffi（异常形态）：退回 app 内解析——koffi 已进应用依赖，
 		// 打包版从 asar 内 createRequire(__dirname) 可解析（native 落 asar.unpacked）。
 	}
+	configureDshRunnerNodeSidecar(process.env[DSH_RUNNER_NODE_ENV]);
 	installHostHiddenConsole(undefined, koffiFfi);
 	installHiddenConsolePatch();
 	installRunnerNodeModeEnv();
@@ -135,6 +137,7 @@ async function main(): Promise<void> {
 		`[dsh-host-entry] windows console policy: mode=${getHiddenConsoleMode()} ` +
 			`runnerNodeMode=${process.env.ELECTRON_RUN_AS_NODE === "1"} ` +
 			`runnerPreloadEnv=${String(process.env.NODE_OPTIONS?.includes("runnerConsolePreload") === true)} ` +
+			`runnerSidecar=${getDshRunnerNodeSidecar() ?? "none"} ` +
 			`koffiModule=${process.env.PIDECK_KOFFI_MODULE ?? "unresolved"}`,
 	);
 

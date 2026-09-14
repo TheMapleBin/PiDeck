@@ -55,6 +55,7 @@ export function AutomationModal({ onViewSession }: AutomationModalProps) {
 			<DialogContent
 				size="xl"
 				stagger
+				showCloseButton={false}
 				className="flex h-[min(720px,calc(100vh-64px))] max-w-[min(960px,calc(100vw-48px))] flex-col overflow-hidden bg-background p-0"
 			>
 				<DialogHeader className="sr-only">

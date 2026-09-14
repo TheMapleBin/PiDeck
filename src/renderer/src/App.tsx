@@ -150,7 +150,7 @@ import { useScratchPad } from "./hooks/useScratchPad";
 import { useDshRuntimeStatusSync } from "./hooks/useDshRuntimeStatusSync";
 import { useDshRuntimeMigrationNotice } from "./hooks/useDshRuntimeMigrationNotice";
 import { useDshRuntimeInstallProgressSync } from "./hooks/useDshRuntimeInstallProgressSync";
-import { DSH_INSTALL_SETTINGS_TARGET, showDshRuntimeBlockHint } from "./utils/dshRuntimeHint";
+import { DSH_INSTALL_SETTINGS_TARGET, maybeHintMissingDshRunnerNode, showDshRuntimeBlockHint } from "./utils/dshRuntimeHint";
 import { dshSendBlockReason } from "../../shared/types/dshRuntime";
 import { useWorktreeActions } from "./hooks/useWorktreeActions";
 import { ChatSessionPane } from "./components/session/ChatSessionPane";
@@ -659,6 +659,7 @@ export function App() {
     gitCommitMessageProvider: "",
     gitCommitMessageModel: "",
     gitExecutablePath: "",
+    dshRunnerNodePath: "",
     closeToTray: true,
     singleInstance: true,
     enableNotifications: true,
@@ -2504,6 +2505,7 @@ export function App() {
         );
         return;
       }
+      maybeHintMissingDshRunnerNode(() => store.set(openSettingsAtom, { tab: "dev", section: "dsh-runner-node" }));
     }
     // 重启活会话走 restartRuntimeTarget→restartingAgentId→SessionSurfaceStage 的 isRestarting 遮罩；
     // 这里（无绑定）没有 restartingAgentId，需显式设置 activating 遮罩，让会话消息区域也有加载动画。

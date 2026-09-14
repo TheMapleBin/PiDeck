@@ -63,6 +63,24 @@ let hostHiddenConsoleActive = false;
 /** runner spawn 策略日志只打一次（避免沙箱每次调用都刷日志）。 */
 let runnerPolicyLogged = false;
 
+/**
+ * Windows 沙箱 runner 的 CUI node sidecar。配置后，把 `electron.exe runner.js`
+ * 改写成 `node.exe runner.js`，让 runner 继承 host 隐藏控制台，不再 AllocConsole 闪窗。
+ * 未配置时保持 electron.exe + ELECTRON_RUN_AS_NODE + preload 旧路径。
+ */
+let dshRunnerNodeSidecarPath: string | undefined;
+
+/** 由 hostEntry 在补丁安装前写入（来自 fork env `PIDECK_DSH_RUNNER_NODE`）。 */
+export function configureDshRunnerNodeSidecar(path: string | undefined): void {
+	dshRunnerNodeSidecarPath = path?.trim() ? path.trim() : undefined;
+	runnerPolicyLogged = false;
+}
+
+/** 当前 sidecar 路径（诊断日志 / 测试）。 */
+export function getDshRunnerNodeSidecar(): string | undefined {
+	return dshRunnerNodeSidecarPath;
+}
+
 /** ERROR_ACCESS_DENIED：AllocConsole 失败码 5 = 进程已附带控制台（见下）。 */
 const ERROR_ACCESS_DENIED = 5;
 
@@ -394,6 +412,28 @@ function isRunnerSpawn(command: string, args: readonly string[] | undefined): bo
 	return args.some((arg) => typeof arg === "string" && RUNNER_SCRIPT_RE.test(arg));
 }
 
+/** command 是否为 Electron GUI 可执行文件（含 utilityProcess 的 process.execPath）。 */
+function isElectronLikeExec(command: string): boolean {
+	if (/(^|[\\/])electron(\.exe)?$/i.test(command)) return true;
+	return command === process.execPath;
+}
+
+/**
+ * 沙箱 runner 若仍由 electron.exe 拉起，改写成 CUI node sidecar。
+ * sidecar 未配置或 command 已经是 node 时原样返回。
+ */
+function rewriteRunnerExecutable(
+	command: string,
+	args: readonly string[],
+): { command: string; args: readonly string[] } {
+	if (!dshRunnerNodeSidecarPath) return { command, args };
+	// 没有可继承控制台时，GUI 父进程拉起 CUI node.exe 会新建可见窗口——比闪一帧更糟。
+	if (!hostHiddenConsoleActive) return { command, args };
+	if (!isRunnerSpawn(command, args)) return { command, args };
+	if (!isElectronLikeExec(command)) return { command, args };
+	return { command: dshRunnerNodeSidecarPath, args };
+}
+
 /**
  * 安装补丁（win32 only；platform 可注入以便测试）。返回还原函数。
  * 必须在 DSH 各包动态 import 之前调用：dsh-subprocess-local 等模块加载时会捕获
@@ -447,16 +487,21 @@ export function installHiddenConsolePatch(
 		options: childProcessModule.SpawnOptions | undefined,
 	): childProcessModule.SpawnOptions | undefined {
 		if (isRunnerSpawn(command, args)) {
-			// 诊断（一次性）：确认沙箱 runner spawn 确实被注入 preload 与
-			// ELECTRON_RUN_AS_NODE。这是「沙箱命令不弹黑窗口」的关键：runner 是 GUI
-			// 进程、不继承 host 控制台，若注入失效（argv 形态变化 / preload 文件缺失），
-			// 沙箱内命令（pwsh/git 等）会新建可见控制台。走 stderr 落主进程日志。
+			// 诊断（一次性）：确认沙箱 runner spawn 的可执行文件与控制台策略。
 			if (!runnerPolicyLogged) {
 				runnerPolicyLogged = true;
 				console.error(
 					`[dsh-host-entry] runner spawn policy: hostHiddenConsoleActive=${String(hostHiddenConsoleActive)} ` +
-						`preload=${runnerPreloadPath}`,
+						`sidecar=${dshRunnerNodeSidecarPath ?? "none"} ` +
+						`command=${command} preload=${runnerPreloadPath}`,
 				);
+			}
+			// CUI node sidecar：必须继承 host 隐藏控制台。windowsHide/CREATE_NO_WINDOW
+			// 会让 sidecar 自己没控制台，CreateProcessAsUserW 的 pwsh 再弹可见窗口。
+			// 仅在改写真正发生（host 已持有隐藏控制台）时走这条；否则退回 electron.exe 旧路径。
+			if (dshRunnerNodeSidecarPath && hostHiddenConsoleActive) {
+				const inherited = { ...(options ?? {}), windowsHide: false };
+				return withRunnerPreload(withPwshStartupEnv(inherited, true), runnerPreloadPath);
 			}
 			return withRunnerPreload(
 				withRunnerRunAsNode(
@@ -482,15 +527,16 @@ export function installHiddenConsolePatch(
 			// 进程表里没有 pwsh，命令行里的 exit 也已送达），而是 ACL runner 以 GUI
 			// electron.exe 形态运行、事件循环永不退出——见 installRunnerNodeModeEnv。
 			// 注意 stdio 不动：runner 可能用 stdin pipe 向受限命令传数据。
-			const guarded = isPwshCommand(command)
-				? withPwshHangGuard(argsOrOptions, maybeOptions)
-				: isRunnerSpawn(command, argsOrOptions)
-					? { args: withPwshExitAppend(argsOrOptions), options: maybeOptions }
-					: { args: argsOrOptions, options: maybeOptions };
-			const next = resolveSpawnOptions(command, guarded.args, guarded.options);
+			const rewritten = rewriteRunnerExecutable(command, argsOrOptions);
+			const guarded = isPwshCommand(rewritten.command)
+				? withPwshHangGuard(rewritten.args, maybeOptions)
+				: isRunnerSpawn(rewritten.command, rewritten.args)
+					? { args: withPwshExitAppend(rewritten.args), options: maybeOptions }
+					: { args: rewritten.args, options: maybeOptions };
+			const next = resolveSpawnOptions(rewritten.command, guarded.args, guarded.options);
 			return next === undefined
-				? originals.spawn(command, guarded.args)
-				: originals.spawn(command, guarded.args, next);
+				? originals.spawn(rewritten.command, guarded.args)
+				: originals.spawn(rewritten.command, guarded.args, next);
 		}
 		const next = resolveSpawnOptions(command, undefined, argsOrOptions as SpawnOptions | undefined);
 		return next === undefined ? originals.spawn(command) : originals.spawn(command, next);
@@ -499,15 +545,16 @@ export function installHiddenConsolePatch(
 	// spawnSync 与 spawn 同形态（沙箱探测 spawnSync 也走 runner 分支，argv 改写无害）。
 	replaceExport("spawnSync", ((command: string, argsOrOptions?: readonly string[] | SpawnOptions, maybeOptions?: SpawnOptions) => {
 		if (Array.isArray(argsOrOptions)) {
-			const guarded = isPwshCommand(command)
-				? withPwshHangGuard(argsOrOptions, maybeOptions)
-				: isRunnerSpawn(command, argsOrOptions)
-					? { args: withPwshExitAppend(argsOrOptions), options: maybeOptions }
-					: { args: argsOrOptions, options: maybeOptions };
-			const next = resolveSpawnOptions(command, guarded.args, guarded.options);
+			const rewritten = rewriteRunnerExecutable(command, argsOrOptions);
+			const guarded = isPwshCommand(rewritten.command)
+				? withPwshHangGuard(rewritten.args, maybeOptions)
+				: isRunnerSpawn(rewritten.command, rewritten.args)
+					? { args: withPwshExitAppend(rewritten.args), options: maybeOptions }
+					: { args: rewritten.args, options: maybeOptions };
+			const next = resolveSpawnOptions(rewritten.command, guarded.args, guarded.options);
 			return next === undefined
-				? originals.spawnSync(command, guarded.args)
-				: originals.spawnSync(command, guarded.args, next);
+				? originals.spawnSync(rewritten.command, guarded.args)
+				: originals.spawnSync(rewritten.command, guarded.args, next);
 		}
 		const next = resolveSpawnOptions(command, undefined, argsOrOptions as SpawnOptions | undefined);
 		return next === undefined ? originals.spawnSync(command) : originals.spawnSync(command, next);

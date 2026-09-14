@@ -6,6 +6,7 @@
  * 给出友好文案 + 直达「配置管理 → DSH」安装引导的动作按钮。
  */
 import { t } from "../i18n";
+import { desktopApi } from "../desktopApi";
 import { showNotice } from "./notice";
 import type { DshRuntimeState } from "../../../shared/types/dshRuntime";
 import type { SettingsFocusTarget } from "../atoms/app-ui-atoms";
@@ -15,6 +16,12 @@ export const DSH_INSTALL_SETTINGS_TARGET: SettingsFocusTarget = {
 	tab: "common",
 	pane: "config",
 	backendPane: "dsh",
+};
+
+/** 开发设置 → DSH runner 的本机 Node 路径。 */
+export const DSH_RUNNER_NODE_SETTINGS_TARGET: SettingsFocusTarget = {
+	tab: "dev",
+	section: "dsh-runner-node",
 };
 
 export function showDshRuntimeBlockHint(
@@ -37,5 +44,31 @@ export function showDshRuntimeBlockHint(
 			label: t("dsh.runtime.installAction"),
 			onClick: () => openSettings(DSH_INSTALL_SETTINGS_TARGET),
 		},
+	});
+}
+
+let runnerNodeHintShown = false;
+
+export function showDshRunnerNodeHint(openSettings: (target: SettingsFocusTarget) => void): void {
+	if (runnerNodeHintShown) return;
+	runnerNodeHintShown = true;
+	showNotice(t("settings.dshRunnerNodeMissingHint"), 8000, "info", undefined, {
+		action: {
+			label: t("settings.dshRunnerNodeOpenSettings"),
+			onClick: () => openSettings(DSH_RUNNER_NODE_SETTINGS_TARGET),
+		},
+	});
+}
+
+/** DSH 会话用沙箱前探测本机 Node 24；缺了只提示去设置，不拦发送（仍可回退 electron.exe）。 */
+export function maybeHintMissingDshRunnerNode(
+	openSettings: (target: SettingsFocusTarget) => void,
+): void {
+	if (runnerNodeHintShown) return;
+	if (typeof navigator !== "undefined" && !navigator.userAgent.includes("Windows")) return;
+	void desktopApi.sessions.detectDshRunnerNode().then((info) => {
+		if (!info.compatible) showDshRunnerNodeHint(openSettings);
+	}).catch(() => {
+		// 探测失败不打扰：host 仍会走 electron.exe 回退
 	});
 }

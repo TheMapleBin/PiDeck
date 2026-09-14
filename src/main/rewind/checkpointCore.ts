@@ -31,6 +31,7 @@ import {
 	DEFAULT_MAX_CHECKPOINTS,
 	MAX_UNTRACKED_DIR_FILES,
 	MAX_UNTRACKED_FILE_SIZE,
+	MAX_UNTRACKED_TOTAL_BYTES,
 	REF_BASE,
 	ZEROS,
 } from "./checkpointConstants.ts";
@@ -72,6 +73,10 @@ export interface CheckpointData {
 	skippedLargeFiles?: string[];
 	/** 因 >=200 文件跳过的目录（safeClean 保护名单） */
 	skippedLargeDirs?: string[];
+	/** 因未跟踪总字节预算跳过的文件（safeClean 保护名单；持久化在 commit message） */
+	skippedOverBudgetFiles?: string[];
+	/** git add 批次失败后被剔除的路径（仅本次调用返回值携带，不持久化；诊断用） */
+	droppedPaths?: string[];
 }
 
 /** git 命令小封装：跑 runGit、只回 trim 后的 stdout（错误原样抛给调用方 catch）。 */
@@ -95,6 +100,8 @@ interface StatusSnapshot {
 	untrackedFiles: string[];
 	/** 未跟踪文件里进 index 快照的（排除大文件） */
 	untrackedFilesForIndex: string[];
+	/** 未跟踪文件尺寸（statSync 结果，字节；总预算过滤复用，避免二次 stat） */
+	untrackedSizes: Map<string, number>;
 	/** 未跟踪目录 */
 	untrackedDirs: string[];
 	/** 超过 10MiB 的文件 */
@@ -111,6 +118,7 @@ async function captureStatusSnapshot(root: string): Promise<StatusSnapshot> {
 		trackedPaths: [],
 		untrackedFiles: [],
 		untrackedFilesForIndex: [],
+		untrackedSizes: new Map<string, number>(),
 		untrackedDirs: [],
 		skippedLargeFiles: [],
 	};
@@ -156,6 +164,7 @@ async function captureStatusSnapshot(root: string): Promise<StatusSnapshot> {
 			}
 
 			snap.untrackedFiles.push(raw);
+			if (st?.isFile()) snap.untrackedSizes.set(raw, st.size);
 			const large = st?.isFile() ? st.size > MAX_UNTRACKED_FILE_SIZE : false;
 			if (large) snap.skippedLargeFiles.push(raw);
 			else snap.untrackedFilesForIndex.push(raw);
@@ -190,12 +199,14 @@ function extractField(record: string, n: number): string | null {
 }
 
 interface FilesToAddResult {
-	/** 实际进快照的路径（跟踪 + 未跟踪，已剔除大目录/忽略） */
+	/** 实际进快照的路径（跟踪 + 未跟踪，已剔除大目录/忽略/超总预算） */
 	filtered: string[];
 	/** 全部未跟踪文件（含大文件，供 preexisting 保护名单） */
 	allUntracked: string[];
 	skippedLargeFiles: string[];
 	skippedLargeDirs: string[];
+	/** 因未跟踪总字节预算被跳过的文件（恢复时受保护，不进快照树） */
+	skippedOverBudget: string[];
 }
 
 async function getFilesToAdd(root: string): Promise<FilesToAddResult> {
@@ -214,15 +225,33 @@ async function getFilesToAdd(root: string): Promise<FilesToAddResult> {
 		(p) => !isPathWithinAny(p, largeDirsSet),
 	);
 
+	// 总字节预算：很多小文件（.runs/ 截图、报告、中间权重）单文件都低于
+	// MAX_UNTRACKED_FILE_SIZE，但总量可到 GB 级——临时 index 每次都要重新
+	// 读全部文件算 blob 哈希，实测 1.1GB/次把磁盘读满（2026-09-13 用户报告）。
+	// 超预算的文件整体跳过（保持枚举顺序，先到先得），记入保护名单。
+	const skippedOverBudget: string[] = [];
+	const forIndex: string[] = [];
+	let totalBytes = 0;
+	for (const p of untrackedForIndex) {
+		const size = status.untrackedSizes.get(p) ?? 0;
+		if (totalBytes + size > MAX_UNTRACKED_TOTAL_BYTES) {
+			skippedOverBudget.push(p);
+			continue;
+		}
+		totalBytes += size;
+		forIndex.push(p);
+	}
+
 	const all = new Set<string>();
 	status.trackedPaths.forEach((p) => all.add(p));
-	untrackedForIndex.forEach((p) => all.add(p));
+	forIndex.forEach((p) => all.add(p));
 
 	return {
 		filtered: [...all],
 		allUntracked: status.untrackedFiles,
 		skippedLargeFiles,
 		skippedLargeDirs: largeDirs,
+		skippedOverBudget,
 	};
 }
 
@@ -239,6 +268,38 @@ export interface CreateCheckpointOpts {
 	toolName?: string;
 	/** 人类可读标签（用户 prompt / 工具参数摘要） */
 	description?: string;
+}
+
+/**
+ * 把路径分批 add 进临时 index，返回被剔除的失败路径。
+ *
+ * 容错背景（2026-09-13 用户报告）：git 对单个坏 pathspec（被 .gitignore 命中 /
+ * 枚举后被删除改名 / 文件不可读）会 fatal 掉整条命令——不降级就是「一次失效
+ * 丢掉整份快照」。批次失败时逐路径重试，失败路径剔除并计入 droppedPaths；
+ * 逐路径重试与 git 错误文案语言无关，比解析 stderr 更稳。
+ */
+export async function addPathsToIndex(
+	root: string,
+	env: NodeJS.ProcessEnv,
+	paths: string[],
+): Promise<string[]> {
+	const droppedPaths: string[] = [];
+	const BATCH = 100;
+	for (let i = 0; i < paths.length; i += BATCH) {
+		const batch = paths.slice(i, i + BATCH);
+		try {
+			await gitOp(root, ["add", "--all", "--", ...batch], env);
+		} catch {
+			for (const p of batch) {
+				try {
+					await gitOp(root, ["add", "--all", "--", p], env);
+				} catch {
+					droppedPaths.push(p);
+				}
+			}
+		}
+	}
+	return droppedPaths;
 }
 
 /**
@@ -268,13 +329,19 @@ export async function createCheckpoint(
 	const tmpEnv = { GIT_INDEX_FILE: tmpIndex };
 
 	try {
-		const { filtered, allUntracked, skippedLargeFiles, skippedLargeDirs } =
-			await getFilesToAdd(root);
+		const {
+			filtered,
+			allUntracked,
+			skippedLargeFiles,
+			skippedLargeDirs,
+			skippedOverBudget,
+		} = await getFilesToAdd(root);
 
 		const largeDirsSet = new Set(skippedLargeDirs);
 		const largeFilesSet = new Set(skippedLargeFiles);
 		// 保护名单：快照时已存在的未跟踪文件（不含忽略/大文件/大目录内），
-		// 恢复时这些文件即使现在还在也不会被 clean。
+		// 恢复时这些文件即使现在还在也不会被 clean。超总预算的文件不进快照树
+		// 但确实存在于快照时刻，因此不在这里排除——否则恢复时会被误删。
 		const preexistingUntrackedFiles = allUntracked.filter((f) => {
 			if (shouldIgnoreForSnapshot(f)) return false;
 			if (largeFilesSet.has(f)) return false;
@@ -288,11 +355,8 @@ export async function createCheckpoint(
 		}
 
 		// 分批 add：--all + 显式 pathspec 保证「已删除的文件也从 index 移除」。
-		const BATCH = 100;
-		for (let i = 0; i < filtered.length; i += BATCH) {
-			const batch = filtered.slice(i, i + BATCH);
-			await gitOp(root, ["add", "--all", "--", ...batch], tmpEnv);
-		}
+		// 批次失败时降级逐路径重试并剔除失败路径，见 addPathsToIndex。
+		const droppedPaths = await addPathsToIndex(root, tmpEnv, filtered);
 
 		const worktreeTreeSha = await gitOp(root, ["write-tree"], tmpEnv);
 
@@ -313,6 +377,7 @@ export async function createCheckpoint(
 			`untracked ${JSON.stringify(preexistingUntrackedFiles)}`,
 			`largeFiles ${JSON.stringify(skippedLargeFiles)}`,
 			`largeDirs ${JSON.stringify(skippedLargeDirs)}`,
+			`overBudget ${JSON.stringify(skippedOverBudget)}`,
 		]
 			.filter(Boolean)
 			.join("\n");
@@ -357,6 +422,9 @@ export async function createCheckpoint(
 			skippedLargeFiles:
 				skippedLargeFiles.length > 0 ? skippedLargeFiles : undefined,
 			skippedLargeDirs: skippedLargeDirs.length > 0 ? skippedLargeDirs : undefined,
+			skippedOverBudgetFiles:
+				skippedOverBudget.length > 0 ? skippedOverBudget : undefined,
+			droppedPaths: droppedPaths.length > 0 ? droppedPaths : undefined,
 		};
 	} finally {
 		await rm(tmpDir, { recursive: true, force: true }).catch(() => {});
@@ -494,6 +562,7 @@ function parseCheckpointCommit(
 		preexistingUntrackedFiles: parseJson("untracked"),
 		skippedLargeFiles: parseJson("largeFiles"),
 		skippedLargeDirs: parseJson("largeDirs"),
+		skippedOverBudgetFiles: parseJson("overBudget"),
 	};
 }
 
@@ -731,5 +800,6 @@ export function toCheckpointSummary(
 		timestamp: cp.timestamp,
 		skippedLargeFiles: cp.skippedLargeFiles,
 		skippedLargeDirs: cp.skippedLargeDirs,
+		skippedOverBudgetFiles: cp.skippedOverBudgetFiles,
 	};
 }

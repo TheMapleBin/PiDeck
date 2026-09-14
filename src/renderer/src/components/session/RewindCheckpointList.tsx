@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { FileDiff, RefreshCw, Undo2 } from "lucide-react";
+import { FileDiff, RefreshCw, TriangleAlert, Undo2 } from "lucide-react";
 import { useAtomValue } from "jotai";
 import { t, type TranslationKey } from "../../i18n";
 import { sessionRuntimeBySessionIdAtomFamily } from "../../atoms/session-selectors";
@@ -22,6 +22,7 @@ import {
 } from "../ui-shadcn/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui-shadcn/tooltip";
 import type {
+	RewindCheckpointHealth,
 	RewindCheckpointSummary,
 	RewindCheckpointTrigger,
 	RewindRestoreScope,
@@ -62,6 +63,8 @@ export function RewindCheckpointList(props: { sessionId: string }) {
 	);
 	const [checkpoints, setCheckpoints] = useState<RewindCheckpointSummary[]>([]);
 	const [hasMore, setHasMore] = useState(false);
+	/** 自动打点健康状态（主进程 per 工作目录维护）：失败态显示警示条，不再静默。 */
+	const [health, setHealth] = useState<RewindCheckpointHealth | undefined>(undefined);
 	const [loadError, setLoadError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(false);
 	/** 加载更多进行中：锁定「加载更多」按钮，避免重复点击拉出重复页。 */
@@ -88,11 +91,12 @@ export function RewindCheckpointList(props: { sessionId: string }) {
 		setLoading(true);
 		setLoadError(null);
 		try {
-			const page = requireSessionCommand(
-				await desktopApi.sessions.listRewindCheckpoints(target, { limit: PAGE_SIZE }),
-			).value;
-			setCheckpoints(page.items);
-			setHasMore(page.hasMore);
+		const page = requireSessionCommand(
+			await desktopApi.sessions.listRewindCheckpoints(target, { limit: PAGE_SIZE }),
+		).value;
+		setCheckpoints(page.items);
+		setHasMore(page.hasMore);
+		setHealth(page.health);
 		} catch (error) {
 			setCheckpoints([]);
 			setHasMore(false);
@@ -117,6 +121,7 @@ export function RewindCheckpointList(props: { sessionId: string }) {
 			).value;
 			setCheckpoints((prev) => [...prev, ...page.items]);
 			setHasMore(page.hasMore);
+			setHealth(page.health);
 		} catch (error) {
 			showNotice(
 				sessionCommandFailureToast(error, (raw) => t("rewind.loadFailed", { error: raw })),
@@ -242,6 +247,21 @@ export function RewindCheckpointList(props: { sessionId: string }) {
 
 	return (
 		<>
+			{/* 自动打点失败警示条：长期静默失败会让人以为有快照、真出事才发现没有
+			    可回滚点（2026-09-13 用户报告）——失败态必须可见。成功一次即消失。 */}
+			{health && health.consecutiveFailures > 0 && (
+				<div className="mb-1 flex items-start gap-1.5 rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-[11px] leading-4 text-destructive">
+					<TriangleAlert size={12} strokeWidth={2} className="mt-0.5 shrink-0" aria-hidden="true" />
+					<span className="min-w-0 break-words">
+						{health.lastErrorKind === "no-git"
+							? t("rewind.health.noGit")
+							: t("rewind.health.failed", {
+									time: health.lastErrorAt ? formatRelativeTime(health.lastErrorAt) : "",
+									error: health.lastError ?? "",
+								})}
+					</span>
+				</div>
+			)}
 			{/* 手动刷新：checkpoint 由主进程在写文件工具事件后异步创建，
 			    面板开着期间新打的点不会自动出现；空态/错误态尤其需要刷新重试。
 			    加载中显示旋转态，防止重复点击。 */}

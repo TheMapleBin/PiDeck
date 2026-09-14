@@ -17,7 +17,7 @@ const STALE_ELECTRON_VITE_ENV_KEYS = [
 	"VITE_DEV_SERVER_URL",
 ];
 
-function createDevEnvironment({ platform = process.platform, env = process.env } = {}) {
+function createDevEnvironment({ platform = process.platform, env = process.env, nodeExecPath = process.execPath } = {}) {
 	const nextEnv = { ...env };
 	for (const key of STALE_ELECTRON_VITE_ENV_KEYS) {
 		delete nextEnv[key];
@@ -28,6 +28,10 @@ function createDevEnvironment({ platform = process.platform, env = process.env }
 		nextEnv.ELECTRON_DISABLE_SANDBOX == null
 	) {
 		nextEnv.ELECTRON_DISABLE_SANDBOX = "1";
+	}
+	// Windows DSH 沙箱 runner 的 CUI sidecar：dev 直接用本机 node.exe，不必先下载随包副本。
+	if (platform === "win32" && nextEnv.PIDECK_DSH_RUNNER_NODE == null) {
+		nextEnv.PIDECK_DSH_RUNNER_NODE = nodeExecPath;
 	}
 	return nextEnv;
 }

@@ -9,6 +9,7 @@
 
 export {
 	createCheckpoint,
+	addPathsToIndex,
 	restoreCheckpoint,
 	loadCheckpointFromRef,
 	listCheckpointRefs,
@@ -25,7 +26,9 @@ export {
 	ZEROS,
 	REF_BASE,
 	MAX_UNTRACKED_FILE_SIZE,
+	MAX_UNTRACKED_TOTAL_BYTES,
 	MAX_UNTRACKED_DIR_FILES,
+	MIN_CHECKPOINT_INTERVAL_MS,
 	DEFAULT_MAX_CHECKPOINTS,
 	IGNORED_DIR_NAMES,
 	MUTATING_TOOLS,

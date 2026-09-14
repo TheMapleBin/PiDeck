@@ -38,7 +38,7 @@ export type SettingsTabId =
 	| "imagegen";
 
 /** 常用设置内部可滚动分区；目前只有 Git 摘要需要从面板直达。 */
-export type SettingsSectionId = "git";
+export type SettingsSectionId = "git" | "dsh-runner-node";
 
 /** 设置窗口顶层分区：系统设置 / 配置管理（顶部 tab，样式同配置页 Pi/DSH 分页）。 */
 export type SettingsPaneId = "settings" | "config";

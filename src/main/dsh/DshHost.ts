@@ -6,6 +6,8 @@ import { createRequire } from "node:module";
 import { getAppLogger } from "../logging/sharedLogger";
 import { applyProxyEnvPatch, type HostProxyEnvPatch } from "../sessions/sessionProxyPolicy";
 import { DshHostProcess, resolveHostEntryPath } from "./DshHostProcess";
+import { DSH_RUNNER_NODE_ENV } from "./dshRunnerNodeSidecar";
+import { resolveDshRunnerNodePath } from "./dshRunnerNode";
 import { DshApiClient, type DshFetchTransport } from "./DshApiClient";
 import { DshRemoteClient } from "./dshRemoteClient";
 import { toDshAvailableModels, toDshFetchedModels, unwrapDshDiscoveryModels } from "./dshModels";
@@ -95,6 +97,11 @@ export class DshHost {
 		 * 主进程装配时注入 electron shell.trashItem；测试注入假实现，保持 DshHost 与 electron 解耦。
 		 */
 		private readonly trashPath: (path: string) => Promise<void> = () => Promise.reject(new Error("trashPath not injected")),
+		/**
+		 * Windows 沙箱 runner 的本机 CUI node。空串/undefined = 自动探测。
+		 * 改路径后需重启 host 才写入 fork env。
+		 */
+		private readonly getDshRunnerNodePath: () => string | undefined = () => undefined,
 	) {}
 
 	/** 订阅 host-ready（首次启动与崩溃自动重启；E4：崩溃后恢复运行时状态）。 */
@@ -937,6 +944,15 @@ export class DshHost {
 		const forkEnv = buildDshHostForkEnv();
 		const proxyPatch = this.resolveHostProxyEnvPatch();
 		if (proxyPatch) applyProxyEnvPatch(forkEnv, proxyPatch);
+		// Windows 沙箱 runner 改走 CUI node sidecar（B 方案）：host 仍是 utilityProcess，
+		// 但 runner 不再用 electron.exe，避免 AllocConsole 闪窗。路径写入 fork env，
+		// hostEntry 在补丁安装前 configureDshRunnerNodeSidecar。
+		const runnerNode = await resolveDshRunnerNodePath({
+			platform: process.platform,
+			configuredPath: this.getDshRunnerNodePath(),
+			envPath: process.env[DSH_RUNNER_NODE_ENV],
+		});
+		if (runnerNode) forkEnv[DSH_RUNNER_NODE_ENV] = runnerNode;
 
 		const hostProcess = new DshHostProcess(
 			hostEntryPath,

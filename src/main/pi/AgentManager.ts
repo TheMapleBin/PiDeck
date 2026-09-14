@@ -17,6 +17,7 @@ import type {
 	I18nParams,
 	ImageContent,
 	Project,
+	RewindCheckpointHealth,
 	RewindCheckpointPage,
 	RewindCheckpointPageParams,
 	RewindRestoreResult,
@@ -71,6 +72,7 @@ import {
 	diffCheckpoints,
 	loadAllCheckpoints,
 	loadCheckpointFromRef,
+	MIN_CHECKPOINT_INTERVAL_MS,
 	MUTATING_TOOLS,
 	restoreCheckpoint as applyCheckpointRestore,
 	toCheckpointSummary,
@@ -360,6 +362,28 @@ export class AgentManager {
 	 * pi 事件流没有 turnIndex 概念，用本地计数近似 pi-rewind 的 turn 语义。
 	 */
 	private readonly rewindTurnCounters = new Map<string, number>();
+	/**
+	 * 自动打点节流状态（per agent）：最小间隔 + 在途合并。
+	 * 每个文件类工具动作结束都请求打点，不节流时高频 bash 循环下中位间隔仅 6.3s
+	 * （2026-09-13 用户报告：两个会话并排施工把磁盘读满整机卡死）。与字节预算构成
+	 * 双重防线：预算限「单次多贵」，这里限「单位时间打几次」。
+	 */
+	private readonly rewindSchedules = new Map<
+		string,
+		{
+			/** 最近一次打点发起（成功开始创建）时刻 */
+			lastAt: number;
+			inFlight: boolean;
+			/** 在途/间隔期内的合并请求：当前快照完成后补拍一次最新状态 */
+			pending: boolean;
+			timer: NodeJS.Timeout | null;
+		}
+	>();
+	/**
+	 * 自动打点健康状态（per 工作目录）：失败态上屏用。
+	 * 此前失败只写日志，用户以为有快照、真要回滚才发现全是空的。
+	 */
+	private readonly rewindHealthByRoot = new Map<string, RewindCheckpointHealth>();
 	/** 正在执行模型配置刷新的 agent，用于退出处理器中忽略进程退出事件 */
 	private readonly modelRefreshingAgents = new Set<string>();
 	/** 用户主动停止的 agent，用于退出处理器中跳过自动重连 */
@@ -3189,6 +3213,11 @@ export class AgentManager {
 		// agentId 每次 spawn 都是 randomUUID，漏删 = 每次 stop/restart 永久留一个键（慢泄漏）。
 		this.messageHeadOffsetByAgent.delete(agentId);
 		this.rewindTurnCounters.delete(agentId);
+		// 打点节流状态随生命周期清理；pending 补拍自然终止（runRewindCheckpoint
+		// 运行时会重新校验 agent 存活），timer 未触发也要清掉防悬挂回调。
+		const rewindSchedule = this.rewindSchedules.get(agentId);
+		if (rewindSchedule?.timer) clearTimeout(rewindSchedule.timer);
+		this.rewindSchedules.delete(agentId);
 		// 工具完整结果缓存是运行期性能优化（回退读文件等价），agent 停止时整体释放
 		this.toolFullTextByMessageId.clear();
 		this.toolFullTextBytes = 0;
@@ -3440,14 +3469,18 @@ export class AgentManager {
 			? (params!.beforeTimestamp as number)
 			: Number.POSITIVE_INFINITY;
 		const filtered = all.filter((cp) => cp.timestamp < before);
+		// 附带自动打点健康状态：失败态渲染层显示警示条（此前失败完全静默，
+		// 用户以为有快照、真要回滚才发现列表是空的）。
+		const health = this.rewindHealthByRoot.get(runtime.tab.cwd);
 		// 未传 limit（如 rewind-to-message 需要全量最近检查点）时返回全部；
 		// 否则按 limit 截取一页，并据此判断是否还有更早的检查点。
 		if (params?.limit === undefined) {
-			return { items: filtered, hasMore: false };
+			return { items: filtered, hasMore: false, health };
 		}
 		return {
 			items: filtered.slice(0, limit),
 			hasMore: filtered.length > limit,
+			health,
 		};
 	}
 
@@ -3531,28 +3564,118 @@ export class AgentManager {
 	 * 文件类工具（write/edit/bash）执行结束后异步创建文件检查点（fire-and-forget）。
 	 * 打点放在 tool_execution_end：此时文件系统已静默，快照内容稳定，不会与进行中的
 	 * 写入竞争；恢复语义为「回到该工具执行完成后的状态」。失败不影响 agent 主链路
-	 * （纯旁路快照），只记日志。
+	 * （纯旁路快照），记日志并更新健康状态供界面提示。
+	 *
+	 * 节流（MIN_CHECKPOINT_INTERVAL_MS + 在途合并）：
+	 * - 在途时有新请求 → 置 pending，当前快照完成后立即补拍一次（合并到最新状态）；
+	 * - 距上次打点不足间隔 → 挂 trailing 定时器到点补拍（间隔内的多次请求合并成一次）；
+	 * - before-restore 等关键快照不走此路径，不受节流影响。
 	 */
 	private scheduleRewindCheckpoint(agentId: string, toolName: string, turnIndex: number): void {
 		const runtime = this.agents.get(agentId);
 		const root = runtime?.tab.cwd;
 		const sessionId = runtime?.tab.sessionId;
 		if (!root || !sessionId) return;
-		void createCheckpoint({
-			root,
-			// id 拼进 git ref 名，必须是 isRewindCheckpointId 允许的安全字符。
-			id: `tool-${sessionId}-${turnIndex}-${Date.now()}`,
-			sessionId,
-			trigger: "tool",
-			turnIndex,
-			toolName,
-		}).catch((error: unknown) => {
+		const state =
+			this.rewindSchedules.get(agentId) ??
+			{ lastAt: 0, inFlight: false, pending: false, timer: null as NodeJS.Timeout | null };
+		this.rewindSchedules.set(agentId, state);
+
+		if (state.inFlight) {
+			state.pending = true;
+			return;
+		}
+		const elapsed = Date.now() - state.lastAt;
+		if (elapsed < MIN_CHECKPOINT_INTERVAL_MS) {
+			// 间隔内：已有 trailing 定时器就无需重复挂（到点拍的本来就是最新状态）。
+			if (state.timer) return;
+			state.timer = setTimeout(() => {
+				state.timer = null;
+				if (state.inFlight) {
+					state.pending = true;
+					return;
+				}
+				void this.runRewindCheckpoint(agentId, state, toolName, turnIndex);
+			}, MIN_CHECKPOINT_INTERVAL_MS - elapsed);
+			state.timer.unref?.();
+			return;
+		}
+		void this.runRewindCheckpoint(agentId, state, toolName, turnIndex);
+	}
+
+	/** 实际执行打点：成功/失败都更新健康状态；完成后处理 pending 合并补拍。 */
+	private async runRewindCheckpoint(
+		agentId: string,
+		state: { lastAt: number; inFlight: boolean; pending: boolean; timer: NodeJS.Timeout | null },
+		toolName: string,
+		turnIndex: number,
+	): Promise<void> {
+		const runtime = this.agents.get(agentId);
+		const root = runtime?.tab.cwd;
+		const sessionId = runtime?.tab.sessionId;
+		// agent 已停止/换 runtime：丢弃补拍（节流 map 已随生命周期清理兜底）。
+		if (!root || !sessionId) return;
+		state.inFlight = true;
+		state.lastAt = Date.now();
+		try {
+			const result = await createCheckpoint({
+				root,
+				// id 拼进 git ref 名，必须是 isRewindCheckpointId 允许的安全字符。
+				id: `tool-${sessionId}-${turnIndex}-${Date.now()}`,
+				sessionId,
+				trigger: "tool",
+				turnIndex,
+				toolName,
+			});
+			this.recordRewindHealth(root, null);
+			// 被剔除的路径只在开发诊断时有用：有值记一条 debug 级摘要（不刷屏）。
+			if (result.droppedPaths) {
+				this.appLogger?.warn("rewind", "checkpoint added with dropped paths", {
+					agentId,
+					toolName,
+					dropped: result.droppedPaths.length,
+					sample: result.droppedPaths.slice(0, 5).join(", "),
+				});
+			}
+		} catch (error: unknown) {
+			this.recordRewindHealth(root, error);
+			// 错误串可能极长（git add 会把全部路径 + CRLF 警告写进一条消息，实测 9KB+），
+			// 截断后再进日志，防止失败风暴时日志膨胀（一天 2.4MB 的教训）。
+			const rawError = error instanceof Error ? error.message : String(error);
 			this.appLogger?.warn("rewind", "checkpoint creation failed", {
 				agentId,
 				toolName,
-				error: error instanceof Error ? error.message : String(error),
+				error: rawError.length > 500 ? `${rawError.slice(0, 500)}…(${rawError.length} chars)` : rawError,
 			});
-		});
+		} finally {
+			state.inFlight = false;
+			if (state.pending) {
+				state.pending = false;
+				if (this.agents.has(agentId)) {
+					void this.runRewindCheckpoint(agentId, state, toolName, turnIndex);
+				}
+			}
+		}
+	}
+
+	/** 更新工作目录的打点健康状态（成功清零；失败累计并保留最近原因）。 */
+	private recordRewindHealth(root: string, error: unknown): void {
+		const health =
+			this.rewindHealthByRoot.get(root) ?? { consecutiveFailures: 0 };
+		if (error === null) {
+			health.lastSuccessAt = Date.now();
+			health.consecutiveFailures = 0;
+			health.lastError = undefined;
+			health.lastErrorAt = undefined;
+			health.lastErrorKind = undefined;
+		} else {
+			const message = (error instanceof Error ? error.message : String(error)).slice(0, 300);
+			health.lastErrorAt = Date.now();
+			health.consecutiveFailures += 1;
+			health.lastError = message;
+			health.lastErrorKind = /not a git repository/i.test(message) ? "no-git" : "other";
+		}
+		this.rewindHealthByRoot.set(root, health);
 	}
 
 	private async promptMatchesRegisteredExtensionCommand(runtime: AgentRuntime, message: string): Promise<boolean> {
