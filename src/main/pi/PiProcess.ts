@@ -16,6 +16,7 @@ import { appendBuiltInExtensionArgs } from "../extensions/builtInExtensions";
 import { MIN_PI_MINOR_VERSION_FOR_EXTENSION_WHITELIST, MIN_PI_MINOR_VERSION_FOR_PROMPT_WHITELIST, MIN_PI_MINOR_VERSION_FOR_SKILL_WHITELIST } from "../extensions/extensionVersionGate";
 import { getAppLogger } from "../logging/sharedLogger";
 import { applyPiProxyMode } from "../sessions/sessionProxyPolicy";
+import { killProcessTree } from "../git/gitProcess";
 
 type PiProcessSettings = Pick<
   AppSettings,
@@ -679,6 +680,10 @@ export class PiProcess extends EventEmitter {
         cwd: spawnCwd,
         stdio: ["pipe", "pipe", "pipe"],
         shell: invocation.shell,
+        // Unix：让 pi 成为新进程组组长，stop() 时可用负 pid 对整个进程组兜底
+        // SIGKILL（清理 pi 退出后残留的子代理）。Windows 的树杀走 taskkill /T，
+        // 不依赖进程组。
+        detached: process.platform !== "win32",
         // env 已在上方合并安全门环境变量（PIDECK_SECURITY_CONFIG / PIDECK_SESSION_ID）
         // Windows：PiDeck 是无控制台的 GUI 进程，隐藏子进程窗口以免 cmd.exe 弹出控制台。
         env,
@@ -784,7 +789,25 @@ export class PiProcess extends EventEmitter {
       this.restoreParkedExtensions();
       return;
     }
+    const pid = this.proc.pid;
+    if (pid !== undefined && process.platform === "win32") {
+      // Windows：先整树强杀、再杀根。pi-subagents / acp_delegate 的子代理是 pi
+      // 自行 spawn 的独立进程，只 kill 根进程会把它们留在孤儿态继续运行（父会话
+      // 已停、子代理还在烧 token）。taskkill /T 需要根进程存活才能枚举整棵树，
+      // 顺序反过来会漏杀；/F 与原 proc.kill()（TerminateProcess）强度一致。
+      killProcessTree(pid);
+    }
     this.proc.kill();
+    if (pid !== undefined && process.platform !== "win32") {
+      // Unix：先 SIGTERM 优雅停 pi（保持原语义），延迟对整个进程组 SIGKILL 兜底
+      // ——spawn 已 detached（pi 是组长），兜底只清理 pi 退出后残留的子代理；
+      // 组随最后一个成员退出自然消失，kill 失败（ESRCH）忽略。unref 不阻退出。
+      const groupId = -pid;
+      const reaper = setTimeout(() => {
+        try { process.kill(groupId, "SIGKILL"); } catch { /* 组已不存在 */ }
+      }, 3_000);
+      reaper.unref?.();
+    }
     // 真正还原在 exit 回调里做；此处不提前 unpark，避免与仍在退出的 pi 竞态。
   }
 

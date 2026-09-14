@@ -165,6 +165,8 @@ export class AgentManager {
 	/** 工具完整结果 LRU 缓存：截断下发后完整文本仅存于此（运行期「查看完整输出」走内存，
 	 *  历史会话回退读会话文件）。键为 pi message id，agent 停止时随 clearAgentState 释放。 */
 	private readonly toolFullTextByMessageId = new Map<string, string>();
+	/** 已驻留完整文本的总字节数（字节预算 LRU 淘汰用）。 */
+	private toolFullTextBytes = 0;
 
 	/** 当前流式思考的累积文本，用于实时推送给前端展示 */
 	private readonly streamingThinking = new Map<string, string>();
@@ -293,6 +295,11 @@ export class AgentManager {
 	private static readonly MAX_AUTO_HISTORY_LOAD_BYTES = 5 * 1024 * 1024;
 	/** 工具完整结果 LRU 上限（见 toolFullTextByMessageId）。 */
 	private static readonly TOOL_FULL_TEXT_LRU_LIMIT = 200;
+	/**
+	 * 工具完整结果总字节预算（2026 内存排查）：单条可达数百 KB，
+	 * 200 条全是大结果时仍可驻留数十 MB；超预算时按最旧先淘汰。
+	 */
+	private static readonly TOOL_FULL_TEXT_MAX_BYTES = 32 * 1024 * 1024;
 	/**
 	 * 大会话直接从文件尾部读取时，最多保留的最近消息轮次（每条 user 消息算一轮）。
 	 * 12 轮 = 4 次 3 轮翻页，覆盖绝大多数回看需求；更早历史走磁盘轮次分页。
@@ -2558,6 +2565,22 @@ export class AgentManager {
 		return this.getRuntimeState(agentId);
 	}
 
+	/**
+	 * 会话内系统提示：catalog 保存的模型偏好已失效被跳过（模型被重命名/删除，
+	 * 不在本地 models.json 也不在 pi 模型目录）。不阻断发送，沿用 runtime 当前
+	 * 模型；由 SessionRuntimeCoordinator.applyPreferences 在降级时调用。
+	 */
+	notifyModelPreferenceIgnored(agentId: string, provider: string, modelId: string): void {
+		if (!this.agents.has(agentId)) return;
+		this.addLocalizedMessage(
+			agentId,
+			"system",
+			"diagnostic.modelPreferenceIgnored",
+			`会话保存的模型偏好 ${provider}/${modelId} 已不存在（可能已被重命名或删除），本次发送沿用当前模型。请打开模型选择器重新选择。`,
+			{ params: { provider, model: modelId } },
+		);
+	}
+
 	/** 本地 models.json 是否包含指定 provider/modelId。 */
 	private async localModelsContains(provider: string, modelId: string): Promise<boolean> {
 		try {
@@ -3162,8 +3185,13 @@ export class AgentManager {
 		this.pendingStartupDiagnostics.delete(agentId);
 		this.agentStartedFirstRun.delete(agentId);
 		this.clearStreamGate(agentId);
+		// 数值游标与回合计数随生命周期清理（2026 内存排查补漏）：
+		// agentId 每次 spawn 都是 randomUUID，漏删 = 每次 stop/restart 永久留一个键（慢泄漏）。
+		this.messageHeadOffsetByAgent.delete(agentId);
+		this.rewindTurnCounters.delete(agentId);
 		// 工具完整结果缓存是运行期性能优化（回退读文件等价），agent 停止时整体释放
 		this.toolFullTextByMessageId.clear();
+		this.toolFullTextBytes = 0;
 	}
 
 	/**
@@ -5437,11 +5465,28 @@ export class AgentManager {
 		if (detailDelivery.truncated) {
 			const fullText = this.messageProjector.extractToolResultText(result) || this.messageProjector.safeJson(result);
 			if (fullText) {
+				// 字节 + 条数双预算：单条工具结果可达数百 KB，仅按条数封顶时
+				// 200 条大结果仍可驻留数十 MB（2026 内存排查）。
+				this.toolFullTextBytes += fullText.length;
+				while (
+					this.toolFullTextBytes > AgentManager.TOOL_FULL_TEXT_MAX_BYTES &&
+					this.toolFullTextByMessageId.size > 0
+				) {
+					const oldest = this.toolFullTextByMessageId.keys().next().value;
+					if (oldest === undefined) break;
+					const removed = this.toolFullTextByMessageId.get(oldest);
+					if (removed !== undefined) this.toolFullTextBytes -= removed.length;
+					this.toolFullTextByMessageId.delete(oldest);
+				}
 				this.toolFullTextByMessageId.set(messageId, fullText);
 				if (this.toolFullTextByMessageId.size > AgentManager.TOOL_FULL_TEXT_LRU_LIMIT) {
 					// LRU 淘汰最旧（Map 迭代序 = 插入序）
 					const oldest = this.toolFullTextByMessageId.keys().next().value;
-					if (oldest !== undefined) this.toolFullTextByMessageId.delete(oldest);
+					if (oldest !== undefined) {
+						const removed = this.toolFullTextByMessageId.get(oldest);
+						if (removed !== undefined) this.toolFullTextBytes -= removed.length;
+						this.toolFullTextByMessageId.delete(oldest);
+					}
 				}
 			}
 		}

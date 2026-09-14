@@ -243,6 +243,12 @@ export class CompositeAgentGateway implements SessionAgentGateway {
 		return gateway.setPermission!(agentId, preset);
 	}
 
+	/** 可选能力透传：pi 网关在会话时间线落系统提示；DSH 网关未实现则静默跳过。 */
+	notifyModelPreferenceIgnored(agentId: string, provider: string, modelId: string): void {
+		const gateway = this.owner(agentId);
+		gateway.notifyModelPreferenceIgnored?.(agentId, provider, modelId);
+	}
+
 	async publishRuntimeState(agentId: string): Promise<void> {
 		return this.owner(agentId).publishRuntimeState(agentId);
 	}
