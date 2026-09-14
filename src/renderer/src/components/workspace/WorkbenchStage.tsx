@@ -18,11 +18,6 @@ export type WorkbenchStageProps = {
 	chrome?: ReactNode;
 	session: ReactNode;
 	content: ReactNode | null;
-	/** 独立 utility surface；激活时会保留并隐藏普通会话/内容树，避免丢失运行时状态。 */
-	utility?: {
-		active: boolean;
-		content: ReactNode | null;
-	};
 	/** 内容区宽度上报（split 分屏时右缘刻度轴需贴消息区右缘，而非窗口右缘） */
 	onContentWidthChange?: (width: number) => void;
 };
@@ -40,7 +35,6 @@ export type WorkbenchStageProps = {
 export function WorkbenchStage(props: WorkbenchStageProps) {
 	const sessionPanelRef = useRef<PanelImperativeHandle>(null);
 	const contentFrameRef = useRef<HTMLDivElement>(null);
-	const utilityActive = props.utility?.active === true && props.utility.content !== null;
 
 	// 内容区宽度上报：右缘刻度轴（.outline-hover）默认贴窗口右缘，工作台分屏时
 	// 需右移内容区宽度才能落在消息区右缘。maximize 会话区收起，按 0 偏移回窗口右缘。
@@ -49,7 +43,7 @@ export function WorkbenchStage(props: WorkbenchStageProps) {
 		if (!element) return;
 		const update = () => {
 			props.onContentWidthChange?.(
-				props.hasContent && props.layout !== "maximize" && !utilityActive
+				props.hasContent && props.layout !== "maximize"
 					? Math.round(element.getBoundingClientRect().width)
 					: 0,
 			);
@@ -62,7 +56,7 @@ export function WorkbenchStage(props: WorkbenchStageProps) {
 			// 卸载时归零，避免残留旧内容区宽度
 			props.onContentWidthChange?.(0);
 		};
-	}, [props.onContentWidthChange, props.hasContent, props.layout, utilityActive]);
+	}, [props.onContentWidthChange, props.hasContent, props.layout]);
 
 	useEffect(() => {
 		if (!props.hasContent) return;
@@ -123,21 +117,8 @@ export function WorkbenchStage(props: WorkbenchStageProps) {
 					: "workbench-stage workbench-stage-with-content"
 			}
 		>
-			{!utilityActive && props.chrome}
-			<div className="workbench-stage-body">
-				{utilityActive ? (
-					<div className="hidden" aria-hidden>
-						{body}
-					</div>
-				) : (
-					body
-				)}
-				{props.utility?.content && (
-					<div className={utilityActive ? "flex min-h-0 flex-1" : "hidden"}>
-						{props.utility.content}
-					</div>
-				)}
-			</div>
+			{props.chrome}
+			<div className="workbench-stage-body">{body}</div>
 		</div>
 	);
 }

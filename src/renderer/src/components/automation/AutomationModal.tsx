@@ -1,6 +1,9 @@
 import { useCallback, useState } from "react";
 import { useAtom } from "jotai";
-import { automationModalOpenAtom } from "../../atoms/automation-atoms";
+import {
+	automationModalOpenAtom,
+	automationModalProjectIdAtom,
+} from "../../atoms/automation-atoms";
 import { t } from "../../i18n";
 import {
 	DEFAULT_AUTOMATION_WORKSPACE_ROUTE,
@@ -20,14 +23,15 @@ interface AutomationModalProps {
 }
 
 /**
- * Legacy compatibility host for the former modal atom.
+ * 定时任务管理弹框宿主。
  *
- * App no longer mounts this component: scheduled-task management lives in the
- * singleton AutomationWorkspace. This thin host preserves the legacy atom contract
- * without retaining a second implementation of the task-management UI.
+ * 管理界面（AutomationWorkspace）以模态弹框呈现：任务表、编辑器、历史都在这
+ * 个 Dialog 内，不覆盖会话工作区。projectId 由 openAutomationModalAtom 在打开时
+ * 写入，支持项目菜单入口锁定到单项目任务表。
  */
 export function AutomationModal({ onViewSession }: AutomationModalProps) {
 	const [open, setOpen] = useAtom(automationModalOpenAtom);
+	const [projectId, setProjectId] = useAtom(automationModalProjectIdAtom);
 	const [route, setRoute] = useState<AutomationWorkspaceRoute>(
 		DEFAULT_AUTOMATION_WORKSPACE_ROUTE,
 	);
@@ -58,6 +62,7 @@ export function AutomationModal({ onViewSession }: AutomationModalProps) {
 				</DialogHeader>
 				<AutomationWorkspace
 					route={route}
+					projectId={projectId ?? undefined}
 					onRouteChange={setRoute}
 					onClose={close}
 					onViewSession={handleViewSession}

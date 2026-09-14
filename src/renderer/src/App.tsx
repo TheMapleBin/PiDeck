@@ -30,7 +30,7 @@ import {
   isLanWeb,
   missingElectronPreload,
 } from "./desktopApi";
-import { turnFlowSettingsAtom, defaultAgentBackendAtom, effectiveAgentBackendAtom, busySendDeliveryAtom, imageGenConfigAtom, dshRuntimeStatusAtom, openSettingsAtom, sessionRecordsAtom, bumpNewTurnCollapseTickAtom } from "./atoms";
+import { turnFlowSettingsAtom, defaultAgentBackendAtom, effectiveAgentBackendAtom, busySendDeliveryAtom, imageGenConfigAtom, dshRuntimeStatusAtom, openSettingsAtom, openAutomationModalAtom, sessionRecordsAtom, bumpNewTurnCollapseTickAtom } from "./atoms";
 import { resolveBusySendDelivery } from "../../shared/busySendDelivery";
 import { FILE_TREE_ABSOLUTE_MAX_DEPTH } from "../../shared/fileTree";
 // 文件链接路由：图片类型走弹窗预览
@@ -39,7 +39,7 @@ import { type SidebarActions } from "./components/sidebar/SidebarContent";
 import { AppSidebar } from "./components/sidebar/AppSidebar";
 import { AppBootstrap } from "./components/app/AppBootstrap";
 import { SettingsFeatureRoot } from "./components/app/SettingsFeatureRoot";
-import { AutomationWorkspace } from "./components/automation/AutomationWorkspace";
+import { AutomationModal } from "./components/automation/AutomationModal";
 import { useRename } from "./hooks/useRename";
 import { useProjectRuntimeCapabilities } from "./hooks/useRuntimeCapabilities";
 import { useSessionRuntimeBridge } from "./hooks/useSessionRuntimeBridge";
@@ -157,7 +157,7 @@ import { ChatSessionPane } from "./components/session/ChatSessionPane";
 import { SessionSplitStage } from "./components/session/SessionSplitStage";
 import { splitLayoutSessionIds } from "./utils/sessionSplitEdge";
 import { findLoadedDirectory, loadProjectFileTree, mergeFileTreeChildren } from "./utils/fileTreeLazy";
-import { SessionTabsBar, type SessionToolAction } from "./components/session/SessionTabsBar";
+import { SessionTabsBar, type SessionTabsBarProps, type SessionToolAction } from "./components/session/SessionTabsBar";
 import {
   SessionPaneServicesProvider,
   type SessionFileOpenContext,
@@ -165,8 +165,6 @@ import {
 import { ProjectEmptyState } from "./components/session/ProjectEmptyState";
 import { FileLinkBaseProvider } from "./components/session/FileLinkBase";
 import { useSessionWorkspaceChrome } from "./hooks/useSessionWorkspaceChrome";
-import { useWorkspaceSurface } from "./hooks/useWorkspaceSurface";
-import { DEFAULT_AUTOMATION_WORKSPACE_ROUTE } from "./utils/workspaceSurface";
 import { ScratchPadOverlay } from "./components/overlays/ScratchPadOverlay";
 import { AskPanelOverlay } from "./components/overlays/AskPanelOverlay";
 import { TerminalDockPanel } from "./components/terminal/TerminalDockPanel";
@@ -263,6 +261,7 @@ export function App() {
   const agents = useAtomValue(agentInventoryAtom);
   const setCurrentSessionId = useSetAtom(currentSessionIdAtom);
   const replaceProjectSessions = useSetAtom(replaceProjectSessionsAtom);
+  const openAutomationModal = useSetAtom(openAutomationModalAtom);
   const setProjects = useSetAtom(replaceProjectInventoryAtom);
   const applyRuntimeEvent = useSetAtom(applySessionRuntimeEventAtom);
   const upsertSession = useSetAtom(upsertSessionAtom);
@@ -818,6 +817,11 @@ export function App() {
   const currentSessionRecord = useAtomValue(
     sessionRecordByIdAtomFamily(currentSessionId ?? ""),
   );
+  // 当前会话 runtime（响应式）：Tab 栏 ⋯ 菜单「复制会话」按 live 分流（clone vs copyRecord）。
+  const currentSessionRuntime = useAtomValue(
+    sessionRuntimeBySessionIdAtomFamily(currentSessionId ?? ""),
+  );
+  const currentSessionIsLive = isLiveRuntimeStatus(currentSessionRuntime?.status);
   // 终端归属：有 activeAgent → agent owner；未激活 agent/历史会话 → project owner。
   // activeProjectId 未同步（如 Tab 直切跨项目会话）时用当前会话所属项目兜底，
   // 保证未激活 agent 的会话也常显「打开终端」按钮。
@@ -1485,7 +1489,6 @@ export function App() {
     currentSessionId,
     activeProjectId,
   });
-  const workspaceSurface = useWorkspaceSurface();
 
   const {
     selectProject: selectProjectCommand,
@@ -1515,7 +1518,6 @@ export function App() {
     removeSessionComposerState,
     closeTabs: workspaceChrome.closeTabs,
     refreshProjectSessions,
-    onWorkspaceSelection: workspaceSurface.showSession,
     api,
     showToast,
     // 新建会话默认后端：跟随设置项（默认 pi，可切换 dsh），经 DSH runtime 安装态钳制
@@ -3199,7 +3201,7 @@ export function App() {
         return openOpenCodeImport(project);
       },
       manageResources: (project) => setProjectResourcesProject(project),
-      manageAutomations: (projectId) => workspaceSurface.showAutomation(projectId),
+      manageAutomations: (projectId) => openAutomationModal(projectId),
       toggleWorktree: toggleProjectWorktree,
       copyPath: async (project) => {
         await navigator.clipboard.writeText(project.path);
@@ -3401,6 +3403,99 @@ export function App() {
     );
     return () => anim.cancel();
   }, [currentSessionId, workspaceChrome.splitLayout]);
+
+  // —— Tab 栏 ⋯ 菜单「当前会话操作」：重命名 / 复制会话 / 导出 HTML / 复制路径 / 打开文件 ——
+  // 与侧栏会话右键菜单同源同语义：搜索定位的会话可能不在侧栏可见（侧栏只渲染部分行），
+  // ⋯ 菜单是唯一稳定入口。live 会话复制走 clone 分流（Agent 换绑新会话，DSH 亦可），
+  // 历史/未启动会话走 copyRecord；DSH 历史会话无宿主文件，隐藏复制/导出组（与侧栏一致）。
+  async function copyCurrentSessionFromTabs() {
+    if (!currentSessionId) return;
+    if (currentSessionIsLive && activeAgentId) {
+      await cloneAgentSession(activeAgentId);
+      return;
+    }
+    await runCopySession(currentSessionId, currentSessionRecord?.projectId);
+  }
+
+  async function copyCurrentSessionPathFromTabs() {
+    if (!currentSessionId) return;
+    // DSH 会话文件路径按 dshSessionId + cwd 推导（与侧栏 copyPath 同源）；
+    // 失败/不可推导时提示而不是把空值写进剪贴板。
+    const path = currentSessionRecord?.backend === "dsh"
+      ? await api.sessions.getDshSessionPath(currentSessionId)
+      : currentSessionRecord?.filePath;
+    if (!path) {
+      showToast(t("menu.copySessionFilePathUnavailable"), 3000);
+      return;
+    }
+    await navigator.clipboard.writeText(path);
+    showToast(t("common.copied"));
+  }
+
+  const tabsSessionActions: SessionTabsBarProps["sessionActions"] =
+    currentSessionId && currentSessionRecord
+      ? {
+          canCopySession:
+            currentSessionRecord.status !== "draft" &&
+            (currentSessionIsLive || currentSessionRecord.backend !== "dsh"),
+          canExportHtml:
+            currentSessionRecord.status !== "draft" && currentSessionRecord.backend !== "dsh",
+          hasFilePath: Boolean(currentSessionRecord.filePath),
+          onCopySession: () => {
+            void copyCurrentSessionFromTabs();
+          },
+          onCopySessionFilePath: () => {
+            void copyCurrentSessionPathFromTabs();
+          },
+          onOpenSessionFile: currentSessionRecord.filePath
+            ? () => {
+                const filePath = currentSessionRecord.filePath;
+                if (!filePath) return;
+                api.files.open(filePath).catch((error) => {
+                  showToast(
+                    t("app.openFileFailed", {
+                      error: error instanceof Error ? error.message : String(error),
+                    }),
+                    4000,
+                  );
+                });
+              }
+            : undefined,
+          onExportSessionHtml: () => {
+            if (!currentSessionId) return;
+            // live 会话走 runtime 导出（与侧栏 agent 导出同源）；历史会话读文件导出
+            if (currentSessionIsLive && activeAgentId) {
+              void exportAgentHtml(activeAgentId);
+              return;
+            }
+            api.sessions
+              .exportRecordHtml(currentSessionId)
+              .then((result) => showToast(t("app.exportedPath", { path: result.path }), 3500))
+              .catch((error) =>
+                showToast(error instanceof Error ? error.message : String(error), 5000),
+              );
+          },
+          onRenameSession: () => {
+            if (!currentSessionRecord) return;
+            // live 会话用 agent 重命名（与侧栏 AgentContextMenu 同源，改名同步运行时标题）；
+            // 历史/未启动会话用 record 拼侧栏同构的 SessionSummary 走统一重命名弹框。
+            if (currentSessionIsLive && activeAgent) {
+              rename.openAgentRename(activeAgent);
+              return;
+            }
+            rename.openSessionRename(currentSessionRecord.projectId, {
+              id: currentSessionRecord.id,
+              filePath: currentSessionRecord.filePath ?? "",
+              name: currentSessionRecord.title,
+              preview: currentSessionRecord.preview,
+              updatedAt: currentSessionRecord.updatedAt,
+              messageCount: currentSessionRecord.messageCount,
+              backend: currentSessionRecord.backend,
+              forked: currentSessionRecord.forked,
+            });
+          },
+        }
+      : undefined;
 
   const sessionTabsProps = {
     tabs: workspaceChrome.sessionTabIds,
@@ -3769,6 +3864,7 @@ export function App() {
   const sessionTabsBarNode = (
     <SessionTabsBar
       {...sessionTabsProps}
+      sessionActions={tabsSessionActions}
       toolActions={sessionToolActions}
       editorTabs={workbenchEditorTabs}
       onSelectEditorTab={(tabId) => {
@@ -3804,27 +3900,6 @@ export function App() {
     />
   ) : null;
 
-  const automationWorkspaceNode = (
-    <AutomationWorkspace
-      route={
-        workspaceSurface.surface.kind === "automation"
-          ? workspaceSurface.surface.route
-          : DEFAULT_AUTOMATION_WORKSPACE_ROUTE
-      }
-      projectId={
-        workspaceSurface.surface.kind === "automation"
-          ? workspaceSurface.surface.projectId
-          : undefined
-      }
-      onRouteChange={workspaceSurface.setAutomationRoute}
-      onClose={workspaceSurface.showSession}
-      onViewSession={(projectId, sessionId) => {
-        workspaceSurface.showSession();
-        void openSidebarSessionByIdWithTab(projectId, sessionId, "permanent");
-      }}
-    />
-  );
-
   const chatPaneContentNode = (
     <WorkbenchStage
       chrome={sessionTabsBarNode}
@@ -3832,10 +3907,6 @@ export function App() {
       hasContent={workbenchHasContent}
       session={chatPaneSessionNode}
       content={workbenchContentNode}
-      utility={{
-        active: workspaceSurface.isAutomationWorkspace,
-        content: automationWorkspaceNode,
-      }}
       onContentWidthChange={handleWorkbenchContentWidth}
     />
   );
@@ -4275,6 +4346,13 @@ export function App() {
 
     {/* Scratch Pad（草稿本）：根级渲染，避免受 chat-pane grid 影响定位 */}
     <ScratchPadOverlay controller={scratchPad} />
+
+    {/* 定时任务与自动化管理中心全功能弹窗（模态呈现，不覆盖会话工作区） */}
+    <AutomationModal
+      onViewSession={(projectId, sessionId) => {
+        void openSidebarSessionByIdWithTab(projectId, sessionId, "permanent");
+      }}
+    />
 
     {/* 并行问询结果弹框（AskPanel）：独立匿名会话的结果展示，根级渲染 */}
     <AskPanelOverlay />

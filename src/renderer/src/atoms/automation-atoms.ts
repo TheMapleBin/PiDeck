@@ -13,10 +13,27 @@ import type {
 export const automationSnapshotAtom = atom<AutomationSnapshot | null>(null);
 
 /**
- * 旧弹窗兼容状态。App 已改由 workspaceSurfaceAtom 呈现自动化工作台；
- * 保留此 atom 只避免潜在旧调用方在升级时崩溃。
+ * 定时任务管理弹框是否打开。
+ * 管理界面（AutomationWorkspace）以模态弹框呈现，避免覆盖会话区打断当前工作流。
  */
 export const automationModalOpenAtom = atom<boolean>(false);
+
+/**
+ * 弹框打开时锁定的项目范围（null = 跨项目总览）。
+ * 由 openAutomationModalAtom 在每次打开时写入，关闭后不清（下次打开必然重写）。
+ */
+export const automationModalProjectIdAtom = atom<string | null>(null);
+
+/**
+ * 打开定时任务管理弹框；传 projectId 时任务表锁定到该项目（项目菜单入口）。
+ */
+export const openAutomationModalAtom = atom(
+	null,
+	(_get, set, projectId?: string) => {
+		set(automationModalProjectIdAtom, projectId ?? null);
+		set(automationModalOpenAtom, true);
+	},
+);
 
 /**
  * 当前在管理弹窗中选中的任务 ID（null = 未选中或处于新建模式）。
