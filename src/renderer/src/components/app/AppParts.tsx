@@ -477,13 +477,22 @@ function loadDevBranch(): Promise<string | undefined> {
 /**
  * Brand lockup：官方 pi 风格 canvas logo + 两行字标（beUI Animated Sidebar 头部风格的文字排布）。
  * 分支名下探为副标题行（仅开发分支时显示，避免视觉噪声）；视觉变形只作用于字标，
- * 品牌语义仍由外层 aria-label 承载。字标用 beUI TextShimmer（纯 CSS 动画、无平台分支）。
+ * 品牌语义仍由外层 aria-label 承载。字标用 beUI TextShimmer（纯 CSS 动画、无平台分支），
+ * 但只在启动/重播后播几轮即定格：常驻 infinite 循环会在高分辨率 × 高刷新率窗口下
+ * 逼 GPU 进程逐帧合成整窗（实测空闲占约 1 核），空闲态必须停在静态帧。
  */
 export function BrandLockup(props: { replayToken?: number } = {}) {
 	const [branch, setBranch] = useState<string | undefined>(undefined);
 	useEffect(() => {
 		void loadDevBranch().then(setBranch);
 	}, []);
+	// 字标扫光限时播放：启动与 logo 重播（replayToken 变化）后播 3 轮即定格为静态渐变。
+	const [shimmerOn, setShimmerOn] = useState(true);
+	useEffect(() => {
+		setShimmerOn(true);
+		const timer = setTimeout(() => setShimmerOn(false), 2.5 * 3 * 1000);
+		return () => clearTimeout(timer);
+	}, [props.replayToken]);
 	const brandTitle = branch ? `PiDeck · ${branch}` : "PiDeck";
 	// macOS 窗口左上角已有原生交通灯，π logo + 字标挤在同一行视觉过重；
 	// darwin 平台只保留字标（品牌语义仍由 aria-label 承载），其余平台维持原样。
@@ -494,6 +503,7 @@ export function BrandLockup(props: { replayToken?: number } = {}) {
 			<span className="flex min-w-0 flex-col justify-center gap-1">
 				<TextShimmer
 					as="span"
+					enabled={shimmerOn}
 					className="brand-wordmark truncate text-[18px] font-[PiDeckDepartureMono] font-bold uppercase leading-none"
 				>
 					PiDeck
