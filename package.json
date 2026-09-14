@@ -1,10 +1,7 @@
 {
   "name": "pi-desktop",
   "version": "0.7.5",
-<<<<<<< HEAD
-=======
   "dshRuntimeVersion": "0.1.5-rc.1",
->>>>>>> e29db8e76fd5b7cf521ba901d5356df74680b7ed
   "description": "PiDeck is an open-source desktop workbench to manage multiple pi AI coding agents across local project folders with session history, Git integration, terminal, and config management.",
   "private": true,
   "license": "MIT",
@@ -83,6 +80,7 @@
     "dist:fast": "node scripts/dist-fast.js",
     "dist:mac": "npm run build && electron-builder --mac dmg zip",
     "dist:linux": "npm run build && electron-builder --linux AppImage deb tar.gz",
+    "dist:linux:arm64": "npm run build && electron-builder --linux AppImage deb tar.gz --arm64",
     "preview": "electron-vite preview",
     "test": "node --test --test-concurrency=4 \"tests/*.test.mjs\"",
     "test:serial": "node --test --test-concurrency=1 \"tests/*.test.mjs\"",
