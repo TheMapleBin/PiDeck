@@ -176,6 +176,7 @@ import type {
 	VisionBridgeEvent,
 	VisionEventsInfo,
 } from "../../../../shared/types";
+import { imageContentSrc } from "../../../../shared/imageContentSrc";
 import { parseRichInputChips, unwrapFileChipPath, formatChipDisplayLabel, isDirectoryFileChip } from "./composer/chips";
 import { buildBubbleRefSegments, replaceExpandedRefBlocksWithLabels } from "./composer/quoteChip";
 import type { BubbleRefSegment } from "./composer/quoteChip";
@@ -698,16 +699,21 @@ export const AssistantText = memo(
 			>
 				{props.images && props.images.length > 0 && (
 					<div className="message-images">
-						{props.images.map((img, index) => (
-							<MessageImage
-								key={index}
-								src={`data:${img.mimeType};base64,${img.data}`}
-								alt={t("app.imageAlt", { index: index + 1 })}
-								className="message-image"
-								placeholderClass="min-h-24"
-								onClick={() => props.onPreviewImage(img)}
-							/>
-						))}
+						{props.images.map((img, index) => {
+							// 历史生图图片只带 ref 引用（走 pideck-img:// 协议），无源时不渲染空图
+							const src = imageContentSrc(img);
+							if (!src) return null;
+							return (
+								<MessageImage
+									key={index}
+									src={src}
+									alt={t("app.imageAlt", { index: index + 1 })}
+									className="message-image"
+									placeholderClass="min-h-24"
+									onClick={() => props.onPreviewImage(img)}
+								/>
+							);
+						})}
 					</div>
 				)}
 				<MarkdownStream
@@ -848,8 +854,14 @@ export const UserBubble = memo(function UserBubble(props: {
 	useEffect(() => {
 		const images = message.images ?? [];
 		if (images.length === 0) return;
+		// 视觉桥事件按图片 base64 哈希匹配；历史生图图片只有 ref 引用（无字节），
+		// 不参与匹配——全部无内联字节时直接不发起轮询。
+		const inline = images
+			.map((image) => image.data)
+			.filter((data): data is string => typeof data === "string" && data.length > 0);
+		if (inline.length === 0) return;
 		let cancelled = false;
-		void visionImageHashes(images.map((image) => image.data)).then((hashes) => {
+		void visionImageHashes(inline).then((hashes) => {
 			if (!cancelled) setImageHashes(hashes);
 		});
 		return () => {
@@ -974,15 +986,20 @@ export const UserBubble = memo(function UserBubble(props: {
 		<article /* user-turn 为 e2e 选择器锚点 */ ref={rowRef} className={`user-turn group/user mb-4 flex w-full min-w-0 max-w-full flex-col items-end ${props.fresh ? "user-turn--fresh animate-[message-enter_260ms_cubic-bezier(0.22,1,0.36,1)_both]" : ""}${props.topFresh ? " user-turn--top-fresh animate-[top-enter_280ms_cubic-bezier(0.22,1,0.36,1)_both]" : ""}`} data-message-id={message.id}>
 			{message.images && message.images.length > 0 && (
 				<div className="mb-2 flex max-w-[min(82%,64ch)] flex-wrap justify-end gap-2">
-					{message.images.map((img, index) => (
-						<MessageImage
-							key={index}
-							src={`data:${img.mimeType};base64,${img.data}`}
-							alt={t("app.imageAlt", { index: index + 1 })}
-							className="size-16 max-h-40 cursor-pointer rounded-md border border-border object-cover transition-colors duration-150 hover:border-border-strong"
-							onClick={() => props.onPreviewImage(img)}
-						/>
-					))}
+					{message.images.map((img, index) => {
+						// 参考图在历史里同样是 ref 引用（新图是内联 base64），统一走解析器
+						const src = imageContentSrc(img);
+						if (!src) return null;
+						return (
+							<MessageImage
+								key={index}
+								src={src}
+								alt={t("app.imageAlt", { index: index + 1 })}
+								className="size-16 max-h-40 cursor-pointer rounded-md border border-border object-cover transition-colors duration-150 hover:border-border-strong"
+								onClick={() => props.onPreviewImage(img)}
+							/>
+						);
+					})}
 				</div>
 			)}
 			{visionBlocks.length > 0 && (
@@ -1283,6 +1300,8 @@ export function ImagePreviewModal(props: {
 	image: ImageContent;
 	onClose: () => void;
 }) {
+	const src = imageContentSrc(props.image);
+	if (!src) return null;
 	return (
 		<div className="image-preview-modal" onClick={props.onClose}>
 			<button
@@ -1293,7 +1312,7 @@ export function ImagePreviewModal(props: {
 				<X size={20} strokeWidth={2.4} />
 			</button>
 			<img
-				src={`data:${props.image.mimeType};base64,${props.image.data}`}
+				src={src}
 				alt={t("app.imagePreviewAlt")}
 				onClick={(event) => event.stopPropagation()}
 			/>

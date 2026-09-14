@@ -81,6 +81,17 @@ src/
 - 安全底线：先下载校验、后原子替换（tmp → `.bak` 换位 → rename，失败回滚）；`invalidateBuiltInExtensionsOverlayCache()` 必须在写盘/还原后调用，否则本次更新要等重启才参与注入。
 - 三处磁盘根（`ExtensionManager` 列表/版本、热更新器写盘、`-e` 注入解析）必须同源，统一走 `src/main/index.ts` 的 `resolveBuiltInExtensionRoots()`；各拼一次路径迟早漂移成「更新成功但会话仍加载旧扩展」。
 
+### 生图会话存储（userData/imagegen：sessions 索引 + blobs 图片）
+
+- 生图（`backend: "imagegen"`）不走 pi/DSH agent，历史独立落在 `<userData>/imagegen/sessions/<sessionId>.jsonl`（`ImageSessionStore`），**图片二进制另存 `<userData>/imagegen/blobs/<sha256>.<ext>`**（`ImageBlobStore`，内容寻址天然去重）。两个磁盘根必须同源解析，统一走 `src/main/index.ts` 的 `resolveImageGenStorageRoots()`。
+- **硬约束：base64 不进 JSONL。** 消息里的图片只留 `{type:"image", ref, mimeType}`；`ImageContent.data` 是「正在生成 / 正在发送」的临时形态，落盘前必须换成 `ref`。理由见下条。
+- **事故教训（2026-09 白屏）**：旧实现把每张图完整 base64 内联进 JSONL，`MAX_MESSAGES=2000` 只限行数不限字节 → 28 轮（56 行）达 246 MB；`append()` 每轮全量读 + 全量重写；`readMessages()` 全量回传渲染层 ⇒ 渲染进程 OOM（`reason:"oom"`）→ 崩溃自动重载循环 → 60s 内 2 次额度耗尽后白屏，手动重启聚焦该会话 1.8 秒再崩。三条防线必须同时成立：字节水位 + 只追加写 + 尾部有界读取。
+- **读取永远有字节上界**：`readMessages()` 只读尾部 `MAX_READ_BYTES` 窗口（起点落在行中间就丢掉半截行），主进程不会 materialize 整个文件，渲染层拿到的图片数据量因此有上界。改这里时不要退回 `readFile(整文件)`。
+- **旧格式自愈**：首次读写内联 base64 的旧文件时按行流式迁移为引用格式（一次只持有一行，输出只有百字节级），迁移前后体积差一个量级；损坏行原样保留。判据是 `"type":"image","data":` 与长 base64 字面量两个标记，引用格式不会误命中。
+- **渲染层不允许手写 `data:${mimeType};base64,${data}`**：历史图的 `data` 是 undefined，会渲染成一张白图且不报错。所有 `<img src>` 走 `shared/imageContentSrc.ts` 的 `imageContentSrc()`（内联 → data URL；ref → `pideck-img://blob/<ref>`）；复制 / 保存 / 重发带回参考图才用 `loadImageBase64()` / `hydrateImageContents()` 走 `imagegen:read-image-blob` 按需取回。
+- `pideck-img://` 是自定义协议（`main/imagegen/ImageGenImageProtocol.ts`）：`registerSchemesAsPrivileged` 在 ready 前声明、`protocol.handle` 在 ready 后注册，`img-src` 已在 `src/renderer/index.html` 的 CSP 里放行。内容寻址 ⇒ ref 与内容一一对应，可长缓存。**别把 ref 回读成 base64 塞回消息对象**，那等于把 200 MB 字符串搬回渲染进程堆。
+- 孤儿 blob 回收（`pruneOrphanBlobs`）带 1 小时宽限期（`put` 落盘与引用写进 JSONL 之间有窗口），且**扫描失败整体放弃**（fail-closed：宁可留垃圾也不删掉读不到会话所引用的图）。
+
 ## 架构规则（硬性）
 
 1. **session-first**：会话是一等公民。新功能优先挂在 session/runtime 链路上，不要退回“围绕 agent tab 堆全局 state”。

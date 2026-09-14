@@ -5,7 +5,7 @@ import type { AnnouncementState } from "../shared/types/announcement";
 import type { RpcLogBatch, RpcLogEntry } from "../shared/types/rpcLog";
 import type { DshRuntimeStatus, DshRuntimeInstallProgress } from "../shared/types/dshRuntime";
 import type { GitExecutableInfo } from "../shared/types/git";
-import type { ImageGenConfigFile, ImageGenRequest, ImageGenResult, ImageGenSaveResult } from "../shared/types/imagegen";
+import type { ImageBlobPayload, ImageGenConfigFile, ImageGenRequest, ImageGenResult, ImageGenSaveResult } from "../shared/types/imagegen";
 import type { CatalogCheckResult, CatalogUpdateResult, CatalogUpdateStatus } from "../shared/types/catalog";
 import type {
 	BuiltInExtensionsCheckResult,
@@ -2082,6 +2082,9 @@ const api = {
 			ipcRenderer.invoke(ipcChannels.imagegenGetConfig) as Promise<ImageGenConfigFile>,
 		saveConfig: (config: ImageGenConfigFile) =>
 			ipcRenderer.invoke(ipcChannels.imagegenSaveConfig, config) as Promise<ImageGenSaveResult>,
+		/** 按 blob 引用名取回落盘图片 base64（历史消息只带 ref，展示走 pideck-img://） */
+		readImageBlob: (ref: string) =>
+			ipcRenderer.invoke(ipcChannels.imagegenReadImageBlob, ref) as Promise<ImageBlobPayload | null>,
 	},
 
 	voiceTranscription: {

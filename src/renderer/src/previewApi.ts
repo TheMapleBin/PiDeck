@@ -1463,11 +1463,12 @@ export function createPreviewApi(): PiDesktopApi {
 			export: async () => false,
 		},
 
-		// 生图预览桩：预览模式不联网，直接返回未配置
+		// 生图预览桩：预览模式不联网、无落盘图片，直接返回未配置 / 空图
 		imagegen: {
 			generate: async (_request) => ({ ok: false, error: "notConfigured" }),
 			getConfig: async () => ({ providers: [], activeProviderId: "", activeModel: "" }),
 			saveConfig: async (config) => ({ ok: true, config }),
+			readImageBlob: async () => null,
 		},
 		voiceTranscription: {
 			getConfig: async () => ({

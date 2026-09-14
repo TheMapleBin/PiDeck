@@ -721,6 +721,11 @@ export const ipcChannels = {
 	imagegenGetConfig: "imagegen:get-config",
 	/** 保存独立生图配置（白名单校验后落盘） */
 	imagegenSaveConfig: "imagegen:save-config",
+	/**
+	 * 按需取回落盘生图图片的 base64（入参为 blob 引用名）。
+	 * 展示走 pideck-img:// 协议流式加载，这个通道只服务「复制 / 保存 / 重发带回参考图」。
+	 */
+	imagegenReadImageBlob: "imagegen:read-image-blob",
 
 	// ===== Composer voice transcription =====
 	voiceTranscriptionGetConfig: "voice-transcription:get-config",
