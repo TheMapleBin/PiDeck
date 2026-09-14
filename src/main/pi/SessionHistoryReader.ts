@@ -106,8 +106,11 @@ export type SessionHistoryReaderDeps = {
  * 纯 user 无回复的会话整体算一轮（用户还没拿到回应，发言权未交还）。
  * 页边界永远对齐完整轮（折叠不会被切成半个回答）。
  *
- * 2026-09 统一轮次协议：字节预算已删除——单轮再大也整轮保留，
- * 页大小只以轮数计（用户看历史就是要看完整一轮，不静默丢内容）。
+ * 2026-09 统一轮次协议：页大小只以轮数计，不做字节裁剪
+ *（用户看历史就是要看完整一轮，不静默丢内容）。
+ *
+ * 注：轮数窗口无法限制单轮体量。需要「一次最多多少条」的硬上限时
+ * 在本函数之上再叠 boundTurnWindowStart（#213）。
  */
 export function findTurnPageStart(
 	entries: ReadonlyArray<{ role?: string; byteLength: number }>,
@@ -153,6 +156,65 @@ export function findTurnPageStart(
 		if (!hasEarlierUser) start = 0;
 	}
 	return start;
+}
+
+/** 收集 [0, before) 内的 turn 起点下标（升序），规则与 findTurnPageStart 一致。 */
+function collectTurnStartIndices(
+	entries: ReadonlyArray<{ role?: string; byteLength: number }>,
+	before: number,
+): number[] {
+	const starts: number[] = [];
+	let prevUserOrAssistantRole: "user" | "assistant" | undefined;
+	for (let i = 0; i < before; i += 1) {
+		const role = entries[i].role;
+		if (role === "user") {
+			// 连发 user：只有前一条是 assistant（或无实质消息）时才算新轮起点。
+			if (prevUserOrAssistantRole !== "user") starts.push(i);
+			prevUserOrAssistantRole = "user";
+		} else if (role === "assistant") {
+			prevUserOrAssistantRole = "assistant";
+		}
+	}
+	return starts;
+}
+
+/**
+ * 在「最近 N 轮」窗口上再叠一层条目预算（纯函数，2026-08 #213）。
+ *
+ * 为什么需要：轮数窗口限制不了单轮体量。上下文超限后的极端会话里一轮可以塞进上千条
+ * 工具/思考条目，于是「12 轮」= 2000+ 条消息，一次读盘 + 投影 + 全量 IPC 下发就把
+ * 渲染进程推到 OOM（#213：压缩失败后重载同一窗口，2162 条 payload）。
+ *
+ * 语义：从尾部向前并入**完整轮次**，累计条目数将超过 maxEntries 就停在已并入的最早轮起点。
+ * 因此页边界仍然对齐轮次（不会切半个回答），预算只决定「一次展示多少轮」——
+ * 更早历史依然能通过翻页读回，不静默丢内容。
+ *
+ * 边界：
+ * - 至少保留最后一轮：单轮自身超预算也必须返回该轮起点，否则会返回空页/翻页死锁。
+ * - 无 user 轮次边界（纯 assistant/system 片段）：不裁剪，退回轮数窗口结果。
+ * - maxEntries 非有限值或 <= 0 = 未启用预算，行为与 findTurnPageStart 完全一致。
+ */
+export function boundTurnWindowStart(
+	entries: ReadonlyArray<{ role?: string; byteLength: number }>,
+	before: number,
+	turnCount: number,
+	maxEntries: number,
+): number {
+	const turnStart = findTurnPageStart(entries, before, turnCount);
+	if (!Number.isFinite(maxEntries) || maxEntries <= 0) return turnStart;
+	if (before - turnStart <= maxEntries) return turnStart;
+	const starts = collectTurnStartIndices(entries, before);
+	if (starts.length === 0) return turnStart;
+	// 兜底 = 最后一轮起点（单轮超预算时也只能整轮保留，不能返回空页）。
+	let bounded = starts[starts.length - 1];
+	for (let i = starts.length - 1; i >= 0; i -= 1) {
+		// 越过轮数窗口上界：不再向更早扩，保留轮数语义。
+		if (starts[i] < turnStart) break;
+		// 并入这一轮会突破预算：停在上一次已并入的起点。
+		if (before - starts[i] > maxEntries) break;
+		bounded = starts[i];
+	}
+	return bounded;
 }
 
 /**
@@ -264,6 +326,29 @@ export class SessionHistoryReader {
 	/** 单页轮次上限（AgentManager 缓存优先路径复用，避免翻页超预算） */
 	static maxTurnPageSize(): number {
 		return SessionHistoryReader.MAX_TURN_PAGE_SIZE;
+	}
+
+	/**
+	 * 启动加载窗口的条目预算（12 轮窗口之上叠的硬上限）。
+	 * 1600 相当于正常重工具会话（≈40-60 条/轮）的 2-3 倍余量，只有「单轮几百条」的
+	 * 极端会话才会被缩窗口；缩窗口只影响一次展示多少轮，更早历史仍可翻页（#213）。
+	 */
+	private static readonly MAX_LOAD_WINDOW_ENTRIES = 1600;
+	/**
+	 * 翻页单页的条目预算（3 轮窗口之上叠的硬上限）。
+	 * 防御「上滚翻页反而把渲染进程撑爆」——页大小本受 MAX_TURN_PAGE_SIZE 限制，
+	 * 但 3 轮 × 数百条仍可超预算；单轮自身超预算时只能整轮保留。
+	 */
+	private static readonly MAX_PAGE_WINDOW_ENTRIES = 600;
+
+	/** 启动加载窗口条目预算（供 AgentManager 对齐窗口口径）。 */
+	static maxLoadWindowEntries(): number {
+		return SessionHistoryReader.MAX_LOAD_WINDOW_ENTRIES;
+	}
+
+	/** 翻页单页条目预算（供 AgentManager 缓存分页对齐口径）。 */
+	static maxPageWindowEntries(): number {
+		return SessionHistoryReader.MAX_PAGE_WINDOW_ENTRIES;
 	}
 
 	constructor(private readonly deps: SessionHistoryReaderDeps) {}
@@ -474,10 +559,11 @@ export class SessionHistoryReader {
 		boundedTurnCount: number,
 	): Promise<SessionMessagePage> {
 		const total = index.activeMessageEntries.length;
-		const start = findTurnPageStart(
+		const start = boundTurnWindowStart(
 			index.activeMessageEntries,
 			boundedBefore,
 			boundedTurnCount,
+			SessionHistoryReader.MAX_PAGE_WINDOW_ENTRIES,
 		);
 
 		// 与普通轮次页一致：压缩会话的归档语义未游标化前走索引切片
@@ -1085,11 +1171,13 @@ export class SessionHistoryReader {
 		const boundedTurns = Number.isFinite(maxTurns) && maxTurns > 0
 			? Math.max(1, Math.floor(maxTurns))
 			: SessionHistoryReader.DEFAULT_TURN_PAGE_SIZE;
-		// 启动窗口要完整保留最近 N 轮（分页页边界统一按轮计，无字节裁剪）。
-		const start = findTurnPageStart(
+		// 启动窗口要完整保留最近 N 轮（分页页边界统一按轮计，无字节裁剪），
+		// 但极端会话里单轮可能有上千条，再叠一层条目预算（#213：2162 条一次下发 → 渲染 OOM）。
+		const start = boundTurnWindowStart(
 			index.activeMessageEntries,
 			total,
 			boundedTurns,
+			SessionHistoryReader.MAX_LOAD_WINDOW_ENTRIES,
 		);
 		const entries = index.activeMessageEntries.slice(start);
 		const rawMessages = await this.readIndexedSessionMessages(index.hostPath, entries);

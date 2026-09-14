@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import test from "node:test";
 import ts from "typescript";
 import vm from "node:vm";
+import { tryRequireLocalTs } from "./helpers/requireLocalTs.mjs";
 
 const require = createRequire(import.meta.url);
 
@@ -108,6 +109,11 @@ function loadModule(mockProcess = {}) {
 			if (id.endsWith("logging/sharedLogger")) {
 				return { getAppLogger: () => null };
 			}
+			// 相对 import 按 src/main/pet 解析后用 Node 原生 TS 加载（见 helper 注释）；
+			// 直接交 require(id) 会以 tests/ 为基准，生产新增本地模块（#213 的 ../v8HeapLimits）
+			// 就会让本文件整片 MODULE_NOT_FOUND。
+			const localFromSource = tryRequireLocalTs(id, "src/main/pet");
+			if (localFromSource) return localFromSource;
 			return require(id);
 		},
 	};

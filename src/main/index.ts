@@ -39,6 +39,7 @@ import {
 	readSingleInstancePreference,
 } from "./settings/SettingsStore";
 import { acquireVersionSingleInstance, type FocusPayload } from "./singleInstance";
+import { mainProcessJsFlags, rendererHeapAdditionalArguments } from "./v8HeapLimits";
 import { isDevToolsShortcut, toggleMainWindowDevTools } from "./devTools";
 import {
 	DEFAULT_DEV_USER_DATA_NAME,
@@ -122,12 +123,13 @@ if (!electronChromiumSandboxEnabled) {
 	app.commandLine.appendSwitch("no-sandbox");
 }
 
-// V8 老生代堆上限（渲染进程 + 主进程 + worker 一并生效）：
+// V8 老生代堆上限（分层，见 v8HeapLimits.ts 注释）：
 // Chromium 默认上限 ≈ 物理内存 60%（8GB 机器 ≈ 4.8GB），V8 没有压力就不主动收缩，
 // 会话消息/代码块高亮等大对象把堆撑大后 committed 空间长期不归还 OS（内存采样实测：
 // V8 总 55MB → 210MB 不回落，RSS 基线随每次操作抬升）。
-// 设 384MB：留 2 倍于实测 JS used 峰值（~185MB）的余量，超限即强制 GC 收缩。
-app.commandLine.appendSwitch("js-flags", "--max-old-space-size=384");
+// 这里的 384MB 是**主进程**档位；渲染进程不能跟着吃这个值（会被 msg 体量打爆 V8，
+// #213），所以每个窗口额外用 additionalArguments 抬到 RENDERER_MAX_OLD_SPACE_MB。
+app.commandLine.appendSwitch("js-flags", mainProcessJsFlags());
 
 // Windows 系统通知必须设置 AppUserModelID，否则通知不显示、点击事件不触发。
 // dev 与正式版使用不同 AppID，避免通知中心归属混淆（与 dev userData 隔离思路一致）。
@@ -1501,6 +1503,8 @@ function configureBrowserPanelWebviewHost(window: BrowserWindow): void {
 
 		webPreferences.partition = BROWSER_PANEL_PARTITION;
 		webPreferences.sandbox = true;
+		// 内置浏览器是第三方页面，同样不能被主进程的 384MB 档位锁住（#213）
+		webPreferences.additionalArguments = rendererHeapAdditionalArguments();
 		webPreferences.nodeIntegration = false;
 		webPreferences.nodeIntegrationInWorker = false;
 		webPreferences.nodeIntegrationInSubFrames = false;
@@ -1616,6 +1620,8 @@ async function createWindow() {
 			contextIsolation: true,
 			nodeIntegration: false,
 			webviewTag: true,
+			// 渲染进程 V8 堆上限：必须覆盖 Chromium 透传的全局 `--js-flags`（#213）
+			additionalArguments: rendererHeapAdditionalArguments(),
 		},
 	});
 	const createdWindow = mainWindow;

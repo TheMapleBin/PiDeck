@@ -3655,6 +3655,7 @@ export const zhCN = {
   "common.retry": "重试",
   "timeline.loadingMore": "加载中...",
   "timeline.loadEarlierTurns": "显示更早的 {count} 轮对话",
+  "timeline.showEarlierSteps": "显示更早的 {count} 条步骤",
   "timeline.loadMoreHistory": "加载更多历史消息 ({count} 条)",
   "timeline.loadMoreTurns": "加载更多对话",
   "drawer.lazyLoading": "加载中...",

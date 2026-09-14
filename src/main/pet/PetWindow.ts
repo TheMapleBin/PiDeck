@@ -13,6 +13,7 @@ import {
 	type Size2D,
 } from "../../shared/petNotificationLayout";
 import { preparePreloadPath } from "../preloadPath";
+import { rendererHeapAdditionalArguments } from "../v8HeapLimits";
 import { readElectronChromiumSandboxPreference } from "../settings/SettingsStore";
 import { getAppLogger } from "../logging/sharedLogger";
 import { PET_WINDOW_PARTITION } from "./petSpriteProtocol";
@@ -141,6 +142,8 @@ export class PetWindow {
 				// 宠物永远浮在桌面、几乎不获焦。默认 backgroundThrottling 会把后台 rAF
 				// 掐到约 1fps 甚至停在第一帧，表现为 idle/running 都静止。
 				backgroundThrottling: false,
+				// 与主窗口同档：不跟吃主进程的 384MB V8 堆上限（#213）
+				additionalArguments: rendererHeapAdditionalArguments(),
 			},
 		});
 		this.win.webContents.on("preload-error", (_event, failedPreloadPath, error) => {

@@ -8,6 +8,7 @@ import test from "node:test";
 import ts from "typescript";
 import vm from "node:vm";
 import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
+import { tryRequireLocalTs } from "./helpers/requireLocalTs.mjs";
 
 const nodeRequire = createRequire(import.meta.url);
 
@@ -84,6 +85,10 @@ function loadAgentMessageProjectorModule() {
       }
       // rewind checkpoint 纯 git 模块：本测试不涉及，空桩满足依赖契约
       if (specifier === "../rewind/index.ts") return {};
+      // 相对 import 按 src/main/pi 解析后交给 Node 原生 TS 加载（见 helper 注释）；
+      // 直接交 nodeRequire 会以 tests/ 为基准，生产新增本地模块即整片 MODULE_NOT_FOUND（#213）
+      const localFromSource = tryRequireLocalTs(specifier, "src/main/pi");
+      if (localFromSource) return localFromSource;
       return nodeRequire(specifier);
     },
     Date,
@@ -282,6 +287,9 @@ function loadAgentManagerModule() {
       }
       // rewind checkpoint 纯 git 模块：本测试不涉及，空桩满足依赖契约
       if (specifier === "../rewind/index.ts") return {};
+      // 同上：生产新增的本地纯模块（如 #213 的 ./messagePayloadSize）从 src/main/pi 解析加载
+      const localFromSource = tryRequireLocalTs(specifier, "src/main/pi");
+      if (localFromSource) return localFromSource;
       return nodeRequire(specifier);
     },
     Date,

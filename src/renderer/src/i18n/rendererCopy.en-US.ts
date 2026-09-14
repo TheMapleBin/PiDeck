@@ -3691,6 +3691,7 @@ export const enUS: Record<TranslationKey, string> = {
   "common.retry": "Retry",
   "timeline.loadingMore": "Loading...",
   "timeline.loadEarlierTurns": "Show {count} earlier turns",
+  "timeline.showEarlierSteps": "Show {count} earlier steps",
   "timeline.loadMoreHistory": "Load more history messages ({count})",
   "timeline.loadMoreTurns": "Load more conversations",
   "drawer.lazyLoading": "Loading...",
