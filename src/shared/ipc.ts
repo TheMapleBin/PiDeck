@@ -212,6 +212,8 @@ export const ipcChannels = {
 	dshDetectRunnerNode: "dsh:detect-runner-node",
 	/** 打开文件选择框挑 node.exe；取消返回 null。 */
 	dshChooseRunnerNode: "dsh:choose-runner-node",
+	/** 从 AtomGit/GitHub `dsh-runner-node` tag 下载 Node 24 到 userData（不改 PATH、不进安装包）。 */
+	dshInstallRunnerNode: "dsh:install-runner-node",
 	/** DSH settings.describe（脱敏 namespace 视图 + schema，渲染配置表单）。 */
 	dshConfigDescribe: "dsh:config-describe",
 	/** DSH settings.update（合并 patch 到 namespace 用户层）。 */

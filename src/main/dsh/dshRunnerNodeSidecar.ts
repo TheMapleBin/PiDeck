@@ -30,25 +30,36 @@ export interface ResolveDshRunnerNodeSidecarInput {
 	resourcesPath?: string;
 	/** `app.getAppPath()`：dev 是项目根，打包是 app.asar。 */
 	appPath?: string;
+	/** 应用数据目录：一键下载的专用 Node 24 落在这里，不进系统 PATH。 */
+	userDataPath?: string;
 	/** 显式覆盖（dev.js / 测试）。空串视为未设。 */
 	envPath?: string;
 	/** 设置里的用户路径。空串视为未设。 */
 	configuredPath?: string;
 }
 
+/** userData 里 PiDeck 专用 node.exe（一键下载产物）。 */
+export function dshRunnerNodeUserDataSidecar(
+	userDataPath: string,
+	platform: NodeJS.Platform = "win32",
+): string {
+	return join(userDataPath, DSH_RUNNER_NODE_DIRNAME, dshRunnerNodeFileName(platform));
+}
+
 /**
- * 解析磁盘上已存在的 CUI node（不做 --version）。
- * 优先级：env → 用户配置 → 旧包 extraResources 残留。
- * 系统 PATH 探测走 `detectDshRunnerNode`，不要在这里 spawn。
+ * 只解析「已落盘的专用副本」（userData / 旧包残留），不含 env 与用户配置。
+ * 给自动探测用：配置路径另外处理，避免坏配置把 sidecar 盖掉。
  */
-export function resolveDshRunnerNodeSidecar(input: ResolveDshRunnerNodeSidecarInput): string | undefined {
+export function resolveInstalledDshRunnerNodeSidecar(
+	input: Pick<ResolveDshRunnerNodeSidecarInput, "platform" | "resourcesPath" | "appPath" | "userDataPath">,
+): string | undefined {
 	const platform = input.platform ?? "win32";
 	if (platform !== "win32") return undefined;
 	const fileName = dshRunnerNodeFileName(platform);
-	const envPath = input.envPath?.trim();
-	if (envPath && existsSync(envPath)) return envPath;
-	const configured = input.configuredPath?.trim();
-	if (configured && existsSync(configured)) return configured;
+	if (input.userDataPath) {
+		const fromUserData = dshRunnerNodeUserDataSidecar(input.userDataPath, platform);
+		if (existsSync(fromUserData)) return fromUserData;
+	}
 	const packaged = input.resourcesPath
 		? join(input.resourcesPath, DSH_RUNNER_NODE_DIRNAME, fileName)
 		: undefined;
@@ -58,4 +69,19 @@ export function resolveDshRunnerNodeSidecar(input: ResolveDshRunnerNodeSidecarIn
 		if (existsSync(fromApp)) return fromApp;
 	}
 	return undefined;
+}
+
+/**
+ * 解析磁盘上已存在的 CUI node（不做 --version）。
+ * 优先级：env → 用户配置 → userData 专用副本 → 旧包 extraResources 残留。
+ * 系统 PATH / 版本管理器探测走 `detectDshRunnerNode`，不要在这里 spawn。
+ */
+export function resolveDshRunnerNodeSidecar(input: ResolveDshRunnerNodeSidecarInput): string | undefined {
+	const platform = input.platform ?? "win32";
+	if (platform !== "win32") return undefined;
+	const envPath = input.envPath?.trim();
+	if (envPath && existsSync(envPath)) return envPath;
+	const configured = input.configuredPath?.trim();
+	if (configured && existsSync(configured)) return configured;
+	return resolveInstalledDshRunnerNodeSidecar(input);
 }

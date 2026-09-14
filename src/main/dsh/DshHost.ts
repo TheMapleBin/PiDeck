@@ -951,6 +951,9 @@ export class DshHost {
 			platform: process.platform,
 			configuredPath: this.getDshRunnerNodePath(),
 			envPath: process.env[DSH_RUNNER_NODE_ENV],
+			userDataPath: this.getUserDataDir(),
+			resourcesPath: typeof process.resourcesPath === "string" ? process.resourcesPath : undefined,
+			appPath: this.getAppPath(),
 		});
 		if (runnerNode) forkEnv[DSH_RUNNER_NODE_ENV] = runnerNode;
 

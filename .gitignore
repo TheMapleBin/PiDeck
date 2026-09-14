@@ -93,6 +93,7 @@ scripts/tmp-*
 # DSH host 组合文件（dev 回退到项目 node_modules 时的落盘目录）
 pideck-host/
 
-# Windows DSH 沙箱 runner 的 CUI node sidecar（prepare-dsh-runner-node.mjs 下载，不入库）
+# Windows DSH 沙箱 runner 的 CUI node sidecar（prepare / pack 下载，不入库、不进安装包）
 resources/dsh-runner-node/node.exe
 resources/dsh-runner-node/node
+dist-runtime/dsh-runner-node/

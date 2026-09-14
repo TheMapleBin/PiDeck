@@ -52,7 +52,7 @@ let runnerNodeHintShown = false;
 export function showDshRunnerNodeHint(openSettings: (target: SettingsFocusTarget) => void): void {
 	if (runnerNodeHintShown) return;
 	runnerNodeHintShown = true;
-	showNotice(t("settings.dshRunnerNodeMissingHint"), 8000, "info", undefined, {
+	showNotice(t("settings.dshRunnerNodeMissingHint"), 10_000, "info", undefined, {
 		action: {
 			label: t("settings.dshRunnerNodeOpenSettings"),
 			onClick: () => openSettings(DSH_RUNNER_NODE_SETTINGS_TARGET),

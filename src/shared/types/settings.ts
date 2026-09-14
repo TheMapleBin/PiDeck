@@ -148,7 +148,8 @@ export type AppSettings = {
 	gitExecutablePath: string;
 	/**
 	 * DSH 沙箱 runner 用的本机 Node 绝对路径（Windows 必须是 CUI node.exe）。
-	 * 空串 = 自动探测 PATH / 常见安装位置。不随包分发，避免安装包再涨 ~86MB。
+	 * 空串 = 自动探测 PATH / 版本管理器 / 应用数据目录里的专用副本。
+	 * 不随包分发，避免安装包再涨 ~86MB；可在开发设置里一键下载到 userData。
 	 */
 	dshRunnerNodePath: string;
 	/** 关闭窗口时隐藏到系统托盘而不是退出 */
@@ -510,6 +511,12 @@ export type AppSettings = {
 	 * 缺省/空串 = 用内置默认地址。sha256 校验始终生效，镜像也不能绕过。
 	 */
 	dshRuntimeIndexUrl?: string;
+
+	/**
+	 * DSH 沙箱 Node 24 下载源索引（覆盖默认 AtomGit/GitHub `dsh-runner-node` tag）。
+	 * 缺省/空串 = 跟随 settings.updateSource。sha256 始终校验。
+	 */
+	dshRunnerNodeIndexUrl?: string;
 
 	/**
 	 * DSH 审批自动放行：开启后 DSH 会话的工具/命令审批（approval/requested）

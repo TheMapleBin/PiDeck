@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * 下载官方 Node 二进制到 resources/dsh-runner-node/，供 Windows DSH 沙箱 runner
- * 以 CUI 进程启动（避免 electron.exe GUI 导致黑窗口一闪）。
+ * 开发机可选：从官方 Node 二进制抽出 node.exe 到 resources/dsh-runner-node/。
+ * 安装包不带这份文件。用户侧走 pack-dsh-runner-node.mjs + AtomGit/GitHub tag。
  *
  *   node scripts/prepare-dsh-runner-node.mjs [--if-missing] [--force]
  *

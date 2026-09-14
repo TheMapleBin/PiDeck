@@ -58,6 +58,19 @@ test("resolveDshRunnerNodeSidecar：env 覆盖优先于用户配置 / extraResou
 			}),
 			configured,
 		);
+		const userData = join(root, "userData", DSH_RUNNER_NODE_DIRNAME);
+		await mkdir(userData, { recursive: true });
+		const userSidecar = join(userData, "node.exe");
+		await writeFile(userSidecar, "userdata");
+		assert.equal(
+			resolveDshRunnerNodeSidecar({
+				platform: "win32",
+				appPath: join(root, "app"),
+				resourcesPath: join(root, "resources-pack"),
+				userDataPath: join(root, "userData"),
+			}),
+			userSidecar,
+		);
 		assert.equal(
 			resolveDshRunnerNodeSidecar({
 				platform: "win32",

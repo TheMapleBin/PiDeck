@@ -1,5 +1,11 @@
 /** DSH 沙箱 runner 的 CUI node 探测来源。 */
-export type DshRunnerNodeSource = "configured" | "path" | "known-location" | "env" | "not-found";
+export type DshRunnerNodeSource =
+	| "configured"
+	| "path"
+	| "known-location"
+	| "env"
+	| "sidecar"
+	| "not-found";
 
 /** 一次成功探测：绝对路径 + 版本号（如 24.13.0）。 */
 export type DshRunnerNodeProbe = {
@@ -28,4 +34,12 @@ export type DshRunnerNodeInfo = {
 	/** 主版本是否满足 DSH runner ABI（Node 24）。 */
 	compatible: boolean;
 	system: DshRunnerNodeSystemProbe | null;
+};
+
+/** `dsh:install-runner-node`：把 Node 24 下到 userData，不改系统 PATH。 */
+export type DshRunnerNodeInstallResult = {
+	ok: boolean;
+	path?: string;
+	version?: string;
+	error?: string;
 };

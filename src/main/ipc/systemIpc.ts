@@ -38,6 +38,8 @@ import { resolveConfigProxyTarget } from "../sessions/sessionProxyPolicy";
 import { setConfiguredGitPath } from "../git/gitExecutable";
 import { detectDshRunnerNode } from "../dsh/dshRunnerNode";
 import { DSH_RUNNER_NODE_ENV } from "../dsh/dshRunnerNodeSidecar";
+import { installDshRunnerNodeSidecar } from "../dsh/dshRunnerNodeInstall";
+import { createNetDownloader, fetchDshRunnerNodeIndex } from "../dsh/runtime/dshRuntimeIo";
 import { refreshShortcutBindings } from "../appShortcuts";
 import type { ConfigProxyMode } from "../../shared/types/fetchedModel";
 import type { SkillManager } from "../skills/SkillManager";
@@ -1272,7 +1274,44 @@ export function registerSystemIpc(deps: SystemIpcDeps): void {
 		return detectDshRunnerNode({
 			configuredPath: configured,
 			envPath: process.env[DSH_RUNNER_NODE_ENV],
+			userDataPath: app.getPath("userData"),
+			resourcesPath: process.resourcesPath,
+			appPath: app.getAppPath(),
 		});
+	});
+	let runnerNodeInstallInflight: Promise<import("../../shared/types/dshRunnerNode").DshRunnerNodeInstallResult> | null = null;
+	ipcMain.handle(ipcChannels.dshInstallRunnerNode, async () => {
+		if (process.platform !== "win32") {
+			return { ok: false, error: "仅 Windows 需要单独的 Node 24 沙箱副本" };
+		}
+		if (runnerNodeInstallInflight) return runnerNodeInstallInflight;
+		runnerNodeInstallInflight = (async () => {
+			const settings = settingsStore.get();
+			const result = await installDshRunnerNodeSidecar({
+				userDataPath: app.getPath("userData"),
+				platform: process.platform,
+				updateSource: normalizeUpdateSource(settings.updateSource),
+				indexUrl: process.env.DSH_RUNNER_NODE_INDEX_URL || settings.dshRunnerNodeIndexUrl,
+				download: createNetDownloader((scope, message, detail) => {
+					void appLogger.info(scope, message, detail);
+				}),
+				fetchIndex: (url) =>
+					fetchDshRunnerNodeIndex(url, (scope, message, detail) => {
+						void appLogger.info(scope, message, detail);
+					}),
+			});
+			if (result.ok && restartDshHost && dshHostIsStarted?.()) {
+				void restartDshHost().catch((error) => {
+					void appLogger.warn("dsh", "Failed to restart DSH host after installing runner node", {
+						error: error instanceof Error ? error.message : String(error),
+					});
+				});
+			}
+			return result;
+		})().finally(() => {
+			runnerNodeInstallInflight = null;
+		});
+		return runnerNodeInstallInflight;
 	});
 	ipcMain.handle(ipcChannels.dshChooseRunnerNode, async () => {
 		const options = {

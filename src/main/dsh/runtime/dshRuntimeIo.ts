@@ -16,6 +16,7 @@ import { pipeline } from "node:stream/promises";
 import { net } from "electron";
 import * as tar from "tar";
 import type { DshRuntimeReleaseIndex } from "../../../shared/types/dshRuntimeManifest";
+import type { DshRunnerNodeReleaseIndex } from "../../../shared/types/dshRunnerNodeRelease";
 import { isSafeArchiveEntry, type DshRuntimeDownloader, type DshRuntimeExtractor } from "./DshRuntimeManager";
 
 /** 重定向跟随上限：GitHub Release 资产会 302 到对象存储，正常 1~2 跳。 */
@@ -164,21 +165,23 @@ function localPathFromUrl(url: string): string | undefined {
 /**
  * 拉取下载源索引（GET JSON；file:// 走本地文件读取）。
  * 失败一律返回 null 而不是抛错：索引拉不到是「暂时装不上」，不该让 IPC 抛到渲染层
- * 变成未捕获异常，调用方统一按 "runtime index unavailable" 提示。
+ * 变成未捕获异常。
  */
-export function fetchDshRuntimeIndex(
+function fetchJsonIndex<T>(
 	url: string,
+	scope: string,
+	validate: (parsed: T) => boolean,
 	log?: (scope: string, message: string, detail?: unknown) => void,
-): Promise<DshRuntimeReleaseIndex | null> {
+): Promise<T | null> {
 	const localPath = localPathFromUrl(url);
 	if (localPath) {
 		return Promise.resolve(
 			(() => {
 				try {
-					const parsed = JSON.parse(readFileSync(localPath, "utf8")) as DshRuntimeReleaseIndex;
-					return Array.isArray(parsed?.releases) ? parsed : null;
+					const parsed = JSON.parse(readFileSync(localPath, "utf8")) as T;
+					return validate(parsed) ? parsed : null;
 				} catch (error) {
-					log?.("dsh-runtime", "local runtime index unreadable", { error: String(error) });
+					log?.(scope, "local index unreadable", { error: String(error) });
 					return null;
 				}
 			})(),
@@ -189,7 +192,7 @@ export function fetchDshRuntimeIndex(
 		request.on("response", (response) => {
 			if (response.statusCode < 200 || response.statusCode >= 300) {
 				discardResponse(response);
-				log?.("dsh-runtime", "runtime index request failed", { status: response.statusCode });
+				log?.(scope, "index request failed", { status: response.statusCode });
 				resolvePromise(null);
 				return;
 			}
@@ -199,24 +202,48 @@ export function fetchDshRuntimeIndex(
 			});
 			response.on("end", () => {
 				try {
-					const parsed = JSON.parse(body) as DshRuntimeReleaseIndex;
-					resolvePromise(Array.isArray(parsed?.releases) ? parsed : null);
+					const parsed = JSON.parse(body) as T;
+					resolvePromise(validate(parsed) ? parsed : null);
 				} catch {
-					log?.("dsh-runtime", "runtime index is not valid json");
+					log?.(scope, "index is not valid json");
 					resolvePromise(null);
 				}
 			});
 			response.on("error", (error) => {
-				log?.("dsh-runtime", "runtime index response error", { error: String(error) });
+				log?.(scope, "index response error", { error: String(error) });
 				resolvePromise(null);
 			});
 		});
 		request.on("error", (error) => {
-			log?.("dsh-runtime", "runtime index request error", { error: String(error) });
+			log?.(scope, "index request error", { error: String(error) });
 			resolvePromise(null);
 		});
 		request.end();
 	});
+}
+
+export function fetchDshRuntimeIndex(
+	url: string,
+	log?: (scope: string, message: string, detail?: unknown) => void,
+): Promise<DshRuntimeReleaseIndex | null> {
+	return fetchJsonIndex<DshRuntimeReleaseIndex>(
+		url,
+		"dsh-runtime",
+		(parsed) => Array.isArray(parsed?.releases),
+		log,
+	);
+}
+
+export function fetchDshRunnerNodeIndex(
+	url: string,
+	log?: (scope: string, message: string, detail?: unknown) => void,
+): Promise<DshRunnerNodeReleaseIndex | null> {
+	return fetchJsonIndex<DshRunnerNodeReleaseIndex>(
+		url,
+		"dsh-runner-node",
+		(parsed) => Array.isArray(parsed?.releases),
+		log,
+	);
 }
 
 type RequestOutcome = { kind: "done" } | { kind: "redirect"; location: string };

@@ -13,7 +13,7 @@
 - **渲染进程 OOM 分层治理** — 主进程堆上限仍 384MB，会话窗口抬到 2GB；历史窗口在「最近 N 轮」上叠加条目预算，单轮折叠区默认只挂尾部步骤；压缩失败不再无条件全量重载。
 - **常驻缓存补字节预算** — 日志行缓存、会话历史全文 LRU、disk 历史消息补上字节 / 条数上限，堵住四处无界增长。
 - **打包版 DSH 黑窗口（koffi）** — koffi 纳入应用依赖并打通 runtime 解析链，打包后 host/runner 能隐藏控制台，不再弹出可见黑窗口。
-- **DSH 沙箱 runner 改走本机 Node 24** — Windows 上沙箱 runner 不再用 electron.exe（GUI）启动，改为复用本机 `node.exe`（开发设置里可检测 / 指定路径）。不随包再带 86MB 的 Node；找不到时提示去安装，并回退旧路径（可能仍会闪窗）。
+- **DSH 沙箱 runner 改走本机 Node 24** — Windows 上沙箱 runner 不再用 electron.exe（GUI）启动，改为复用本机 `node.exe`（开发设置可检测 / 指定，含 nvm/fnm/mise/Scoop）。安装包不带 Node；找不到时可一键从应用更新源（AtomGit/GitHub 的 `dsh-runner-node` tag）下载仅给 PiDeck 用的副本，不改系统 PATH。
 - **Linux 升级后双击图标没反应** — 单实例锁改为二次握手并校验锁主人是否仍响应；升级残留锁、PID 复用与僵尸进程不再让次实例静默退出。问题反馈体检新增锁状态。
 - **停止会话整树终止子代理** — 停止父会话时一并清理 pi-subagents / acp_delegate 拉起的子进程，避免孤儿继续烧 token。
 - **模型偏好失效不再阻断发送** — 已保存模型被重命名 / 删除后，沿用 runtime 当前模型并在时间线提示重选，而不再每次发送报「Failed to apply session preferences」。
