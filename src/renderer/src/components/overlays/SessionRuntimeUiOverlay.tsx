@@ -11,8 +11,11 @@ import { t } from "../../i18n";
 import {
 	buildAskResponse,
 	formatAskTitle,
+	isComposingKeyboardEvent,
 	parseSecurityConfirmTitle,
 	pickActiveAskRequest,
+	resolveBatchAskDirectEnter,
+	resolveSingleAskDirectEnter,
 	serializeBatchAnswers,
 	shouldSuppressAskClick,
 	splitAskOption,
@@ -312,7 +315,26 @@ function BatchQuestion(props: {
 	});
 	const expandedOptionLayout = hasOptionDescriptions || hasLongOptionText || selectOptions.length > 6;
 	return (
-		<div className="flex flex-col gap-1.5">
+		<div
+			className="flex flex-col gap-1.5"
+			onKeyDown={(event) => {
+				// 批量卡直接回车（策略见 askUi.resolveBatchAskDirectEnter）：
+				// 选项按钮上已作答回车 = 提交并推进；卡片空白处同理；未作答回车交原生 click 完成选中。
+				if (event.key !== "Enter" || isComposingKeyboardEvent(event)) return;
+				const target = event.target as HTMLElement;
+				const action = resolveBatchAskDirectEnter({
+					fromField: target.tagName === "INPUT" || target.tagName === "TEXTAREA",
+					fromButton: target.tagName === "BUTTON",
+					fromOptionButton: target.classList.contains("ask-inline-bar-option"),
+					answered: isBatchAnswered(props.answer),
+					nextDisabled: props.nextDisabled,
+				});
+				if (action.kind === "advance") {
+					event.preventDefault();
+					props.onNext();
+				}
+			}}
+		>
 			<div className="font-mono text-micro font-semibold text-text-tertiary">
 				{t("common.details")} {props.questionIndex + 1}/{props.total}
 			</div>
@@ -457,6 +479,19 @@ function BatchQuestion(props: {
 							props.onInputChange(event.target.value);
 							props.onAnswer(event.target.value || undefined, event.target.value);
 						}}
+						onKeyDown={(event) => {
+							// 多行编辑器：回车保留换行，Ctrl/Cmd+Enter 提交并进入下一题（末题 = 提交全部）
+							if (
+								event.key === "Enter" &&
+								(event.ctrlKey || event.metaKey) &&
+								!event.shiftKey &&
+								!isComposingKeyboardEvent(event) &&
+								!props.nextDisabled
+							) {
+								event.preventDefault();
+								props.onNext();
+							}
+						}}
 					/>
 				) : (
 					<div className="flex w-full items-center gap-2">
@@ -467,7 +502,8 @@ function BatchQuestion(props: {
 							disabled={props.responding}
 							onChange={(event) => props.onInputChange(event.target.value)}
 							onKeyDown={(event) => {
-								if (event.key === "Enter") {
+								// IME 合成中的回车只用于选字/提交候选，不能当作提交键
+								if (event.key === "Enter" && !isComposingKeyboardEvent(event)) {
 									event.preventDefault();
 									props.onSubmitInput();
 								}
@@ -597,7 +633,33 @@ export function SessionRuntimeUiOverlay({ sessionId, runtime, ui, responder, onE
 			cancelLabel={t("common.close")}
 			className="ask-inline-bar ask-inline-bar--active w-full"
 		>
-			<div>
+			{/* 单卡「直接回车」策略（见 askUi.resolveSingleAskDirectEnter）：输入框内的回车
+			    由字段自身处理（editor 保留换行），这里接管焦点在字段之外的直接回车；
+			    IME 合成中的回车只用于选字，绝不能触发提交 */}
+			<div
+				onKeyDown={(event) => {
+					if (event.key !== "Enter" || responding || isComposingKeyboardEvent(event)) return;
+					if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+					const action = resolveSingleAskDirectEnter({
+						method: request.method,
+						fromField:
+							event.target instanceof HTMLInputElement ||
+							event.target instanceof HTMLTextAreaElement,
+						fromButton: event.target instanceof HTMLButtonElement,
+						fromOptionButton:
+							event.target instanceof HTMLElement &&
+							event.target.classList.contains("ask-inline-bar-option"),
+						selectedOption,
+						text: value,
+					});
+					if (action.kind === "none") return;
+					// preventDefault 同时抑制按钮原生 click（回车激活按钮），避免双重提交
+					event.preventDefault();
+					if (action.kind === "submit-option") submitValue(action.option);
+					else if (action.kind === "submit-confirm") submitValue(true, true);
+					else if (action.kind === "submit-text") submitValue(action.text);
+				}}
+			>
 				{request.method === "select" && request.options?.length ? (
 					<div className="grid min-w-0 grid-cols-2 gap-1.5 max-[480px]:grid-cols-1">
 						{request.options.map((option) => {
@@ -632,7 +694,10 @@ export function SessionRuntimeUiOverlay({ sessionId, runtime, ui, responder, onE
 									disabled={responding}
 									onChange={(event) => setValue(event.target.value)}
 									onKeyDown={(event) => {
-										if (event.key === "Enter" && value.trim()) submitValue(value.trim());
+										// IME 合成中的回车只用于选字/提交候选，不能当作提交键
+										if (event.key === "Enter" && !isComposingKeyboardEvent(event) && value.trim()) {
+											submitValue(value.trim());
+										}
 									}}
 								/>
 								<Button
@@ -676,7 +741,10 @@ export function SessionRuntimeUiOverlay({ sessionId, runtime, ui, responder, onE
 							disabled={responding}
 							onChange={(event) => setValue(event.target.value)}
 							onKeyDown={(event) => {
-								if (event.key === "Enter" && value.trim()) submitValue(value.trim());
+								// IME 合成中的回车只用于选字/提交候选，不能当作提交键
+								if (event.key === "Enter" && !isComposingKeyboardEvent(event) && value.trim()) {
+									submitValue(value.trim());
+								}
 							}}
 						/>
 						<Button className="ask-inline-bar-submit-btn" variant="default" disabled={responding || !value.trim()} onClick={() => submitValue(value.trim())}>
@@ -693,6 +761,19 @@ export function SessionRuntimeUiOverlay({ sessionId, runtime, ui, responder, onE
 							placeholder={request.placeholder || t("ask.editorPlaceholder")}
 							disabled={responding}
 							onChange={(event) => setValue(event.target.value)}
+							onKeyDown={(event) => {
+								// 多行编辑器：回车保留换行，Ctrl/Cmd+Enter 提交（与主流编辑器快捷键一致）
+								if (
+									event.key === "Enter" &&
+									(event.ctrlKey || event.metaKey) &&
+									!event.shiftKey &&
+									!isComposingKeyboardEvent(event) &&
+									value.trim()
+								) {
+									event.preventDefault();
+									submitValue(value);
+								}
+							}}
 						/>
 						<Button className="ask-inline-bar-submit-btn" variant="default" disabled={responding || !value.trim()} onClick={() => submitValue(value)}>
 							{t("ask.submit")}

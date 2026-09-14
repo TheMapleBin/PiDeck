@@ -232,6 +232,89 @@ export function serializeBatchAnswers(
  * 不复用 messageSelection.ts：那是消息树多选，不是 window 划选探测。
  * input/textarea 内的选区走 selectionStart，不会进入 window.getSelection，故键盘 Enter 提交不受影响。
  */
+
+/**
+ * 判断键盘事件是否来自输入法（IME）合成阶段：合成中的 Enter 用于选字上屏，
+ * 不能触发提交（中文/日文输入法按 Enter 上屏时会被误判为「直接回车」）。
+ * keyCode 229 是 Chromium 对合成键的统一标记，React 合成事件可稳定读到。
+ */
+export function isComposingKeyboardEvent(event: { keyCode?: number }): boolean {
+	return event.keyCode === 229;
+}
+
+/**
+ * ask 提问卡「直接回车」按键策略（焦点不在输入框/多行编辑器时的回车语义）。
+ *
+ * 需求背景（用户反馈）：输入/选择后总要手动点「提交/下一题」，期望回车即可完成；
+ * 但多行编辑器（editor）的回车必须保留换行、输入法（IME）合成中的回车只能用于选字，
+ * 所以把「回车 → 卡片做什么」收敛为纯函数供单卡/批量卡共用，避免策略散落在 JSX 闭包。
+ * 约定：调用方只对本函数喂「纯净回车」（已过滤非 Enter 键、修饰键与 IME 合成），
+ * 输入框/多行编辑器内的回车由字段自身的 onKeyDown 处理（单行=提交 / editor=换行，
+ * Ctrl/Cmd+Enter 提交），这里只负责焦点在字段之外的直接回车。
+ */
+export type AskDirectEnterAction =
+	| { kind: "submit-option"; option: string } // 单卡 select：提交已选中项
+	| { kind: "submit-confirm" } // 单卡 confirm：直接回车 = 确认
+	| { kind: "submit-text"; text: string } // 单卡 input：提交输入内容
+	| { kind: "advance" } // 批量卡：进入下一题 / 评审 / 提交全部
+	| { kind: "none" }; // 不拦截：交给按钮原生 click（或什么都不做）
+
+/**
+ * 单问题卡直接回车策略。
+ * - select 已选中：任意非输入框位置回车即提交（含焦点在选项按钮上——「选了再回车」主路径）；
+ *   未选中：选项按钮回车交给原生 click 完成选中；自定义输入的「提交」按钮交原生 click，
+ *   避免把自定义文本提交误判为提交旧选项。
+ * - confirm：是/否按钮交原生 click（取消按钮回车 = 拒绝），其余位置直接回车默认「确认」。
+ * - input 有内容：离开输入框后（如焦点落在提交按钮）回车兜底提交；提交按钮交原生 click。
+ * - editor：一律不拦截（回车 = 换行，Ctrl/Cmd+Enter 由字段处理器负责）。
+ */
+export function resolveSingleAskDirectEnter(state: {
+	method: string;
+	fromField: boolean; // 事件源是 input/textarea（含编辑器）
+	fromButton: boolean; // 事件源是 button
+	fromOptionButton: boolean; // 事件源是 ask-inline-bar-option 选项按钮
+	selectedOption: string; // select 已选中项（未选中为空串）
+	text: string; // input/editor 当前内容
+}): AskDirectEnterAction {
+	if (state.fromField) return { kind: "none" };
+	if (state.method === "select") {
+		if (state.selectedOption && !(state.fromButton && !state.fromOptionButton)) {
+			return { kind: "submit-option", option: state.selectedOption };
+		}
+		return { kind: "none" };
+	}
+	if (state.method === "confirm") {
+		if (state.fromButton) return { kind: "none" };
+		return { kind: "submit-confirm" };
+	}
+	if (state.method === "input" && state.text.trim()) {
+		if (state.fromButton) return { kind: "none" };
+		return { kind: "submit-text", text: state.text.trim() };
+	}
+	return { kind: "none" };
+}
+
+/**
+ * 批量题卡直接回车策略（与「下一题」按钮同语义，但要求当前题已作答，防误触丢题）：
+ * - 选项按钮：未作答回车 = 原生 click 选中/切换；已作答回车 = 提交当前答案并推进；
+ * - 其他按钮（上一步/下一步/提交自定义/提交全部）：交原生 click，不拦截；
+ * - 卡片空白处：已作答且「下一题」可用才推进；nextDisabled（末题未全部作答）时不动作。
+ */
+export function resolveBatchAskDirectEnter(state: {
+	fromField: boolean;
+	fromButton: boolean;
+	fromOptionButton: boolean;
+	answered: boolean; // 当前题已作答
+	nextDisabled: boolean; // 与「下一题」按钮禁用态一致
+}): AskDirectEnterAction {
+	if (state.fromField) return { kind: "none" };
+	if (state.fromOptionButton) {
+		return state.answered && !state.nextDisabled ? { kind: "advance" } : { kind: "none" };
+	}
+	if (state.fromButton) return { kind: "none" };
+	return state.answered && !state.nextDisabled ? { kind: "advance" } : { kind: "none" };
+}
+
 /**
  * 按压感知划选守卫 —— 「ask 选项点很久才能勾上」的修复（2026-09 用户反馈）。
  *
