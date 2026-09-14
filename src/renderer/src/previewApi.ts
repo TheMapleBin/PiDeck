@@ -894,6 +894,9 @@ export function createPreviewApi(): PiDesktopApi {
 			networkAddresses: async () => [{ address: "192.168.1.100", interfaceName: "Wi-Fi", cidr: "192.168.1.100/24", isPrivate: true }],
 			checkUpdate: async () => undefined,
 			onUpdateStatus: () => () => undefined,
+			onOpenSettings: () => () => undefined,
+			// 预览/浏览器模式没有全局快捷键，订阅退化为空操作
+			onShortcutTriggered: () => () => undefined,
 			getUpdateStatus: async () => null,
 			notifyUpdateSeen: async () => undefined,
 			skipUpdateVersion: async () => undefined,

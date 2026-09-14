@@ -39,6 +39,9 @@ import { AutomationDockButton } from "../automation/AutomationDockButton";
 import { MorphingSearch, type MorphingSearchItem } from "../motion/morphing-search";
 import { parseSidebarNavTab } from "../../utils/sidebarNavTab";
 import { displayProjectDirectoryName, isChatProject } from "../../rendererUtils";
+import { formatAccelerator } from "../../../../shared/shortcuts";
+import { desktopApi } from "../../desktopApi";
+import { useShortcutBindings } from "../../hooks/useShortcutBindings";
 
 export type SidebarActions = {
   projects: {
@@ -211,13 +214,23 @@ export function SidebarContent(props: SidebarContentProps) {
   const [rpcLogOpenedAgentId, setRpcLogOpenedAgentId] = useState<string | null>(null);
   // 顶部「搜索」菜单项控制 MorphingSearch 命令面板的展开状态。
   const [searchOpen, setSearchOpen] = useState(false);
+  // 生效快捷键绑定（用户设置可改），kbd 提示跟随真实键位；设置保存后自动刷新
+  const { bindings: shortcutBindings, platform } = useShortcutBindings();
+  const newSessionKbd = shortcutBindings
+    ? formatAccelerator(shortcutBindings.openNewSession, platform)
+    : "Ctrl+N";
+  const searchKbd = shortcutBindings
+    ? formatAccelerator(shortcutBindings.openSearch, platform)
+    : "Ctrl+F";
 
-  // 全局快捷键：Ctrl+N 新建会话（打开引导页）、Ctrl+F 搜索（打开命令面板）。
-  // 与界面上的 kbd 提示保持一致；输入框/内容可编辑区域聚焦时跳过，避免干扰打字。
+  // 全局快捷键：新建会话（打开引导页）与搜索（打开命令面板）由主进程
+  // before-input-event 匹配（键位可设置页自定义）后广播 appShortcutTriggered；
+  // 这里只负责执行 UI 动作。输入框/内容可编辑区域聚焦时跳过（广播已由主进程
+  // preventDefault，跳过只是不执行，不会误触发页面行为），避免打字时误开面板。
   useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (!(event.ctrlKey || event.metaKey)) return;
-      const target = event.target;
+    return desktopApi.app.onShortcutTriggered((id) => {
+      if (id !== "openNewSession" && id !== "openSearch") return;
+      const target = document.activeElement;
       if (target instanceof HTMLElement &&
         (target.isContentEditable ||
           target instanceof HTMLInputElement ||
@@ -225,17 +238,12 @@ export function SidebarContent(props: SidebarContentProps) {
           target instanceof HTMLSelectElement)) {
         return;
       }
-      const key = event.key.toLowerCase();
-      if (key === "n") {
-        event.preventDefault();
+      if (id === "openNewSession") {
         props.onOpenNewSession?.();
-      } else if (key === "f") {
-        event.preventDefault();
+      } else {
         setSearchOpen(true);
       }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    });
   }, [props.onOpenNewSession]);
   const menuSessionRecord = menu?.kind === "session"
     ? controller.catalog.sessionsByProject[menu.projectId]?.find((session) => session.id === menu.sessionId)
@@ -325,8 +333,9 @@ export function SidebarContent(props: SidebarContentProps) {
           >
             <CirclePlus className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
             <span className="min-w-0 flex-1 truncate font-medium">{t("app.newSession")}</span>
-            {/* 快捷键默认隐藏，行 hover 时才淡入（无边框，弱化到只剩文字），避免常驻视觉噪音 */}
-            <kbd className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-md px-1 text-micro text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">Ctrl+N</kbd>
+            {/* 快捷键默认隐藏，行 hover 时才淡入（无边框，弱化到只剩文字），避免常驻视觉噪音；
+                键位跟随设置页自定义（useShortcutBindings） */}
+            <kbd className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-md px-1 text-micro text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">{newSessionKbd}</kbd>
           </button>
           <button
             type="button"
@@ -337,8 +346,8 @@ export function SidebarContent(props: SidebarContentProps) {
           >
             <Search className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
             <span className="min-w-0 flex-1 truncate font-medium">{t("app.searchSessions")}</span>
-            {/* 快捷键默认隐藏，行 hover 时才淡入；搜索快捷键为 Ctrl+F（见下方全局监听） */}
-            <kbd className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-md px-1 text-micro text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">Ctrl+F</kbd>
+            {/* 快捷键默认隐藏，行 hover 时才淡入；键位跟随设置页自定义（useShortcutBindings） */}
+            <kbd className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-md px-1 text-micro text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">{searchKbd}</kbd>
           </button>
           {/* 定时任务入口：放在新建/搜索下面，避免藏在底栏 Dock 里不好找 */}
           <AutomationDockButton />

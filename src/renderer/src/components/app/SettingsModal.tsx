@@ -22,6 +22,7 @@ import {
 	GitBranch,
 	SlidersHorizontal,
 	MonitorCog,
+	Keyboard,
 	X,
 } from "lucide-react";
 import { t, type TranslationKey } from "../../i18n";
@@ -65,6 +66,7 @@ import type { AppSettings, AppInfo, AvailableModel, PiInstallStatus, PiUpdateChe
 // ── 各 tab 内容 lazy 加载：首开只下载壳 + 当前 tab 的 chunk（qrcode/表格/日志查看器等
 //    重依赖随各自 tab 拆包），切换到某 tab 时才加载其 chunk（本地文件，秒级以内）。──
 const CommonTab = lazy(() => import("./settings/CommonTab").then((m) => ({ default: m.CommonTab })));
+const ShortcutsTab = lazy(() => import("./settings/ShortcutsTab").then((m) => ({ default: m.ShortcutsTab })));
 const AppearanceTab = lazy(() => import("./settings/AppearanceTab").then((m) => ({ default: m.AppearanceTab })));
 const ProxyTab = lazy(() => import("./settings/ProxyTab").then((m) => ({ default: m.ProxyTab })));
 const WebTab = lazy(() => import("./settings/WebTab").then((m) => ({ default: m.WebTab })));
@@ -244,6 +246,7 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
  */
 const TAB_META: Record<SettingsTabId, { labelKey: TranslationKey; icon: ReactNode }> = {
 	common: { labelKey: "settings.tabs.common", icon: <Settings2 size={16} /> },
+	shortcuts: { labelKey: "settings.tabs.shortcuts", icon: <Keyboard size={16} /> },
 	appearance: { labelKey: "settings.tabs.appearance", icon: <Brush size={16} /> },
 	proxy: { labelKey: "settings.tabs.proxy", icon: <Network size={16} /> },
 	web: { labelKey: "settings.tabs.web", icon: <Globe size={16} /> },
@@ -330,6 +333,12 @@ function SettingsModalContent(props: SettingsModalProps) {
 	const imageGenRef = useRef<{ save: () => Promise<boolean> } | null>(null);
 	const [imageGenDirty, setImageGenDirty] = useState(false);
 	const handleImageGenDirtyChange = useCallback((dirty: boolean) => setImageGenDirty(dirty), []);
+	// 快捷键存在冲突等非法状态时禁用保存（ShortcutsTab 上报，见 saveAll 按钮）
+	const [shortcutsInvalid, setShortcutsInvalid] = useState(false);
+	const handleShortcutsInvalidChange = useCallback(
+		(invalid: boolean) => setShortcutsInvalid(invalid),
+		[],
+	);
 	// 左侧导航黄点来源：与关闭确认同一套字段目录，避免两处口径不一致
 	const dirtyTabIds = useMemo(
 		() => dirtySettingsTabIds({ dirtyFields, visionDirty: visionDraft.dirty, imageGenDirty }),
@@ -617,12 +626,18 @@ function SettingsModalContent(props: SettingsModalProps) {
 									variant="default"
 									size="sm"
 									onClick={saveAll}
-									disabled={visionDraft.saving || (visionDraft.dirty && visionDraft.modelMissing)}
+									disabled={
+											visionDraft.saving ||
+											(visionDraft.dirty && visionDraft.modelMissing) ||
+											shortcutsInvalid
+									}
 									// 视觉桥开启但未选模型时禁用保存：悬停说明原因（对应 visionDraft 的 modelRequired 提示）
 									title={
-										visionDraft.dirty && visionDraft.modelMissing
-											? t("settings.vision.modelRequired")
-											: undefined
+										shortcutsInvalid
+											? t("settings.shortcuts.saveBlocked")
+											: visionDraft.dirty && visionDraft.modelMissing
+												? t("settings.vision.modelRequired")
+												: undefined
 									}
 								>
 									{t("common.save")}
@@ -720,6 +735,21 @@ function SettingsModalContent(props: SettingsModalProps) {
 								draft={draftSettings}
 								updateDraft={updateDraft}
 								isDirty={isDirty}
+							/>
+							</Suspense>
+						</TabsContent>
+					)}
+
+					{/* ── 快捷键管理 tab（全局快捷键自定义，见 shared/shortcuts.ts 注册表） ── */}
+					{activeTab === "shortcuts" && (
+						<TabsContent value="shortcuts" className="settings-panel min-w-0">
+							<Suspense fallback={<SettingsTabLoading />}>
+							<ShortcutsTab
+								draft={draftSettings}
+								updateDraft={updateDraft}
+								isDirty={isDirty}
+								platform={props.appInfo.platform}
+								onInvalidChange={handleShortcutsInvalidChange}
 							/>
 							</Suspense>
 						</TabsContent>

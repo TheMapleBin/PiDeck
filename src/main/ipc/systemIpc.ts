@@ -36,6 +36,7 @@ import type { RpcLogger } from "../logging/RpcLogger";
 import type { SessionRuntimeCoordinator } from "../sessions/SessionRuntimeCoordinator";
 import { resolveConfigProxyTarget } from "../sessions/sessionProxyPolicy";
 import { setConfiguredGitPath } from "../git/gitExecutable";
+import { refreshShortcutBindings } from "../appShortcuts";
 import type { ConfigProxyMode } from "../../shared/types/fetchedModel";
 import type { SkillManager } from "../skills/SkillManager";
 import { fetchModelList, getCachedModelList, invalidateModelListCache, modelsFromPiConfig, refreshModelCatalogStore, refreshModelList, resolveModelListReport } from "../pi/modelListCache";
@@ -1262,6 +1263,10 @@ export function registerSystemIpc(deps: SystemIpcDeps): void {
 	ipcMain.handle(ipcChannels.settingsUpdate, async (_event, patch: Partial<AppSettings>) => {
 		const prevSettings = settingsStore.get();
 		const settings = await settingsStore.update(patch);
+		// 全局快捷键覆盖：保存后立即刷新主进程生效绑定，无需重启即可用新键（见 appShortcuts.ts）
+		if ("shortcuts" in patch) {
+			refreshShortcutBindings(settings);
+		}
 		// Git 可执行文件路径：立即同步给 git 子进程解析器，保存后无需重启即生效。
 		if ("gitExecutablePath" in patch) {
 			setConfiguredGitPath(settings.gitExecutablePath);

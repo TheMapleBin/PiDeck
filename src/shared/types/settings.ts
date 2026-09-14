@@ -88,6 +88,13 @@ export type AppSettings = {
 	useNativeTitleBar: boolean;
 	showNativeMenu: boolean;
 	sendShortcut: SendShortcutMode;
+	/**
+	 * 全局快捷键用户覆盖：ShortcutId → accelerator（Electron 语法子集，见 shared/shortcuts.ts）。
+	 * 缺省键 = 平台默认值（macOS ⌘, 打开设置 / F12 开发者工具等）；设置页「快捷键管理」
+	 * 修改后写这里，主进程 before-input-event 匹配实时读取（无需重启）。
+	 * 可选以兼容旧 settings.json；未知 id / 非法 accelerator 的条目在保存时丢弃。
+	 */
+	shortcuts?: Record<string, string>;
 	/** 界面主题：system 跟随系统；schedule 按本地时钟在浅色/暗色之间切换 */
 	theme: AppThemeMode;
 	/** 跟随时间：浅色开始（HH:mm，含）。仅 theme=schedule 时生效。 */

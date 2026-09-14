@@ -1365,6 +1365,11 @@ const api = {
 			) as Promise<import("../shared/types").ChangelogPayload>,
 		onOpenInBrowser: (callback: (url: string) => void) =>
 			subscribe(ipcChannels.appOpenInBrowser, callback),
+		onOpenSettings: (callback: () => void) =>
+			subscribe(ipcChannels.appOpenSettings, callback),
+		/** 全局快捷键命中广播（新建会话/搜索会话）；回调收到 ShortcutId，渲染层自行判断是否执行 */
+		onShortcutTriggered: (callback: (id: import("../shared/shortcuts").ShortcutId) => void) =>
+			subscribe(ipcChannels.appShortcutTriggered, callback),
 		restart: () => ipcRenderer.invoke(ipcChannels.appRestart) as Promise<void>,
 		quit: () => ipcRenderer.invoke(ipcChannels.appQuit) as Promise<void>,
 		// 打开 PiDeck 数据目录（配置/会话/诊断），文件管理器由主进程按平台选择

@@ -41,6 +41,7 @@ import {
 import { acquireVersionSingleInstance, type FocusPayload } from "./singleInstance";
 import { mainProcessJsFlags, rendererHeapAdditionalArguments } from "./v8HeapLimits";
 import { isDevToolsShortcut, toggleMainWindowDevTools } from "./devTools";
+import { isShortcutInput, refreshShortcutBindings } from "./appShortcuts";
 import {
 	DEFAULT_DEV_USER_DATA_NAME,
 	isSharedDevBranch,
@@ -1555,9 +1556,17 @@ function configureBrowserPanelWebviewHost(window: BrowserWindow): void {
 		});
 
 		// webview guest 是独立 webContents，按键到不了主窗口的 before-input-event；
-		// 转发 DevTools 快捷键到主窗口开关，避免焦点在内置浏览器面板时 F12 无响应。
+		// 转发全局快捷键到主窗口：DevTools 开关、打开设置（唤起窗口并广播），
+		// 键位按用户配置匹配（见 appShortcuts.ts / shared/shortcuts.ts）。
 		guest.on("before-input-event", (event, input) => {
-			if (!isDevToolsShortcut(input)) return;
+			if (isShortcutInput("openSettings", input)) {
+				event.preventDefault();
+				if (!window || window.isDestroyed()) return;
+				if (!window.isVisible()) window.show();
+				window.webContents.send(ipcChannels.appOpenSettings);
+				return;
+			}
+			if (!isShortcutInput("toggleDevTools", input)) return;
 			event.preventDefault();
 			toggleMainWindowDevTools(window);
 		});
@@ -1787,11 +1796,30 @@ async function createWindow() {
 		}
 	});
 
-	// 监听浏览器标准快捷键打开开发者工具（F12 / Ctrl+Shift+I / Ctrl+Shift+J，
-	// macOS 变体与开关逻辑集中在 devTools.ts，主窗口/webview/设置 IPC 共用）
+	// 监听全局快捷键（打开设置 / 开发者工具 / 新建会话 / 搜索会话，键位见 shared/shortcuts.ts，
+	// 可设置页自定义）；devTools 组合键的 macOS 变体与开关逻辑集中在 devTools.ts，
+	// 主窗口/webview/设置 IPC 共用。新建/搜索是渲染层 UI 动作（引导页/命令面板），
+	// 这里只做命中与广播，由渲染层按焦点状态决定是否执行（输入框聚焦时忽略）。
 	mainWindow.webContents.on("before-input-event", (event, input) => {
 		if (!mainWindow || mainWindow.isDestroyed()) return;
-		if (isDevToolsShortcut(input)) {
+		if (isShortcutInput("openSettings", input)) {
+			event.preventDefault();
+			// 快捷键可能命中在窗口隐藏（托盘）期间：先唤起窗口，再让渲染层打开设置页
+			if (!mainWindow.isVisible()) mainWindow.show();
+			mainWindow.webContents.send(ipcChannels.appOpenSettings);
+			return;
+		}
+		if (isShortcutInput("openNewSession", input)) {
+			event.preventDefault();
+			mainWindow.webContents.send(ipcChannels.appShortcutTriggered, "openNewSession");
+			return;
+		}
+		if (isShortcutInput("openSearch", input)) {
+			event.preventDefault();
+			mainWindow.webContents.send(ipcChannels.appShortcutTriggered, "openSearch");
+			return;
+		}
+		if (isShortcutInput("toggleDevTools", input)) {
 			event.preventDefault();
 			toggleMainWindowDevTools(mainWindow);
 		}
@@ -3103,6 +3131,8 @@ function registerIpc() {
 			// 恢复写回的是磁盘文件：pideck 设置需重新 load 进内存（其它 store 仍持旧值，
 			// UI 会提示重启生效）；pi 模型目录缓存刷新，避免恢复后仍用旧模型列表。
 			await settingsStore.load();
+			// 快捷键覆盖可能随备份一起被恢复：同步刷新主进程生效绑定，无需重启
+			refreshShortcutBindings(settingsStore.get());
 			void piModelCapabilityCache?.refresh().catch(() => undefined);
 		},
 	});
@@ -3839,6 +3869,8 @@ app.whenReady().then(async () => {
 	quitCleanup.register("terminal", () => terminalManager?.closeAll());
 
 	await settingsStore.load();
+	// 快捷键覆盖从磁盘载入后立即刷新主进程生效绑定（此后 settings:update 路径实时刷新）
+	refreshShortcutBindings(settingsStore.get());
 	piModelCapabilityCache = new PiModelCapabilityCache({
 		// 模型能力水合分两档（详见 docs/pi-model-capability-plan.md）：
 		// - 快速档（默认，loadExtensions=false）：--no-extensions。实测 418 模型下

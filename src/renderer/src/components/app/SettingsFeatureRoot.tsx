@@ -50,6 +50,15 @@ export function SettingsFeatureRoot(props: SettingsFeatureRootProps) {
     }
   }, [open]);
 
+  // 全局快捷键（macOS Cmd+, / Windows·Linux Ctrl+Alt+S）由主进程 before-input-event
+  // 捕获后经 app:open-settings 广播（覆盖 webview 焦点与托盘隐藏唤起场景）；
+  // 这里只负责打开弹窗——快捷键入口没有深链聚焦目标，无需动 settingsFocusAtom。
+  useEffect(() => {
+    return api.app.onOpenSettings(() => {
+      setOpen(true);
+    });
+  }, [setOpen]);
+
   /**
    * File editors debounce writes during normal typing. Before an updater-triggered process
    * exit, explicitly flush every registered editor and keep the user in the app on failure.

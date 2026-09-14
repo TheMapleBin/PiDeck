@@ -417,6 +417,10 @@ export const ipcChannels = {
 	/** 拉取 CHANGELOG 正文（atomgit 优先，GitHub 回退；失败时 markdown=null 由 UI 降级打开浏览器）。 */
 	appGetChangelog: "app:get-changelog",
 	appOpenInBrowser: "app:open-in-browser",
+	/** 全局快捷键（macOS Cmd+, / Windows·Linux Ctrl+Alt+S）命中后由主进程广播，渲染层打开设置页。 */
+	appOpenSettings: "app:open-settings",
+	/** 全局快捷键（新建会话/搜索会话）命中后广播快捷键 id，渲染层决定是否执行（输入框聚焦时忽略）。 */
+	appShortcutTriggered: "app:shortcut-triggered",
 	appRestart: "app:restart",
 	/** 真正退出应用（置 isQuitting 后 app.quit）。异常页不能走 window-close：closeToTray 会把关窗吞成隐藏。 */
 	appQuit: "app:quit",

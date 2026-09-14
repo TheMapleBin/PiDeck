@@ -8,6 +8,7 @@ import { t, type TranslationKey } from "../../../i18n";
 
 export type SettingsUnsavedTabId =
 	| "common"
+	| "shortcuts"
 	| "appearance"
 	| "proxy"
 	| "web"
@@ -44,6 +45,7 @@ type FieldCatalogEntry = {
 
 const TAB_LABEL_KEYS: Record<SettingsUnsavedTabId, TranslationKey> = {
 	common: "settings.tabs.common",
+	shortcuts: "settings.tabs.shortcuts",
 	appearance: "settings.tabs.appearance",
 	proxy: "settings.tabs.proxy",
 	web: "settings.tabs.web",
@@ -65,6 +67,7 @@ const TAB_LABEL_KEYS: Record<SettingsUnsavedTabId, TranslationKey> = {
  */
 const FIELD_CATALOG: readonly FieldCatalogEntry[] = [
 	{ field: "language", tab: "common", itemKey: "settings.language" },
+	{ field: "shortcuts", tab: "shortcuts", itemKey: "settings.tabs.shortcuts" },
 	{ field: "sessionTabOpenMode", tab: "common", itemKey: "settings.sessionTabOpenMode" },
 	{ field: "autoSessionTitle", tab: "common", itemKey: "settings.autoSessionTitle" },
 	{ field: "sendShortcut", tab: "common", itemKey: "settings.inputShortcut" },
