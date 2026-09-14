@@ -2739,6 +2739,8 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 							<SkillsTab
 								scope={resourceScope}
 								projectId={resourceScope === "project" ? effectiveProjectId : undefined}
+								sourceProjectId={projectId}
+								projects={projects}
 								scopeSelector={resourceScopeSelector}
 								projectOverrides={projectResourcesData.overrides}
 								discoverySkills={discoveryData.skills}

@@ -15,6 +15,7 @@ import type {
 	TerminalExitEvent,
 	TerminalTab,
 } from "../../shared/types";
+import type { ResourceImportKind } from "../../shared/types/resourceImport";
 import { t } from "./i18n";
 
 const now = Date.now();
@@ -210,6 +211,7 @@ let previewSettings: AppSettings = {
 
 export function createPreviewApi(): PiDesktopApi {
 	const noop = (() => () => undefined) as any;
+	const previewImportKinds = new Map<string, ResourceImportKind>();
 	const clipboardStub: PiDesktopApi["clipboard"] = {
 		// preview 模式无真实剪贴板；浏览器下 navigator.clipboard 为异步 API，
 		// 与同步接口不匹配，因此返回空串，右键粘贴菜单静默无操作
@@ -1014,6 +1016,20 @@ export function createPreviewApi(): PiDesktopApi {
 				enabled: true,
 				valid: true,
 				warnings: [],
+			}),
+		},
+		resourceImport: {
+			scan: async (input) => {
+				previewImportKinds.set("preview-scan", input.kind);
+				return { scanId: "preview-scan", kind: input.kind, target: input.target, sources: [], candidates: [] };
+			},
+			apply: async (input) => ({
+				scanId: input.scanId,
+				kind: previewImportKinds.get(input.scanId) ?? "mcp",
+				results: [],
+				imported: 0,
+				skipped: 0,
+				failed: 0,
 			}),
 		},
 		extensions: {

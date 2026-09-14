@@ -71,6 +71,10 @@ import type {
 	ProjectResourceListResult,
 	ProjectResourceDiscoveryResult,
 	ProjectResourceOverrides,
+	ResourceImportScanInput,
+	ResourceImportScanResult,
+	ResourceImportApplyInput,
+	ResourceImportReport,
 	PetAggregateState,
 	PetManifest,
 	PetNotification,
@@ -1409,6 +1413,12 @@ const api = {
 			ipcRenderer.invoke(ipcChannels.skillsOpenFolder, path) as Promise<void>,
 		rename: (skillPath: string, newName: string) =>
 			ipcRenderer.invoke(ipcChannels.skillsRename, skillPath, newName) as Promise<PiSkillSummary>,
+	},
+	resourceImport: {
+		scan: (input: ResourceImportScanInput) =>
+			ipcRenderer.invoke(ipcChannels.resourceImportScan, input) as Promise<ResourceImportScanResult>,
+		apply: (input: ResourceImportApplyInput) =>
+			ipcRenderer.invoke(ipcChannels.resourceImportApply, input) as Promise<ResourceImportReport>,
 	},
 	prompts: {
 		list: () =>

@@ -35,6 +35,7 @@ export * from "./types/announcement";
 export * from "./types/providerUsage";
 export * from "./types/pasteFile";
 export * from "./types/mcp";
+export * from "./types/resourceImport";
 export * from "./types/rewind";
 export * from "./types/health";
 export * from "./types/backup";

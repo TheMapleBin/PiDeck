@@ -477,6 +477,8 @@ export const ipcChannels = {
 	configSaveMcp: "config:save-mcp",
 	/** 轻量探测：stdio 命令是否在 PATH、HTTP URL 是否可达；不 spawn MCP SDK。 */
 	configProbeMcp: "config:probe-mcp",
+	resourceImportScan: "resource-import:scan",
+	resourceImportApply: "resource-import:apply",
 	/** 只读返回 pi 全局配置目录（渲染层展示源文件实际编辑位置）。 */
 	configGetDir: "config:get-dir",
 	configSaveModels: "config:save-models",

@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
-import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
-import { dirname, join, relative, sep } from "node:path";
+import { mkdir, readdir, readFile, rename, writeFile, rm, cp, lstat, stat } from "node:fs/promises";
+import { dirname, join, relative, sep, basename } from "node:path";
+import { randomUUID } from "node:crypto";
 import {
 	createProjectFileReadBoundary,
 	resolveProjectFileReadPath,
@@ -19,6 +20,8 @@ import type {
 	ProjectResourceListResult,
 	ProjectResourceOverrides,
 } from "../../shared/types";
+import type { McpConfigFile } from "../../shared/types/mcp";
+import { parseMcpConfigFile, validateMcpConfigFile } from "../config/mcpConfig";
 import type { MainProcessTranslationKey } from "../../shared/i18n/mainProcessCopy";
 import {
 	emptyProjectResourceOverrides,
@@ -28,9 +31,15 @@ import {
 import { discoverExtensionEntries } from "../extensions/extensionDiscovery";
 
 const SKILL_FILE = "SKILL.md";
+const IMPORT_MAX_FILE_BYTES = 10 * 1024 * 1024;
+const IMPORT_MAX_DEPTH = 32;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function hasErrorCode(value: unknown, code: string): boolean {
+	return isRecord(value) && value.code === code;
 }
 
 /** Validate project settings before any resource mutation so malformed JSON is never overwritten. */
@@ -152,6 +161,134 @@ export class ProjectResourceManager {
 		const safeDirectory = await this.resolveProjectWritePath(project, location);
 		await mkdir(safeDirectory, { recursive: true });
 		return this.resolveExistingProjectPath(project, safeDirectory);
+	}
+
+	/**
+	 * Resolve a project-owned resource directory without creating it.
+	 *
+	 * Import scanning uses this method to inspect occupancy while keeping scans read-only.
+	 * The returned path is resolved through the same canonical boundary as every project
+	 * mutation, so a missing directory still inherits the real, registered project root.
+	 */
+	async resolveResourceDirectory(
+		projectId: string,
+		kind: Exclude<ProjectResourceDirectoryKind, "prompts">,
+	): Promise<string> {
+		const project = this.requireProject(projectId);
+		const location = this.skillLocations(project).find((candidate) => candidate.id === kind)?.path;
+		if (!location) throw new Error(this.translate("mainProjectResource.pathOutsideProject"));
+		return this.resolveProjectWritePath(project, location);
+	}
+
+	/**
+	 * Read the project-owned `.pi/mcp.json` through the project boundary.
+	 * A missing file is an empty configuration; malformed JSON/configuration is an error
+	 * so an import can never replace a file the user may need to repair manually.
+	 */
+	async readProjectMcpConfig(projectId: string): Promise<McpConfigFile> {
+		const project = this.requireProject(projectId);
+		const lexicalPath = join(this.projectRoot(project), ".pi", "mcp.json");
+		const entry = await lstat(lexicalPath).catch((error: unknown) => {
+			if (hasErrorCode(error, "ENOENT")) return null;
+			throw error;
+		});
+		if (!entry) return {};
+
+		const safePath = await this.resolveExistingProjectPath(project, lexicalPath);
+		const parsed = parseMcpConfigFile(await readFile(safePath, "utf8"));
+		if (parsed.error) throw new Error(parsed.error);
+		const validationError = validateMcpConfigFile(parsed.file);
+		if (validationError) throw new Error(validationError);
+		return parsed.file;
+	}
+
+	/**
+	 * Atomically replace the project-owned `.pi/mcp.json` after boundary and schema checks.
+	 * The temporary file lives beside the destination and is always cleaned up on failure.
+	 */
+	async saveProjectMcpConfig(projectId: string, file: McpConfigFile): Promise<void> {
+		const project = this.requireProject(projectId);
+		const validationError = validateMcpConfigFile(file);
+		if (validationError) throw new Error(validationError);
+
+		const boundary = await this.projectBoundary(project);
+		const lexicalPath = join(this.projectRoot(project), ".pi", "mcp.json");
+		const safePath = await this.resolveProjectWritePath(project, lexicalPath);
+		await mkdir(dirname(safePath), { recursive: true });
+
+		// Resolve the temporary name after creating the parent. This closes the gap where a
+		// newly-created `.pi` directory could otherwise be replaced by a symlink between
+		// boundary resolution and the write.
+		const temporaryLexicalPath = join(dirname(safePath), `.${basename(safePath)}.${randomUUID()}.tmp`);
+		const temporaryPath = await resolveProjectFileWritePath(boundary, temporaryLexicalPath);
+		try {
+			await writeFile(temporaryPath, `${JSON.stringify(file, null, 2)}\n`, { encoding: "utf8", flag: "wx" });
+			await rename(temporaryPath, safePath);
+		} finally {
+			await rm(temporaryPath, { force: true }).catch(() => undefined);
+		}
+	}
+
+	/**
+	 * Copy a complete external skill directory into a project-local target.
+	 * This API is intentionally not exposed through IPC; the import manager supplies the
+	 * source path from its short-lived, validated scan session.
+	 */
+	async importSkillDirectory(
+		projectId: string,
+		locationId: Exclude<ProjectResourceDirectoryKind, "prompts">,
+		sourceDirectory: string,
+		targetName: string,
+	): Promise<void> {
+		const project = this.requireProject(projectId);
+		if (!targetName || targetName !== targetName.trim() || targetName.toLowerCase() !== targetName || targetName.length > 64 || !/^[\p{L}\p{N}](?:[\p{L}\p{N}-]{0,63})$/u.test(targetName)) {
+			throw new Error(this.translate("mainProjectResource.pathOutsideProject"));
+		}
+		await this.assertImportSkillTree(sourceDirectory);
+
+		const boundary = await this.projectBoundary(project);
+		const lexicalRoot = this.skillLocations(project).find((candidate) => candidate.id === locationId)?.path;
+		if (!lexicalRoot) throw new Error(this.translate("mainProjectResource.pathOutsideProject"));
+		const safeRoot = await resolveProjectFileWritePath(boundary, lexicalRoot);
+		const lexicalTarget = join(lexicalRoot, targetName);
+		const safeTarget = await resolveProjectFileWritePath(boundary, lexicalTarget);
+		const occupied = existsSync(safeRoot) && (await readdir(safeRoot, { withFileTypes: true }).catch(() => []))
+			.some((entry) => entry.name.toLowerCase() === targetName.toLowerCase());
+		if (occupied || existsSync(safeTarget)) {
+			throw new Error(this.translate("mainProjectResource.skillAlreadyExists", { name: targetName }));
+		}
+		await mkdir(safeRoot, { recursive: true });
+		const temporaryLexical = join(safeRoot, `.${targetName}.${randomUUID()}.tmp`);
+		const temporaryPath = await resolveProjectFileWritePath(boundary, temporaryLexical);
+		try {
+			await cp(sourceDirectory, temporaryPath, {
+				recursive: true,
+				errorOnExist: true,
+				force: false,
+				verbatimSymlinks: true,
+			});
+			await rename(temporaryPath, safeTarget);
+		} finally {
+			await rm(temporaryPath, { recursive: true, force: true }).catch(() => undefined);
+		}
+	}
+
+	private async assertImportSkillTree(root: string, depth = 0): Promise<void> {
+		if (depth > IMPORT_MAX_DEPTH) throw new Error("Skill directory is too deep.");
+		const rootEntry = await lstat(root);
+		if (!rootEntry.isDirectory() || rootEntry.isSymbolicLink()) {
+			throw new Error("Skill source must be a directory without symbolic links.");
+		}
+		for (const entry of await readdir(root, { withFileTypes: true })) {
+			if (entry.isSymbolicLink()) throw new Error("Skill contains a symbolic link and cannot be imported.");
+			const fullPath = join(root, entry.name);
+			if (entry.isDirectory()) {
+				await this.assertImportSkillTree(fullPath, depth + 1);
+				continue;
+			}
+			if (!entry.isFile()) throw new Error("Skill contains an unsupported file type.");
+			if ((await stat(fullPath)).size > IMPORT_MAX_FILE_BYTES) throw new Error("Skill file is too large.");
+		}
 	}
 
 	async deleteSkill(projectId: string, skillPath: string): Promise<void> {

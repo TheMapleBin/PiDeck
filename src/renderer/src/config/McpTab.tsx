@@ -36,6 +36,7 @@ import type {
 	McpServerListItem,
 	McpServerTransport,
 } from "../../../shared/types/mcp";
+import { ResourceImportDialog } from "./ResourceImportDialog";
 
 const api = (window as unknown as { piDesktop: {
 	config: {
@@ -387,6 +388,13 @@ export const McpTab = forwardRef<McpTabHandle, {
 						<RefreshCw size={14} />
 						{t("common.refresh")}
 					</Button>
+					<ResourceImportDialog
+						kind="mcp"
+						sourceProjectId={activeProjectId}
+						projects={projects}
+						triggerLabel={t("config.import.button")}
+						onImported={() => void load()}
+					/>
 					{adapterInstalled !== false && effectiveScope === "global" ? (
 						<Button size="sm" onClick={startCreate} disabled={saving || Boolean(creating)}>
 							<Plus size={14} />

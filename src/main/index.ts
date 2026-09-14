@@ -306,6 +306,7 @@ import { createPiProcessExtensionResolvers } from "./extensions/piProcessExtensi
 import { createPiProcessSkillResolvers } from "./skills/piProcessSkillResolvers";
 import { createPiProcessPromptResolvers } from "./prompts/piProcessPromptResolvers";
 import { ProjectResourceManager } from "./projects/ProjectResourceManager";
+import { ResourceImportManager } from "./resourceImport/ResourceImportManager";
 import { toWslLinuxPath, toWindowsHostPath } from "./wsl/WslPaths";
 import { registerProjectsIpc } from "./ipc/projectsIpc";
 import { registerUsageStatsIpc } from "./ipc/usageStatsIpc";
@@ -333,6 +334,7 @@ import { VoiceTranscriptionService } from "./voice/VoiceTranscriptionService";
 import { VisionBridgeConfigManager } from "./settings/visionBridgeConfig";
 import { registerSessionIpc, scheduleCatalogBackgroundScan } from "./ipc/sessionIpc";
 import { registerSystemIpc } from "./ipc/systemIpc";
+import { registerResourceImportIpc } from "./ipc/resourceImportIpc";
 import { registerBackupIpc } from "./ipc/backupIpc";
 import { registerCatalogIpc } from "./ipc/catalogIpc";
 import { getPiAiCatalogIndex, lookupPiAiCatalogEntry, setPiAiCatalogUserDataDir } from "./pi/piAiBuiltinCatalog";
@@ -438,6 +440,7 @@ let extensionManager: ExtensionManager;
 /** 后台更新检查服务（启动延迟 + 2h 周期，无配额方案）；null = 未初始化。 */
 let updateService: UpdateService | null = null;
 let projectResourceManager: ProjectResourceManager;
+let resourceImportManager: ResourceImportManager;
 let webServiceManager: WebServiceManager;
 let terminalManager: TerminalSessionManager;
 let petSystem: PetSystem | null = null;
@@ -2375,6 +2378,7 @@ function registerIpc() {
 			});
 		},
 	});
+	registerResourceImportIpc(resourceImportManager);
 
 	registerScratchPadIpc({ appLogger });
 
@@ -3233,6 +3237,21 @@ app.whenReady().then(async () => {
 				}
 			}
 			return project.path;
+		},
+	);
+	resourceImportManager = new ResourceImportManager(
+		configManager,
+		skillManager,
+		projectResourceManager,
+		(id) => projectStore.get(id),
+		async (_id, root) => (await configManager.getProjectTrustDecision(root)) === true,
+		(report) => {
+			void appLogger.info("resource-import", "Resource import completed", {
+				kind: report.kind,
+				imported: report.imported,
+				skipped: report.skipped,
+				failed: report.failed,
+			});
 		},
 	);
 	agentManager = new AgentManager(

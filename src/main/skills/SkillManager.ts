@@ -1,6 +1,8 @@
 import { app, shell } from "electron";
 import { existsSync, type Dirent } from "node:fs";
 import {
+	cp,
+	lstat,
 	mkdir,
 	readdir,
 	readFile,
@@ -12,6 +14,7 @@ import {
 } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
+import { randomUUID } from "node:crypto";
 import { trashPath } from "../fs/trash";
 import type {
 	AppSettings,
@@ -24,6 +27,8 @@ import type { WslEnvironment } from "../wsl/WslPaths";
 import type { MainProcessTranslationKey } from "../../shared/i18n/mainProcessCopy";
 
 const SKILL_FILE = "SKILL.md";
+const IMPORT_MAX_FILE_BYTES = 10 * 1024 * 1024;
+const IMPORT_MAX_DEPTH = 32;
 
 type SkillCopy = (
 	key: MainProcessTranslationKey,
@@ -116,6 +121,61 @@ export class SkillManager {
 			"utf8",
 		);
 		return this.readSkill(skillPath, location, "directory");
+	}
+
+	/**
+	 * Copy a complete external skill into one of PiDeck's managed global locations.
+	 * The source path is supplied only by the main-process import scan cache; callers cannot
+	 * provide it over IPC. The original SKILL.md and all companion assets remain byte-for-byte
+	 * unchanged, and a temporary sibling directory prevents partial installs.
+	 */
+	async importSkillDirectory(
+		locationId: "pi-global" | "agents-global",
+		sourceDirectory: string,
+		targetName: string,
+	): Promise<void> {
+		const location = this.requireLocation(locationId);
+		if (!targetName || this.normalizeSkillName(targetName) !== targetName || targetName.length > 64) {
+			throw new Error(this.translate("mainSkill.nameRequiredDetailed"));
+		}
+		await this.assertImportSkillTree(sourceDirectory);
+		await mkdir(location.path, { recursive: true });
+
+		const occupied = (await readdir(location.path, { withFileTypes: true }).catch(() => []))
+			.some((entry) => entry.name.toLowerCase() === targetName.toLowerCase());
+		if (occupied) throw new Error(this.translate("mainSkill.alreadyExists", { name: targetName }));
+
+		const targetDirectory = join(location.path, targetName);
+		const temporaryDirectory = join(location.path, `.${targetName}.${randomUUID()}.tmp`);
+		try {
+			await cp(sourceDirectory, temporaryDirectory, {
+				recursive: true,
+				errorOnExist: true,
+				force: false,
+				verbatimSymlinks: true,
+			});
+			await rename(temporaryDirectory, targetDirectory);
+		} finally {
+			await rm(temporaryDirectory, { recursive: true, force: true }).catch(() => undefined);
+		}
+	}
+
+	private async assertImportSkillTree(root: string, depth = 0): Promise<void> {
+		if (depth > IMPORT_MAX_DEPTH) throw new Error("Skill directory is too deep.");
+		const rootEntry = await lstat(root);
+		if (!rootEntry.isDirectory() || rootEntry.isSymbolicLink()) {
+			throw new Error("Skill source must be a directory without symbolic links.");
+		}
+		for (const entry of await readdir(root, { withFileTypes: true })) {
+			if (entry.isSymbolicLink()) throw new Error("Skill contains a symbolic link and cannot be imported.");
+			const fullPath = join(root, entry.name);
+			if (entry.isDirectory()) {
+				await this.assertImportSkillTree(fullPath, depth + 1);
+				continue;
+			}
+			if (!entry.isFile()) throw new Error("Skill contains an unsupported file type.");
+			if ((await stat(fullPath)).size > IMPORT_MAX_FILE_BYTES) throw new Error("Skill file is too large.");
+		}
 	}
 
 	async toggle(skillPath: string, enabled: boolean): Promise<PiSkillSummary> {
