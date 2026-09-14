@@ -304,3 +304,34 @@ export function downgradeStaleRunning(entries: PiSubagentEntry[]): PiSubagentEnt
 	});
 	return changed ? next : entries;
 }
+
+/**
+ * 活 runtime 的历史对账降级：本代 runtime 启动（tab.createdAt）之前派发的
+ * running/queued 条目已随上一代 pi 进程消亡——子代理是 pi 的子进程，父进程
+ * 停止/崩溃后失去协调者，PiDeck stop 还会整树终止它们，永远等不到终态写盘。
+ * 不降级的话旧会话激活后面板会一直显示「运行中」（2026-09-14 用户环境实测：
+ * 真实活动子代理 0，历史投影仍显示 33 个 running）。
+ *
+ * 与 downgradeStaleRunning 的差异：活 runtime 下不能一刀切——本代启动之后
+ * 派发的异步运行可能真的还在跑，只按 startedAt 对账；startedAt 缺失的条目
+ * 无法判定，保守保留原状。对 record 与 toolcall 两源统一生效（record 的
+ * running 残留同样来自已消亡的旧 runtime）。
+ */
+export function downgradeRunningStartedBefore(
+	entries: PiSubagentEntry[],
+	startedBeforeMs: number,
+): PiSubagentEntry[] {
+	let changed = false;
+	const next = entries.map((entry) => {
+		if (
+			(entry.status === "running" || entry.status === "queued")
+			&& typeof entry.startedAt === "number"
+			&& entry.startedAt < startedBeforeMs
+		) {
+			changed = true;
+			return { ...entry, status: "stopped" as const };
+		}
+		return entry;
+	});
+	return changed ? next : entries;
+}

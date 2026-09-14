@@ -228,9 +228,8 @@ export function useSessionSubagents(
 	// widgets["subagent-async"]（nicobailon pi-subagents 的 async 运行快照）。
 	// atom family 按 Record 索引取值，无 runtime UI 记录的会话（如起始页未启动会话）
 	// 运行时为 undefined，必须可选链防护，否则整卡渲染崩溃。
-	const widgets = useAtomValue(
-		sessionRuntimeUiBySessionIdAtomFamily(sessionId),
-	)?.widgets;
+	const runtimeUi = useAtomValue(sessionRuntimeUiBySessionIdAtomFamily(sessionId));
+	const widgets = runtimeUi?.widgets;
 	const bridgeLines = widgets?.["pi-deck-subagents"] as
 		| readonly string[]
 		| undefined;
@@ -238,7 +237,12 @@ export function useSessionSubagents(
 		| readonly string[]
 		| undefined;
 
-	// 主进程 IPC：拉取 record（初次 / 会话切换时）
+	// 主进程 IPC：拉取 record（初次 / 会话切换时）。
+	// runtime 绑定出现（agentId 从 undefined 变为实例，或重启换代）时重拉：
+	// 激活前面板可能带着上一代 runtime 的 stale running 记录，主进程的对账降级
+	// （downgradeRunningStartedBefore，按本代 runtime 启动时间）只有在绑定后
+	// 才有阈值可用——绑定即重拉，激活完成后立即看到对账结果
+	//（2026-09-14 用户环境实测：真实活动子代理 0，历史投影仍显示 33 个 running）。
 	useEffect(() => {
 		let cancelled = false;
 		setLoading(true);
@@ -256,7 +260,7 @@ export function useSessionSubagents(
 		return () => {
 			cancelled = true;
 		};
-	}, [sessionId]);
+	}, [sessionId, runtimeUi?.agentId]);
 
 	// 合并：record（主进程侧已含工具推导）+ tintinweb 桥接 → 叠加 nicobailon async 条目
 	const { merged, pluginActive } = useMemo(

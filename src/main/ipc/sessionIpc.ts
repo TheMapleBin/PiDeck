@@ -35,7 +35,7 @@ import type {
 	ArchivedDshSession,
 } from "../../shared/types";
 import { parseSessionProcessEvents } from "../sessions/sessionProcessEvents";
-import { downgradeStaleRunning } from "../pi/derivedSubagents";
+import { downgradeRunningStartedBefore, downgradeStaleRunning } from "../pi/derivedSubagents";
 import { resolveLaunchDefaultOptions, isModelInModelsConfig } from "../sessions/launchDefaults";
 import { BackgroundScanCoordinator } from "../sessions/BackgroundScanCoordinator";
 
@@ -913,9 +913,21 @@ export function registerSessionIpc(deps: SessionIpcDeps): void {
 				// 终态通知没写进文件（进程被杀/崩溃）的委托在历史会话里永远是 running，
 				// 会误导为仍在运行；活会话保持 running，由后续通知/桥接覆盖。
 				// 与 start 锚点残留合成 stopped 同一语义（见 downgradeStaleRunning）。
-				if (!sessionRuntimeCoordinator.getTarget(sessionId)
-					&& !sessionRuntimeCoordinator.isActivating(sessionId)) {
-					records = downgradeStaleRunning(records);
+				const liveTarget = sessionRuntimeCoordinator.getTarget(sessionId);
+				if (!liveTarget) {
+					if (!sessionRuntimeCoordinator.isActivating(sessionId)) {
+						records = downgradeStaleRunning(records);
+					}
+				} else {
+					// 活 runtime 也要对账：本代 runtime 启动（tab.createdAt）之前派发的
+					// running/queued 已随上一代 pi 进程消亡，永远等不到终态写盘。渲染层
+					// hook 在绑定出现时会重新拉取本列表，激活完成后即看到降级结果
+					//（2026-09-14 用户环境实测：真实活动子代理 0，历史投影仍显示 33 个
+					// running；启动之后派发的异步运行不受影响，保持 running）。
+					const liveTab = agentManager.list().find((t) => t.id === liveTarget.agentId);
+					if (liveTab?.createdAt) {
+						records = downgradeRunningStartedBefore(records, liveTab.createdAt);
+					}
 				}
 			// 回填 childSessionPath：按 parentSessionPath === 本会话 filePath 收集所有子会话，
 			// 再按子会话名 `${type}#${id前8位}` 精确匹配。

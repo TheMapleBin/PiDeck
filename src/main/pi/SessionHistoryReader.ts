@@ -1180,7 +1180,28 @@ export class SessionHistoryReader {
 		maxTurns: number,
 	): Promise<RpcResponse> {
 		const t0 = Date.now();
-		const index = await this.getSessionDisplayIndex(sessionPath);
+		let index: Awaited<ReturnType<SessionHistoryReader["getSessionDisplayIndex"]>>;
+		try {
+			index = await this.getSessionDisplayIndex(sessionPath);
+		} catch (error) {
+			// 新会话竞态：创建空白会话后 pi 立即返回 sessionFile，但 JSONL 要到首条
+			// 消息才落盘——此刻读取 ENOENT 是「空历史」而不是加载失败（2026-09-14
+			// 用户环境诊断：16:02:01 "Agent recent history file load failed" 即此形态，
+			// 16:02:19 首轮完成后同一读取自然成功）。按空历史返回，不落错误卡片。
+			const code = (error as NodeJS.ErrnoException | null)?.code;
+			if (code === "ENOENT" || /ENOENT/.test(error instanceof Error ? error.message : String(error))) {
+				void this.deps.logger?.info("agent", "Session file not created yet; treating recent history as empty", {
+					sessionPath,
+				});
+				return {
+					type: "response" as const,
+					command: "get_messages",
+					success: true,
+					data: { messages: [] },
+				};
+			}
+			throw error;
+		}
 		const total = index.activeMessageEntries.length;
 		const boundedTurns = Number.isFinite(maxTurns) && maxTurns > 0
 			? Math.max(1, Math.floor(maxTurns))
