@@ -52,6 +52,8 @@ export type SidebarActions = {
     openWithEditor: (project: Project) => void;
     importSessions: (project: Project, source: "codex" | "claude" | "opencode" | "zcode" | "workbuddy") => void;
     manageResources: (project: Project) => void;
+    /** 打开该项目的自动化任务表；任务归属与运行历史均按项目隔离。 */
+    manageAutomations: (projectId: string) => void;
     toggleWorktree: (project: Project) => Promise<void>;
     copyPath: (project: Project) => Promise<void>;
     /** 重命名项目显示名（仅改 label，不动磁盘目录）；打开重命名对话框。 */
@@ -518,6 +520,7 @@ export function SidebarContent(props: SidebarContentProps) {
           onImportZCodeSessions={() => { actions.projects.importSessions(menuProject, "zcode"); controller.closeMenu(); }}
           onImportWorkBuddySessions={() => { actions.projects.importSessions(menuProject, "workbuddy"); controller.closeMenu(); }}
           onManageProjectResources={() => { actions.projects.manageResources(menuProject); controller.closeMenu(); }}
+          onManageAutomations={() => { actions.projects.manageAutomations(menuProject.id); controller.closeMenu(); }}
           onManageSessions={() => { controller.openSessionManager(menuProject.id); controller.closeMenu(); }}
           onFilterSessions={() => { controller.openSourceFilter(menuProject.id, menu.x, menu.y + 20); controller.closeMenu(); }}
           onToggleWorktree={() => { void actions.projects.toggleWorktree(menuProject); controller.closeMenu(); }}

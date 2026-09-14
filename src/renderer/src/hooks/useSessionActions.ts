@@ -56,6 +56,8 @@ export interface UseSessionActionsOptions {
   /** 归档/删除前批量关 Tab；必须在清 session state 之前调用，否则焦点切不到邻居。 */
   closeTabs: (sessionIds: string[]) => void;
   refreshProjectSessions: RefreshProjectSessions;
+  /** Runs after a project or session selection commits; utility surfaces use it to yield to the selected session. */
+  onWorkspaceSelection?: () => void;
   /** 新建会话默认后端（设置项 defaultAgentBackend；缺省走 DEFAULT_AGENT_BACKEND）。 */
   defaultBackend?: AgentBackend;
   api: {
@@ -95,6 +97,7 @@ export function useSessionActions(options: UseSessionActionsOptions) {
     removeSessionComposerState,
     closeTabs,
     refreshProjectSessions,
+    onWorkspaceSelection,
     api,
     showToast,
   } = options;
@@ -104,6 +107,7 @@ export function useSessionActions(options: UseSessionActionsOptions) {
     sessionId: string | undefined,
     scrollToEnd: boolean,
   ) {
+    onWorkspaceSelection?.();
     setActiveProjectId(projectId);
     setCurrentSessionId(sessionId);
     void scrollToEnd;

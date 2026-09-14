@@ -627,3 +627,45 @@ test("AutomationRunCoordinator 预算全留空（不限）不误杀：run 正常
 		await rm(dir, { recursive: true, force: true });
 	}
 });
+
+test("each automation run creates a fresh session while retaining task linkage", async () => {
+	const dir = await mkdtemp(join(tmpdir(), "pideck-coord-fresh-session-"));
+	const storePath = join(dir, "automation.json");
+	try {
+		const store = new AutomationStore(storePath);
+		await store.load(1_000);
+		const { task, deps, coordinator, run, sessionId } = await createStartedCoordinator(store);
+
+		coordinator.observeRuntimeEvent(runtimeStateEvent(sessionId, {
+			isTurnActive: true,
+			isExecutingTool: false,
+		}));
+		coordinator.observeRuntimeEvent(tabStateEvent(sessionId, "idle"));
+		assert.equal(
+			await waitFor(() => store.getRun(run.id)?.status === "succeeded"),
+			true,
+			"the first run should settle before starting the next occurrence",
+		);
+
+		const secondRun = await coordinator.runNow(task.id, 2_000);
+		assert.equal(
+			await waitFor(() => {
+				const persisted = store.getRun(secondRun.id);
+				return deps.createdSessions.length === 2 && Boolean(persisted?.sessionId);
+			}),
+			true,
+			"a second occurrence should receive its own session",
+		);
+
+		const secondSessionId = deps.createdSessions[1].id;
+		const persistedSecondRun = store.getRun(secondRun.id);
+		assert.notEqual(secondSessionId, sessionId);
+		assert.equal(persistedSecondRun.taskId, task.id);
+		assert.equal(persistedSecondRun.projectId, task.projectId);
+		assert.equal(persistedSecondRun.sessionId, secondSessionId);
+
+		coordinator.dispose();
+	} finally {
+		await rm(dir, { recursive: true, force: true });
+	}
+});

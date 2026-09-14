@@ -13,7 +13,8 @@ import type {
 export const automationSnapshotAtom = atom<AutomationSnapshot | null>(null);
 
 /**
- * 定时任务管理弹窗显隐状态。
+ * 旧弹窗兼容状态。App 已改由 workspaceSurfaceAtom 呈现自动化工作台；
+ * 保留此 atom 只避免潜在旧调用方在升级时崩溃。
  */
 export const automationModalOpenAtom = atom<boolean>(false);
 

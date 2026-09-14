@@ -174,7 +174,66 @@ test("首轮 settled 后只用最小独立 context 生成标题并写回 session
 	assert.match(request.titleContext.messages[0].content, /我会先检查登录流程/);
 	assert.doesNotMatch(request.titleContext.messages[0].content, /super-secret-value/);
 	assert.doesNotMatch(request.titleContext.messages[0].content, /不要泄露这段思考/);
-	assert.equal(request.options.maxTokens, 64);
+	assert.equal(request.options.maxTokens, 512);
+});
+
+test("推理模型吃光输出预算时升级预算重发一次并完成命名", async () => {
+	const entries = freshBranch({ user: "排查越界 bug" });
+	const harness = createHarness({ entries });
+	let calls = 0;
+	harness.setCompletion(() => {
+		calls += 1;
+		// 第一次：输出预算全被 thinking 吃掉（stopReason=length，没有正文）
+		if (calls === 1) {
+			return Promise.resolve(assistantMessage([{ type: "thinking", thinking: "先想想标题怎么写" }], "length"));
+		}
+		return Promise.resolve(assistantMessage([{ type: "text", text: "越界 bug 排查" }]));
+	});
+	await startFresh(harness, entries);
+	await harness.emit("agent_settled");
+	await flushAsyncWork();
+	await flushAsyncWork();
+
+	assert.deepEqual(harness.completeCalls.map((call) => call.options.maxTokens), [512, 2048]);
+	assert.deepEqual(harness.setNames, ["越界 bug 排查"]);
+});
+
+test("非截断的空标题响应不做升级重发", async () => {
+	const entries = freshBranch();
+	const harness = createHarness({ entries });
+	harness.setCompletion(() => Promise.resolve(assistantMessage([], "stop")));
+	await startFresh(harness, entries);
+	await harness.emit("agent_settled");
+	await flushAsyncWork();
+
+	assert.equal(harness.completeCalls.length, 1);
+	assert.deepEqual(harness.setNames, []);
+});
+
+test("两次预算都被推理吃光时放弃命名，同一轮不重复重发", async () => {
+	const entries = freshBranch();
+	const harness = createHarness({ entries });
+	harness.setCompletion(() => Promise.resolve(assistantMessage([{ type: "thinking", thinking: "一直在想标题" }], "length")));
+	await startFresh(harness, entries);
+	await harness.emit("agent_settled");
+	await flushAsyncWork();
+	await flushAsyncWork();
+	assert.equal(harness.completeCalls.length, 2);
+	assert.deepEqual(harness.setNames, []);
+
+	// 同一轮重复 settled 不得再发（升级重发不能放大成每轮多次请求）
+	await harness.emit("agent_settled");
+	await flushAsyncWork();
+	assert.equal(harness.completeCalls.length, 2);
+
+	// 下一轮 agent run 才重新尝试（MAX_TITLE_ATTEMPTS = 2）
+	harness.setCompletion(() => Promise.resolve(assistantMessage([{ type: "text", text: "重试成功" }])));
+	await harness.emit("agent_start");
+	await harness.emit("agent_settled");
+	await flushAsyncWork();
+	await flushAsyncWork();
+	assert.equal(harness.completeCalls.length, 3);
+	assert.deepEqual(harness.setNames, ["重试成功"]);
 });
 
 test("uses a credential-provided base URL for the independent request", async () => {

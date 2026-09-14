@@ -1,9 +1,7 @@
-import { useAtom, useAtomValue } from "jotai";
+import { useAtomValue, useSetAtom } from "jotai";
 import { Clock } from "lucide-react";
-import {
-	automationModalOpenAtom,
-	automationActiveRunsAtom,
-} from "../../atoms/automation-atoms";
+import { openAutomationWorkspaceAtom } from "../../atoms/workspace-surface-atoms";
+import { automationActiveRunsAtom } from "../../atoms/automation-atoms";
 import { t } from "../../i18n";
 
 /**
@@ -11,7 +9,7 @@ import { t } from "../../i18n";
  * 有正在执行的任务时，行尾显示呼吸蓝点，避免用户还要翻底栏 Dock。
  */
 export function AutomationDockButton() {
-	const [, setOpen] = useAtom(automationModalOpenAtom);
+	const openAutomationWorkspace = useSetAtom(openAutomationWorkspaceAtom);
 	const activeRuns = useAtomValue(automationActiveRunsAtom);
 	const hasActive = activeRuns.length > 0;
 	const label = hasActive
@@ -24,7 +22,7 @@ export function AutomationDockButton() {
 			className="group flex h-8 w-full items-center gap-2 rounded-lg px-2 text-left text-body text-foreground transition-colors hover:bg-muted/60"
 			aria-label={label}
 			title={label}
-			onClick={() => setOpen(true)}
+			onClick={() => openAutomationWorkspace()}
 		>
 			<span className="relative shrink-0">
 				<Clock className="size-4 text-muted-foreground" aria-hidden="true" />

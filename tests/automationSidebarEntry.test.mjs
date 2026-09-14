@@ -26,12 +26,36 @@ test("dock no longer hosts the automation entry", () => {
 	assert.doesNotMatch(sidebar.slice(dockIndex), /AutomationDockButton/);
 });
 
-test("automation dock button keeps active-run indicator and modal contract", () => {
+test("selecting a project or session restores the session workbench", () => {
+	const app = readFileSync("src/renderer/src/App.tsx", "utf8");
+	const sessionActions = readFileSync(
+		"src/renderer/src/hooks/useSessionActions.ts",
+		"utf8",
+	);
+	const surface = readFileSync(
+		"src/renderer/src/utils/workspaceSurface.ts",
+		"utf8",
+	);
+
+	assert.match(app, /onWorkspaceSelection: workspaceSurface\.showSession/);
+	assert.match(
+		sessionActions,
+		/onWorkspaceSelection\?\.\(\);\s*setActiveProjectId\(projectId\);/,
+	);
+	assert.doesNotMatch(surface, /sessionTabIdsAtom/);
+});
+
+test("automation dock button keeps active-run indicator and opens the utility workspace", () => {
 	const source = readFileSync(
 		"src/renderer/src/components/automation/AutomationDockButton.tsx",
 		"utf8",
 	);
-	assert.match(source, /automationModalOpenAtom/);
+	const app = readFileSync("src/renderer/src/App.tsx", "utf8");
+	assert.match(source, /openAutomationWorkspaceAtom/);
+	assert.doesNotMatch(source, /automationModalOpenAtom/);
 	assert.match(source, /automationActiveRunsAtom/);
 	assert.match(source, /t\("automation\.title"\)/);
+	assert.match(app, /<AutomationWorkspace/);
+	assert.match(app, /workspaceSurface\.isAutomationWorkspace/);
+	assert.doesNotMatch(app, /<AutomationModal/);
 });
