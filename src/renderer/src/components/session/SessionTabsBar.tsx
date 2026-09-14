@@ -5,10 +5,15 @@ import {
   ChevronRight,
   CircleStop,
   CircleX,
+  Copy,
+  FileDown,
+  FileText,
   Folder,
   Globe,
+  Link2,
   MessagesSquare,
   MoreHorizontal,
+  Pencil,
   PanelLeft,
   PanelRight,
   Pin,
@@ -217,6 +222,25 @@ export type SessionTabsBarProps = {
    * undefined = 无当前会话或宿主不支持（如 DSH 共享 host）。
    */
   onOpenProxySetting?: () => void;
+  /**
+   * 当前会话的「会话操作」组：重命名 / 复制会话 / 导出 HTML / 复制会话文件路径 / 打开会话文件。
+   * 搜索定位到的会话可能不在侧栏可见（侧栏只渲染部分行），⋯ 菜单是唯一稳定入口；
+   * 可见性判定与侧栏会话右键菜单同一套（DSH 历史会话无宿主文件 → 隐藏复制/导出/路径组）。
+   * undefined = 无当前会话（引导页等），整组不渲染。
+   */
+  sessionActions?: {
+    /** 复制会话：live 走 clone 分流（DSH 亦可），历史走 copyRecord；草稿会话隐藏 */
+    canCopySession: boolean;
+    /** 导出 HTML：DSH 无实现，隐藏 */
+    canExportHtml: boolean;
+    /** 有会话文件：无（草稿/DSH）则隐藏「复制路径 / 打开文件」 */
+    hasFilePath: boolean;
+    onCopySession: () => void;
+    onCopySessionFilePath: () => void;
+    onOpenSessionFile?: () => void;
+    onExportSessionHtml?: () => void;
+    onRenameSession?: () => void;
+  };
 };
 
 export function SessionTabsBar(props: SessionTabsBarProps) {
@@ -692,7 +716,8 @@ export function SessionTabsBar(props: SessionTabsBarProps) {
       {props.onToggleDrawer ||
       props.actions != null ||
       (props.toolActions && props.toolActions.length > 0) ||
-      props.runControl ? (
+      props.runControl ||
+      props.sessionActions ? (
         <div className="session-tabs-actions flex shrink-0 items-center gap-1 border-l border-border/30 pl-1">
           {props.actions}
           <DropdownMenu>
@@ -719,12 +744,65 @@ export function SessionTabsBar(props: SessionTabsBarProps) {
                   <DropdownMenuSeparator />
                 </>
               )}
+              {/* 当前会话操作组：重命名 / 复制会话 / 导出 HTML / 复制会话文件路径 / 打开会话文件。
+                  与侧栏会话右键菜单同源同语义；搜索定位的会话不在侧栏可见时，
+                  ⋯ 菜单是唯一稳定入口（本组由此补齐）。 */}
+              {props.sessionActions && (
+                <>
+                  {!props.runControl?.capabilities && (
+                    <DropdownMenuLabel>{t("tabs.currentSessionGroup")}</DropdownMenuLabel>
+                  )}
+                  {props.sessionActions.onRenameSession && (
+                    <DropdownMenuItem onSelect={props.sessionActions.onRenameSession}>
+                      <span className="inline-flex items-center gap-2">
+                        <Pencil className="size-3.5" aria-hidden="true" />
+                        {t("common.rename")}
+                      </span>
+                    </DropdownMenuItem>
+                  )}
+                  {props.sessionActions.canCopySession && (
+                    <DropdownMenuItem onSelect={props.sessionActions.onCopySession}>
+                      <span className="inline-flex items-center gap-2">
+                        <Copy className="size-3.5" aria-hidden="true" />
+                        {t("menu.copySession")}
+                      </span>
+                    </DropdownMenuItem>
+                  )}
+                  {props.sessionActions.canExportHtml && props.sessionActions.onExportSessionHtml && (
+                    <DropdownMenuItem onSelect={props.sessionActions.onExportSessionHtml}>
+                      <span className="inline-flex items-center gap-2">
+                        <FileDown className="size-3.5" aria-hidden="true" />
+                        {t("menu.exportHtml")}
+                      </span>
+                    </DropdownMenuItem>
+                  )}
+                  {props.sessionActions.hasFilePath && (
+                    <>
+                      <DropdownMenuItem onSelect={props.sessionActions.onCopySessionFilePath}>
+                        <span className="inline-flex items-center gap-2">
+                          <Link2 className="size-3.5" aria-hidden="true" />
+                          {t("menu.copySessionFilePath")}
+                        </span>
+                      </DropdownMenuItem>
+                      {props.sessionActions.onOpenSessionFile && (
+                        <DropdownMenuItem onSelect={props.sessionActions.onOpenSessionFile}>
+                          <span className="inline-flex items-center gap-2">
+                            <FileText className="size-3.5" aria-hidden="true" />
+                            {t("menu.openSessionFile")}
+                          </span>
+                        </DropdownMenuItem>
+                      )}
+                    </>
+                  )}
+                  {props.onOpenProxySetting ? <DropdownMenuSeparator /> : null}
+                </>
+              )}
               {/* 会话代理（网络代理）：与侧栏同名入口一致；保存后自动重启 runtime 生效。
                   放在工具开关组之前，语义上属于「会话级配置」而非「面板开关」。
                   无运行控制能力时（如极端降级场景）补一个组标签，避免菜单项裸奔。 */}
               {props.onOpenProxySetting && (
                 <>
-                  {!props.runControl?.capabilities && (
+                  {!props.runControl?.capabilities && !props.sessionActions && (
                     <DropdownMenuLabel>{t("tabs.currentSessionGroup")}</DropdownMenuLabel>
                   )}
                   <DropdownMenuItem onSelect={() => props.onOpenProxySetting?.()}>
