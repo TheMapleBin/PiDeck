@@ -312,6 +312,13 @@ import {
 } from "./extensions/builtInExtensions";
 import { createPiProcessExtensionResolvers } from "./extensions/piProcessExtensionResolvers";
 import { registerBuiltInExtensionIpc } from "./ipc/builtInExtensionIpc";
+import {
+	PROMPTS_STORE_CHANNELS,
+	SKILLS_STORE_CHANNELS,
+	registerContentStoreIpc,
+} from "./ipc/contentStoreIpc";
+import { PromptStoreUpdater } from "./prompts/promptStoreUpdater";
+import { SkillStoreUpdater } from "./skills/skillStoreUpdater";
 import { createPiProcessSkillResolvers } from "./skills/piProcessSkillResolvers";
 import { createPiProcessPromptResolvers } from "./prompts/piProcessPromptResolvers";
 import { ProjectResourceManager } from "./projects/ProjectResourceManager";
@@ -3217,8 +3224,38 @@ app.whenReady().then(async () => {
 		() => settingsStore.get(),
 		(patch) => settingsStore.update(patch),
 	);
-	xuePromptManager = new XuePromptManager();
+	// 提示词商店官方模板 / 内置技能热更新：与内置扩展同一套「resources 只读 → userData 覆盖层」机制。
+	// 覆盖层供查询侧（XuePromptManager / SkillManager）叠加解析：远端新增/修改的模板与技能免发版生效。
+	const promptStoreUpdater = new PromptStoreUpdater({
+		userDataDir: app.getPath("userData"),
+		// 随包根与 skills/xueprompts.db 同一约定：dev 读 app.getAppPath()/resources，
+		// 打包读 process.resourcesPath —— extraResources 的 `to` 已经把目录铺到
+		// <app>/resources/<to>，这里再拼一层 "resources" 会指向不存在的路径。
+		builtinPromptsDir: app.isPackaged
+			? join(process.resourcesPath, "prompts")
+			: join(app.getAppPath(), "resources", "prompts"),
+		// 与内置扩展/模型目录共用 settings.updateSource：默认 AtomGit，切 GitHub 后 raw 直连优先。
+		source: () => settingsStore.get().updateSource,
+	});
+	const skillStoreUpdater = new SkillStoreUpdater({
+		userDataDir: app.getPath("userData"),
+		// 与 SkillManager.installTemplate 的 root 解析严格对齐：打包态 process.resourcesPath
+		// 已是 <app>/resources，再拼一层会变成 <app>/resources/resources/skills。
+		builtinSkillsDir: app.isPackaged
+			? join(process.resourcesPath, "skills")
+			: join(app.getAppPath(), "resources", "skills"),
+		source: () => settingsStore.get().updateSource,
+	});
+	registerContentStoreIpc(promptStoreUpdater, PROMPTS_STORE_CHANNELS);
+	registerContentStoreIpc(skillStoreUpdater, SKILLS_STORE_CHANNELS);
+	xuePromptManager = new XuePromptManager(
+		undefined,
+		// 官方模板覆盖层叠加：热更新后商店列表/详情立即显示覆盖层版本
+		() => promptStoreUpdater.resolveEffectiveOverlayDir(),
+	);
 	skillManager = new SkillManager(undefined, mainCopy);
+	// 内置技能覆盖层叠加：安装内置技能模板时覆盖层优先（修 bug/新增技能免发版）
+	skillManager.configureSkillOverlay(() => skillStoreUpdater.resolveEffectiveOverlayDir());
 	// 注入设置读写：技能开关同步持久化禁用列表（--no-skills/--skill 白名单模式的依据），
 	// 跨重启保留，不再只依赖 SKILL.md frontmatter（该标记仅阻止模型自动调用）。
 	skillManager.configureSettings(

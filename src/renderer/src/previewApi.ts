@@ -1092,6 +1092,57 @@ export function createPreviewApi(): PiDesktopApi {
 			}),
 			builtInOpenDir: async () => undefined,
 		},
+		// 提示词商店官方模板 / 内置技能热更新（预览/Web 模式不联网、无覆盖层）
+		contentStore: {
+			promptsStatus: async () => ({
+				builtin: { version: "1.0.0", fileCount: 0 },
+				overlay: null,
+				hasOverlayFiles: false,
+				hasBackup: false,
+				effectiveVersion: "1.0.0",
+				overlayDir: null,
+			}),
+			promptsCheck: async () => ({
+				ok: true,
+				remoteVersion: "1.0.0",
+				localVersion: "1.0.0",
+				hasUpdate: false,
+				changedFiles: [],
+			}),
+			promptsUpdate: async () => ({ ok: true, updated: false, version: "1.0.0" }),
+			promptsRestore: async () => ({ ok: true, updated: false }),
+			promptsRestorePrevious: async () => ({
+				ok: false,
+				code: "validation" as const,
+				message: "Preview mode: no previous overlay",
+				updated: false,
+			}),
+			promptsOpenDir: async () => undefined,
+			skillsStatus: async () => ({
+				builtin: { version: "1.0.0", fileCount: 0 },
+				overlay: null,
+				hasOverlayFiles: false,
+				hasBackup: false,
+				effectiveVersion: "1.0.0",
+				overlayDir: null,
+			}),
+			skillsCheck: async () => ({
+				ok: true,
+				remoteVersion: "1.0.0",
+				localVersion: "1.0.0",
+				hasUpdate: false,
+				changedFiles: [],
+			}),
+			skillsUpdate: async () => ({ ok: true, updated: false, version: "1.0.0" }),
+			skillsRestore: async () => ({ ok: true, updated: false }),
+			skillsRestorePrevious: async () => ({
+				ok: false,
+				code: "validation" as const,
+				message: "Preview mode: no previous overlay",
+				updated: false,
+			}),
+			skillsOpenDir: async () => undefined,
+		},
 		prompts: {
 			list: async () => ({ templates: [], globalDir: "C:/Users/preview/.pi/agent/prompts" }),
 			create: async (input) => ({

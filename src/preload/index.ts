@@ -13,6 +13,11 @@ import type {
 	BuiltInExtensionsUpdateStatus,
 } from "../shared/types/extensionsUpdate";
 import type {
+	BuiltinContentCheckResult,
+	BuiltinContentUpdateResult,
+	BuiltinContentUpdateStatus,
+} from "../shared/types/contentUpdate";
+import type {
 	VoiceTranscriptionPublicConfig,
 	VoiceTranscriptionRequest,
 	VoiceTranscriptionResult,
@@ -1512,6 +1517,35 @@ const api = {
 		/** 用系统默认程序打开当前生效的内置扩展目录（覆盖层优先，否则随包目录） */
 		builtInOpenDir: () =>
 			ipcRenderer.invoke(ipcChannels.extensionsBuiltInOpenDir) as Promise<void>,
+	},
+	// ── 提示词商店官方模板 / 内置技能热更新（与内置扩展同构：sha256 比对 + userData 覆盖层）──
+	contentStore: {
+		promptsStatus: () =>
+			ipcRenderer.invoke(ipcChannels.promptsStoreUpdateStatus) as Promise<BuiltinContentUpdateStatus>,
+		promptsCheck: (branch?: "main" | "dev") =>
+			ipcRenderer.invoke(ipcChannels.promptsStoreUpdateCheck, branch) as Promise<BuiltinContentCheckResult>,
+		promptsUpdate: (branch?: "main" | "dev") =>
+			ipcRenderer.invoke(ipcChannels.promptsStoreUpdateApply, branch) as Promise<BuiltinContentUpdateResult>,
+		promptsRestore: () =>
+			ipcRenderer.invoke(ipcChannels.promptsStoreUpdateRestore) as Promise<BuiltinContentUpdateResult>,
+		promptsRestorePrevious: () =>
+			ipcRenderer.invoke(ipcChannels.promptsStoreUpdateRestorePrevious) as Promise<BuiltinContentUpdateResult>,
+		/** 用系统默认程序打开当前生效的官方模板目录（覆盖层优先，否则随包目录） */
+		promptsOpenDir: () =>
+			ipcRenderer.invoke(ipcChannels.promptsStoreOpenDir) as Promise<void>,
+		skillsStatus: () =>
+			ipcRenderer.invoke(ipcChannels.skillsStoreUpdateStatus) as Promise<BuiltinContentUpdateStatus>,
+		skillsCheck: (branch?: "main" | "dev") =>
+			ipcRenderer.invoke(ipcChannels.skillsStoreUpdateCheck, branch) as Promise<BuiltinContentCheckResult>,
+		skillsUpdate: (branch?: "main" | "dev") =>
+			ipcRenderer.invoke(ipcChannels.skillsStoreUpdateApply, branch) as Promise<BuiltinContentUpdateResult>,
+		skillsRestore: () =>
+			ipcRenderer.invoke(ipcChannels.skillsStoreUpdateRestore) as Promise<BuiltinContentUpdateResult>,
+		skillsRestorePrevious: () =>
+			ipcRenderer.invoke(ipcChannels.skillsStoreUpdateRestorePrevious) as Promise<BuiltinContentUpdateResult>,
+		/** 用系统默认程序打开当前生效的内置技能目录（覆盖层优先，否则随包目录） */
+		skillsOpenDir: () =>
+			ipcRenderer.invoke(ipcChannels.skillsStoreOpenDir) as Promise<void>,
 	},
 	settings: {
 		get: () =>

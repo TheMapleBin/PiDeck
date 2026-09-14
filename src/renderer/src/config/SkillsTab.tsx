@@ -11,6 +11,8 @@ import type {
 import { t } from "../i18n";
 import { SkillStoreTab } from "./SkillStoreTab";
 import { SkillHubStorePanel } from "./SkillHubStorePanel";
+import { ContentStoreUpdatePanel } from "./ContentStoreUpdatePanel";
+import { desktopApi } from "../desktopApi";
 import { Input } from "../components/ui-shadcn/input";
 import type { ResourceScope } from "./ResourceScopeSelector";
 import { globalSkillOverrideKey, isGlobalSkillSourceId } from "../../../shared/resourceIdentity";
@@ -100,6 +102,23 @@ export function SkillsTab(props: {
 				</div>
 			) : (
 				<>
+					{/* 内置技能热更新面板：随包技能可同步远端最新版（覆盖层优先），刷新列表即时生效 */}
+					<ContentStoreUpdatePanel
+						api={{
+							status: () => desktopApi.contentStore.skillsStatus(),
+							check: (branch) => desktopApi.contentStore.skillsCheck(branch),
+							update: (branch) => desktopApi.contentStore.skillsUpdate(branch),
+							restore: () => desktopApi.contentStore.skillsRestore(),
+							restorePrevious: () => desktopApi.contentStore.skillsRestorePrevious(),
+							openDir: () => desktopApi.contentStore.skillsOpenDir(),
+						}}
+						text={{
+							title: t("config.contentStore.skills.title"),
+							description: t("config.contentStore.skills.description"),
+							restartHint: t("config.contentStore.skills.restartHint"),
+						}}
+						onApplied={props.onRefresh}
+					/>
 					<div className="mb-3 flex items-center justify-between gap-3">
 				<div>
 					<span className="font-mono text-xs tabular-nums text-text-tertiary">

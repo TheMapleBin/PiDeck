@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
 import { join } from "node:path";
 import { app } from "electron";
@@ -13,6 +13,15 @@ import type {
 	PiPromptTemplateSummary,
 } from "../../shared/types";
 
+/** 覆盖层模板条目（官方模板热更新 md，正文为明文、无需解压）。 */
+type OverlayPrompt = {
+	/** frontmatter 可选的 title/description/category；缺省时回退 db 同名条目的值。 */
+	title?: string;
+	description?: string;
+	category?: string;
+	content: string;
+};
+
 /**
  * 基于 SQLite 的 XuePrompt 提示词管理器。
  *
@@ -23,13 +32,20 @@ import type {
 export class XuePromptManager {
 	private readonly dbPath: string;
 	private readonly promptManager: PromptManager;
+	/**
+	 * 官方模板覆盖层目录提供器：热更新（PromptStoreUpdater）把远端有差异的模板写进
+	 * userData 覆盖层后，查询侧实时取目录路径叠加显示，写入即见无需重启。
+	 * 每次查询现取（覆盖层内容很少、读取开销可忽略），避免缓存失效时序问题。
+	 */
+	private readonly overlayDirProvider: () => string | null;
 
-	constructor(home?: string) {
+	constructor(home?: string, overlayDirProvider: () => string | null = () => null) {
 		const base = app.isPackaged
 			? process.resourcesPath
 			: join(app.getAppPath(), "resources");
 		this.dbPath = join(base, "xueprompts.db");
 		this.promptManager = new PromptManager(home);
+		this.overlayDirProvider = overlayDirProvider;
 	}
 
 	private sqlPromise: ReturnType<typeof initSqlJs> | null = null;
@@ -82,6 +98,55 @@ export class XuePromptManager {
 			return buf.toString("utf8");
 		}
 	}
+
+	/** 覆盖层模板条目（官方模板热更新 md，正文为明文、无需解压）。 */
+	private overlayPromptOf(raw: string): OverlayPrompt {
+		const frontmatter = this.parseOverlayFrontmatter(raw);
+		// 与 scripts/add-builtin-prompts.mjs 的 stripFrontmatter 同一规则：只取正文，含 frontmatter 时去掉
+		const content = raw.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "");
+		return { ...frontmatter, content };
+	}
+	/**
+	 * 读取官方模板覆盖层（PromptStoreUpdater 热更新落盘目录）。
+	 * 每次查询实时读：覆盖层只有几个 md 文件、开销可忽略，且避免「更新/还原后缓存不过期」的时序问题。
+	 * 返回 slug → 条目 的映射；无覆盖层时返回空 Map（走纯 db 路径，零回归）。
+	 */
+	private readOverlayPrompts(): Map<string, OverlayPrompt> {
+		const dir = this.overlayDirProvider();
+		if (!dir || !existsSync(dir)) return new Map();
+		const result = new Map<string, OverlayPrompt>();
+		for (const name of readdirSync(dir)) {
+			if (!name.endsWith(".md")) continue;
+			try {
+				const raw = readFileSync(join(dir, name), "utf8");
+				const frontmatter = this.parseOverlayFrontmatter(raw);
+				// 与 scripts/add-builtin-prompts.mjs 的 stripFrontmatter 同一规则：只取正文，含 frontmatter 时去掉
+				const content = raw.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "");
+				result.set(name.slice(0, -3), { ...frontmatter, content });
+			} catch {
+				// 单个文件解析失败不影响其它模板（校验由更新器写盘前完成，这里只是兜底）
+			}
+		}
+		return result;
+	}
+
+	/** 解析覆盖层 md 的 frontmatter（key: value 形式），非法行忽略。 */
+	private parseOverlayFrontmatter(raw: string): { title?: string; description?: string; category?: string } {
+		const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+		if (!match) return {};
+		const result: { title?: string; description?: string; category?: string } = {};
+		for (const line of match[1].split(/\r?\n/)) {
+			const index = line.indexOf(":");
+			if (index === -1) continue;
+			const key = line.slice(0, index).trim();
+			const value = line.slice(index + 1).trim().replace(/^['"]|['"]$/g, "");
+			if (key === "title" || key === "description" || key === "category") {
+				(result as Record<string, string>)[key] = value;
+			}
+		}
+		return result;
+	}
+
 
 	/**
 	 * 把 SELECT slug, url, title, category, content, description 的一行映射为商店条目。
@@ -139,88 +204,239 @@ export class XuePromptManager {
 				count: Number(row[2] ?? 0),
 			}));
 
-			if (!opts) {
-				// 向后兼容：全量查询
-				const promptRows = db.exec(
-					"SELECT slug, url, title, category, content, description FROM xueprompts ORDER BY category, title"
-				);
-				const prompts: YaoPromptItem[] = (promptRows[0]?.values ?? []).map((row: any[]) => this.rowToYaoPromptItem(row));
-				return { categories, prompts, repoPath: this.dbPath };
+			const overlay = this.readOverlayPrompts();
+			if (overlay.size === 0) {
+				return this.listFromDbOnly(db, categories, opts);
 			}
 
-			// title 是明文 TEXT，可直接进 SQL；content / description 都是 gzip BLOB，
-			// SQL 的 LIKE 对 BLOB 只做字节比较，中文关键词永远匹配不到（实测 description
-			// LIKE 命中数恒为 0），所以带 search 时必须走应用层解压匹配。
+			// ── 有官方模板覆盖层：db 全量取回后与 overlay 合并，再统一排序/分页/搜索 ──
+			// 原因：overlay 条目可能覆盖、新增、改分类，SQL 的 LIMIT/OFFSET 会因条目插入而错位，
+			// 全量合并后用同一套应用层逻辑处理才能保证 total 与页码准确。
 			const conditions: string[] = [];
 			const params: any[] = [];
-
-			if (opts.category) {
-				// xueprompts.category 存的是原始分类名（如 "营销/SEO提示词"），
-				// opts.category 是分类的 slug（如 "营销-seo提示词"），
-				// 通过子查询从 xueprompt_categories 拿到原始名再匹配。
+			if (opts?.category) {
 				conditions.push("(category = ? OR category = (SELECT name FROM xueprompt_categories WHERE slug = ?))");
 				params.push(opts.category, opts.category);
+			}
+			const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+			const rows = db.exec(
+				`SELECT slug, url, title, category, content, description FROM xueprompts ${whereClause} ORDER BY category, title`,
+				params
+			);
+
+			// slug → 条目 合并表：overlay 优先（title/category 缺省时回退 db 同名值，
+			// 保证商店表格显示仍是友好中文标题而非文件名）
+			const bySlug = new Map<string, { item: YaoPromptItem; rawContent?: any; rawDesc?: any; overlayContent?: string }>();
+			for (const row of rows[0]?.values ?? []) {
+				const slug = String(row[0] ?? "");
+				bySlug.set(slug, {
+					item: this.rowToYaoPromptItem(row),
+					rawContent: row[4],
+					rawDesc: row[5],
+				});
+			}
+			for (const [slug, op] of overlay) {
+				const base = bySlug.get(slug);
+				bySlug.set(slug, {
+					item: {
+						slug,
+						title: op.title ?? base?.item.title ?? slug,
+						category: op.category ?? base?.item.category ?? "编程提示词",
+						subcategory: "",
+						tags: [],
+						description: op.description ?? (base ? this.blobToString(base.rawDesc!) : ""),
+						path: slug,
+					},
+					overlayContent: op.content,
+				});
+			}
+
+			// category 过滤：overlay 条目用「分类名或 slug」宽容匹配
+			const categoryName = opts?.category
+				? categories.find((c) => c.slug === opts.category)?.name ?? opts.category
+				: null;
+			let all = Array.from(bySlug.values());
+			if (categoryName) {
+				all = all.filter((e) =>
+					e.item.category === categoryName || e.item.category === opts!.category
+				);
+			}
+
+			// 搜索：应用层明文匹配（overlay 内容本来就是明文；db 的 BLOB 解压后匹配）
+			const keyword = opts?.search?.trim().toLowerCase();
+			if (keyword) {
+				all = all.filter((e) => {
+					const { item } = e;
+					if (item.title.toLowerCase().includes(keyword)) return true;
+					if (item.description.toLowerCase().includes(keyword)) return true;
+					if (e.overlayContent?.toLowerCase().includes(keyword)) return true;
+					if (e.rawContent && this.blobToString(e.rawContent).toLowerCase().includes(keyword)) return true;
+					return false;
+				});
+			}
+
+			// 与 SQL 一致的排序（category, title 按 Unicode 码点）
+			all.sort((a, b) => {
+				const c = a.item.category < b.item.category ? -1 : a.item.category > b.item.category ? 1 : 0;
+				if (c !== 0) return c;
+				return a.item.title < b.item.title ? -1 : a.item.title > b.item.title ? 1 : 0;
+			});
+
+			// 分类栏：db 分类 + overlay 新增分类，count 按合并后可见条数重算
+			const mergedCategories = this.mergeCategories(categories, all.map((e) => e.item.category));
+
+			if (!opts) {
+				return { categories: mergedCategories, prompts: all.map((e) => e.item), repoPath: this.dbPath };
 			}
 
 			const page = Math.max(1, opts.page ?? 1);
 			const pageSize = Math.max(1, Math.min(100, opts.pageSize ?? 20));
-
-			const keyword = opts.search?.trim();
-			if (keyword) {
-				// 先按 category 粗筛（不含 text 条件），再在应用层解压匹配 title/description/content。
-				// 数据量约 4000 条、全量解压约 4MB，仅搜索时触发一次，开销可接受；
-				// 换来的是「正文里的词也能搜到」这个正确语义。
-				const categoryClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-				const rows = db.exec(
-					`SELECT slug, url, title, category, content, description FROM xueprompts ${categoryClause} ORDER BY category, title`,
-					params
-				);
-				const needle = keyword.toLowerCase();
-				const matched = (rows[0]?.values ?? []).filter((row: any[]) => {
-					const title = String(row[2] ?? "");
-					if (title.toLowerCase().includes(needle)) return true;
-					// content / description 为 gzip BLOB，解压后按明文匹配
-					if (row[5] && this.blobToString(row[5]).toLowerCase().includes(needle)) return true;
-					if (row[4] && this.blobToString(row[4]).toLowerCase().includes(needle)) return true;
-					return false;
-				});
-				const offset = (page - 1) * pageSize;
-				const prompts = matched.slice(offset, offset + pageSize).map((row: any[]) => this.rowToYaoPromptItem(row));
-				return { categories, prompts, repoPath: this.dbPath, total: matched.length, page, pageSize };
-			}
-
-			const whereClause = conditions.length > 0
-				? `WHERE ${conditions.join(" AND ")}`
-				: "";
-
-			// 总数
-			const countResult = db.exec(
-				`SELECT COUNT(*) FROM xueprompts ${whereClause}`,
-				params
-			);
-			const total = Number(countResult[0]?.values?.[0]?.[0] ?? 0);
-
 			const offset = (page - 1) * pageSize;
-
-			const promptRows = db.exec(
-				`SELECT slug, url, title, category, content, description FROM xueprompts ${whereClause} ORDER BY category, title LIMIT ? OFFSET ?`,
-				[...params, pageSize, offset]
-			);
-			const prompts: YaoPromptItem[] = (promptRows[0]?.values ?? []).map((row: any[]) => this.rowToYaoPromptItem(row));
-
-			return { categories, prompts, repoPath: this.dbPath, total, page, pageSize };
+			const prompts = all.slice(offset, offset + pageSize).map((e) => e.item);
+			return { categories: mergedCategories, prompts, repoPath: this.dbPath, total: all.length, page, pageSize };
 		} finally {
 			db.close();
 		}
 	}
 
 	/**
-	 * 获取单条提示词详情
+	 * 无覆盖层时的原 db 查询路径（保持历史行为与性能，分页走 SQL LIMIT/OFFSET）。
+	 */
+	private async listFromDbOnly(
+		db: import("sql.js").Database,
+		categories: YaoPromptCategory[],
+		opts?: { category?: string; search?: string; page?: number; pageSize?: number }
+	): Promise<YaoPromptListResult> {
+		if (!opts) {
+			// 向后兼容：全量查询
+			const promptRows = db.exec(
+				"SELECT slug, url, title, category, content, description FROM xueprompts ORDER BY category, title"
+			);
+			const prompts: YaoPromptItem[] = (promptRows[0]?.values ?? []).map((row: any[]) => this.rowToYaoPromptItem(row));
+			return { categories, prompts, repoPath: this.dbPath };
+		}
+
+		// title 是明文 TEXT，可直接进 SQL；content / description 都是 gzip BLOB，
+		// SQL 的 LIKE 对 BLOB 只做字节比较，中文关键词永远匹配不到（实测 description
+		// LIKE 命中数恒为 0），所以带 search 时必须走应用层解压匹配。
+		const conditions: string[] = [];
+		const params: any[] = [];
+
+		if (opts.category) {
+			conditions.push("(category = ? OR category = (SELECT name FROM xueprompt_categories WHERE slug = ?))");
+			params.push(opts.category, opts.category);
+		}
+
+		const page = Math.max(1, opts.page ?? 1);
+		const pageSize = Math.max(1, Math.min(100, opts.pageSize ?? 20));
+
+		const keyword = opts.search?.trim();
+		if (keyword) {
+			const categoryClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+			const rows = db.exec(
+				`SELECT slug, url, title, category, content, description FROM xueprompts ${categoryClause} ORDER BY category, title`,
+				params
+			);
+			const needle = keyword.toLowerCase();
+			const matched = (rows[0]?.values ?? []).filter((row: any[]) => {
+				const title = String(row[2] ?? "");
+				if (title.toLowerCase().includes(needle)) return true;
+				if (row[5] && this.blobToString(row[5]).toLowerCase().includes(needle)) return true;
+				if (row[4] && this.blobToString(row[4]).toLowerCase().includes(needle)) return true;
+				return false;
+			});
+			const offset = (page - 1) * pageSize;
+			const prompts = matched.slice(offset, offset + pageSize).map((row: any[]) => this.rowToYaoPromptItem(row));
+			return { categories, prompts, repoPath: this.dbPath, total: matched.length, page, pageSize };
+		}
+
+		const whereClause = conditions.length > 0
+			? `WHERE ${conditions.join(" AND ")}`
+			: "";
+
+		const countResult = db.exec(
+			`SELECT COUNT(*) FROM xueprompts ${whereClause}`,
+			params
+		);
+		const total = Number(countResult[0]?.values?.[0]?.[0] ?? 0);
+
+		const offset = (page - 1) * pageSize;
+
+		const promptRows = db.exec(
+			`SELECT slug, url, title, category, content, description FROM xueprompts ${whereClause} ORDER BY category, title LIMIT ? OFFSET ?`,
+			[...params, pageSize, offset]
+		);
+		const prompts: YaoPromptItem[] = (promptRows[0]?.values ?? []).map((row: any[]) => this.rowToYaoPromptItem(row));
+
+		return { categories, prompts, repoPath: this.dbPath, total, page, pageSize };
+	}
+
+	/**
+	 * 合并分类栏：保留 db 全部分类，叠加覆盖层引入的新分类；
+	 * count 用覆盖层可见分类重算（覆盖不改变条数，新增分类才计入）。
+	 */
+	private mergeCategories(dbCategories: YaoPromptCategory[], visibleCategories: string[]): YaoPromptCategory[] {
+		const countBy = new Map<string, number>();
+		for (const name of visibleCategories) {
+			countBy.set(name, (countBy.get(name) ?? 0) + 1);
+		}
+		const result: YaoPromptCategory[] = dbCategories.map((c) => ({
+			...c,
+			count: countBy.get(c.name) ?? c.count,
+		}));
+		// 覆盖层引入的全新分类：slug 规则与 scripts/convert-xueprompts.mjs 保持一致
+		const existing = new Set(dbCategories.map((c) => c.name));
+		for (const [name, count] of countBy) {
+			if (existing.has(name)) continue;
+			const slug = name
+				.replace(/[^\w\u4e00-\u9fff]/g, "-")
+				.replace(/-+/g, "-")
+				.replace(/^-|-$/g, "")
+				.toLowerCase();
+			result.push({ slug, name, count });
+		}
+		result.sort((a, b) => b.count - a.count);
+		return result;
+	}
+
+	/**
+	 * 获取单条提示词详情（覆盖层模板优先：官方模板热更新后，商店详情立即显示新正文）
 	 */
 	async detail(
 		slug: string,
-		_category: string
+		category: string
 	): Promise<YaoPromptDetailResult | null> {
+		const overlay = this.readOverlayPrompts().get(slug);
+		if (overlay) {
+			const db = await this.getDb();
+			try {
+				// 标题/描述缺省时回退 db 同名条目，保持商店观感一致
+				const rows = db.exec(
+					"SELECT title, description, url FROM xueprompts WHERE slug = ?",
+				[slug]
+			);
+				const dbRow = rows[0]?.values?.[0];
+				const dbTitle = dbRow ? String(dbRow[0] ?? "") : "";
+				const dbDescription = dbRow ? this.blobToString(dbRow[1]) : "";
+				const dbUrl = dbRow ? String(dbRow[2] ?? "") : "";
+				const title = overlay.title ?? dbTitle ?? slug;
+				const description = overlay.description ?? dbDescription ?? "";
+				const fullContent = [
+					"---",
+					`title: ${title}`,
+					`description: ${description}`,
+					`source: xueprompt-overlay`,
+					`url: ${dbUrl}`,
+					"---",
+					"",
+					overlay.content,
+				].join("\n");
+				return { title, description, promptContent: overlay.content, fullContent };
+			} finally {
+				db.close();
+			}
+		}
+
 		const db = await this.getDb();
 		try {
 			const rows = db.exec(
