@@ -21,6 +21,7 @@ const {
 	DSH_RUNNER_NODE_RELEASE_TAG,
 	defaultDshRunnerNodeIndexUrl,
 	dshRunnerNodeAssetDownloadUrl,
+	dshRunnerNodeReleasePageUrl,
 	dshRunnerNodeZipName,
 	officialNodeZipUrl,
 	selectDshRunnerNodeRelease,
@@ -54,24 +55,35 @@ test("IPC / preload 三处同步注册一键下载通道", () => {
 	assert.match(systemIpc, /fetchDshRunnerNodeIndex/);
 	assert.match(preload, /installDshRunnerNode:\s*\(\)\s*=>/);
 	assert.match(preload, /ipcChannels\.dshInstallRunnerNode/);
+	const row = readFileSync("src/renderer/src/components/app/settings/DshRunnerNodeRow.tsx", "utf8");
+	assert.match(row, /dshRunnerNodeReleasePageUrl/);
+	assert.doesNotMatch(row, /releases\/tag\/dsh-runner-node/);
 });
 
-test("客户端下载走 PiDeck tag，不直连 nodejs.org", () => {
+test("客户端下载走 latest 应用 Release，不直连 nodejs.org，也不单独建 sidecar tag", () => {
 	assert.equal(DSH_RUNNER_NODE_SIDECAR_VERSION, "24.13.0");
 	assert.equal(dshRunnerNodeSidecarArch("x64"), "x64");
 	assert.equal(dshRunnerNodeSidecarArch("arm64"), "arm64");
-	assert.equal(DSH_RUNNER_NODE_RELEASE_TAG, "dsh-runner-node");
+	assert.equal(DSH_RUNNER_NODE_RELEASE_TAG, "latest");
 	assert.equal(
 		defaultDshRunnerNodeIndexUrl("atomgit"),
-		"https://atomgit.com/ayuayue/PiDeck/releases/download/dsh-runner-node/dsh-runner-node-releases.json",
+		"https://atomgit.com/ayuayue/PiDeck/releases/download/latest/dsh-runner-node-releases.json",
 	);
 	assert.equal(
 		defaultDshRunnerNodeIndexUrl("github"),
-		"https://github.com/ayuayue/PiDeck/releases/download/dsh-runner-node/dsh-runner-node-releases.json",
+		"https://github.com/ayuayue/PiDeck/releases/latest/download/dsh-runner-node-releases.json",
 	);
 	assert.equal(
 		dshRunnerNodeAssetDownloadUrl("atomgit", "node-v24.13.0-win-x64.zip"),
-		"https://atomgit.com/ayuayue/PiDeck/releases/download/dsh-runner-node/node-v24.13.0-win-x64.zip",
+		"https://atomgit.com/ayuayue/PiDeck/releases/download/latest/node-v24.13.0-win-x64.zip",
+	);
+	assert.equal(
+		dshRunnerNodeReleasePageUrl("github"),
+		"https://github.com/ayuayue/PiDeck/releases/latest",
+	);
+	assert.equal(
+		dshRunnerNodeReleasePageUrl("atomgit"),
+		"https://atomgit.com/ayuayue/PiDeck/releases/latest",
 	);
 	assert.equal(
 		resolveDshRunnerNodeIndexUrl({ updateSource: "github" }),
@@ -201,9 +213,17 @@ test("打包脚本与安装包都不把 node.exe 打进 extraResources", () => {
 	const pack = readFileSync("scripts/pack-dsh-runner-node.mjs", "utf8");
 	assert.match(pack, /dsh-runner-node-releases\.json/);
 	assert.match(pack, /nodejs\.org\/dist/);
+	assert.match(pack, /latest 应用 Release/);
+	assert.doesNotMatch(pack, /tag `dsh-runner-node`/);
 	assert.equal(DSH_RUNNER_NODE_INDEX_FILE, "dsh-runner-node-releases.json");
 	const pkg = JSON.parse(readFileSync("package.json", "utf8"));
 	assert.equal(pkg.scripts["runner-node:pack"], "node scripts/pack-dsh-runner-node.mjs");
 	const extra = JSON.stringify(pkg.build?.extraResources ?? []);
 	assert.equal(extra.includes("dsh-runner-node"), false);
+	const publish = readFileSync(".github/workflows/publish-dsh-runner-node.yml", "utf8");
+	assert.match(publish, /releases\/latest/);
+	assert.doesNotMatch(publish, /TAG=dsh-runner-node/);
+	const release = readFileSync(".github/workflows/release.yml", "utf8");
+	assert.match(release, /dist-runtime\/dsh-runner-node\/\*\.zip/);
+	assert.match(release, /Pack DSH runner Node sidecar/);
 });

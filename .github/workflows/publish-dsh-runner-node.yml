@@ -1,7 +1,8 @@
 name: Publish DSH runner Node
 
 # Windows DSH 沙箱用的 Node 24 zip：不进安装包。
-# 打到独立 tag `dsh-runner-node`，再由 sync-atomgit 同步到 AtomGit。
+# 挂到当前 GitHub latest *应用* Release（vX.Y.Z），再由 sync-atomgit 同步到 AtomGit。
+# 禁止独立 sidecar tag：会抢走 /releases/latest，把更新检查指到 Node zip。
 # Node 补丁版本不变时不必每次应用发版都重跑。
 
 on:
@@ -26,14 +27,18 @@ jobs:
       - name: Pack both Windows arches
         run: node scripts/pack-dsh-runner-node.mjs --arch x64 && node scripts/pack-dsh-runner-node.mjs --arch arm64
 
-      - name: Publish GitHub release assets
+      - name: Upload onto current latest app Release
         env:
           GH_TOKEN: ${{ secrets.RELEASE_PAT }}
         run: |
-          TAG=dsh-runner-node
-          NOTES="Windows DSH sandbox Node 24 (console node.exe). Not bundled in the installer; clients download on demand via AtomGit/GitHub."
-          if gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
-            gh release upload "$TAG" dist-runtime/dsh-runner-node/*.zip dist-runtime/dsh-runner-node/dsh-runner-node-releases.json --clobber --repo "${{ github.repository }}"
-          else
-            gh release create "$TAG" dist-runtime/dsh-runner-node/*.zip dist-runtime/dsh-runner-node/dsh-runner-node-releases.json --notes "$NOTES" --repo "${{ github.repository }}"
+          TAG=$(gh api "repos/${{ github.repository }}/releases/latest" --jq .tag_name)
+          if [[ ! "$TAG" =~ ^v[0-9] ]]; then
+            echo "::error::GitHub latest 不是应用版本 tag（got ${TAG}）。拒绝创建独立 sidecar Release。"
+            exit 1
           fi
+          echo "Uploading Node 24 sidecar onto ${TAG}"
+          gh release upload "$TAG" \
+            dist-runtime/dsh-runner-node/*.zip \
+            dist-runtime/dsh-runner-node/dsh-runner-node-releases.json \
+            --clobber \
+            --repo "${{ github.repository }}"

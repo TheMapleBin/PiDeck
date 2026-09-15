@@ -513,7 +513,7 @@ export type AppSettings = {
 	dshRuntimeIndexUrl?: string;
 
 	/**
-	 * DSH 沙箱 Node 24 下载源索引（覆盖默认 AtomGit/GitHub `dsh-runner-node` tag）。
+	 * DSH 沙箱 Node 24 下载源索引（覆盖默认 AtomGit/GitHub latest 应用 Release）。
 	 * 缺省/空串 = 跟随 settings.updateSource。sha256 始终校验。
 	 */
 	dshRunnerNodeIndexUrl?: string;

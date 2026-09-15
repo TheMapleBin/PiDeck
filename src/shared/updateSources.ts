@@ -53,6 +53,14 @@ export function gitHubReleasesBase(): string {
   return `https://github.com/${UPDATE_REPO_OWNER}/${UPDATE_REPO}`;
 }
 
+/**
+ * GitHub latest 资产根路径，例如 `https://github.com/ayuayue/PiDeck/releases/latest/download`。
+ * 与 AtomGit 的 `/releases/download/latest` 路径不同，两边不能共用同一套拼接。
+ */
+export function gitHubLatestDownloadBase(): string {
+  return `${gitHubReleasesBase()}${RELEASES_LATEST_DOWNLOAD_PATH}`;
+}
+
 /** 镜像前缀 → generic feed baseUrl。对于 atomgit 直接返回 atomgit feed url。 */
 export function buildCustomSourceFeedUrl(host: string): string {
   if (host === ATOMGIT_HOST || host.startsWith(ATOMGIT_HOST)) {

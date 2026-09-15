@@ -8,8 +8,9 @@
  *   dist-runtime/dsh-runner-node/node-v24.13.0-win-<arch>.zip
  *   dist-runtime/dsh-runner-node/dsh-runner-node-releases.json
  *
- * 索引里的 url 先写官方包地址作占位；发到 GitHub/AtomGit `dsh-runner-node` tag
- * 后由客户端按 updateSource 改写为 Release 资产地址。客户端永不直连 nodejs.org。
+ * 索引里的 url 先写官方包地址作占位；挂到当前 latest 应用 Release（vX.Y.Z）后
+ * 由客户端按 updateSource 改写为 latest 资产地址。禁止独立 sidecar tag（会抢走
+ * GitHub /releases/latest）。客户端永不直连 nodejs.org。
  *
  * 只在 win32 CI / 维护者本机跑；mac/linux 跳过（沙箱不需要 CUI sidecar）。
  */
@@ -99,4 +100,4 @@ for (const entry of releases) merged.set(`${entry.version}:${entry.arch}`, entry
 const index = { schemaVersion: 1, releases: [...merged.values()] };
 writeFileSync(indexPath, `${JSON.stringify(index, null, 2)}\n`);
 console.log(`[pack-dsh-runner-node] wrote ${indexPath}`);
-console.log("[pack-dsh-runner-node] 上传 GitHub/AtomGit tag `dsh-runner-node` 后客户端即可按需下载");
+console.log("[pack-dsh-runner-node] 上传到当前 latest 应用 Release（vX.Y.Z）后客户端即可按需下载");

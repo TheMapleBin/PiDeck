@@ -56,8 +56,13 @@ jobs:
             echo "::error::未能识别或获取到合法的 Release Tag"
             exit 1
           fi
-          # 归一化：去空白、去空段
-          TAGS=$(echo "$TAGS" | tr ',' '\n' | sed 's/[[:space:]]//g' | grep -v '^$' | paste -sd, -)
+          # 归一化：去空白、去空段；只同步应用版本 tag（vX.Y.Z）。
+          # sidecar 之类的非版本 tag 会抢走 GitHub/AtomGit latest，更新检查会指错包。
+          TAGS=$(echo "$TAGS" | tr ',' '\n' | sed 's/[[:space:]]//g' | grep -E '^v[0-9]' | paste -sd, -)
+          if [ -z "$TAGS" ]; then
+            echo "::error::没有可同步的应用版本 tag（vX.Y.Z）。拒绝同步 sidecar / 其它非版本 Release。"
+            exit 1
+          fi
           echo "Target tags: ${TAGS}"
           echo "tags=${TAGS}" >> $GITHUB_OUTPUT
         env:

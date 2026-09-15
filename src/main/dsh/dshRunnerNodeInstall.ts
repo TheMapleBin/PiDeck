@@ -49,7 +49,7 @@ export type InstallDshRunnerNodeInput = {
 	version?: string;
 	force?: boolean;
 	updateSource?: UpdateSourceId;
-	/** 覆盖默认索引（测试 / 内网）；空串走内置 AtomGit/GitHub tag。 */
+	/** 覆盖默认索引（测试 / 内网）；空串走内置 AtomGit/GitHub latest 应用 Release。 */
 	indexUrl?: string;
 	download?: DshRunnerNodeDownloader;
 	fetchIndex?: DshRunnerNodeIndexFetcher;
@@ -97,8 +97,8 @@ async function defaultSha256(filePath: string): Promise<string> {
 }
 
 /**
- * 把索引条目的 url 改成当前更新源的 Release 资产。
- * 打包脚本写的是 nodejs.org 占位；客户端永远按 tag 拉，国内默认 AtomGit。
+ * 把索引条目的 url 改成当前更新源 latest 应用 Release 的资产。
+ * 打包脚本写的是 nodejs.org 占位；客户端永远按 latest 拉，国内默认 AtomGit。
  */
 export function resolveDshRunnerNodeReleaseUrl(
 	release: DshRunnerNodeRelease,
@@ -123,7 +123,7 @@ export function resolveDshRunnerNodeIndexUrl(input: {
 
 /**
  * 下载 Node 24 的 CUI node.exe 到 `<userData>/dsh-runner-node/`。
- * 源是 PiDeck 的 `dsh-runner-node` tag（AtomGit/GitHub），不改 PATH、不直连 nodejs.org。
+ * 源是当前 latest 应用 Release（AtomGit/GitHub），不改 PATH、不直连 nodejs.org。
  */
 export async function installDshRunnerNodeSidecar(
 	input: InstallDshRunnerNodeInput,

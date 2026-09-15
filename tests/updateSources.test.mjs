@@ -42,7 +42,7 @@ const mainModule = loadTsModule("src/main/update/updateSources.ts", {
 });
 
 const { normalizeUpdateSource, updateSourceFeedUrl, updateSourceLatestReleaseUrl } = mainModule;
-const { normalizeCustomMirrorHost } = shared;
+const { gitHubLatestDownloadBase, atomGitFeedUrl, normalizeCustomMirrorHost } = shared;
 
 test("normalizeUpdateSource: 已知 id 原样保留", () => {
 	assert.equal(normalizeUpdateSource("atomgit"), "atomgit");
@@ -68,6 +68,11 @@ test("updateSourceFeedUrl: atomgit 源生成 AtomGit generic feed baseUrl", () =
 	assert.equal(
 		updateSourceFeedUrl("atomgit"),
 		"https://atomgit.com/ayuayue/PiDeck/releases/download/latest",
+	);
+	assert.equal(atomGitFeedUrl(), "https://atomgit.com/ayuayue/PiDeck/releases/download/latest");
+	assert.equal(
+		gitHubLatestDownloadBase(),
+		"https://github.com/ayuayue/PiDeck/releases/latest/download",
 	);
 });
 

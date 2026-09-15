@@ -76,16 +76,24 @@ function fetchWithTimeout(url, options = {}, timeoutMs = API_TIMEOUT_MS) {
 }
 
 /**
+ * 只有应用版本 tag（vX.Y.Z / vX.Y.Z-beta）才允许成为 latest。
+ * sidecar 资源（dsh-runner-node 等）必须挂在版本 Release 上，禁止独立占 latest。
+ */
+export function isAppVersionReleaseTag(tag) {
+  return /^v\d+\.\d+/.test(String(tag ?? '').trim());
+}
+
+/**
  * latest 校正计划（纯函数，可单测）：
  * AtomGit 只允许一个 release 持有 release_status='latest'（更新 feed 以此为准）。
- * 以 GitHub latest tag 为准，其余 release 应为无标记（脚本侧用 'none' 提交；
- * AtomGit 若拒绝 'none' 值则由调用方降级为跳过并警告——通常平台会在新 latest
- * 写入时自动降级旧标记，此 PATCH 只是兜底）。
+ * 以 GitHub latest 的应用版本 tag 为准；sidecar 等非版本 tag 即使被 GitHub
+ * 标成 latest 也不能写到 AtomGit（会把安装包更新指错）。
  */
 export function planLatestCorrection(AtomgitReleases, githubLatestTag) {
   const plan = [];
+  const latestTag = isAppVersionReleaseTag(githubLatestTag) ? githubLatestTag : '';
   for (const rel of AtomgitReleases || []) {
-    if (rel.tag_name === githubLatestTag) {
+    if (latestTag && rel.tag_name === latestTag) {
       if (rel.release_status !== 'latest') {
         plan.push({ tag: rel.tag_name, release_status: 'latest' });
       }
@@ -158,17 +166,41 @@ async function main() {
 
   // 0. 以 GitHub 官方 latest 为唯一事实来源，供后续 release_status 决策与收尾校正
   console.log(`\n📌 查询 GitHub 官方 latest Release...`);
-  const githubLatestTag = execFileSync('gh', [
+  let githubLatestTag = execFileSync('gh', [
     'api',
     `repos/${ghRepo}/releases/latest`,
     '--jq',
     '.tag_name',
   ], { encoding: 'utf-8' }).trim();
-  console.log(`✅ GitHub latest: ${githubLatestTag}`);
+  if (!isAppVersionReleaseTag(githubLatestTag)) {
+    console.warn(`⚠️ GitHub latest 不是应用版本 tag（${githubLatestTag}），改查最近的 v* Release…`);
+    const listed = JSON.parse(execFileSync('gh', [
+      'release',
+      'list',
+      '--repo',
+      ghRepo,
+      '--limit',
+      '30',
+      '--json',
+      'tagName',
+    ], { encoding: 'utf-8' }));
+    githubLatestTag = (listed || []).map((r) => r.tagName).find(isAppVersionReleaseTag) || '';
+  }
+  console.log(`✅ GitHub latest: ${githubLatestTag || '(none)'}`);
+
+  const skippedTags = targetTags.filter((tag) => !isAppVersionReleaseTag(tag));
+  const syncTags = targetTags.filter(isAppVersionReleaseTag);
+  if (skippedTags.length > 0) {
+    console.log(`⏩ 跳过非应用版本 tag（会抢走 latest）: ${skippedTags.join(', ')}`);
+  }
+  if (syncTags.length === 0) {
+    console.error('❌ 没有可同步的应用版本 tag（vX.Y.Z）。sidecar 资源请挂到当前 latest 应用 Release。');
+    process.exit(1);
+  }
 
   const failedAssets = [];
 
-  for (const targetTag of targetTags) {
+  for (const targetTag of syncTags) {
     try {
       await syncOneRelease(targetTag, githubLatestTag, failedAssets);
     } catch (err) {

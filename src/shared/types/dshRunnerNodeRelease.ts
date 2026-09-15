@@ -1,16 +1,24 @@
 /**
  * Windows DSH 沙箱 Node 24 的按需分发契约。
  *
- * 与 DSH runtime 同一模式：不进安装包，打成 zip + 索引后挂到 GitHub/AtomGit
- * 的 `dsh-runner-node` tag，客户端按 settings.updateSource 按需下载。
+ * 不进安装包：打成 zip + 索引后挂到当前 latest 应用 Release（vX.Y.Z）上，
+ * 客户端按 settings.updateSource 从 AtomGit/GitHub latest 按需下载。
+ * 禁止再用独立 `dsh-runner-node` tag——那会抢走 GitHub /releases/latest，
+ * 把更新检查指到 sidecar 而不是安装包。
  * sha256 必须写在索引里（下载前已知），zip 内不能自证哈希。
  */
 
-import { atomGitReleasesBase, gitHubReleasesBase } from "../updateSources";
+import {
+	atomGitFeedUrl,
+	atomGitReleasesBase,
+	gitHubLatestDownloadBase,
+	gitHubReleasesBase,
+} from "../updateSources";
 import type { UpdateSourceId } from "./settings";
 
 export const DSH_RUNNER_NODE_RELEASE_SCHEMA = 1;
-export const DSH_RUNNER_NODE_RELEASE_TAG = "dsh-runner-node";
+/** 永远跟当前 latest 应用 Release，不单独建 tag。 */
+export const DSH_RUNNER_NODE_RELEASE_TAG = "latest";
 export const DSH_RUNNER_NODE_INDEX_FILE = "dsh-runner-node-releases.json";
 
 /** 与 koffi ABI / CI setup-node 对齐的官方 Node 主版本。 */
@@ -54,13 +62,19 @@ export function dshRunnerNodeAssetDownloadUrl(
 ): string {
 	const encoded = encodeURIComponent(fileName);
 	if (source === "github") {
-		return `${gitHubReleasesBase()}/releases/download/${DSH_RUNNER_NODE_RELEASE_TAG}/${encoded}`;
+		return `${gitHubLatestDownloadBase()}/${encoded}`;
 	}
-	return `${atomGitReleasesBase()}/releases/download/${DSH_RUNNER_NODE_RELEASE_TAG}/${encoded}`;
+	return `${atomGitFeedUrl()}/${encoded}`;
 }
 
 export function defaultDshRunnerNodeIndexUrl(source: UpdateSourceId = "atomgit"): string {
 	return dshRunnerNodeAssetDownloadUrl(source, DSH_RUNNER_NODE_INDEX_FILE);
+}
+
+/** 设置页「打开下载页」：始终指向当前 latest 应用 Release，不指向 sidecar 专用 tag。 */
+export function dshRunnerNodeReleasePageUrl(source: UpdateSourceId): string {
+	if (source === "github") return `${gitHubReleasesBase()}/releases/latest`;
+	return `${atomGitReleasesBase()}/releases/latest`;
 }
 
 export function selectDshRunnerNodeRelease(
