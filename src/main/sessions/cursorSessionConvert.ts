@@ -10,6 +10,13 @@ import {
 	type CursorRecord,
 	type ParsedCursorSession,
 } from "./cursorSessionSource";
+import { normalizeImportedToolArguments } from "./importToolArguments";
+import {
+	importedContentHasToolCall,
+	importedUnknownBlockAsText,
+	normalizeImportedStopReason,
+	tryImportedImageBlock,
+} from "./importNormalize";
 
 export type ConvertedCursorSession = {
 	raw: string;
@@ -116,12 +123,7 @@ export function convertCursorContentBlocks(
 				type: "toolCall",
 				id,
 				name,
-				// 完整保留 Cursor tool_use.input：对象原样写入，数组包一层以免 pi 端假定 map。
-				arguments: Array.isArray(input)
-					? { items: input }
-					: input && typeof input === "object"
-						? readRecord(input)
-						: { value: input ?? {} },
+				arguments: normalizeImportedToolArguments(input),
 			});
 			continue;
 		}
@@ -147,12 +149,14 @@ export function convertCursorContentBlocks(
 			continue;
 		}
 
-		// 未知块原样序列化：宁可多一段 JSON，也不要在转写时丢掉。
-		try {
-			content.push({ type: "text", text: JSON.stringify(record) });
-		} catch {
-			content.push({ type: "text", text: String(block) });
+		const image = tryImportedImageBlock(record);
+		if (image) {
+			content.push(image);
+			continue;
 		}
+
+		// 未知块原样序列化：宁可多一段 JSON，也不要在转写时丢掉。
+		content.push(importedUnknownBlockAsText(record));
 	}
 
 	const resultIds = new Set(toolResults.map((result) => result.id).filter(Boolean));
@@ -260,7 +264,39 @@ export function convertCursorSession(input: ConvertCursorInput): ConvertedCursor
 			const text = extractCursorUserText(raw);
 			const at = parseCursorTimestampFromText(raw) || lastTimestamp;
 			if (at > 0) lastTimestamp = at;
-			if (text) pushMessage("user", [{ type: "text", text }], {}, at);
+			const converted = convertCursorContentBlocks(blocks, sessionId, toolSeq);
+			const content: PiContent[] = [];
+			let wrapperReplaced = false;
+			for (const item of converted.content) {
+				if (item.type === "text") {
+					const original = readString(item.text);
+					const isUserWrapper =
+						original === raw ||
+						(Boolean(text) && original.includes("<user_query>") && original.includes(text));
+					if (isUserWrapper) {
+						if (!wrapperReplaced) {
+							wrapperReplaced = true;
+							if (text) content.push({ type: "text", text });
+						}
+						continue;
+					}
+				}
+				content.push(item);
+			}
+			if (!wrapperReplaced && text) content.push({ type: "text", text });
+			pushMessage("user", content, {}, at);
+			for (const result of converted.toolResults) {
+				pushMessage(
+					"toolResult",
+					[{ type: "text", text: result.text }],
+					{
+						toolCallId: result.id,
+						toolName: result.name,
+						isError: result.isError,
+					},
+					at,
+				);
+			}
 			continue;
 		}
 
@@ -273,7 +309,9 @@ export function convertCursorSession(input: ConvertCursorInput): ConvertedCursor
 					api: "cursor-import",
 					provider: "cursor",
 					model: "cursor-import",
-					stopReason: "stop",
+					stopReason: normalizeImportedStopReason({
+						hasToolCall: importedContentHasToolCall(converted.content),
+					}),
 				},
 				lastTimestamp,
 			);

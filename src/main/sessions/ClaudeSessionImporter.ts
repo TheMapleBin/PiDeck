@@ -12,6 +12,13 @@ import {
 	defaultSessionImportCopy,
 	type SessionImportCopy,
 } from "./SessionImportCopy";
+import { normalizeImportedToolArguments } from "./importToolArguments";
+import {
+	importedContentHasToolCall,
+	importedUnknownBlockAsText,
+	normalizeImportedStopReason,
+	tryImportedImageBlock,
+} from "./importNormalize";
 
 type ParsedClaudeSession = {
 	meta: {
@@ -211,15 +218,7 @@ export class ClaudeSessionImporter {
 			if (entry.type === "system" && entry.subtype === "api_error") continue;
 
 			if (entry.type === "user") {
-				const text = String(entry.message?.content ?? "").trim();
-				if (text) {
-					pushMessage(
-						"user",
-						[{ type: "text", text }],
-						{},
-						entry.timestamp,
-					);
-				}
+				this.pushClaudeUserEntry(entry, pushMessage);
 				continue;
 			}
 
@@ -227,10 +226,11 @@ export class ClaudeSessionImporter {
 				const message = entry.message;
 				if (!message) continue;
 
-				const content: any[] = [];
+				const content: Array<Record<string, unknown>> = [];
 
-				// 处理内容
-				if (Array.isArray(message.content)) {
+				if (typeof message.content === "string") {
+					if (message.content.trim()) content.push({ type: "text", text: message.content });
+				} else if (Array.isArray(message.content)) {
 					for (const item of message.content) {
 						if (item.type === "text") {
 							content.push({ type: "text", text: item.text });
@@ -245,8 +245,11 @@ export class ClaudeSessionImporter {
 								type: "toolCall",
 								id: item.id,
 								name: item.name,
-								arguments: item.input,
+								arguments: normalizeImportedToolArguments(item.input),
 							});
+						} else {
+							const image = tryImportedImageBlock(item);
+							content.push(image ?? importedUnknownBlockAsText(item));
 						}
 					}
 				}
@@ -259,7 +262,10 @@ export class ClaudeSessionImporter {
 							api: "claude-import",
 							provider: "anthropic",
 							model: message.model || "claude-sonnet-4",
-							stopReason: message.stop_reason || "stop",
+							stopReason: normalizeImportedStopReason({
+								raw: message.stop_reason,
+								hasToolCall: importedContentHasToolCall(content),
+							}),
 						},
 						entry.timestamp,
 					);
@@ -267,20 +273,9 @@ export class ClaudeSessionImporter {
 				continue;
 			}
 
-			// 处理工具结果
+			// 兼容少数顶层 type=tool_result 的导出；主流 Claude Code 写在 user.content 里。
 			if (entry.type === "tool_result") {
-				const toolCallId = String(entry.tool_use_id ?? "");
-				const output = this.extractToolOutput(entry);
-				pushMessage(
-					"toolResult",
-					[{ type: "text", text: output }],
-					{
-						toolCallId,
-						toolName: "tool",
-						isError: Boolean(entry.is_error),
-					},
-					entry.timestamp,
-				);
+				this.pushClaudeToolResult(entry, entry, pushMessage);
 			}
 		}
 
@@ -306,6 +301,76 @@ export class ClaudeSessionImporter {
 			preview: titleState.preview || this.translate("session.importedPreview", { source: "Claude" }),
 			messageCount,
 		};
+	}
+
+	/**
+	 * Claude Code 的 user 行可能是纯文本，也可能是 content[]：
+	 * tool_result 块（喂回模型的工具输出）必须写成 pi toolResult，不能 String(数组) 变成用户气泡。
+	 */
+	private pushClaudeUserEntry(
+		entry: Record<string, any>,
+		pushMessage: (
+			role: "user" | "assistant" | "toolResult",
+			content: unknown[],
+			extra?: Record<string, unknown>,
+			timestampValue?: string,
+		) => void,
+	) {
+		const raw = entry.message?.content;
+		if (typeof raw === "string") {
+			const text = raw.trim();
+			if (text) pushMessage("user", [{ type: "text", text }], {}, entry.timestamp);
+			return;
+		}
+		if (!Array.isArray(raw)) return;
+		const userContent: Array<Record<string, unknown>> = [];
+		const flushUser = () => {
+			if (userContent.length === 0) return;
+			pushMessage("user", userContent.splice(0), {}, entry.timestamp);
+		};
+		for (const item of raw) {
+			if (typeof item === "string") {
+				if (item.trim()) userContent.push({ type: "text", text: item });
+				continue;
+			}
+			if (!item || typeof item !== "object") continue;
+			const record = item as Record<string, unknown>;
+			if (record.type === "tool_result") {
+				flushUser();
+				this.pushClaudeToolResult(record, entry, pushMessage);
+				continue;
+			}
+			if (record.type === "text") {
+				const text = String(record.text ?? "");
+				if (text) userContent.push({ type: "text", text });
+				continue;
+			}
+			const image = tryImportedImageBlock(record);
+			userContent.push(image ?? importedUnknownBlockAsText(record));
+		}
+		flushUser();
+	}
+
+	private pushClaudeToolResult(
+		payload: Record<string, any>,
+		entry: Record<string, any>,
+		pushMessage: (
+			role: "user" | "assistant" | "toolResult",
+			content: unknown[],
+			extra?: Record<string, unknown>,
+			timestampValue?: string,
+		) => void,
+	) {
+		pushMessage(
+			"toolResult",
+			[{ type: "text", text: this.extractToolOutput(payload) }],
+			{
+				toolCallId: String(payload.tool_use_id ?? payload.toolCallId ?? ""),
+				toolName: String(payload.name ?? "tool"),
+				isError: Boolean(payload.is_error ?? payload.isError),
+			},
+			entry.timestamp,
+		);
 	}
 
 	private zeroUsage() {

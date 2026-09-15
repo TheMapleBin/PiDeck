@@ -35,6 +35,8 @@ function loadTranspiled(sourcePath, sandbox) {
 function loadImporter(homePath) {
 	const codexMeta = loadTranspiled("src/shared/codexSessionMeta.ts", { exports: {} });
 	const importCopy = loadTranspiled("src/main/sessions/SessionImportCopy.ts", { exports: {} });
+	const toolArgs = loadTranspiled("src/main/sessions/importToolArguments.ts", { exports: {} });
+	const normalize = loadTranspiled("src/main/sessions/importNormalize.ts", { exports: {} });
 	const sandbox = {
 		Buffer,
 		exports: {},
@@ -43,6 +45,8 @@ function loadImporter(homePath) {
 			if (id === "electron") return { app: { getPath: () => homePath }, shell: {} };
 			if (id === "../../shared/codexSessionMeta") return codexMeta;
 			if (id === "./SessionImportCopy") return importCopy;
+			if (id === "./importToolArguments") return toolArgs;
+			if (id === "./importNormalize") return normalize;
 			return require(id);
 		},
 	};

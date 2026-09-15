@@ -33,11 +33,15 @@ function loadTranspiled(sourcePath, sandbox) {
 
 function loadImporter(homePath) {
 	const importCopy = loadTranspiled("src/main/sessions/SessionImportCopy.ts", { exports: {} });
+	const toolArgs = loadTranspiled("src/main/sessions/importToolArguments.ts", { exports: {} });
+	const normalize = loadTranspiled("src/main/sessions/importNormalize.ts", { exports: {} });
 	const sandbox = {
 		exports: {},
 		require: (id) => {
 			if (id === "electron") return { app: { getPath: () => homePath } };
 			if (id === "./SessionImportCopy") return importCopy;
+			if (id === "./importToolArguments") return toolArgs;
+			if (id === "./importNormalize") return normalize;
 			return require(id);
 		},
 		process,
@@ -346,6 +350,7 @@ test("zcode import: 生成可被 pi 读取的 JSONL（消息/工具/图片/标�
 		assert.equal(toolCall.id, "call_abc123");
 		assert.equal(toolCall.name, "Bash");
 		assert.deepEqual(toolCall.arguments, { command: "ls", description: "列目录" });
+		assert.equal(asstMsg.message.stopReason, "toolUse");
 
 		// toolResult：紧跟 assistant 之后，输出与 isError 正确
 		const resultMsgs = lines.filter((l) => l.type === "message" && l.message.role === "toolResult");

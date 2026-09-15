@@ -36,6 +36,8 @@ function loadImporter(homePath) {
 		require: (id) => {
 			if (id === "electron") return { app: { getPath: () => homePath } };
 			if (id === "./SessionImportCopy") return registry.importCopy;
+			if (id === "./importToolArguments") return registry.toolArgs;
+			if (id === "./importNormalize") return registry.normalize;
 			if (id === "./cursorSessionSource") return registry.source;
 			if (id === "./cursorSessionConvert") return registry.convert;
 			return require(id);
@@ -51,6 +53,8 @@ function loadImporter(homePath) {
 	});
 
 	registry.importCopy = transpile("src/main/sessions/SessionImportCopy.ts", makeSandbox());
+	registry.toolArgs = transpile("src/main/sessions/importToolArguments.ts", makeSandbox());
+	registry.normalize = transpile("src/main/sessions/importNormalize.ts", makeSandbox());
 	registry.source = transpile("src/main/sessions/cursorSessionSource.ts", makeSandbox());
 	registry.convert = transpile("src/main/sessions/cursorSessionConvert.ts", makeSandbox());
 	const mod = transpile("src/main/sessions/CursorSessionImporter.ts", makeSandbox());
@@ -158,6 +162,27 @@ test("纯函数: parseCursorClock 解析 Cursor 时间戳", () => {
 	}
 });
 
+test("convertCursorContentBlocks: 未知块 JSON、无字节图片写占位", () => {
+	const home = mkdtempSync(join(tmpdir(), "cursor-home-"));
+	try {
+		const { registry } = loadImporter(home);
+		const converted = registry.convert.convertCursorContentBlocks(
+			[
+				{ type: "image", filename: "a.png" },
+				{ type: "mystery", foo: 1 },
+			],
+			"sid",
+			{ n: 0 },
+		);
+		assert.deepEqual(JSON.parse(JSON.stringify(converted.content)), [
+			{ type: "text", text: "[image: a.png]" },
+			{ type: "text", text: '{"type":"mystery","foo":1}' },
+		]);
+	} finally {
+		rmSync(home, { recursive: true, force: true });
+	}
+});
+
 test("scan: 按 slug 定位 agent-transcripts，跳过 subagents，标题取 user_query", async () => {
 	const home = mkdtempSync(join(tmpdir(), "cursor-home-"));
 	try {
@@ -250,6 +275,8 @@ test("import: 忠实转写 user / assistant 文本 / tool_use 参数，丢弃 tu
 
 		const toolResults = lines.filter((line) => line.type === "message" && line.message?.role === "toolResult");
 		assert.equal(toolResults.length, 1);
+		assert.equal(assistants[0].message.stopReason, "toolUse");
+		assert.equal(assistants[1].message.stopReason, "stop");
 		assert.equal(toolResults[0].message.toolCallId, assistants[0].message.content[1].id);
 		assert.equal(toolResults[0].message.toolName, "Read");
 		assert.equal(toolResults[0].message.isError, false);
@@ -287,6 +314,34 @@ test("import: 源里已有 tool_result 时按原文写入，不重复补空结�
 		assert.equal(toolResults.length, 1);
 		assert.equal(toolResults[0].message.toolCallId, "call_1");
 		assert.equal(toolResults[0].message.content[0].text, "hello from cursor");
+	} finally {
+		rmSync(home, { recursive: true, force: true });
+	}
+});
+
+test("import: tool_use.input 为 JSON 字符串时解析成对象参数", async () => {
+	const home = mkdtempSync(join(tmpdir(), "cursor-home-"));
+	try {
+		const file = writeTranscript(home, "f-PiDeck", SID, [
+			{
+				role: "user",
+				message: { content: [{ type: "text", text: wrappedUser("字符串参数") }] },
+			},
+			{
+				role: "assistant",
+				message: {
+					content: [
+						{ type: "tool_use", id: "call_json", name: "Read", input: "{\"path\":\"a.ts\",\"limit\":10}" },
+					],
+				},
+			},
+		]);
+		const { importer } = loadImporter(home);
+		const report = await importer.import("F:\\PiDeck", [file]);
+		const lines = readLines(report.results[0].targetPath);
+		const assistant = lines.find((line) => line.type === "message" && line.message?.role === "assistant");
+		assert.equal(assistant.message.content[0].type, "toolCall");
+		assert.deepEqual(assistant.message.content[0].arguments, { path: "a.ts", limit: 10 });
 	} finally {
 		rmSync(home, { recursive: true, force: true });
 	}

@@ -1,5 +1,6 @@
 import { mkdir, readFile, readdir, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
+import { normalizeImportedToolArguments } from "./importToolArguments";
 
 /** WorkBuddy 的 JSONL 行结构不固定，统一按 unknown 读取后再逐字段收窄。 */
 export type WorkBuddyRecord = Record<string, unknown>;
@@ -213,13 +214,7 @@ export function stripInjectedContext(value: string): string {
 		.trim();
 }
 
-/** function_call.arguments 是 JSON 字符串；解析失败时退化为空对象而不是丢掉整次调用。 */
+/** function_call.arguments 是 JSON 字符串；解析失败时保留原文而不是丢掉整次调用。 */
 export function parseWorkBuddyArguments(value: unknown): Record<string, unknown> {
-	if (typeof value !== "string") return readRecord(value);
-	try {
-		const parsed: unknown = JSON.parse(value);
-		return readRecord(parsed);
-	} catch {
-		return {};
-	}
+	return normalizeImportedToolArguments(value);
 }
