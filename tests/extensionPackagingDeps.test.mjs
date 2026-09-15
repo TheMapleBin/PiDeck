@@ -56,3 +56,20 @@ test("extension runtime deps are packaged next to extensions", () => {
 		);
 	}
 });
+
+/**
+ * 2026-09-15 线上事故回归：热更新覆盖层（<userData>/builtin-extensions/）上层没有
+ * node_modules，vendored 依赖必须由 BuiltInExtensionsUpdater 一并复制进覆盖层
+ * （VENDOR_DEP_PACKAGE_NAMES）。新增扩展运行时依赖时两边必须同步——漏了覆盖层这条
+ * 就是「打包版正常、热更新后 pi 启动失败、全部扩展被禁用」。
+ */
+test("extension runtime deps are covered by the updater's vendored package list", async () => {
+	const { loadTsCommonJs: load } = await import("./helpers/loadTsCommonJs.mjs");
+	const updaterModule = load("src/main/extensions/builtInExtensionsUpdater.ts");
+	const vendorNames = [...updaterModule.VENDOR_DEP_PACKAGE_NAMES];
+	assert.deepEqual(
+		[...collectBareImports()].sort(),
+		[...vendorNames].sort(),
+		"VENDOR_DEP_PACKAGE_NAMES 必须与扩展运行时裸导入集合一致（缺了覆盖层解析不到，多了白占空间）",
+	);
+});

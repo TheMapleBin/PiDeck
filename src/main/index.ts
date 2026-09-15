@@ -314,6 +314,7 @@ import { BuiltInExtensionsUpdater } from "./extensions/builtInExtensionsUpdater"
 import {
 	resolveBuiltInExtensionsDir,
 	resolveBuiltInExtensionsOverlayDir,
+	resolveVendorNodeModulesDir,
 	type BuiltInExtensionPathRoots,
 } from "./extensions/builtInExtensions";
 import { createPiProcessExtensionResolvers } from "./extensions/piProcessExtensionResolvers";
@@ -2906,9 +2907,14 @@ function registerIpc() {
 	const builtInExtensionsUpdater = new BuiltInExtensionsUpdater({
 		userDataDir: app.getPath("userData"),
 		builtinExtensionsDir: resolveBuiltInExtensionsDir(builtInExtensionRoots),
+		// vendored 运行时依赖（node_modules/undici 等）的源目录：覆盖层上层没有 node_modules，
+		// 缺了它 pi 会因扩展裸导入解析不到而启动失败（2026-09-15 线上事故）。
+		vendorNodeModulesDir: resolveVendorNodeModulesDir(builtInExtensionRoots),
 		// 与模型目录/应用更新共用 settings.updateSource：默认 AtomGit，切 GitHub 后 raw 直连优先。
 		source: () => settingsStore.get().updateSource,
 	});
+	// 旧覆盖层（没有 vendored 依赖的版本写的）启动自愈，不能要求用户先点一次「更新」
+	builtInExtensionsUpdater.ensureOverlayVendorDependencies();
 	// 后台更新检查：Windows / 支持自动升级的发行物走 electron-updater；
 	// macOS 当前未签 Developer ID，不能承诺稳定的替换/重启，因此只检测 Release 并交给用户手动安装。
 	// 两条路径都由同一个 UpdateService 快照推送渲染层，设置页能明确表达能力边界。
