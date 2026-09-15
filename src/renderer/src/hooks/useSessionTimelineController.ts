@@ -37,6 +37,12 @@ import {
   shouldApplyDelayedHistoryResult,
 } from "./timeline/scrollHistoryPolicy";
 import {
+  browsePinScrollTop,
+  followBrowsePinAfterUserScroll,
+  shouldCompensateBrowsePin,
+  type BrowsePin,
+} from "./timeline/browsePin";
+import {
   countUserTurns,
   TIMELINE_MOUNTED_TURN_LIMIT,
   TIMELINE_SCROLLED_TURN_LIMIT,
@@ -124,6 +130,43 @@ export function isTimelineAtBottom(
 
 export function restoreTimelineAnchor(previousTop: number, heightDelta: number): number {
   return previousTop + heightDelta;
+}
+
+const BROWSE_PIN_ROW_SELECTOR =
+  "article.user-turn[data-message-id], .turn-row[data-message-id]";
+
+/** 钉行相对视口顶的偏移；行未挂载时返回 null。 */
+export function measureBrowsePinViewportTop(
+  timeline: HTMLElement | null,
+  messageId: string,
+): number | null {
+  if (!timeline || !messageId) return null;
+  const el = timeline.querySelector(
+    `[data-message-id="${CSS.escape(messageId)}"]`,
+  ) as HTMLElement | null;
+  if (!el) return null;
+  return el.getBoundingClientRect().top - timeline.getBoundingClientRect().top;
+}
+
+/**
+ * 视口里第一条完整轮根节点（user-turn / turn-row）。
+ * 浏览钉行用：即使物理上仍接近底部（短 3 轮窗口）也要能钉住，所以不走 isTimelineAtBottom。
+ */
+export function findBrowsePin(timeline: HTMLElement | null): BrowsePin | null {
+  if (!timeline) return null;
+  const viewportRect = timeline.getBoundingClientRect();
+  const rows = timeline.querySelectorAll<HTMLElement>(BROWSE_PIN_ROW_SELECTOR);
+  for (const row of rows) {
+    const rect = row.getBoundingClientRect();
+    if (rect.bottom < viewportRect.top + 1) continue;
+    const messageId = row.dataset.messageId ?? "";
+    if (!messageId) continue;
+    return {
+      messageId,
+      expectedViewportTop: rect.top - viewportRect.top,
+    };
+  }
+  return null;
 }
 
 /**
@@ -269,6 +312,11 @@ export type SessionTimelineController = {
    * 引擎未挂上时回退原生 scrollTop。
    */
   pinViewportAfterPrepend: (nextTop: number) => void;
+  /**
+   * 浏览态：按钉住的那一轮相对视口顶的漂移补 scrollTop。
+   * 扩窗 / 翻页 / Markdown 后排版共用；跟随时无操作。人手滚动不会走这条。
+   */
+  pinBrowseRow: () => void;
   jumpToMessage: (messageId: string) => void;
   scrollToBottom: () => void;
   /** Receives wheel input from the sibling outline rail without bypassing timeline scroll ownership. */
@@ -418,6 +466,15 @@ export function useSessionTimelineController(options: {
     // owns it; the layout-effect cleanup must never inspect post-switch nodes.
     // The rAF below still coalesces the settled position and atom persistence.
     currentAnchorRef.current = computeCurrentAnchor();
+    // restoreAt / 扩窗补偿派发的 scroll：只更新冻住那一行的 expected，不改钉到新的第一可见行。
+    if (!programmaticScrollRef.current && !autoScrollRef.current) {
+      if (browsePinFrozenRef.current && browsePinRef.current) {
+        const top = measureBrowsePinViewportTop(timelineRef.current, browsePinRef.current.messageId);
+        browsePinRef.current = followBrowsePinAfterUserScroll(browsePinRef.current, top);
+      } else {
+        browsePinRef.current = findBrowsePin(timelineRef.current);
+      }
+    }
     if (scrollAnchorFrameRef.current != null) return;
     scrollAnchorFrameRef.current = requestAnimationFrame(() => {
       scrollAnchorFrameRef.current = undefined;
@@ -621,6 +678,12 @@ export function useSessionTimelineController(options: {
   const settleScrollCancelRef = useRef<(() => void) | undefined>(undefined);
   const scrollerScrollApiRef = useRef<MessageScrollerScrollApi | null>(null);
   const loadMoreAnchorRef = useRef<Tagged<TimelineAnchor> | undefined>(undefined);
+  /** 浏览态钉行：扩窗/翻页前冻住正在看的那一轮，布局变高时按漂移补位置。 */
+  const browsePinRef = useRef<BrowsePin | null>(null);
+  /** 钉行的 messageId 冻结中：补偿完成前不要改钉到「当前第一可见行」（那会是刚插进来的更早轮）。 */
+  const browsePinFrozenRef = useRef(false);
+  /** 刻度跳转进行中：不要钉浏览行，否则会把刚跳到的目标拽回旧视口。 */
+  const skipBrowsePinRef = useRef(false);
   /**
    * 挂起的跳转：expandAttempts/loadAttempts 分别驱动指数兜底扩窗与补页防呆
    * （策略见 timeline/jumpWindowPolicy）。必须是 state 而非 ref——ref 赋值不会
@@ -702,6 +765,9 @@ export function useSessionTimelineController(options: {
    * 在 React effect 前便作废迟到分页、锚点、扩窗 rAF 与待处理的上滚意图。
    */
   const invalidateHistoryBrowsing = useCallback(() => {
+    browsePinRef.current = null;
+    browsePinFrozenRef.current = false;
+    skipBrowsePinRef.current = false;
     historyBrowseGenerationRef.current += 1;
     // 历史浏览事务结束（回底/重锁）同样作废在途的「最终回答安静定位」动画：
     // 回底后视口应停在底部，不能让动画把刚回底的位置再拉到 30% 高度。
@@ -736,6 +802,13 @@ export function useSessionTimelineController(options: {
   }, []);
   const expandWindowBatched = useCallback((turns = TIMELINE_WINDOW_EXPAND_STEP) => {
     escapeAutoScroll();
+    if (!skipBrowsePinRef.current && !autoScrollRef.current) {
+      const next = findBrowsePin(timelineRef.current);
+      if (next) {
+        browsePinRef.current = next;
+        browsePinFrozenRef.current = true;
+      }
+    }
     if (turns <= 0) return;
     pendingExpandTurnsRef.current += turns;
     if (expandBatchFrameRef.current === undefined) {
@@ -758,12 +831,22 @@ export function useSessionTimelineController(options: {
     // 否则 turnWindowTurns 恒取贴底窗口 3 轮，扩大 scrolledWindowTurns 不生效，
     // 按钮点击表现为无反应（2026-02 修复）。escapeAutoScroll 同时 stopScroll。
     escapeAutoScroll();
+    if (!skipBrowsePinRef.current && !autoScrollRef.current) {
+      const next = findBrowsePin(timelineRef.current);
+      if (next) {
+        browsePinRef.current = next;
+        browsePinFrozenRef.current = true;
+      }
+    }
     setScrolledWindowTurns((prev) => prev + Math.max(1, turns));
   }, [escapeAutoScroll]);
   // 回底/卸载时取消未消费的分批扩展（窗口重置回基础大小，pending 作废）
   useEffect(() => {
     if (autoScroll) {
       pendingExpandTurnsRef.current = 0;
+      browsePinRef.current = null;
+      browsePinFrozenRef.current = false;
+      skipBrowsePinRef.current = false;
       if (expandBatchFrameRef.current !== undefined) {
         window.cancelAnimationFrame(expandBatchFrameRef.current);
         expandBatchFrameRef.current = undefined;
@@ -897,6 +980,43 @@ export function useSessionTimelineController(options: {
     const timeline = timelineRef.current;
     if (timeline) timeline.scrollTop = nextTop;
   }, [markProgrammaticScroll]);
+
+  const captureBrowsePin = useCallback((freeze: boolean) => {
+    if (skipBrowsePinRef.current || autoScrollRef.current) return;
+    const next = findBrowsePin(timelineRef.current);
+    if (!next) return;
+    browsePinRef.current = next;
+    if (freeze) browsePinFrozenRef.current = true;
+  }, []);
+
+  /**
+   * 浏览态钉行：上方长高后把冻住的那一轮拉回 expectedViewportTop。
+   * 必须走 restoreAt。人手滚动不走这里（只更新 expected，见 handleTimelineScroll）。
+   */
+  const pinBrowseRow = useCallback(() => {
+    if (skipBrowsePinRef.current || autoScrollRef.current) return;
+    const pin = browsePinRef.current;
+    const timeline = timelineRef.current;
+    if (!pin || !timeline) return;
+    const currentTop = measureBrowsePinViewportTop(timeline, pin.messageId);
+    if (
+      !shouldCompensateBrowsePin({
+        following: autoScrollRef.current,
+        currentViewportTop: currentTop,
+        expectedViewportTop: pin.expectedViewportTop,
+      })
+    ) {
+      return;
+    }
+    if (currentTop === null) return;
+    pinViewportAfterPrepend(
+      browsePinScrollTop(timeline.scrollTop, currentTop, pin.expectedViewportTop),
+    );
+    const after = measureBrowsePinViewportTop(timeline, pin.messageId);
+    if (after !== null) {
+      browsePinRef.current = { messageId: pin.messageId, expectedViewportTop: after };
+    }
+  }, [pinViewportAfterPrepend]);
 
   /**
    * 最新轮结束 1.5s 且用户无操作、执行过程自动收起后，把该轮最终回答开头放到视口中上方。
@@ -1044,6 +1164,7 @@ export function useSessionTimelineController(options: {
 	const loadMoreMessages = useCallback((source: "scroll" | "button" = "scroll") => {
 		const requestOwnerKey = ownerKey;
 		const timeline = timelineRef.current;
+    if (source === "scroll") captureBrowsePin(true);
     if (timeline && ownerKeyRef.current === requestOwnerKey) {
       loadMoreAnchorRef.current = {
         ownerKey: requestOwnerKey,
@@ -1141,7 +1262,7 @@ export function useSessionTimelineController(options: {
 				});
 			return;
 		}
-	}, [cachedEntry?.revision, diskPage, expandWindowBatched, historyHasMore, isLoadingMessagePage, messages, options.sessionId, ownerKey, prependHistoryPage, prependMessagePage, runtimeHistory]);
+	}, [cachedEntry?.revision, captureBrowsePin, diskPage, expandWindowBatched, historyHasMore, isLoadingMessagePage, messages, options.sessionId, ownerKey, prependHistoryPage, prependMessagePage, runtimeHistory]);
 
 	// ── 回底清理临时历史（2026-11 轮次模型）──
 	// 贴底稳定 1.5s 后清掉翻过的历史前缀（atom 只留运行时窗口段），渲染层内存回到最小；
@@ -1218,10 +1339,14 @@ export function useSessionTimelineController(options: {
     // 跟随态点击刻度必须先解锁贴底：目标已在挂载窗口内时（如最新一条）引擎
     // 会把滚动拽回底部；目标在窗口外时 unlock 也是扩窗生效的前提。
     escapeAutoScroll();
+    skipBrowsePinRef.current = true;
+    browsePinRef.current = null;
+    browsePinFrozenRef.current = false;
     const existing = timeline.querySelector(
       `[data-message-id="${CSS.escape(messageId)}"]`,
     ) as HTMLElement | null;
     if (existing) {
+      skipBrowsePinRef.current = false;
       scrollJumpTargetIntoView(timeline, existing);
       highlightMessage(existing, requestOwnerKey);
       return;
@@ -1246,6 +1371,9 @@ export function useSessionTimelineController(options: {
 
   useEffect(() => {
     loadMoreAnchorRef.current = undefined;
+    browsePinRef.current = null;
+    browsePinFrozenRef.current = false;
+    skipBrowsePinRef.current = false;
     // 切会话：取消旧会话遗留的挂起跳转与动画状态。
     setPendingJump(undefined);
     programmaticScrollRef.current = false;
@@ -1414,6 +1542,16 @@ export function useSessionTimelineController(options: {
       const timeline = timelineRef.current;
       if (!timeline) return;
 
+      const layoutPending =
+        pendingExpandTurnsRef.current > 0 ||
+        expandBatchFrameRef.current !== undefined ||
+        loadMoreAnchorRef.current !== undefined;
+      if (source === "input" && !layoutPending) {
+        // 扩窗已落稳后用户继续滑：换钉当前第一可见行，不要焊在扩窗前那一条上。
+        browsePinFrozenRef.current = false;
+        captureBrowsePin(false);
+      }
+
       const now = Date.now();
       const hasMore = diskPage ? diskPage.nextBefore !== null : historyHasMore;
       // wheel 意图在浏览器默认滚动前上报，scrollbar/touch 意图在 scroll 后上报；
@@ -1449,6 +1587,7 @@ export function useSessionTimelineController(options: {
       }
     });
   }, [
+    captureBrowsePin,
     controllerEnabled,
     diskPage,
     escapeAutoScroll,
@@ -1470,13 +1609,15 @@ export function useSessionTimelineController(options: {
       loadMoreAnchorRef.current = undefined;
       return;
     }
-    // 所有补页入口统一补偿（preserveAtTop）：即使原视口在顶部也把旧首条钉住，
-    // 新历史只出现在上方，用户继续上滚查看——避免「数据一到窗口整体上移」。
+    // 滚动翻页：钉住正在看的那一轮（不是整页 scrollHeight 差）。
+    // 跳转驱动的补页（preserveAtTop 为空）仍走顶部阈值：点刻度时不要把视口焊回旧行。
+    if (anchor.value.preserveAtTop) {
+      pinBrowseRow();
+      loadMoreAnchorRef.current = undefined;
+      return;
+    }
     const heightDelta = timeline.scrollHeight - anchor.value.height;
-    const nextScrollTop = anchor.value.preserveAtTop
-      // 滚动加载用「当前视口」补偿：请求期间用户可能继续滚了，按发起时 anchor 会把用户拽回旧位置。
-      ? restoreTimelineAnchor(timeline.scrollTop, heightDelta)
-      : resolveTimelineTopCompensation(anchor.value.top, heightDelta);
+    const nextScrollTop = resolveTimelineTopCompensation(anchor.value.top, heightDelta);
     if (nextScrollTop === null) {
       loadMoreAnchorRef.current = undefined;
       programmaticScrollRef.current = true;
@@ -1485,11 +1626,25 @@ export function useSessionTimelineController(options: {
       });
       return () => cancelAnimationFrame(topFrame);
     }
-    // restoreAt：定位 + 解锁锁底 + ignoreScrollToTop，补偿造成的 scrollTop 增大
-    // 不会被引擎当成用户下滚重锁。markProgrammaticScroll 也会抑制上层意图消费。
     pinViewportAfterPrepend(nextScrollTop);
     loadMoreAnchorRef.current = undefined;
-  }, [controllerEnabled, ownerKey, pinViewportAfterPrepend, visibleMessages.length]);
+  }, [controllerEnabled, ownerKey, pinBrowseRow, pinViewportAfterPrepend, visibleMessages.length]);
+
+  // 浏览态内容后增高（历史 Markdown 轻量→全量、图片、mermaid）：扩窗那一帧的补偿不够，
+  // 按钉住的行继续补漂移。跟随时不碰——吸底引擎负责下方增长。
+  useLayoutEffect(() => {
+    if (!controllerEnabled) return;
+    const timeline = timelineRef.current;
+    if (!timeline || typeof ResizeObserver === "undefined") return;
+    const content = timeline.querySelector("[role=\"log\"]");
+    const target = content ?? timeline;
+    const observer = new ResizeObserver(() => {
+      if (autoScrollRef.current || skipBrowsePinRef.current) return;
+      pinBrowseRow();
+    });
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [controllerEnabled, ownerKey, pinBrowseRow]);
 
   useEffect(() => {
     if (!controllerEnabled || !pendingJump) return;
@@ -1503,6 +1658,7 @@ export function useSessionTimelineController(options: {
       `[data-message-id="${CSS.escape(pendingJump.value.messageId)}"]`,
     ) as HTMLElement | null;
     if (element) {
+      skipBrowsePinRef.current = false;
       setPendingJump(undefined);
       scrollJumpTargetIntoView(timeline, element);
       highlightMessage(element, ownerKey);
@@ -1520,6 +1676,7 @@ export function useSessionTimelineController(options: {
       loadAttempts: pendingJump.value.loadAttempts,
     });
     if (action.kind === "give-up") {
+      skipBrowsePinRef.current = false;
       setPendingJump(undefined);
       return;
     }
@@ -1555,6 +1712,7 @@ export function useSessionTimelineController(options: {
     loadMoreMessages,
     markProgrammaticScroll,
     pinViewportAfterPrepend,
+    pinBrowseRow,
     jumpToMessage,
     scrollToBottom,
     scrollTimelineBy,

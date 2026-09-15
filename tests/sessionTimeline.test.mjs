@@ -45,6 +45,7 @@ function loadTimelineHelpers() {
       "src/renderer/src/components/session/timeline/jumpWindowPolicy.ts",
       { "./turnRenderWindow": { TIMELINE_WINDOW_EXPAND_STEP: 3 } },
     ),
+    "./timeline/browsePin": compileModule("src/renderer/src/hooks/timeline/browsePin.ts"),
   });
 }
 
@@ -146,7 +147,7 @@ test("scroll events synchronously retain an anchor before a same-task session sw
   // exist before React can commit a tab change and cancel the pending frame.
   assert.match(
     source,
-    /currentAnchorRef\.current = computeCurrentAnchor\(\);\s*if \(scrollAnchorFrameRef\.current != null\) return;\s*scrollAnchorFrameRef\.current = requestAnimationFrame/,
+    /currentAnchorRef\.current = computeCurrentAnchor\(\);[\s\S]*?if \(scrollAnchorFrameRef\.current != null\) return;\s*scrollAnchorFrameRef\.current = requestAnimationFrame/,
   );
 });
 
@@ -193,15 +194,15 @@ test("bottom-settle history clear invalidates in-flight runtime history pages", 
   assert.match(source, /isTimelineAtBottom\(timeline\.scrollTop/);
 });
 
-test("prepend scroll compensation is skipped while following bottom and pins via restoreAt", () => {
+test("prepend scroll compensation is skipped while following bottom and pins the visible row", () => {
   // 跟底中/浏览代数过期（autoScrollRef=true 或 generation 不匹配）不恢复旧锚点：
   // 贴底引擎负责生长补偿，迟到分页也不得把刚回底的视口重新插页；
-  // 非跟底时走 pinViewportAfterPrepend（restoreAt），禁止原生 scrollTop 补偿。
+  // 滚动翻页钉正在看的那一轮（pinBrowseRow），禁止按整页 scrollHeight 差写原生 scrollTop。
   assert.match(
     source,
     /if \(autoScrollRef\.current \|\| anchor\.value\.generation !== historyBrowseGenerationRef\.current\) \{\n\s*loadMoreAnchorRef\.current = undefined;\n\s*return;\n\s*\}/,
   );
-  assert.match(source, /pinViewportAfterPrepend\(nextScrollTop\)/);
+  assert.match(source, /if \(anchor\.value\.preserveAtTop\) \{\n\s*pinBrowseRow\(\);/);
   assert.doesNotMatch(source, /timeline\.scrollTop = nextScrollTop/);
   assert.match(source, /requestAnimationFrame\(\(\) => \{\n\s*programmaticScrollRef\.current = false;/);
 });
@@ -222,6 +223,18 @@ test("prepend pin uses restoreAt so ResizeObserver cannot re-lock to the bottom"
   assert.match(source, /const pinViewportAfterPrepend = useCallback\(\(nextTop: number\) => \{/);
   assert.match(source, /api\?\.restoreAt/);
   assert.match(source, /api\.restoreAt\(nextTop\)/);
+});
+
+test("history expand pins the visible turn row instead of container height delta", () => {
+  // 上滑跳到更早 1~2 轮的根因：整页 scrollHeight 差把后排版也算进去，且只补一次。
+  assert.match(source, /browsePinScrollTop\(timeline\.scrollTop, currentTop, pin\.expectedViewportTop\)/);
+  assert.match(source, /const pinBrowseRow = useCallback\(\(\) => \{/);
+  assert.match(source, /new ResizeObserver\(\(\) => \{/);
+  assert.match(source, /browsePinFrozenRef/);
+  assert.doesNotMatch(
+    source,
+    /restoreTimelineAnchor\(timeline\.scrollTop, heightDelta\)/,
+  );
 });
 
 test("load-more compensation is skipped at the very top so prepended content stays visible", () => {
