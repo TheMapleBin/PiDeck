@@ -197,10 +197,18 @@ for (const pkg of ENTRY_PACKAGES) {
 /** 收集包的所有入口候选（main + exports 全部字符串值，递归展开条件对象）。 */
 function collectAllEntries(pkg) {
 	const out = [];
-	if (typeof pkg.main === "string" && pkg.main) out.push(pkg.main);
+	if (typeof pkg.main === "string" && pkg.main && normalizeEntry(pkg.main) !== "package.json") out.push(pkg.main);
 	const walk = (value) => {
-		if (typeof value === "string") out.push(value);
-		else if (value && typeof value === "object") for (const v of Object.values(value)) walk(v);
+		if (typeof value === "string") {
+			// exports["./package.json"] 是元数据导出：文件必然在包里，不能充当
+			// 运行时代码入口。2026-09 事故：dsh-tool-pwsh-persistent 缺 lib/ 时
+			// 靠 "./package.json" 候选“可解析”骗过校验，坏归档照样发布。
+			// 含 "*" 的通配模式（dsh-web-frontend 的 "./dist/*"）按模式展开，
+			// 不能字面解析，同样不进候选。
+			if (value && !value.includes("*") && normalizeEntry(value) !== "package.json") out.push(value);
+		} else if (value && typeof value === "object") {
+			for (const v of Object.values(value)) walk(v);
+		}
 	};
 	if (pkg.exports) walk(pkg.exports);
 	return out;
