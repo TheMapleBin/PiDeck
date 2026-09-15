@@ -581,6 +581,7 @@ export function SessionSourceFilterMenu(props: {
 		opencode: t("sessionSource.opencode"),
 		zcode: t("sessionSource.zcode"),
 		workbuddy: t("sessionSource.workbuddy"),
+		cursor: t("sessionSource.cursor"),
 		dsh: t("sessionBackend.dsh"),
 		imagegen: t("sessionBackend.imagegen"),
 	};
@@ -629,6 +630,7 @@ export function ProjectContextMenu(props: {
 	onImportOpenCodeSessions: () => void;
 	onImportZCodeSessions: () => void;
 	onImportWorkBuddySessions: () => void;
+	onImportCursorSessions: () => void;
 	onManageProjectResources: () => void;
 	onManageAutomations: () => void;
 	onManageSessions: () => void;
@@ -745,6 +747,9 @@ export function ProjectContextMenu(props: {
 							</DropdownMenuItem>
 							<DropdownMenuItem onSelect={props.onImportWorkBuddySessions}>
 								{t("menu.importWorkBuddy")}
+							</DropdownMenuItem>
+							<DropdownMenuItem onSelect={props.onImportCursorSessions}>
+								{t("menu.importCursor")}
 							</DropdownMenuItem>
 						</DropdownMenuSubContent>
 					</DropdownMenuSub>

@@ -24,6 +24,8 @@ import type {
 	ZCodeImportReport,
 	WorkBuddySessionSummary,
 	WorkBuddyImportReport,
+	CursorSessionSummary,
+	CursorImportReport,
 	Project,
 } from "../../../../shared/types";
 import { Checkbox } from "../ui-shadcn/checkbox";
@@ -344,7 +346,7 @@ export function ZCodeImportModal(props: {
 }
 type ImportStatusValue = "new" | "current" | "outdated";
 
-/** 会话列表项的最小公共形状：Claude / OpenCode / ZCode / WorkBuddy 汇总结构一致。 */
+/** 会话列表项的最小公共形状：Claude / OpenCode / ZCode / WorkBuddy / Cursor 汇总结构一致。 */
 type ImportSessionLike = {
 	sourcePath: string;
 	title: string;
@@ -515,6 +517,34 @@ export function WorkBuddyImportModal(props: {
 		<SessionImportModal
 			copyPrefix="workbuddy"
 			formatStatus={formatWorkBuddyStatus}
+			{...props}
+		/>
+	);
+}
+
+function formatCursorStatus(status: CursorSessionSummary["status"]) {
+	if (status === "current") return t("cursor.status.current");
+	if (status === "outdated") return t("cursor.status.outdated");
+	return t("cursor.status.new");
+}
+
+export function CursorImportModal(props: {
+	project: Project;
+	sessions: CursorSessionSummary[];
+	selectedPaths: string[];
+	loading: boolean;
+	importing: boolean;
+	report: CursorImportReport | null;
+	onClose: () => void;
+	onRefresh: () => void;
+	onToggle: (sourcePath: string) => void;
+	onToggleAll: () => void;
+	onImport: () => void;
+}) {
+	return (
+		<SessionImportModal
+			copyPrefix="cursor"
+			formatStatus={formatCursorStatus}
 			{...props}
 		/>
 	);

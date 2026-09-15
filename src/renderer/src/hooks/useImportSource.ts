@@ -43,7 +43,7 @@ export type ImportSource<T, R> = {
 /**
  * 单个导入源的完整状态机：扫描 / 勾选 / 导入 / 报告。
  *
- * 五个导入源（Codex / Claude / OpenCode / ZCode / WorkBuddy）流程完全一致，
+ * 六个导入源（Codex / Claude / OpenCode / ZCode / WorkBuddy / Cursor）流程完全一致，
  * 只有 API、文案前缀与可选集合不同，因此收敛成工厂 hook，避免逐源复制状态。
  */
 export function useImportSource<

@@ -69,7 +69,7 @@ export type FileTreeNode = {
 	size?: number;
 };
 
-export type SessionSource = "pi" | "codex" | "claude" | "opencode" | "zcode" | "workbuddy";
+export type SessionSource = "pi" | "codex" | "claude" | "opencode" | "zcode" | "workbuddy" | "cursor";
 export type SessionEnvironment = "native" | "wsl";
 
 /**

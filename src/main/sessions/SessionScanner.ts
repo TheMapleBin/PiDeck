@@ -1648,7 +1648,7 @@ export class SessionScanner {
     };
   }
 
-  /** 导入器约定文件名：codex_<id>.jsonl / claude_<id>.jsonl / opencode_<id>.jsonl / zcode_<id>.jsonl。 */
+  /** 导入器约定文件名：codex_<id>.jsonl / claude_<id>.jsonl / opencode_<id>.jsonl / zcode_<id>.jsonl / cursor_<id>.jsonl。 */
   private inferSourceFromFileName(filePath: string): NonNullable<SessionSummary["source"]> {
     const base = basename(filePath).toLowerCase();
     if (base.startsWith("codex_")) return "codex";
@@ -1656,6 +1656,7 @@ export class SessionScanner {
     if (base.startsWith("opencode_")) return "opencode";
     if (base.startsWith("zcode_")) return "zcode";
     if (base.startsWith("workbuddy_")) return "workbuddy";
+    if (base.startsWith("cursor_")) return "cursor";
     return "pi";
   }
 
@@ -1752,6 +1753,7 @@ export class SessionScanner {
         else if (entry.type === "opencode_import") source = "opencode";
         else if (entry.type === "zcode_import") source = "zcode";
         else if (entry.type === "workbuddy_import") source = "workbuddy";
+        else if (entry.type === "cursor_import") source = "cursor";
       }
 
       projectPath ||= entry.cwd || entry.projectPath || entry.header?.cwd || entry.data?.cwd || entry.session?.cwd || entry.data?.session?.cwd;

@@ -21,6 +21,7 @@ export const SESSION_FILTER_PILLS: readonly SessionFilterPill[] = [
   "opencode",
   "zcode",
   "workbuddy",
+  "cursor",
   "dsh",
   "imagegen",
 ];
@@ -67,7 +68,7 @@ export function pillsPresentIn<T extends { source?: SessionSource; backend?: Age
  *
  * v2：{ v: 2, filters: { [projectId]: string[] | null } }，数组为 5 个类别。
  * v3：{ v: 3, filters: { [projectId]: string[] | null } }，数组为 6 个类别（追加 imagegen）。
- * zcode 类别于 v3 后追加，不升版本号：v3 解析路径按 isSessionFilterPill 动态校验，
+ * zcode / workbuddy / cursor 类别于 v3 后追加，不升版本号：v3 解析路径按 isSessionFilterPill 动态校验，
  * 新类别写入的存量数据读回时天然兼容，无需迁移。
  * v1（旧版）：{ [projectId]: string[] | null }，数组只有 4 个来源，DSH 会话按
  *   source=pi 显示。读取时迁移：集合含 "pi" 则补 "dsh"——旧用户此前能看到

@@ -82,6 +82,7 @@ import type { ClaudeSessionImporter } from "../sessions/ClaudeSessionImporter";
 import type { OpenCodeSessionImporter } from "../sessions/OpenCodeSessionImporter";
 import type { ZCodeSessionImporter } from "../sessions/ZCodeSessionImporter";
 import type { WorkBuddySessionImporter } from "../sessions/WorkBuddySessionImporter";
+import type { CursorSessionImporter } from "../sessions/CursorSessionImporter";
 import type { AppLogger } from "../logging/AppLogger";
 
 /**
@@ -298,6 +299,7 @@ export type SessionIpcDeps = {
 	openCodeSessionImporter: OpenCodeSessionImporter;
 	zcodeSessionImporter: ZCodeSessionImporter;
 	workbuddySessionImporter: WorkBuddySessionImporter;
+	cursorSessionImporter: CursorSessionImporter;
 	appLogger: AppLogger;
 	terminalManager: TerminalSessionManager;
 	mainCopy: (key: string, params?: Record<string, string | number>) => string;
@@ -388,6 +390,7 @@ export function registerSessionIpc(deps: SessionIpcDeps): void {
 		openCodeSessionImporter,
 		zcodeSessionImporter,
 		workbuddySessionImporter,
+		cursorSessionImporter,
 		appLogger,
 		terminalManager,
 		mainCopy,
@@ -2219,6 +2222,29 @@ export function registerSessionIpc(deps: SessionIpcDeps): void {
 			if (!project) throw new Error(`Project not found: ${projectId}`);
 			const result = await workbuddySessionImporter.import(project.path, sourcePaths);
 			void appLogger.info("session", "WorkBuddy sessions imported", {
+				projectId,
+				sourceCount: sourcePaths.length,
+			});
+			return result;
+		},
+	);
+	ipcMain.handle(
+		ipcChannels.cursorSessionsScan,
+		async (_event, projectId: string) => {
+			const project = projectStore.get(projectId);
+			if (!project) throw new Error(`Project not found: ${projectId}`);
+			const result = await cursorSessionImporter.scan(project.path);
+			void appLogger.debug("session", "Cursor sessions scanned", { projectId });
+			return result;
+		},
+	);
+	ipcMain.handle(
+		ipcChannels.cursorSessionsImport,
+		async (_event, projectId: string, sourcePaths: string[]) => {
+			const project = projectStore.get(projectId);
+			if (!project) throw new Error(`Project not found: ${projectId}`);
+			const result = await cursorSessionImporter.import(project.path, sourcePaths);
+			void appLogger.info("session", "Cursor sessions imported", {
 				projectId,
 				sourceCount: sourcePaths.length,
 			});
