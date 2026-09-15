@@ -141,6 +141,35 @@ test("Tailwind scans streamdown + plugin classes; styles.css imports vendor stre
   assert.doesNotMatch(packageJson, /"react-markdown"/);
 });
 
+test("renderer aliases bare shiki to the fine-grained bundle, never shiki/core subpaths", () => {
+  // @streamdown/code 与 @pierre/diffs 都 from "shiki" 拉 full bundle；
+  // 只改 agent-code langs 不够。alias 必须 /^shiki$/，字符串前缀会吞掉 shiki/wasm。
+  const vite = readFileSync("electron.vite.config.ts", "utf8");
+  const bundle = readFileSync("src/renderer/src/shiki/bundle.ts", "utf8");
+  assert.match(vite, /find:\s*\/\^shiki\$\//);
+  assert.match(vite, /function shikiBundleAliasPlugin/);
+  assert.match(
+    vite,
+    /worker:\s*\{[\s\S]*plugins:\s*\(\)\s*=>\s*\[shikiBundleAliasPlugin\(\)\]/,
+    "worker 不继承 renderer.resolve.alias，必须单独挂插件",
+  );
+  assert.doesNotMatch(vite, /find:\s*"shiki"/);
+  assert.match(bundle, /createBundledHighlighter/);
+  assert.match(bundle, /@shikijs\/langs\/diff/);
+  assert.match(bundle, /@shikijs\/langs\/go/);
+  assert.match(bundle, /@shikijs\/langs\/rust/);
+  assert.doesNotMatch(
+    bundle,
+    /from "@shikijs\/core"/,
+    "必须用 shiki/core（4.x createBundledHighlighter），不能用顶层 @shikijs/core@2",
+  );
+  assert.doesNotMatch(
+    bundle,
+    /^export \* from "shiki\/core";/m,
+    "不要把 shiki/core 整包再导出，会和 shorthand 撞名",
+  );
+});
+
 test("link handling is the single shared implementation (no react-markdown import)", () => {
   // 单份实现：所有管线从共享模块 import，不允许本地重复定义
   assert.match(surface, /from "\.\/MarkdownStream"/);

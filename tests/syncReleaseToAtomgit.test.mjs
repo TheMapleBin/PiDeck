@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 // 被测模块以 ESM import 加载；脚本有 CLI 直跑守卫，import 时不触发网络/进程副作用
-const { planLatestCorrection, pickReleaseStatus, planAssetActions } = await import('../scripts/sync-release-to-atomgit.mjs');
+const { isAppVersionReleaseTag, planLatestCorrection, pickReleaseStatus, planAssetActions } = await import('../scripts/sync-release-to-atomgit.mjs');
 
 test('planLatestCorrection: AtomGit latest 落后于 GitHub latest 时计划提升+降级', () => {
   const plan = planLatestCorrection(
@@ -33,6 +33,40 @@ test('planLatestCorrection: 无差异时返回空计划（幂等）', () => {
 test('pickReleaseStatus: 仅 GitHub latest 写 latest 标记，旧 tag 不携带该字段', () => {
   assert.equal(pickReleaseStatus(true), 'latest');
   assert.equal(pickReleaseStatus(false), undefined);
+});
+
+test('isAppVersionReleaseTag: 只认 vX.Y 应用版本，sidecar tag 不算 latest 候选', () => {
+  assert.equal(isAppVersionReleaseTag('v0.7.5'), true);
+  assert.equal(isAppVersionReleaseTag('v0.7.6-beta'), true);
+  assert.equal(isAppVersionReleaseTag('dsh-runner-node'), false);
+  assert.equal(isAppVersionReleaseTag('dsh-runtime'), false);
+  assert.equal(isAppVersionReleaseTag('latest'), false);
+});
+
+test('planLatestCorrection: sidecar 误占 GitHub latest 时仍把 AtomGit latest 钉回版本 tag', () => {
+  const plan = planLatestCorrection(
+    [
+      { tag_name: 'v0.7.5', release_status: 'none' },
+      { tag_name: 'dsh-runner-node', release_status: 'latest' },
+    ],
+    'dsh-runner-node',
+  );
+  // 函数本身不猜「哪个版本才是应用 latest」——调用方会先把 GitHub latest 映射成 v*。
+  assert.deepEqual(plan, [{ tag: 'dsh-runner-node', release_status: 'none' }]);
+});
+
+test('planLatestCorrection: 版本 tag 为 GitHub latest 时提升它并降级 sidecar', () => {
+  const plan = planLatestCorrection(
+    [
+      { tag_name: 'v0.7.5', release_status: 'none' },
+      { tag_name: 'dsh-runner-node', release_status: 'latest' },
+    ],
+    'v0.7.5',
+  );
+  assert.deepEqual(plan, [
+    { tag: 'v0.7.5', release_status: 'latest' },
+    { tag: 'dsh-runner-node', release_status: 'none' },
+  ]);
 });
 
 test('planAssetActions: 同名同大小 → 跳过；远端没有 → 上传（基础断点续传语义）', () => {

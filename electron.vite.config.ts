@@ -6,6 +6,30 @@ import type { Plugin } from "vite";
 import { readDevGitBranch, resolveDevVitePort } from "./src/main/devIsolation";
 
 /**
+ * 把裸导入 `shiki` 指到精细 bundle。
+ * worker 不继承 renderer.resolve.alias，必须 renderer plugins + worker.plugins 都挂。
+ * find 必须是 `/^shiki$/`：字符串前缀会把 `shiki/core` / `shiki/wasm` 一并改写。
+ */
+function shikiBundleAliasPlugin(): Plugin {
+	return {
+		name: "shiki-bundle-alias",
+		enforce: "pre",
+		config() {
+			return {
+				resolve: {
+					alias: [
+						{
+							find: /^shiki$/,
+							replacement: resolve("src/renderer/src/shiki/bundle.ts"),
+						},
+					],
+				},
+			};
+		},
+	};
+}
+
+/**
  * KaTeX 字体精简 Vite 插件
  *
  * katex.min.css 中的每个 @font-face 声明了三种格式（woff2 / woff / truetype），
@@ -118,17 +142,21 @@ export default defineConfig({
       ],
     },
     resolve: {
-      alias: {
-        "@": resolve("src/renderer/src"),
-        "@renderer": resolve("src/renderer/src"),
-        "@shared": resolve("src/shared"),
-      },
+      alias: [
+        { find: "@", replacement: resolve("src/renderer/src") },
+        { find: "@renderer", replacement: resolve("src/renderer/src") },
+        { find: "@shared", replacement: resolve("src/shared") },
+        // 必须精确匹配裸 `shiki`：字符串前缀会把 `shiki/core` / `shiki/wasm` 一并改写，
+        // @pierre/diffs 的 worker 与引擎入口会解析到不存在的 bundle.ts/core。
+        { find: /^shiki$/, replacement: resolve("src/renderer/src/shiki/bundle.ts") },
+      ],
     },
-    plugins: [react(), tailwindcss(), katexWoff2OnlyPlugin()],
+    plugins: [react(), tailwindcss(), katexWoff2OnlyPlugin(), shikiBundleAliasPlugin()],
     worker: {
       // @pierre/diffs 的 worker 线程脚本是 ESM（含 import），
       // 必须用 ES 格式打包（iife 不支持 code-splitting），产物以 module worker 加载
       format: "es",
+      plugins: () => [shikiBundleAliasPlugin()],
     },
     build: {
       // 不计算 gzip 压缩后大小（节约构建时间）

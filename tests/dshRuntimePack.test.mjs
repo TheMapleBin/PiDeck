@@ -261,6 +261,33 @@ test("没有随包资源时回退到在线索引", async () => {
 	rmSync(root, { recursive: true, force: true });
 });
 
+test("runtime:pack 默认 lite，CI 上传分平台归档，禁止独立 dsh-runtime tag", () => {
+	const pack = readFileSync("scripts/pack-dsh-runtime.mjs", "utf8");
+	const pkgJson = readFileSync("package.json", "utf8");
+	const pkg = JSON.parse(pkgJson);
+	const release = readFileSync(".github/workflows/release.yml", "utf8");
+	assert.match(
+		pack,
+		/const lite = !argv.includes\("--full"\)/,
+		"官方默认 lite；--full 才把 runtime 拷进 extraResources",
+	);
+	assert.match(pack, /isNpmHashedLeftoverDir/,
+		"npm 升级残留 .pkg-<8char> 必须从种子/闭包/walk 跳过");
+	assert.equal(pkg.scripts["runtime:pack"], "node scripts/pack-dsh-runtime.mjs");
+	assert.match(
+		pkgJson,
+		/@larksuiteoapi\/node-sdk\/es/,
+		"electron-builder files 必须排除飞书 SDK 的 ESM 副本",
+	);
+	assert.match(release, /dist-runtime\/dsh-runtime-\*\.tgz/);
+	assert.match(release, /dist-runtime\/dsh-runtime-\*-releases\.json/);
+	assert.doesNotMatch(
+		release,
+		/releases\/download\/dsh-runtime/,
+		"独立 sidecar tag 会抢走 GitHub /releases/latest",
+	);
+});
+
 test("解压器过滤逃逸条目：../ 不会写出目标目录", async () => {
 	const root = mkdtempSync(join(tmpdir(), "dsh-slip-"));
 	const src = mkdtempSync(join(tmpdir(), "dsh-slipsrc-"));

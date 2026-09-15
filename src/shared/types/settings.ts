@@ -506,14 +506,15 @@ export type AppSettings = {
 	dshHomeDir?: string;
 
 	/**
-	 * DSH runtime 下载源索引地址（覆盖默认 GitHub Release 资产）。
-	 * 用于镜像/内网分发：索引是 dsh-runtime-releases.json，条目里给出 tarball 直链与 sha256。
-	 * 缺省/空串 = 用内置默认地址。sha256 校验始终生效，镜像也不能绕过。
+	 * DSH runtime 下载源索引地址（覆盖默认 AtomGit/GitHub latest 应用 Release）。
+	 * 用于镜像/内网分发：索引是分平台 `dsh-runtime-<platform>-<arch>-releases.json`，
+	 * 条目里给出 tarball 直链与 sha256。缺省/空串 = 跟随 settings.updateSource。
+	 * sha256 校验始终生效，镜像也不能绕过。禁止指向独立 `dsh-runtime` tag。
 	 */
 	dshRuntimeIndexUrl?: string;
 
 	/**
-	 * DSH 沙箱 Node 24 下载源索引（覆盖默认 AtomGit/GitHub `dsh-runner-node` tag）。
+	 * DSH 沙箱 Node 24 下载源索引（覆盖默认 AtomGit/GitHub latest 应用 Release）。
 	 * 缺省/空串 = 跟随 settings.updateSource。sha256 始终校验。
 	 */
 	dshRunnerNodeIndexUrl?: string;

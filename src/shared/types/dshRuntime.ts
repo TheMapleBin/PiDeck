@@ -1,9 +1,10 @@
 /**
- * DSH runtime 安装态契约（AgentRuntimeProvider 阶段 1，docs/dsh-runtime-optional-plan.md）。
+ * DSH runtime 安装态契约（AgentRuntimeProvider，docs/dsh-runtime-optional-plan.md）。
  *
- * 阶段 1：dsh runtime 仍随包分发，探测恒为 installed；本契约先把「runtime 是否可用」
- * 做成一等状态并据此门控 UI。阶段 2 把状态源换成真实的外部 runtime 探测
- * （userData/runtimes/dsh/<version>/manifest.json），UI 消费方零改动。
+ * 官方安装包默认 lite：不随 runtime。打包版探测顺序是外部
+ * userData/runtimes/dsh/<version> → 随包 extraResources（仅 --full）→ 都没有才是
+ * notInstalled（引导从 latest 应用 Release 按需下载）。dev 模式回退项目
+ * node_modules 的 @deepseek-ai。UI 按本契约门控，不直接绑分发形态。
  *
  * 本文件保持纯类型 + 纯函数（无任何运行时层依赖），主/渲染两侧与 node 单测共享。
  */

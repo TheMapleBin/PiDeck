@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * 开发机可选：从官方 Node 二进制抽出 node.exe 到 resources/dsh-runner-node/。
- * 安装包不带这份文件。用户侧走 pack-dsh-runner-node.mjs + AtomGit/GitHub tag。
+ * 安装包不带这份文件。用户侧走 pack-dsh-runner-node.mjs + 当前 latest 应用 Release。
  *
  *   node scripts/prepare-dsh-runner-node.mjs [--if-missing] [--force]
  *

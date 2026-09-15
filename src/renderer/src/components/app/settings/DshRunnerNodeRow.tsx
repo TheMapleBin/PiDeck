@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { AppSettings, DshRunnerNodeInfo } from "../../../../../shared/types";
+import { dshRunnerNodeReleasePageUrl } from "../../../../../shared/types/dshRunnerNodeRelease";
 import { t } from "../../../i18n";
 import { desktopApi } from "../../../desktopApi";
 import { openInSystemBrowser } from "../../../utils/openExternal";
@@ -217,11 +218,7 @@ export function DshRunnerNodeRow(props: {
 							variant="ghost"
 							size="sm"
 							onClick={() =>
-								openInSystemBrowser(
-									draft.updateSource === "github"
-										? "https://github.com/ayuayue/PiDeck/releases/tag/dsh-runner-node"
-										: "https://atomgit.com/ayuayue/PiDeck/releases/tag/dsh-runner-node",
-								)
+								openInSystemBrowser(dshRunnerNodeReleasePageUrl(draft.updateSource ?? "atomgit"))
 							}
 						>
 							{t("settings.dshRunnerNodeOpenDownload")}

@@ -12,6 +12,12 @@ const {
 	selectRuntime,
 	selectRelease,
 	collectRecyclableRuntimes,
+	defaultDshRuntimeIndexUrl,
+	dshRuntimeArchiveName,
+	dshRuntimeAssetDownloadUrl,
+	dshRuntimeIndexFileName,
+	resolveDshRuntimeIndexUrl,
+	resolveDshRuntimeReleaseUrl,
 } = loadTsCommonJs("src/shared/types/dshRuntimeManifest.ts");
 
 const {
@@ -88,6 +94,71 @@ test("collectRecyclableRuntimes：保留最新兼容版与指定版本，其余�
 	assert.equal(recyclable.includes("0.1.1-rc.2"), false, "最新兼容版必须保留");
 	assert.equal(recyclable.includes("0.1.0"), true, "旧的兼容版可回收");
 	assert.equal(recyclable.includes("broken-dir"), true, "清单不可用的目录可回收");
+});
+
+test("runtime 索引挂 latest 应用 Release，禁止独立 dsh-runtime tag", () => {
+	assert.equal(
+		dshRuntimeIndexFileName("win32", "x64"),
+		"dsh-runtime-win32-x64-releases.json",
+	);
+	assert.equal(dshRuntimeArchiveName("darwin", "arm64"), "dsh-runtime-darwin-arm64.tgz");
+	assert.equal(
+		defaultDshRuntimeIndexUrl("atomgit", "win32", "x64"),
+		"https://atomgit.com/ayuayue/PiDeck/releases/download/latest/dsh-runtime-win32-x64-releases.json",
+	);
+	assert.equal(
+		defaultDshRuntimeIndexUrl("github", "linux", "arm64"),
+		"https://github.com/ayuayue/PiDeck/releases/latest/download/dsh-runtime-linux-arm64-releases.json",
+	);
+	assert.doesNotMatch(
+		defaultDshRuntimeIndexUrl("github", "win32", "x64"),
+		/\/dsh-runtime\//,
+		"独立 sidecar tag 会抢走 GitHub /releases/latest",
+	);
+	assert.equal(
+		resolveDshRuntimeIndexUrl({ updateSource: "github", platform: "win32", arch: "x64" }),
+		defaultDshRuntimeIndexUrl("github", "win32", "x64"),
+	);
+	assert.equal(
+		resolveDshRuntimeIndexUrl({
+			indexUrl: "file:///C:/tmp/dsh-runtime-releases.json",
+			updateSource: "github",
+		}),
+		"file:///C:/tmp/dsh-runtime-releases.json",
+		"环境变量/设置覆盖优先，空串才走内置 latest",
+	);
+	const placeholder = {
+		runtimeVersion: "0.1.5",
+		minAppVersion: "0.7.0",
+		maxAppVersion: "",
+		url: "dsh-runtime-win32-x64.tgz",
+		sha256: "a".repeat(64),
+		size: 1,
+	};
+	assert.equal(
+		resolveDshRuntimeReleaseUrl(placeholder, "atomgit", "win32", "x64"),
+		dshRuntimeAssetDownloadUrl("atomgit", dshRuntimeArchiveName("win32", "x64")),
+	);
+	assert.equal(
+		resolveDshRuntimeReleaseUrl(
+			{ ...placeholder, url: "https://example.test/old-dsh-runtime-tag.tgz" },
+			"github",
+			"win32",
+			"x64",
+		),
+		dshRuntimeAssetDownloadUrl("github", dshRuntimeArchiveName("win32", "x64")),
+		"旧索引里的 http(s) 占位也改写，避免直连 sidecar tag",
+	);
+	assert.equal(
+		resolveDshRuntimeReleaseUrl(
+			{ ...placeholder, url: "file:///C:/tmp/runtime.tgz" },
+			"atomgit",
+			"win32",
+			"x64",
+		),
+		"file:///C:/tmp/runtime.tgz",
+		"file:// 离线验证不改写",
+	);
 });
 
 test("selectRelease：与 selectRuntime 同样按兼容区间 + 取最新", () => {

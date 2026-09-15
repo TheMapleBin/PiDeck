@@ -6,6 +6,10 @@ import test from "node:test";
 import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
 const { DshRuntimeInstaller } = loadTsCommonJs("src/main/dsh/runtime/DshRuntimeInstaller.ts");
+const {
+	dshRuntimeArchiveName,
+	dshRuntimeAssetDownloadUrl,
+} = loadTsCommonJs("src/shared/types/dshRuntimeManifest.ts");
 
 const APP_VERSION = "0.7.5";
 
@@ -13,14 +17,20 @@ const release = (over = {}) => ({
 	runtimeVersion: "0.1.1-rc.2",
 	minAppVersion: "0.7.0",
 	maxAppVersion: "",
-	url: "https://example.test/r.tgz",
+	// 打包脚本写归档文件名占位；installer 再按 updateSource 改写成 latest 资产。
+	url: dshRuntimeArchiveName(process.platform, process.arch),
 	sha256: "abc",
 	size: 100,
 	...over,
 });
 
 /** 组装一个 installer，manager 用替身（不碰磁盘与网络）。 */
-function makeInstaller({ index = { schemaVersion: 1, releases: [release()] }, url = "https://idx.test/i.json", manager = {} } = {}) {
+function makeInstaller({
+	index = { schemaVersion: 1, releases: [release()] },
+	url = "https://idx.test/i.json",
+	manager = {},
+	updateSource = "atomgit",
+} = {}) {
 	const progress = [];
 	const calls = { installFromUrl: [], installFromArchive: [], installFromDirectory: [], uninstall: [] };
 	const fakeManager = {
@@ -54,6 +64,7 @@ function makeInstaller({ index = { schemaVersion: 1, releases: [release()] }, ur
 	const installer = new DshRuntimeInstaller({
 		manager: fakeManager,
 		indexUrl: () => url,
+		updateSource: () => updateSource,
 		appVersion: () => APP_VERSION,
 		fetchIndex: async () => index,
 		onProgress: (p) => progress.push(p),
@@ -66,11 +77,25 @@ test("installFromIndex：按兼容区间挑版本并触发下载", async () => {
 	const result = await installer.installFromIndex();
 	assert.equal(result.ok, true);
 	assert.equal(calls.installFromUrl.length, 1);
-	assert.equal(calls.installFromUrl[0].archiveUrl, "https://example.test/r.tgz");
+	assert.equal(
+		calls.installFromUrl[0].archiveUrl,
+		dshRuntimeAssetDownloadUrl("atomgit", dshRuntimeArchiveName(process.platform, process.arch)),
+		"归档文件名占位必须改写成当前 latest 应用 Release",
+	);
 	assert.equal(calls.installFromUrl[0].sha256, "abc");
 	// 结束时必须是 done=100，UI 据此收起进度条
 	assert.equal(progress.at(-1).phase, "done");
 	assert.equal(progress.at(-1).percent, 100);
+});
+
+test("installFromIndex：file:// 归档不改写，离线验证直连本地文件", async () => {
+	const localUrl = "file:///C:/tmp/dsh-runtime-win32-x64.tgz";
+	const { installer, calls } = makeInstaller({
+		index: { schemaVersion: 1, releases: [release({ url: localUrl })] },
+	});
+	const result = await installer.installFromIndex();
+	assert.equal(result.ok, true);
+	assert.equal(calls.installFromUrl[0].archiveUrl, localUrl);
 });
 
 test("installFromIndex：下载字节进度映射到 0-70%，阶段进度随后推进", async () => {

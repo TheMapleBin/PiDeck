@@ -258,6 +258,7 @@ import {
 	readDeclaredDshVersion,
 } from "./dsh/runtime/DshRuntimeManager";
 import { DshRuntimeInstaller } from "./dsh/runtime/DshRuntimeInstaller";
+import { resolveDshRuntimeIndexUrl } from "../shared/types/dshRuntimeManifest";
 import { autoUpdateDshRuntimeIfOutdated } from "./dsh/runtime/dshRuntimeAutoUpdate";
 import { createNetDownloader, createTarExtractor, fetchDshRuntimeIndex } from "./dsh/runtime/dshRuntimeIo";
 import { credentialValueFromDocument } from "./dsh/dshCredentials";
@@ -410,7 +411,6 @@ import type { FeishuChatBinding } from "../shared/types";
 import { createRealAutoUpdater } from "./update/createAutoUpdater";
 import { installAtomgitNoCacheBypass, UPDATER_PARTITION_NAME } from "./update/atomgitNoCacheBypass";
 import { createMacManualUpdateChecker } from "./update/macManualUpdate";
-import { UPDATE_REPO, UPDATE_REPO_OWNER } from "./update/releaseRepo";
 import { UpdateService } from "./update/UpdateService";
 
 let mainWindow: BrowserWindow | null = null;
@@ -3484,8 +3484,8 @@ app.whenReady().then(async () => {
 	// 探测顺序：外部已装 runtime 优先 → 回退 app 内置（dev 模式 = 项目 node_modules 的
 	// @deepseek-ai 开发依赖，已随 npm install 存在，直接可用无需安装/下载），
 	// 两边都没有才是 notInstalled。状态变更经 dsh-runtime:status-changed 广播给渲染层。
-	// allowBundledFallback 只在开发态开启：**打包版不内置 runtime**（build 用 runtime:pack:lite，
-	// 随包目录留空）——减小安装体积，需要 DSH 的用户在打包版里按引导下载安装；
+	// allowBundledFallback 只在开发态开启：**打包版默认不内置 runtime**（build 走 runtime:pack，默认 lite，
+	// extraResources 只留 .gitkeep）——减小安装体积，需要 DSH 的用户在打包版里按引导下载；
 	// 开发态则直接复用项目 node_modules（零下载、零安装，符合「dev 不需要装 runtime」的诉求）。
 	dshRuntimeStatus = new DshRuntimeStatusService(
 		() => app.getAppPath(),
@@ -3511,11 +3511,14 @@ app.whenReady().then(async () => {
 	// 索引地址默认指向与 app update 同一仓库的 release 资产，settings 可覆盖为镜像。
 	dshRuntimeInstaller = new DshRuntimeInstaller({
 		manager: dshRuntimeManager,
-		// 优先级：环境变量（本地/内网验证用，免改设置）> 设置项（镜像）> 默认 Release 资产。
+		// 优先级：环境变量（本地/内网验证用，免改设置）> 设置项（镜像）> 当前 latest 应用 Release。
+		// 禁止独立 dsh-runtime tag：会抢走 GitHub /releases/latest。
 		indexUrl: () =>
-			process.env.DSH_RUNTIME_INDEX_URL ||
-			settingsStore.get().dshRuntimeIndexUrl ||
-			`https://github.com/${UPDATE_REPO_OWNER}/${UPDATE_REPO}/releases/download/dsh-runtime/dsh-runtime-releases.json`,
+			resolveDshRuntimeIndexUrl({
+				indexUrl: process.env.DSH_RUNTIME_INDEX_URL || settingsStore.get().dshRuntimeIndexUrl,
+				updateSource: settingsStore.get().updateSource,
+			}),
+		updateSource: () => settingsStore.get().updateSource,
 		appVersion: () => app.getVersion(),
 		fetchIndex: fetchDshRuntimeIndex,
 		// 随包 runtime（resources/dsh-runtime/）：有就本地解压，不必联网。

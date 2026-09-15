@@ -9,10 +9,12 @@
  * 编排层不认识 BrowserWindow。
  */
 import {
+	resolveDshRuntimeReleaseUrl,
 	selectRelease,
 	type DshRuntimeReleaseIndex,
 } from "../../../shared/types/dshRuntimeManifest";
 import type { DshRuntimeInstallProgress } from "../../../shared/types/dshRuntime";
+import type { UpdateSourceId } from "../../../shared/types/settings";
 import { existsSync, statSync } from "node:fs";
 import type { BundledDshRuntime, DshRuntimeManager } from "./DshRuntimeManager";
 
@@ -25,6 +27,8 @@ export type DshRuntimeInstallerDeps = {
 	manager: DshRuntimeManager;
 	/** 下载源索引地址（settings 可覆盖为镜像）。 */
 	indexUrl: () => string;
+	/** 当前更新源：用于把索引里的归档文件名改写成 latest 资产 URL。 */
+	updateSource?: () => UpdateSourceId;
 	appVersion: () => string;
 	fetchIndex: DshRuntimeIndexFetcher;
 	onProgress: (progress: DshRuntimeInstallProgress) => void;
@@ -107,7 +111,15 @@ export class DshRuntimeInstaller {
 		}
 
 		deps.onProgress({ phase: "downloading", percent: 0, runtimeVersion: release.runtimeVersion });
-		const result = await deps.manager.installFromUrl(release.url, release.sha256, {
+		// 索引条目的 url 可能只是归档文件名占位；客户端按 updateSource 改写为
+		// 当前 latest 应用 Release 资产。file:// / 本地路径保持原样（离线验证）。
+		const archiveUrl = resolveDshRuntimeReleaseUrl(
+			release,
+			deps.updateSource?.() ?? "atomgit",
+			process.platform,
+			process.arch,
+		);
+		const result = await deps.manager.installFromUrl(archiveUrl, release.sha256, {
 			onPhase: (phase) => {
 				// 各阶段的离散进度：只有 downloading 有真实字节占比（见 onDownloadProgress）。
 				const percent = phase === "downloading" ? 0 : phase === "verifying" ? 75 : phase === "extracting" ? 85 : 95;
