@@ -8,6 +8,7 @@
 - **Session tab “current session actions”** — The ⋯ menu gains the same actions as the sidebar context menu: rename / duplicate / export HTML / copy session file path / open session file. When search lands on a session the sidebar has not rendered, the ⋯ menu is the stable entry.
 - **Ask cards submit on Enter** — Single and batch cards submit with Enter after an answer (including “select then Enter”). IME composition Enter only confirms a candidate and never submits; the editor still uses Enter for newline and Ctrl/Cmd+Enter to submit.
 - **Official installer no longer ships DSH runtime** — The default pack is lite: extraResources stays empty. First DSH use downloads the platform archive from the current latest app Release (AtomGit / GitHub), same sidecar pattern as runner-node. Offline / intranet builds still use `--full`. npm leftover hashed dirs from old DSH upgrades are no longer packed into the tarball.
+- **Manual DSH runtime publish** — New `Publish DSH runtime` Action: packs tgz + per-platform indexes on 6 native runners (win/mac/linux × x64/arm64) and attaches them to the current latest app Release (`v*`). No standalone sidecar tag. Re-run AtomGit sync after attaching.
 
 ### 🐛 Fixes
 - **Image-gen sessions no longer OOM the renderer from inline base64** — Images are content-addressed blobs plus refs; base64 no longer lands in JSONL. Reads use a bounded tail window, and the old format self-migrates on first open. The `reason:"oom"` crash-reload loop and blank window from repeated image gen are gone.

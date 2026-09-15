@@ -288,6 +288,28 @@ test("runtime:pack 默认 lite，CI 上传分平台归档，禁止独立 dsh-run
 	);
 });
 
+/** 手动补发入口：runtime 变更后不必重打安装包，但仍必须挂 latest v*。 */
+test("publish-dsh-runtime.yml 按原生平台打 tgz，挂 latest 应用 Release", () => {
+	const publish = readFileSync(".github/workflows/publish-dsh-runtime.yml", "utf8");
+	assert.match(publish, /workflow_dispatch/);
+	assert.match(publish, /node scripts\/pack-dsh-runtime\.mjs/);
+	assert.match(publish, /node scripts\/check-dsh-asar\.mjs/);
+	assert.match(publish, /releases\/latest/);
+	assert.match(publish, /gh release upload/);
+	assert.match(publish, /windows-11-arm/);
+	assert.match(publish, /macos-15-intel/);
+	assert.match(publish, /ubuntu-24\.04-arm/);
+	assert.match(publish, /dsh-runtime-\$\{\{ matrix\.platform \}\}-\$\{\{ matrix\.arch \}\}\.tgz/);
+	assert.match(publish, /dsh-runtime-\$\{\{ matrix\.platform \}\}-\$\{\{ matrix\.arch \}\}-releases\.json/);
+	assert.match(publish, /\^v\[0-9\]/, "只允许挂到 v* 应用 tag");
+	assert.doesNotMatch(publish, /TAG=dsh-runtime/);
+	assert.doesNotMatch(
+		publish,
+		/gh release create\s+dsh-runtime/,
+		"禁止新建独立 sidecar Release",
+	);
+});
+
 test("解压器过滤逃逸条目：../ 不会写出目标目录", async () => {
 	const root = mkdtempSync(join(tmpdir(), "dsh-slip-"));
 	const src = mkdtempSync(join(tmpdir(), "dsh-slipsrc-"));
