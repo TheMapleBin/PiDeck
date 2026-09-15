@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 import * as tar from "tar";
 import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
@@ -17,6 +18,7 @@ const { DshRuntimeManager } = loadTsCommonJs("src/main/dsh/runtime/DshRuntimeMan
 
 const APP_VERSION = "0.7.5";
 const VERSION = "0.1.1-rc.2";
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 const manifest = (over = {}) => ({
 	schemaVersion: 1,
@@ -384,4 +386,17 @@ test("解压器过滤逃逸条目：../ 不会写出目标目录", async () => {
 	assert.equal(existsSync(leaked), false, "绝不能写到目标目录之外");
 	rmSync(root, { recursive: true, force: true });
 	rmSync(src, { recursive: true, force: true });
+});
+
+// 2026-09 v0.7.5 sidecar 事故：file: 本地包（dsh-tool-pwsh-persistent）在全新检出
+// 下未构建（lib/ 是 gitignore 产物），源码-only 被打进归档 → host 启动
+// require.resolve 直接崩。打包脚本必须在 tar 之前对磁盘入口做预检（缺失自动构建/报错）。
+test("pack script pre-flights entry files before tarring", () => {
+	const packScript = readFileSync(join(repoRoot, "scripts/pack-dsh-runtime.mjs"), "utf8");
+	const pruneRules = readFileSync(join(repoRoot, "scripts/runtime-prune-rules.mjs"), "utf8");
+	// 预检必须在闭包收集后、文件收集前执行（自动构建的产物要进归档）
+	assert.match(packScript, /\/\/ 入口预检必须发生在文件收集之前[^\n]*\nensureClosureEntriesBuilt\(closure\);/);
+	assert.match(packScript, /runtimeEntryResolvableOnDisk/);
+	// 磁盘侧判定与归档侧校验（check-dsh-asar）同源复用同一入口提取逻辑
+	assert.match(pruneRules, /export function runtimeEntryResolvableOnDisk/);
 });

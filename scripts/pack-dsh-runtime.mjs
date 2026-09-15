@@ -55,13 +55,20 @@
  * 裁剪后必须跑一遍入口解析校验（见 docs 的验证记录），确认没有裁掉运行文件。
  */
 import { createHash } from "node:crypto";
-import { copyFileSync, createReadStream, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, truncateSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { copyFileSync, createReadStream, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, truncateSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as tar from "tar";
 // 裁剪规则独立成模块：CLI 主流程不便 import（会触发打包），测试直接引用规则单测。
-import { isExcluded, isNpmHashedLeftoverDir, isSrcPrunable } from "./runtime-prune-rules.mjs";
+import {
+	allEntryCandidates,
+	isExcluded,
+	isNpmHashedLeftoverDir,
+	isSrcPrunable,
+	runtimeEntryResolvableOnDisk,
+} from "./runtime-prune-rules.mjs";
 
 const require = createRequire(import.meta.url);
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -159,6 +166,74 @@ function packageNameOf(dir) {
 	return readPackageJson(dir)?.name;
 }
 
+/**
+ * 判断包目录是否为 file: 本地依赖的 symlink（npm 7+ 对 file:/workspace: 建链）。
+ * 真实路径与 node_modules 内路径不一致即视为本地包。
+ */
+function isSymlinkedLocalPackage(dir) {
+	try {
+		return realpathSync(dir) !== resolve(dir);
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * 闭包入口预检（file: 本地包未构建防护）。
+ *
+ * 事故背景（2026-09 v0.7.5 sidecar）：dsh-tool-pwsh-persistent 是 file: 本地包，
+ * lib/ 是 gitignore 的构建产物——全新检出上 npm ci 只把包以链接形式挂进
+ * node_modules，源码-only 的包被原样打进归档，host 启动时
+ * require.resolve("dsh-tool-pwsh-persistent")（exports 指向 lib/index.js）即崩
+ * （Cannot find module .../node_modules/dsh-tool-pwsh-persistent/lib/index.js）。
+ * check-dsh-asar 只守护 CI 上传链路，手动 pack/upload 会绕过——所以打包前必须
+ * 在磁盘上把每个闭包包运行时入口钉死。
+ *
+ * 规则：入口缺失且包带 build 脚本 → 自动执行构建后复检；仍缺失（或无构建脚本）
+ * → 报错退出。宁可打包失败，也不产出 host 起不来的归档。
+ * 判定语义与 check-dsh-asar 一致：main + exports["."] 运行时条件里
+ * 「至少一个可解析」即通过（个别上游包 exports 指向从未发布的文件，见该脚本注释）。
+ */
+function ensureClosureEntriesBuilt(closureDirs) {
+	for (const dir of closureDirs) {
+		const pkg = readPackageJson(dir);
+		if (!pkg || String(pkg.name ?? "").startsWith("@types/")) continue;
+		const entries = allEntryCandidates(dir);
+		if (entries.length === 0) continue; // 无运行时入口的包无需校验
+		if (entries.some((entry) => runtimeEntryResolvableOnDisk(dir, entry))) continue;
+		const rel = relative(nodeModulesRoot, dir);
+		// 自动构建只对 file: 本地包（symlink 到仓库内源码目录）生效：全新检出下
+		// lib/ 等编译产物不存在是这类包的真实风险（2026-09 dsh-tool-pwsh-persistent
+		// 缺 lib/index.js 事故）。registry 包一律不自动构建——dist/ 已存在但
+		// exports["."] 指不存在文件（子路径导出包）更常见，跑构建既慢又炸流程，
+		// 直接报错交给人判断。
+		if (isSymlinkedLocalPackage(dir) && typeof pkg.scripts?.build === "string") {
+			console.warn(
+				`[pack-dsh-runtime] ⚠️ ${rel}: 运行时入口缺失（${entries.join(", ")}），自动执行 npm run build...`,
+			);
+			// Windows 上 npm 是 npm.cmd shim，CreateProcess 不经 cmd.exe 不能执行批处理（EINVAL），
+			// 必须显式走 cmd.exe；不用 shell:true——Node 24 传参会触发 DEP0190（参数不转义只拼接），
+			// 而这里的参数全是固定常量，无用户输入，无注入面。
+			const [npmCmd, npmArgs] =
+				process.platform === "win32"
+					? ["cmd.exe", ["/d", "/s", "/c", "npm", "run", "build"]]
+					: ["npm", ["run", "build"]];
+			execFileSync(npmCmd, npmArgs, { cwd: dir, stdio: "inherit" });
+			if (entries.some((entry) => runtimeEntryResolvableOnDisk(dir, entry))) continue;
+			console.error(
+				`[pack-dsh-runtime] ❌ ${rel}: npm run build 后入口仍缺失（${entries.join(", ")}），中止打包。`,
+			);
+			process.exit(1);
+		}
+		console.error(
+			`[pack-dsh-runtime] ❌ ${rel}: 运行时入口全部不可解析（${entries.join(", ")}），中止打包。\n` +
+				`   file: 本地包请先构建（npm run build）；registry 包可能是子路径导出包（exports["."] 指向未发布文件），\n` +
+				`   请确认该包确为 dsh 运行所需后手动处理（补文件或从闭包剔除），再重试。`,
+		);
+		process.exit(1);
+	}
+}
+
 // ── 文件级裁剪（规则实现见 runtime-prune-rules.mjs） ──
 
 function listFiles(dir) {
@@ -242,6 +317,9 @@ const closure = collectClosure(seedDirs).filter((dir) => {
 	return Boolean(packageNameOf(dir)) && !isNpmHashedLeftoverDir(base);
 });
 const closureSet = new Set(closure);
+
+// 入口预检必须发生在文件收集之前：自动构建产生的 lib/ 产物要能进入归档。
+ensureClosureEntriesBuilt(closure);
 
 // 遍历文件时跳过「属于另一个闭包目录」的子目录：嵌套 node_modules 既会被父目录
 // 递归到、又会作为独立闭包项单独统计，不去重会把体积算成两倍。

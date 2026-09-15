@@ -78,6 +78,7 @@ src/
 - 更新/检测入口在扩展设置页的「内置扩展」面板（`BuiltInExtensionsUpdatePanel`）+ `extensions:builtin-update-*` 通道；默认源 AtomGit（`api.atomgit.com/api/v5/repos/.../contents/...` 返回 base64，匿名可读），`settings.updateSource=github` 时 GitHub raw 直连优先。分支只接受 main/dev 白名单。
 - **判据是逐文件 sha256，不是版本号**：改了扩展却忘记 bump 版本也必须能检出更新；远端清单里出现**本地不认识的新文件名一律忽略**（注入清单 `BUILT_IN_EXTENSIONS` 编译在应用代码里，热更新不该也无法凭空引入新代码）。
 - **覆盖层必须是完整自洽快照**：扩展之间存在相对 import（`pi-deck-todo.ts` → `./pi-deck-todo-state.ts`，后者不在 `BUILT_IN_EXTENSIONS` 里但在清单内）。因此更新写的是「变化文件取远端 + 未变化文件从当前生效源复制」的全集，且 `resolveBuiltInExtensionPath` 只在 `readVerifiedArtifact` 整份校验通过时才认覆盖层——半截覆盖层（缺文件/被外部改动）会让 pi 报模块找不到。
+- **覆盖层必须自带 vendored 运行时依赖**（`node_modules/undici` 等）：pi 扩展加载器按扩展文件所在目录**向上查 node_modules**。随包目录有 extraResources 复制的 `extensions/node_modules/<pkg>` 兜底，覆盖层 `<userData>/builtin-extensions/` 上层没有——缺了就是扩展顶部 `import "undici"` MODULE_NOT_FOUND → pi 启动失败 → PiDeck 禁用全部扩展重启（2026-09-15 事故，与 2026-08-09 打包版缺 undici 同类）。更新器随 tmp 复制（源目录走 `resolveVendorNodeModulesDir`），旧覆盖层由启动装配的 `ensureOverlayVendorDependencies()` 自愈；`VENDOR_DEP_PACKAGE_NAMES` 与扩展裸导入的集合一致性由 `tests/extensionPackagingDeps.test.mjs` 双向把关，新增运行时依赖必须同步 extraResources 与该清单。
 - 安全底线：先下载校验、后原子替换（tmp → `.bak` 换位 → rename，失败回滚）；`invalidateBuiltInExtensionsOverlayCache()` 必须在写盘/还原后调用，否则本次更新要等重启才参与注入。
 - 三处磁盘根（`ExtensionManager` 列表/版本、热更新器写盘、`-e` 注入解析）必须同源，统一走 `src/main/index.ts` 的 `resolveBuiltInExtensionRoots()`；各拼一次路径迟早漂移成「更新成功但会话仍加载旧扩展」。
 
