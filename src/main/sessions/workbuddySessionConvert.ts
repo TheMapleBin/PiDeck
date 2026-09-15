@@ -1,6 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { SessionImportCopy } from "./SessionImportCopy";
 import {
+	importedContentHasToolCall,
+	normalizeImportedStopReason,
+} from "./importNormalize";
+import {
 	asArray,
 	parseWorkBuddyArguments,
 	readNumber,
@@ -155,7 +159,14 @@ export function convertWorkBuddySession(
 		pushMessage(
 			"assistant",
 			content,
-			{ api: "workbuddy-import", provider: "workbuddy", model: modelId, stopReason: "stop" },
+			{
+				api: "workbuddy-import",
+				provider: "workbuddy",
+				model: modelId,
+				stopReason: normalizeImportedStopReason({
+					hasToolCall: importedContentHasToolCall(content),
+				}),
+			},
 			fallbackTimestamp,
 		);
 	};

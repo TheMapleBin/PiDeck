@@ -14,6 +14,15 @@ import {
 	defaultSessionImportCopy,
 	type SessionImportCopy,
 } from "./SessionImportCopy";
+import { normalizeImportedToolArguments } from "./importToolArguments";
+import {
+	IMPORTED_SKIP_PART_TYPES,
+	importedAttachmentPlaceholder,
+	importedContentHasToolCall,
+	importedUnknownBlockAsText,
+	normalizeImportedStopReason,
+	tryImportedImageBlock,
+} from "./importNormalize";
 
 type OpenCodeMessage = {
 	id: string;
@@ -188,7 +197,8 @@ export class OpenCodeSessionImporter {
 		for (const message of session.messages) {
 			const messageData = message.data;
 			const role = messageData.role;
-			const content: any[] = [];
+			const content: Array<Record<string, unknown>> = [];
+			const toolQueue: Array<{ part: OpenCodePart; callId: string; name: string }> = [];
 			for (const part of message.parts) {
 				const partData = part.data;
 				if (partData.type === "text" && partData.text) {
@@ -197,15 +207,30 @@ export class OpenCodeSessionImporter {
 					content.push({ type: "thinking", thinking: String(partData.text), thinkingSignature: "opencode_reasoning" });
 				} else if (partData.type === "tool") {
 					const toolCallId = String(partData.callID ?? part.id);
+					const name = String(partData.tool ?? "tool");
+					const args = normalizeImportedToolArguments(partData.state?.input);
 					if (role === "assistant") {
-						content.push({ type: "toolCall", id: toolCallId, name: String(partData.tool ?? "tool"), arguments: partData.state?.input ?? {} });
+						// OpenCode 的 tool part 挂在 assistant 上，input+output 同 part。
+						// 必须拆成 toolCall + 后面的 toolResult，否则时间线没有工具卡。
+						content.push({ type: "toolCall", id: toolCallId, name, arguments: args });
+						toolQueue.push({ part, callId: toolCallId, name });
 					} else {
 						pushMessage("toolResult", [{ type: "text", text: this.extractToolOutput(partData) }], {
 							toolCallId,
-							toolName: String(partData.tool ?? "tool"),
+							toolName: name,
 							isError: partData.state?.status === "error",
 						}, part.time_created);
 					}
+				} else if (IMPORTED_SKIP_PART_TYPES.has(String(partData.type ?? ""))) {
+					continue;
+				} else if (partData.type === "file") {
+					const image = tryImportedImageBlock(partData);
+					content.push(
+						image ?? importedAttachmentPlaceholder(String(partData.filename ?? partData.url ?? "")),
+					);
+				} else if (partData.type) {
+					const image = tryImportedImageBlock(partData);
+					content.push(image ?? importedUnknownBlockAsText(partData));
 				}
 			}
 
@@ -216,9 +241,24 @@ export class OpenCodeSessionImporter {
 					api: "opencode-import",
 					provider: messageData.providerID ?? model.providerID ?? "opencode",
 					model: messageData.modelID ?? model.id ?? model.modelID ?? "opencode",
-					stopReason: messageData.finish ?? "stop",
+					stopReason: normalizeImportedStopReason({
+						raw: messageData.finish,
+						hasToolCall: importedContentHasToolCall(content),
+					}),
 					tokens: messageData.tokens,
 				}, message.time_created);
+			}
+			for (const { part, callId, name } of toolQueue) {
+				pushMessage(
+					"toolResult",
+					[{ type: "text", text: this.extractToolOutput(part.data) }],
+					{
+						toolCallId: callId,
+						toolName: name,
+						isError: part.data.state?.status === "error",
+					},
+					part.time_created,
+				);
 			}
 		}
 

@@ -37,6 +37,8 @@ function loadImporter(homePath) {
 		require: (id) => {
 			if (id === "electron") return { app: { getPath: () => homePath } };
 			if (id === "./SessionImportCopy") return registry.importCopy;
+			if (id === "./importToolArguments") return registry.toolArgs;
+			if (id === "./importNormalize") return registry.normalize;
 			if (id === "./workbuddySessionSource") return registry.source;
 			if (id === "./workbuddySessionConvert") return registry.convert;
 			return require(id);
@@ -52,6 +54,8 @@ function loadImporter(homePath) {
 	});
 
 	registry.importCopy = transpile("src/main/sessions/SessionImportCopy.ts", makeSandbox());
+	registry.toolArgs = transpile("src/main/sessions/importToolArguments.ts", makeSandbox());
+	registry.normalize = transpile("src/main/sessions/importNormalize.ts", makeSandbox());
 	registry.source = transpile("src/main/sessions/workbuddySessionSource.ts", makeSandbox());
 	registry.convert = transpile("src/main/sessions/workbuddySessionConvert.ts", makeSandbox());
 	const mod = transpile("src/main/sessions/WorkBuddySessionImporter.ts", makeSandbox());
@@ -255,6 +259,8 @@ test("import: reasoning 与 function_call 聚合进同一条 assistant 消息", 
 		assert.equal(assistant[0].message.content[1].name, "Bash");
 		assert.deepEqual(assistant[0].message.content[1].arguments, { command: "npm run build" });
 		assert.equal(assistant[0].message.model, "hy4-preview");
+		assert.equal(assistant[0].message.stopReason, "toolUse");
+		assert.equal(assistant[1].message.stopReason, "stop");
 		assert.equal(assistant[1].message.content[0].text, "构建已通过");
 
 		const toolResult = lines.find(

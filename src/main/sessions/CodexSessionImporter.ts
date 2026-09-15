@@ -15,6 +15,8 @@ import {
 	defaultSessionImportCopy,
 	type SessionImportCopy,
 } from "./SessionImportCopy";
+import { normalizeImportedToolArguments } from "./importToolArguments";
+import { normalizeImportedStopReason, tryImportedImageBlock } from "./importNormalize";
 
 // 扫描阶段只读每个文件头部：session_meta / 首条用户消息 / preview 都在前部，
 // 全量解析会让内存峰值随 ~/.codex/sessions 总大小线性增长（rollouts 轨迹文件常达几十 MB），
@@ -283,8 +285,8 @@ export class CodexSessionImporter {
 
 		for (const entry of session.entries) {
 			if (entry.type === "event_msg" && entry.payload?.type === "user_message") {
-				const text = String(entry.payload.message ?? "").trim();
-				if (text) pushMessage("user", [{ type: "text", text }], {}, entry.timestamp);
+				const content = this.convertCodexUserContent(entry.payload);
+				if (content.length > 0) pushMessage("user", content, {}, entry.timestamp);
 				continue;
 			}
 
@@ -304,6 +306,7 @@ export class CodexSessionImporter {
 						? [{ type: "thinking", thinking: pendingThinking, thinkingSignature: "codex_reasoning" }]
 						: []),
 					...(text ? [{ type: "text", text }] : []),
+					...this.extractCodexImportedImages(payload),
 				];
 				pendingThinking = "";
 				pushMessage(
@@ -313,7 +316,7 @@ export class CodexSessionImporter {
 						api: "codex-import",
 						provider: String(session.meta.model_provider ?? "codex"),
 						model: String(session.meta.model ?? "codex"),
-						stopReason: "stop",
+						stopReason: normalizeImportedStopReason({ hasToolCall: false }),
 					},
 					entry.timestamp,
 				);
@@ -341,7 +344,7 @@ export class CodexSessionImporter {
 						api: "codex-import",
 						provider: String(session.meta.model_provider ?? "codex"),
 						model: String(session.meta.model ?? "codex"),
-						stopReason: "toolUse",
+						stopReason: normalizeImportedStopReason({ hasToolCall: true }),
 					},
 					entry.timestamp,
 				);
@@ -522,8 +525,8 @@ export class CodexSessionImporter {
 				}
 
 				if (entry.type === "event_msg" && entry.payload?.type === "user_message") {
-					const text = String(entry.payload.message ?? "").trim();
-					if (text) await pushMessage("user", [{ type: "text", text }], {}, entry.timestamp);
+					const content = this.convertCodexUserContent(entry.payload);
+					if (content.length > 0) await pushMessage("user", content, {}, entry.timestamp);
 					continue;
 				}
 
@@ -543,6 +546,7 @@ export class CodexSessionImporter {
 							? [{ type: "thinking", thinking: pendingThinking, thinkingSignature: "codex_reasoning" }]
 							: []),
 						...(text ? [{ type: "text", text }] : []),
+						...this.extractCodexImportedImages(payload),
 					];
 					pendingThinking = "";
 					await pushMessage(
@@ -552,7 +556,7 @@ export class CodexSessionImporter {
 							api: "codex-import",
 							provider: String(session.meta.model_provider ?? "codex"),
 							model: String(session.meta.model ?? "codex"),
-							stopReason: "stop",
+							stopReason: normalizeImportedStopReason({ hasToolCall: false }),
 						},
 						entry.timestamp,
 					);
@@ -580,7 +584,7 @@ export class CodexSessionImporter {
 							api: "codex-import",
 							provider: String(session.meta.model_provider ?? "codex"),
 							model: String(session.meta.model ?? "codex"),
-							stopReason: "toolUse",
+							stopReason: normalizeImportedStopReason({ hasToolCall: true }),
 						},
 						entry.timestamp,
 					);
@@ -751,6 +755,29 @@ export class CodexSessionImporter {
 		return `--${normalized.replace(/^\//, "").replace(/\//g, "-")}--`;
 	}
 
+	private convertCodexUserContent(payload: Record<string, unknown> | undefined): unknown[] {
+		const record = payload ?? {};
+		const content: unknown[] = [];
+		const text = String(record.message ?? "").trim();
+		if (text) content.push({ type: "text", text });
+		content.push(...this.extractCodexImportedImages(record));
+		return content;
+	}
+
+	private extractCodexImportedImages(payload: Record<string, unknown>): unknown[] {
+		const images: unknown[] = [];
+		const collect = (value: unknown) => {
+			if (!Array.isArray(value)) return;
+			for (const item of value) {
+				const image = tryImportedImageBlock(item);
+				if (image) images.push(image);
+			}
+		};
+		collect(payload.content);
+		collect(payload.images);
+		return images;
+	}
+
 	private extractCodexText(payload: Record<string, any>) {
 		const content = payload.content ?? payload.summary ?? payload.text ?? payload.output;
 		if (typeof content === "string") return content;
@@ -777,12 +804,7 @@ export class CodexSessionImporter {
 	}
 
 	private parseArguments(value: unknown) {
-		if (typeof value !== "string") return value ?? {};
-		try {
-			return JSON.parse(value);
-		} catch {
-			return { input: value };
-		}
+		return normalizeImportedToolArguments(value);
 	}
 
 	private parseTimestamp(value: unknown) {
