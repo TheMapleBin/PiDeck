@@ -29,15 +29,35 @@
  * （52 分钟无进展）。所有 fetch 调用均有超时；PUT 失败自动重试一次并计入失败清单，
  * 脚本以非 0 退出码结束，让 workflow 明确标红。
  *
+ * 资产选择（v0.7.5 sidecar 补传场景）：默认行为是「GitHub 有、AtomGit 缺的全量增量同步」。
+ * 只补传某类资产（如 6 平台 dsh-runtime）时用 --only，想自己逐项勾选时用 --select。
+ * 选择只影响「这次传哪些附件」，不动 Release 元数据、不碰未选中的附件。
+ *
+ * 远端大小探测（去重有效性修复）：AtomGit 的下载 CDN 对 HEAD 返回 401（WAF 拦），
+ * 旧实现只发 HEAD，导致远端大小恒为 null → 所有同名附件都落到「远端大小未知，
+ * 保守跳过」，配置里承诺的「同名异大小冲突检测」实际上从未生效（v0.7.5 重建产物
+ * 时靠 --force-resync 才勉强绕开）。现在 HEAD 失败后回退 Range: bytes=0-0，
+ * 从 Content-Range 尾段拿真实长度（206）。
+ *
  * 用法：
  *   node scripts/sync-release-to-atomgit.mjs --tag v0.7.4
  *   ATOMGIT_TOKEN=xxx node scripts/sync-release-to-atomgit.mjs --tag v0.7.2,v0.7.3,v0.7.4
+ *   ATOMGIT_TOKEN=xxx node scripts/sync-release-to-atomgit.mjs --tag v0.7.5 --only 'dsh-runtime-*'
+ *   ATOMGIT_TOKEN=xxx node scripts/sync-release-to-atomgit.mjs --tag v0.7.5 --select
  */
 
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { execFileSync } from 'node:child_process';
+import {
+  actionLabel,
+  buildAssetSelectionRows,
+  filterAssetsByPatterns,
+  formatAssetSize,
+  parseAssetSelection,
+  selectRows,
+} from './atomgit-asset-selection.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -69,6 +89,27 @@ const atomgitApiBase = getArg('--api-base', 'https://api.atomgit.com/api/v5');
 const token = process.env.ATOMGIT_TOKEN || getArg('--token', '');
 // 强制重建开关：同名 Release 在 AtomGit 已存在时先删除再全量重传（同版本号重建产物重发版场景）
 const forceResync = args.includes('--force-resync');
+// 资产选择（只影响「这次传哪些附件」，不动 Release 元数据与未选中的附件）：
+//   --only <patterns>  逗号分隔的 glob（如 dsh-runtime-*），可重复传入；用于单独补传某类资产
+//   --select           交互式列出附件让用户勾选（CI 不传，保持全量增量行为）
+//   --force-upload     对本次选中的附件强制先删后传，即使远端同名同大小
+//   --dry-run          只打印计划，不做任何写操作（配合 --select 可放心预演）
+//   --yes              跳过交互确认（--select 脚本化调用）
+// 逐个 --only 收集模式（支持 `--only a,b` 与 `--only=a,b` 两种写法）
+const onlyPatterns = [];
+for (let i = 0; i < args.length; i++) {
+  const arg = args[i];
+  if (arg === '--only') {
+    onlyPatterns.push(...String(args[i + 1] ?? '').split(','));
+    i += 1;
+  } else if (arg.startsWith('--only=')) {
+    onlyPatterns.push(...arg.slice('--only='.length).split(','));
+  }
+}
+const selectMode = args.includes('--select');
+const forceUpload = args.includes('--force-upload');
+const dryRun = args.includes('--dry-run');
+const assumeYes = args.includes('--yes');
 
 /** 带超时的 fetch 包装：所有网络请求必须经过这里，防止挂起拖死 CI job。 */
 function fetchWithTimeout(url, options = {}, timeoutMs = API_TIMEOUT_MS) {
@@ -221,6 +262,131 @@ async function main() {
   console.log(`\n✅ 全部同步完成。`);
 }
 
+/**
+ * 逐行读取 stdin（TTY 与管道均可），EOF 时 next() 返回 null。
+ *
+ * 不用 readline 的 question()：流已结束（管道输入读空 / Ctrl-D）时它可能永不 resolve
+ * ——实测表现为 node 因事件循环空而静默 exit 0，既没传也没报错（2026-09 实测），
+ * 对「同步 Release」这种没法靠日志回滚的操作是危险的。
+ */
+export function createLineReader(stream) {
+  let buffer = '';
+  let ended = false;
+  let pending = null;
+  const queued = [];
+  const deliver = (line) => {
+    if (pending) {
+      const resolve = pending;
+      pending = null;
+      resolve(line);
+    } else {
+      queued.push(line);
+    }
+  };
+  stream.setEncoding('utf8');
+  stream.on('data', (chunk) => {
+    buffer += chunk;
+    let idx = buffer.indexOf('\n');
+    while (idx >= 0) {
+      const line = buffer.slice(0, idx).replace(/\r$/, '');
+      buffer = buffer.slice(idx + 1);
+      deliver(line);
+      idx = buffer.indexOf('\n');
+    }
+  });
+  stream.on('end', () => {
+    ended = true;
+    // 残留无换行的最后一行也算一条，只有真正空了才是 EOF
+    if (buffer.length > 0) {
+      const line = buffer;
+      buffer = '';
+      deliver(line);
+    }
+    if (pending) {
+      const resolve = pending;
+      pending = null;
+      resolve(null);
+    }
+  });
+  return {
+    /** @returns {Promise<string|null>} 行内容；null = EOF（调用方必须自己决定下一步） */
+    next() {
+      if (queued.length > 0) return Promise.resolve(queued.shift());
+      if (ended) return Promise.resolve(null);
+      return new Promise((resolve) => {
+        pending = resolve;
+      });
+    },
+  };
+}
+
+/**
+ * 交互式勾选要同步的附件（--select）。
+ *
+ * 返回 { rows, forcedNames }；用户取消（确认时答非 y）或确认阶段 EOF 返回 null。
+ * 选择阶段 EOF（管道只给了选择没给确认）走默认计划；确认阶段 EOF 一律当作取消——
+ * 「没得到回答就上传」是这里最不能接受的行为。
+ */
+async function pickAssetsInteractively(rows) {
+  console.log('\n本次可选附件：');
+  let category = '';
+  for (const row of rows) {
+    if (row.category !== category) {
+      category = row.category;
+      console.log(`  ── ${category} ──`);
+    }
+    console.log(
+      `  [${String(row.index).padStart(2)}] ${row.name.padEnd(46)} ${formatAssetSize(row.size).padStart(9)}  ${actionLabel(row)}`,
+    );
+  }
+
+  const reader = createLineReader(process.stdin);
+  const ask = async (question) => {
+    process.stdout.write(question);
+    return reader.next();
+  };
+
+  let parsed = null;
+  for (let attempt = 0; attempt < 3 && !parsed; attempt++) {
+    const answer = await ask('\n输入要同步的编号（如 1,3-5；a=全选；回车=默认计划）: ');
+    if (answer === null) {
+      console.log('（输入结束，采用默认计划）');
+      return { rows, forcedNames: new Set() };
+    }
+    const result = parseAssetSelection(answer, rows.length);
+    if (result.error) {
+      console.error(`❌ 选择无效：${result.error}`);
+      continue;
+    }
+    parsed = result;
+  }
+  if (!parsed) {
+    console.error('❌ 连续 3 次输入无效，已中止（未做任何改动）。');
+    process.exit(1);
+  }
+
+  if (parsed.indices.length === 0) {
+    console.log('→ 采用默认计划（新增的传，已存在的跳过）');
+    return { rows, forcedNames: new Set() };
+  }
+
+  const selected = selectRows(rows, parsed.indices);
+  // selectRows 把「默认跳过」的行升级为上传（remote 同名同大小时必须先删后传）
+  const forcedNames = new Set(selected.filter((r) => r.reason === 'force-reselect').map((r) => r.name));
+  console.log(`→ 已选 ${selected.length} 个：${selected.map((r) => r.name).join(', ')}`);
+  if (forcedNames.size > 0) {
+    console.log(`⚠️ 其中 ${forcedNames.size} 个远端已存在同名同大小附件，将先删除再重传（上传失败会留空）。`);
+  }
+  if (!assumeYes) {
+    const confirm = (await ask('确认执行？(y/N) '))?.trim().toLowerCase();
+    if (confirm !== 'y' && confirm !== 'yes') {
+      console.log('（未确认，脚本化调用请加 --yes）');
+      return null;
+    }
+  }
+  return { rows: selected, forcedNames };
+}
+
 /** 同步单个 tag 的 release：元数据 → 附件增量上传 → 校正 latest 标记。 */
 async function syncOneRelease(targetTag, githubLatestTag, failedAssets) {
   const isTargetLatest = targetTag === githubLatestTag;
@@ -245,33 +411,49 @@ async function syncOneRelease(targetTag, githubLatestTag, failedAssets) {
 
   console.log(`✅ Release 名称="${ghRelease.name || targetTag}", 附件总数=${ghRelease.assets.length}`);
 
+  // 1.5 资产过滤（--only）：只处理命中的附件，其余一律不探测、不上传
+  const allGhAssets = ghRelease.assets ?? [];
+  const targetAssets = filterAssetsByPatterns(allGhAssets, onlyPatterns);
+  if (onlyPatterns.length > 0) {
+    console.log(`🎯 --only ${onlyPatterns.join(',')}：候选附件 ${targetAssets.length}/${allGhAssets.length} 个`);
+    if (targetAssets.length === 0) {
+      // 模式打错时绝不静默降级成「什么都不传」，直接失败好过事后靠人眼发现没传上
+      throw new Error(`--only 没有匹配到任何附件（模式: ${onlyPatterns.join(', ')}）`);
+    }
+  }
+
   // 2. 检查或创建 AtomGit Release
   const releaseUrl = `${atomgitApiBase}/repos/${atomgitRepo}/releases/tags/${encodeURIComponent(targetTag)}?access_token=${encodeURIComponent(token)}`;
   let atomgitRelease = null;
 
   const checkRes = await fetchWithTimeout(releaseUrl);
   if (checkRes.status === 404) {
-    console.log(`✨ AtomGit 上尚无 Release [${targetTag}]，创建中...`);
-    const createBody = {
-      tag_name: targetTag,
-      name: ghRelease.name || targetTag,
-      body: ghRelease.body || '',
-    };
-    const status = pickReleaseStatus(isTargetLatest);
-    if (status) createBody.release_status = status;
-    const createUrl = `${atomgitApiBase}/repos/${atomgitRepo}/releases?access_token=${encodeURIComponent(token)}`;
-    const createRes = await fetchWithTimeout(createUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(createBody),
-    });
+    if (dryRun) {
+      // dry-run 不建 Release：远端按「附件为空」预演，计划里会显示全部待上传
+      console.log(`🅳 dry-run：AtomGit 上尚无 Release [${targetTag}]，按「全部新增」预演（不创建、不上传）。`);
+    } else {
+      console.log(`✨ AtomGit 上尚无 Release [${targetTag}]，创建中...`);
+      const createBody = {
+        tag_name: targetTag,
+        name: ghRelease.name || targetTag,
+        body: ghRelease.body || '',
+      };
+      const status = pickReleaseStatus(isTargetLatest);
+      if (status) createBody.release_status = status;
+      const createUrl = `${atomgitApiBase}/repos/${atomgitRepo}/releases?access_token=${encodeURIComponent(token)}`;
+      const createRes = await fetchWithTimeout(createUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(createBody),
+      });
 
-    if (!createRes.ok) {
-      const errText = await createRes.text();
-      throw new Error(`创建 AtomGit Release 失败: HTTP ${createRes.status} ${errText}`);
+      if (!createRes.ok) {
+        const errText = await createRes.text();
+        throw new Error(`创建 AtomGit Release 失败: HTTP ${createRes.status} ${errText}`);
+      }
+      atomgitRelease = await createRes.json();
+      console.log(`✅ 创建 AtomGit Release 成功!`);
     }
-    atomgitRelease = await createRes.json();
-    console.log(`✅ 创建 AtomGit Release 成功!`);
   } else if (!checkRes.ok) {
     const errText = await checkRes.text();
     throw new Error(`检查 AtomGit Release 状态异常: HTTP ${checkRes.status} ${errText}`);
@@ -282,46 +464,59 @@ async function syncOneRelease(targetTag, githubLatestTag, failedAssets) {
     if (forceResync) {
       // AtomGit 不提供删除整个 release 的 API（9 个 release 端点中仅附件可删）：
       // --force-resync = 删光该 tag 全部附件后全量重传，用于同版本号重建产物重发版
-      console.log(`♻️ --force-resync: 删除 [${targetTag}] 的全部 ${attachAssets.length} 个附件后重传...`);
-      await deleteReleaseAttachments(targetTag, attachAssets);
+      if (dryRun) {
+        console.log(`🅳 dry-run：--force-resync 会删除全部 ${attachAssets.length} 个附件（本次不执行）。`);
+      } else {
+        console.log(`♻️ --force-resync: 删除 [${targetTag}] 的全部 ${attachAssets.length} 个附件后重传...`);
+        await deleteReleaseAttachments(targetTag, attachAssets);
+      }
     }
     console.log(`ℹ️ AtomGit 上已存在 Release [${targetTag}]，${forceResync ? '附件已清空，' : ''}增量同步附件。`);
-    const patchBody = {
-      name: ghRelease.name || targetTag,
-      body: ghRelease.body || '',
-    };
-    if (isTargetLatest) patchBody.release_status = 'latest';
-    const patchUrl = `${atomgitApiBase}/repos/${atomgitRepo}/releases/${encodeURIComponent(targetTag)}?access_token=${encodeURIComponent(token)}`;
-    const patchRes = await fetchWithTimeout(patchUrl, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(patchBody),
-    });
-    if (!patchRes.ok) {
-      const errText = await patchRes.text().catch(() => '');
-      // PATCH 失败不阻塞附件上传，但要留痕（latest 校正步骤会再兜底一次）
-      console.error(`⚠️ 更新 Release 元数据失败: HTTP ${patchRes.status} ${errText}`);
+    if (dryRun) {
+      // dry-run 就改元数据（尤其 release_status）属于破坏性副作用，必须拦住
+      console.log(`🅳 dry-run：跳过 Release 元数据更新。`);
+    } else {
+      const patchBody = {
+        name: ghRelease.name || targetTag,
+        body: ghRelease.body || '',
+      };
+      if (isTargetLatest) patchBody.release_status = 'latest';
+      const patchUrl = `${atomgitApiBase}/repos/${atomgitRepo}/releases/${encodeURIComponent(targetTag)}?access_token=${encodeURIComponent(token)}`;
+      const patchRes = await fetchWithTimeout(patchUrl, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patchBody),
+      });
+      if (!patchRes.ok) {
+        const errText = await patchRes.text().catch(() => '');
+        // PATCH 失败不阻塞附件上传，但要留痕（latest 校正步骤会再兜底一次）
+        console.error(`⚠️ 更新 Release 元数据失败: HTTP ${patchRes.status} ${errText}`);
+      }
     }
   }
 
-  // 重新获取最新的 AtomGit 附件列表以判断哪些已上传（断点续传）
+  // 3. 只对「本次候选资产」探测远端状态：未选中的附件不探测，省掉几十次网络往返
+  const targetNames = new Set(targetAssets.map((a) => a.name));
   const freshRes = await fetchWithTimeout(releaseUrl);
-  const currentRelease = await freshRes.json();
+  const currentRelease = freshRes.ok ? await freshRes.json() : { assets: [] };
+  const attachAssets = (currentRelease.assets || []).filter((a) => a.type === 'attach');
   const remoteAssets = [];
-  for (const a of currentRelease.assets || []) {
-    if (a.type !== 'attach') continue;
+  const remoteIdByName = new Map();
+  for (const a of attachAssets) {
+    if (!targetNames.has(a.name)) continue;
     // 探测远端文件实际大小；失败时 size=null → 计划函数按「无法校验」保守跳过
     const size = a.browser_download_url ? await fetchRemoteAssetSize(a.browser_download_url) : null;
     if (size == null) {
-      console.log(`⚠️ 无法校验远端附件 [${a.name}] 的大小（HEAD 失败），按同名跳过处理。`);
+      console.log(`⚠️ 无法校验远端附件 [${a.name}] 的大小（HEAD/Range 均失败），按同名跳过处理。`);
     }
     remoteAssets.push({ name: a.name, size });
+    if (a.id) remoteIdByName.set(a.name, a.id);
   }
-  console.log(`📦 当前 AtomGit 已有附件数: ${remoteAssets.length}`);
+  console.log(`📦 AtomGit 已有附件 ${attachAssets.length} 个；本次候选 ${targetAssets.length} 个，其中同名已存在 ${remoteAssets.length} 个`);
 
-  // 3. 内容感知去重计划：同名同大小 → 跳过；同名异大小 → 冲突（不静默）
+  // 4. 内容感知去重计划：同名同大小 → 跳过；同名异大小 → 冲突（不静默）
   const plan = planAssetActions(
-    ghRelease.assets.map((a) => ({ name: a.name, size: a.size })),
+    targetAssets.map((a) => ({ name: a.name, size: a.size })),
     remoteAssets,
   );
 
@@ -337,14 +532,43 @@ async function syncOneRelease(targetTag, githubLatestTag, failedAssets) {
     console.log(`⏩ 附件 [${s.name}] ${s.reason === 'same-size' ? '在 AtomGit 已存在（大小一致），跳过。' : '远端大小未知，保守跳过。'}`);
   }
 
-  const assetsToSync = plan.uploads;
+  // 5. 选定本次要传的附件：默认走计划的上传项；--select 让用户逐项勾选；--force-upload 点名重传
+  let rows = buildAssetSelectionRows(targetAssets, plan);
+  if (forceUpload) {
+    // 点名重传：连「远端已存在同大小」的行也升级为上传（否则 PUT 会拿到 409 而什么都没换）
+    rows = rows.map((r) => (r.action === 'skip' ? { ...r, action: 'upload', reason: 'force-upload' } : r));
+  }
+  let forcedNames = new Set(forceUpload ? rows.map((r) => r.name) : []);
+  if (selectMode) {
+    const picked = await pickAssetsInteractively(rows);
+    if (!picked) {
+      console.log('⏹️ 已取消，未做任何改动。');
+      return;
+    }
+    rows = picked.rows;
+    forcedNames = picked.forcedNames;
+  }
+  const assetsToSync = rows
+    .filter((r) => r.action === 'upload')
+    .map((r) => ({ name: r.name, forced: forcedNames.has(r.name) }));
+  // 被点名重传的原本是「跳过」，汇总里的跳过数要相应减少
+  let skipCount = plan.skips.length - rows.filter((r) => r.reason === 'force-upload' || r.reason === 'force-reselect').length;
+
+  if (dryRun) {
+    console.log(`\n🅳 dry-run 计划：上传 ${assetsToSync.length} 个 / 跳过 ${skipCount} 个 / 冲突 ${plan.conflicts.length} 个`);
+    for (const a of assetsToSync) {
+      console.log(`   ↑ ${a.name}${a.forced ? '（先删后传）' : ''}`);
+    }
+    console.log('dry-run：未执行任何写操作。');
+    return;
+  }
+
   let successCount = 0;
-  let skipCount = plan.skips.length;
 
   for (let i = 0; i < assetsToSync.length; i++) {
     const asset = assetsToSync[i];
     const fileName = asset.name;
-    const ghAsset = ghRelease.assets.find((a) => a.name === fileName);
+    const ghAsset = targetAssets.find((a) => a.name === fileName) ?? allGhAssets.find((a) => a.name === fileName);
     if (!ghAsset) continue;
     const fileSizeMb = (ghAsset.size / (1024 * 1024)).toFixed(2);
     console.log(`\n[${i + 1}/${assetsToSync.length}] 处理: ${fileName} (${fileSizeMb} MB)`);
@@ -398,6 +622,16 @@ async function syncOneRelease(targetTag, githubLatestTag, failedAssets) {
         }
         failedAssets.push({ tag: targetTag, name: fileName, error: `download: ${err.message}` });
         continue;
+      }
+    }
+
+    // 点名重传：远端同名附件不先删的话，直传会命中对象存储的 409 幂等语义
+    //（脚本会把 409 当成功），结果是「报告成功但内容没换」。
+    if (asset.forced) {
+      const remoteId = remoteIdByName.get(fileName);
+      if (remoteId) {
+        console.log(`♻️ 强制重传：先删除远端同名附件 ${fileName} (id=${remoteId})`);
+        await deleteAttachmentById(targetTag, remoteId, fileName);
       }
     }
 
@@ -472,19 +706,37 @@ async function uploadOneAsset(targetTag, fileName, localFilePath) {
 }
 
 /**
- * 探测远端附件真实大小（HEAD Content-Length）。
- * AtomGit 的 Release API 不返回附件大小字段（仅 name/type/id），
- * 只能靠下载 URL 的 HEAD 获取；失败返回 null 表示「无法校验」。
- * 下载 URL 需要鉴权，带 token 探测后立即释放连接。
+ * 探测远端附件真实大小。
+ * AtomGit 的 Release API 不返回附件大小字段（仅 name/type/id），下载 CDN 对 HEAD
+ * 返回 401（WAF 拦 HEAD），旧实现只发 HEAD → 恒为 null → 所有同名附件都被归到
+ * 「远端大小未知，保守跳过」，头注释承诺的「同名异大小冲突检测」从未生效。
+ * 现在 HEAD 不成时回退 `Range: bytes=0-0`（实测 206 + Content-Range），
+ * 从尾段取真实总长；两者都失败仍然返回 null 表示「无法校验」。
  */
 async function fetchRemoteAssetSize(downloadUrl) {
   try {
     const sep = downloadUrl.includes('?') ? '&' : '?';
     const url = `${downloadUrl}${sep}access_token=${encodeURIComponent(token)}`;
     const res = await fetchWithTimeout(url, { method: 'HEAD' }, API_TIMEOUT_MS);
-    if (!res.ok) return null;
-    const len = res.headers.get('content-length');
-    return len ? Number(len) : null;
+    if (res.ok) {
+      const len = res.headers.get('content-length');
+      if (len) return Number(len);
+    }
+  } catch {
+    // HEAD 异常不能直接放弃：继续尝试 Range 探测
+  }
+  try {
+    // 不带 token（带 token 会被 CDN 当成异常参数返回 404），公开下载 URL 即可读长度
+    const res = await fetchWithTimeout(downloadUrl, { headers: { Range: 'bytes=0-0' } }, API_TIMEOUT_MS);
+    if (res.status === 206) {
+      const total = res.headers.get('content-range')?.split('/')[1];
+      return total ? Number(total) : null;
+    }
+    if (res.status === 200) {
+      const len = res.headers.get('content-length');
+      return len ? Number(len) : null;
+    }
+    return null;
   } catch {
     // 探测失败不阻塞流程：计划函数会按「无法校验」保守跳过
     return null;
@@ -505,15 +757,21 @@ async function deleteReleaseAttachments(targetTag, attachments) {
       console.error(`⚠️ 附件 [${a.name}] 缺少 id，无法删除，将在上传阶段按同名跳过/409 处理。`);
       continue;
     }
-    const delUrl = `${atomgitApiBase}/repos/${atomgitRepo}/releases/${encodeURIComponent(targetTag)}/attach_files/${encodeURIComponent(a.id)}?access_token=${encodeURIComponent(token)}`;
-    const res = await fetchWithTimeout(delUrl, { method: 'DELETE' });
-    if (!res.ok) {
-      const errText = await res.text().catch(() => '');
-      throw new Error(`删除附件 [${a.name}] (id=${a.id}) 失败: HTTP ${res.status} ${errText}`);
-    }
+    await deleteAttachmentById(targetTag, a.id, a.name);
     deleted++;
   }
   console.log(`🗑️ 已删除 ${deleted} 个附件。`);
+}
+
+/** 删除单个附件（--force-upload 点名单传、--force-resync 批量删除共用）。 */
+async function deleteAttachmentById(targetTag, id, name) {
+  const delUrl = `${atomgitApiBase}/repos/${atomgitRepo}/releases/${encodeURIComponent(targetTag)}/attach_files/${encodeURIComponent(id)}?access_token=${encodeURIComponent(token)}`;
+  const res = await fetchWithTimeout(delUrl, { method: 'DELETE' });
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    throw new Error(`删除附件 [${name}] (id=${id}) 失败: HTTP ${res.status} ${errText}`);
+  }
+  console.log(`  🗑️ 已删除旧附件 ${name}`);
 }
 
 /**
