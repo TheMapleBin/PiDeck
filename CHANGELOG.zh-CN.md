@@ -8,6 +8,7 @@
 - **会话 Tab 栏「当前会话操作」** — ⋯ 菜单新增与侧栏右键同源的操作组：重命名 / 复制会话 / 导出 HTML / 复制会话文件路径 / 打开会话文件。搜索定位到侧栏未渲染的会话时，⋯ 菜单是稳定入口。
 - **提问卡支持直接回车提交** — 单卡 / 批量卡选完即可回车提交（含「选了再回车」），IME 合成中的回车只用于选字不上屏提交；编辑器回车仍换行，Ctrl/Cmd+Enter 提交。
 - **官方安装包不再随 DSH runtime** — 默认 lite：extraResources 留空。首次用 DSH 时从当前 latest 应用 Release（AtomGit / GitHub）按平台下载，跟 runner-node sidecar 同款。离线/内网包仍可 `--full`。旧版 DSH 升级留下的 npm hashed leftover 目录不再打进 tarball。
+- **手动补发 DSH runtime** — 新增 `Publish DSH runtime` Action：6 个原生平台（win/mac/linux × x64/arm64）打包 tgz 与分平台索引，挂到当前 latest 应用 Release（v*），禁止独立 sidecar tag。runtime 变更后不必重打安装包；追加资产需手动重跑 AtomGit 同步。
 
 ### 🐛 修复
 - **生图会话不再因 base64 落盘撑爆渲染进程** — 图片改为内容寻址 blob + 引用，base64 不再进 JSONL；读取只走尾部字节窗口，旧格式首次打开自动迁移。反复生图导致的 `reason:"oom"` 崩溃循环与白屏已消除。

@@ -180,7 +180,7 @@ dsh 仍随包分发，但把「runtime 是否可用」做成一等状态并据�
 `@img/sharp` 18MB、`@vscode/ripgrep` 5MB。验证方式是排除后用**真实 Electron 启动 host 并发一条消息**，
 而不是只做静态检查。收益/风险比不划算，暂不做。
 
-1. **在线更新源**（官方 lite 包的主路径）：CI 把分平台 tgz 与 `dsh-runtime-<platform>-<arch>-releases.json` 挂到当前 latest 应用 Release（与 runner-node sidecar 同款，禁止独立 `dsh-runtime` tag）。客户端按 `settings.updateSource` 改写归档 URL，sha256 始终校验。自测可设 `DSH_RUNTIME_INDEX_URL` 指向本地索引（url 用 `file://`）。
+1. **在线更新源**（官方 lite 包的主路径）：`release.yml` 发版时随安装包上传当前构建机那份 tgz；单独补发走 `.github/workflows/publish-dsh-runtime.yml`（6 个原生平台矩阵，挂当前 latest 应用 Release，与 runner-node sidecar 同款，禁止独立 `dsh-runtime` tag）。追加资产只产生 `release: edited`，需手动重跑 sync-atomgit。客户端按 `settings.updateSource` 改写归档 URL，sha256 始终校验。自测可设 `DSH_RUNTIME_INDEX_URL` 指向本地索引（url 用 `file://`）。
 
 **验证记录**
 
