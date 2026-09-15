@@ -45,7 +45,7 @@ export function AboutPopover(props: AboutPopoverProps) {
       <MorphPopoverContent side="bottom" align="start" sideOffset={10} radius={16} className="w-72 overflow-hidden">
         <div className="flex flex-col gap-3 p-4">
           <div className="flex items-center gap-3">
-            <PiLogoCanvas size={40} autoPlay />
+            <PiLogoCanvas size={40} playOnClick />
             <div className="min-w-0 flex-1">
               <div className="font-[PiDeckDepartureMono] text-lg font-normal uppercase leading-tight tracking-wide text-foreground">
                 PiDeck

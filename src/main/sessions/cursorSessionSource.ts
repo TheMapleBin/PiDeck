@@ -1,0 +1,264 @@
+import { mkdir, readFile, readdir, stat } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
+
+/** Cursor JSONL 行结构不固定，统一按 unknown 读取后再逐字段收窄。 */
+export type CursorRecord = Record<string, unknown>;
+
+export type ParsedCursorSession = {
+	meta: {
+		sessionId: string;
+		cwd: string;
+		firstTimestamp: number;
+		lastTimestamp: number;
+	};
+	entries: CursorRecord[];
+	sourcePath: string;
+	sourceSize: number;
+	sourceMtime: number;
+};
+
+export type CursorImportMeta = {
+	sourceMtime: number;
+	sourceSize: number;
+};
+
+export function asArray(value: unknown): unknown[] {
+	return Array.isArray(value) ? value : [];
+}
+
+export function readString(value: unknown): string {
+	return typeof value === "string" ? value : "";
+}
+
+export function readNumber(value: unknown): number {
+	return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+export function readRecord(value: unknown): Record<string, unknown> {
+	return value && typeof value === "object" && !Array.isArray(value)
+		? (value as Record<string, unknown>)
+		: {};
+}
+
+export function normalizePath(path?: string): string {
+	return String(path ?? "")
+		.replace(/\\/g, "/")
+		.replace(/\/+$/, "")
+		.toLowerCase();
+}
+
+/**
+ * 项目路径 → Cursor `~/.cursor/projects/<slug>` 目录名。
+ * Windows：`F:\PiDeck` → `f-PiDeck`（盘符小写，冒号丢掉，分隔符变 `-`）。
+ * POSIX：`/home/u/repo` → `home-u-repo`（去掉前导斜杠）。
+ * 与 Claude 的 `C--Users-...`（冒号变双横杠）不是同一套编码。
+ */
+export function encodeCursorProjectSlug(projectPath: string): string {
+	const normalized = projectPath.replace(/\\/g, "/").replace(/\/+$/, "");
+	const win = normalized.match(/^([A-Za-z]):\/(.+)$/);
+	if (win) return `${win[1].toLowerCase()}-${win[2].replace(/\//g, "-")}`;
+	return normalized.replace(/^\//, "").replace(/\//g, "-");
+}
+
+export function getCursorProjectDir(root: string, projectPath: string): string {
+	return join(root, encodeCursorProjectSlug(projectPath));
+}
+
+export function safePathToken(path: string): string {
+	const normalized = path.replace(/\\/g, "/");
+	const win = normalized.match(/^([A-Za-z]):\/(.+)$/);
+	if (win) return `--${win[1]}--${win[2].replace(/\//g, "-")}--`;
+	return `--${normalized.replace(/^\//, "").replace(/\//g, "-")}--`;
+}
+
+export function getProjectSessionDir(piRoot: string, projectPath: string): string {
+	return join(piRoot, safePathToken(projectPath));
+}
+
+export function getCursorTargetPath(
+	piRoot: string,
+	projectPath: string,
+	session: ParsedCursorSession,
+): string {
+	const id = session.meta.sessionId.replace(/[^a-zA-Z0-9_-]/g, "-");
+	return join(getProjectSessionDir(piRoot, projectPath), `cursor_${id}.jsonl`);
+}
+
+/** 路径逃逸校验：只允许读取 ~/.cursor/projects 之下的会话文件。 */
+export function assertCursorSourcePath(root: string, filePath: string): void {
+	const base = normalizePath(root);
+	const target = normalizePath(filePath);
+	if (target !== base && !target.startsWith(`${base}/`)) {
+		throw new Error("Cursor session path is outside ~/.cursor/projects");
+	}
+}
+
+export function sessionIdFromPath(filePath: string): string {
+	return basename(filePath).replace(/\.jsonl$/i, "");
+}
+
+/**
+ * 收集当前项目的主会话 JSONL。
+ * 两种布局并存：`<id>/<id>.jsonl`（现行）与 `agent-transcripts/<id>.jsonl`（旧）。
+ * `subagents/` 是委派子代理，第一版不导入，避免和父会话重复。
+ */
+export async function collectCursorTranscripts(projectDir: string): Promise<string[]> {
+	const transcriptsDir = join(projectDir, "agent-transcripts");
+	let entries;
+	try {
+		entries = await readdir(transcriptsDir, { withFileTypes: true });
+	} catch {
+		return [];
+	}
+
+	const files: string[] = [];
+	for (const entry of entries) {
+		const path = join(transcriptsDir, entry.name);
+		if (entry.isFile() && entry.name.toLowerCase().endsWith(".jsonl")) {
+			files.push(path);
+			continue;
+		}
+		if (!entry.isDirectory() || entry.name === "subagents") continue;
+		const nested = join(path, `${entry.name}.jsonl`);
+		try {
+			const info = await stat(nested);
+			if (info.isFile()) files.push(nested);
+		} catch {
+			// 目录存在但没有同名主转录，跳过
+		}
+	}
+	return files;
+}
+
+/** 把一条 Cursor 消息的 text 块拼起来，供抽 user_query / 时间戳。 */
+export function joinCursorTextBlocks(content: unknown): string {
+	if (typeof content === "string") return content;
+	return asArray(content)
+		.map((item) => {
+			const record = readRecord(item);
+			return readString(record.text);
+		})
+		.filter(Boolean)
+		.join("\n");
+}
+
+/**
+ * 用户可见正文：优先取 `<user_query>` 内的原话。
+ * Cursor 会把时间戳、规则、技能、git 状态等注入包在同一条 user 消息里，
+ * 那些不是用户打的字；有 user_query 时丢掉包装才是忠实转写。
+ * 没有 user_query 时只剥 timestamp，其余原文保留，避免误删。
+ */
+export function extractCursorUserText(raw: string): string {
+	const queries = [...raw.matchAll(/<user_query\b[^>]*>([\s\S]*?)<\/user_query>/gi)]
+		.map((match) => match[1].trim())
+		.filter(Boolean);
+	if (queries.length > 0) return queries.join("\n\n");
+	return raw.replace(/<timestamp\b[^>]*>[\s\S]*?<\/timestamp>/gi, "").trim();
+}
+
+/**
+ * Cursor 把时钟写在 user 文本的 `<timestamp>` 里，例如
+ * `Tuesday, Sep 15, 2026, 4:35 PM (UTC+8)`。V8 不认 `(UTC+8)`，要改成 GMT 偏移。
+ */
+export function parseCursorClock(value: string): number {
+	const trimmed = value.trim();
+	if (!trimmed) return 0;
+	const direct = Date.parse(trimmed);
+	if (Number.isFinite(direct)) return direct;
+
+	const tz = trimmed.match(/\(UTC([+-])(\d{1,2})(?::(\d{2}))?\)\s*$/i);
+	let core = trimmed;
+	let suffix = "";
+	if (tz && tz.index !== undefined) {
+		core = trimmed.slice(0, tz.index).trim();
+		const hours = tz[2].padStart(2, "0");
+		const minutes = (tz[3] ?? "00").padStart(2, "0");
+		suffix = ` GMT${tz[1]}${hours}${minutes}`;
+	}
+	const withOffset = Date.parse(`${core}${suffix}`);
+	if (Number.isFinite(withOffset)) return withOffset;
+	const withoutWeekday = Date.parse(`${core.replace(/^[A-Za-z]+,\s+/, "")}${suffix}`);
+	return Number.isFinite(withoutWeekday) ? withoutWeekday : 0;
+}
+
+export function parseCursorTimestampFromText(raw: string): number {
+	const match = raw.match(/<timestamp\b[^>]*>([\s\S]*?)<\/timestamp>/i);
+	return match ? parseCursorClock(match[1]) : 0;
+}
+
+export async function readCursorSession(
+	root: string,
+	filePath: string,
+): Promise<ParsedCursorSession> {
+	assertCursorSourcePath(root, filePath);
+	const [raw, info] = await Promise.all([readFile(filePath, "utf8"), stat(filePath)]);
+	const entries: CursorRecord[] = [];
+	for (const line of raw.split(/\r?\n/)) {
+		if (!line.trim()) continue;
+		let parsed: unknown;
+		try {
+			parsed = JSON.parse(line);
+		} catch {
+			// 损坏行跳过，不让整份会话导入失败。
+			continue;
+		}
+		if (parsed && typeof parsed === "object") entries.push(parsed as CursorRecord);
+	}
+
+	const sessionId = sessionIdFromPath(filePath);
+	if (!sessionId) throw new Error("Missing Cursor session id");
+
+	const timestamps: number[] = [];
+	let hasConversation = false;
+	for (const entry of entries) {
+		const role = readString(entry.role);
+		if (role === "user" || role === "assistant") hasConversation = true;
+		if (role !== "user") continue;
+		const message = readRecord(entry.message);
+		const ts = parseCursorTimestampFromText(joinCursorTextBlocks(message.content ?? entry.content));
+		if (ts > 0) timestamps.push(ts);
+	}
+	if (!hasConversation) throw new Error("Missing Cursor session messages");
+
+	const firstTimestamp = timestamps.length > 0 ? Math.min(...timestamps) : info.mtimeMs;
+	const lastTimestamp = timestamps.length > 0 ? Math.max(...timestamps) : info.mtimeMs;
+
+	return {
+		meta: {
+			sessionId,
+			cwd: dirname(dirname(filePath)),
+			firstTimestamp,
+			lastTimestamp,
+		},
+		entries,
+		sourcePath: filePath,
+		sourceSize: info.size,
+		sourceMtime: info.mtimeMs,
+	};
+}
+
+export async function readCursorImportMeta(
+	targetPath: string,
+): Promise<CursorImportMeta | undefined> {
+	try {
+		const raw = await readFile(targetPath, "utf8");
+		for (const line of raw.split(/\r?\n/).filter(Boolean).slice(0, 8)) {
+			const entry = JSON.parse(line) as CursorRecord;
+			if (readString(entry.type) === "cursor_import") {
+				return {
+					sourceMtime: readNumber(entry.sourceMtime),
+					sourceSize: readNumber(entry.sourceSize),
+				};
+			}
+		}
+	} catch {
+		return undefined;
+	}
+	return undefined;
+}
+
+export async function ensureProjectSessionDir(piRoot: string, projectPath: string) {
+	const dir = getProjectSessionDir(piRoot, projectPath);
+	await mkdir(dir, { recursive: true });
+	return dir;
+}

@@ -207,7 +207,33 @@ test("readBundledRuntime：清单与归档齐备且兼容时返回可安装的�
 	rmSync(root, { recursive: true, force: true });
 });
 
-test("installFromIndex 优先用随包资源：不联网也能装成功", async () => {
+test("官方 dev/lite 路径：不注入 bundledRuntime 时必须走在线索引", async () => {
+	const root = mkdtempSync(join(tmpdir(), "dsh-remote-only-"));
+	let fetchCalled = false;
+	const { DshRuntimeInstaller } = loadTsCommonJs("src/main/dsh/runtime/DshRuntimeInstaller.ts");
+	const installer = new DshRuntimeInstaller({
+		manager: new DshRuntimeManager({
+			layout: { runtimesRoot: join(root, "runtimes", "dsh"), tempRoot: join(root, "runtimes", ".tmp") },
+			appVersion: () => APP_VERSION,
+			extract: createTarExtractor(),
+		}),
+		indexUrl: () => "https://idx.test/i.json",
+		appVersion: () => APP_VERSION,
+		fetchIndex: async () => {
+			fetchCalled = true;
+			return null;
+		},
+		onProgress: () => {},
+		// dev 和 lite 打包不注入 bundledRuntime；不能因为项目/残留资源存在而跳过远程索引。
+		bundledRuntime: () => undefined,
+	});
+	const result = await installer.installFromIndex();
+	assert.equal(result.ok, false);
+	assert.equal(fetchCalled, true);
+	rmSync(root, { recursive: true, force: true });
+});
+
+test("兼容旧 full 包：显式注入随包资源时可不联网安装", async () => {
 	const root = mkdtempSync(join(tmpdir(), "dsh-bundled-"));
 	const dir = await makeBundledDir(root);
 
@@ -227,16 +253,17 @@ test("installFromIndex 优先用随包资源：不联网也能装成功", async 
 			return null;
 		},
 		onProgress: () => {},
+		// 兼容旧 full 包：只有显式注入才允许本地资源优先。
 		bundledRuntime: () => readBundledRuntime(dir, APP_VERSION),
 	});
 
 	const result = await installer.installFromIndex();
 	assert.equal(result.ok, true, JSON.stringify(result));
-	assert.equal(fetchCalled, false, "有随包资源时不应发起网络请求");
+	assert.equal(fetchCalled, false, "显式随包资源时不应发起网络请求");
 	rmSync(root, { recursive: true, force: true });
 });
 
-test("没有随包资源时回退到在线索引", async () => {
+test("没有随包资源时走在线索引", async () => {
 	const root = mkdtempSync(join(tmpdir(), "dsh-bundled-"));
 	const { DshRuntimeInstaller } = loadTsCommonJs("src/main/dsh/runtime/DshRuntimeInstaller.ts");
 	let fetchCalled = false;
@@ -253,6 +280,7 @@ test("没有随包资源时回退到在线索引", async () => {
 			return null;
 		},
 		onProgress: () => {},
+		// lite/dev 路径显式不提供随包 runtime，必须查询远程索引。
 		bundledRuntime: () => undefined,
 	});
 	const result = await installer.installFromIndex();
@@ -285,6 +313,56 @@ test("runtime:pack 默认 lite，CI 上传分平台归档，禁止独立 dsh-run
 		release,
 		/releases\/download\/dsh-runtime/,
 		"独立 sidecar tag 会抢走 GitHub /releases/latest",
+	);
+});
+
+/** 手动补发入口：runtime 变更后不必重打安装包，但仍必须挂 latest v*。 */
+test("publish-dsh-runtime.yml 提供手动上传入口，并要求同步到默认分支", () => {
+	const publish = readFileSync(".github/workflows/publish-dsh-runtime.yml", "utf8");
+	assert.match(publish, /workflow_dispatch/);
+	assert.match(publish, /tag:/);
+	assert.match(publish, /type: string/);
+	assert.match(publish, /默认分支 main/);
+	assert.match(publish, /Actions 不会在页面注册\/显示/);
+});
+
+test("runtime 与 runner Node 补发都支持显式目标 Release tag", () => {
+	const publishRuntime = readFileSync(".github/workflows/publish-dsh-runtime.yml", "utf8");
+	const publishNode = readFileSync(".github/workflows/publish-dsh-runner-node.yml", "utf8");
+	assert.match(publishRuntime, /INPUT_TAG: \$\{\{ inputs\.tag \}\}/);
+	assert.match(publishNode, /INPUT_TAG: \$\{\{ inputs\.tag \}\}/);
+	assert.match(publishNode, /gh release upload/);
+	assert.match(publishNode, /--clobber/);
+});
+
+test("publish-dsh-runtime.yml 不依赖不会触发 workflow 的 runtime:pack 脚本", () => {
+	const publish = readFileSync(".github/workflows/publish-dsh-runtime.yml", "utf8");
+	assert.doesNotMatch(publish, /npm run runtime:pack/);
+	assert.match(publish, /node scripts\/pack-dsh-runtime\.mjs/);
+});
+
+test("publish-dsh-runtime.yml 按原生平台打 tgz，挂 latest 应用 Release", () => {
+	const publish = readFileSync(".github/workflows/publish-dsh-runtime.yml", "utf8");
+	assert.match(publish, /workflow_dispatch/);
+	assert.match(publish, /node scripts\/pack-dsh-runtime\.mjs/);
+	assert.match(publish, /node scripts\/check-dsh-asar\.mjs/);
+	assert.match(publish, /releases\/latest/);
+	assert.match(publish, /gh release upload/);
+	assert.match(publish, /name: Publish DSH runtime/);
+	assert.match(publish, /RELEASE_PAT/);
+	assert.match(publish, /--clobber/);
+	assert.match(publish, /windows-11-arm/);
+	assert.match(publish, /ubuntu-24\.04-arm/);
+	assert.match(publish, /macos-15-intel/);
+	assert.match(publish, /RELEASE_PAT/);
+	assert.match(publish, /dsh-runtime-\$\{\{ matrix\.platform \}\}-\$\{\{ matrix\.arch \}\}\.tgz/);
+	assert.match(publish, /dsh-runtime-\$\{\{ matrix\.platform \}\}-\$\{\{ matrix\.arch \}\}-releases\.json/);
+	assert.match(publish, /\^v\[0-9\]/, "只允许挂到 v* 应用 tag");
+	assert.doesNotMatch(publish, /TAG=dsh-runtime/);
+	assert.doesNotMatch(
+		publish,
+		/gh release create\s+dsh-runtime/,
+		"禁止新建独立 sidecar Release",
 	);
 });
 

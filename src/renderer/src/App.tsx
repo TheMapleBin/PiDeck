@@ -286,8 +286,6 @@ export function App() {
 
   // 项目的 git worktree 列表：{ parentId -> WorktreeEntry[] }
   const [pendingAgents, setPendingAgents] = useState<PendingAgentTab[]>([]);
-  /** 侧栏 π logo 重播令牌：agent 启动（含历史会话）/关闭时递增，驱动 BrandLockup 动画 */
-  const [brandLogoReplayToken, setBrandLogoReplayToken] = useState(0);
   const [activeProjectId, setActiveProjectId] = useState<string>();
   const activeProjectIdRef = useRef<string | undefined>(activeProjectId);
   activeProjectIdRef.current = activeProjectId;
@@ -549,16 +547,20 @@ export function App() {
     setZcodeImportProject,
     workbuddyImportProject,
     setWorkbuddyImportProject,
+    cursorImportProject,
+    setCursorImportProject,
     codexImportController,
     claudeImportController,
     openCodeImportController,
     zcodeImportController,
     workbuddyImportController,
+    cursorImportController,
     openCodexImport,
     openClaudeImport,
     openOpenCodeImport,
     openZCodeImport,
     openWorkBuddyImport,
+    openCursorImport,
   } = useImportFlow({
     setProjectMenu: () => undefined,
     refreshProjectSessions,
@@ -573,6 +575,8 @@ export function App() {
     importZCodeSessionsApi: api.zcodeSessions.import,
     scanWorkBuddySessions: api.workbuddySessions.scan,
     importWorkBuddySessionsApi: api.workbuddySessions.import,
+    scanCursorSessions: api.cursorSessions.scan,
+    importCursorSessionsApi: api.cursorSessions.import,
     t,
   });
 
@@ -2007,11 +2011,6 @@ export function App() {
   }, [currentSessionId]);
 
 
-  // 侧栏 π logo 业务反馈：新建/历史会话启动/关闭 agent 时重播拼装动画。
-  const triggerBrandLogoReplay = useCallback(() => {
-    setBrandLogoReplayToken((token) => token + 1);
-  }, []);
-
   // 已删除内置 goal 完成检测。
 
   // 监听用户发送消息的编辑事件：回填输入框，并把自包含引用块还原成 chip
@@ -3200,6 +3199,7 @@ export function App() {
         if (source === "claude") return openClaudeImport(project);
         if (source === "zcode") return openZCodeImport(project);
         if (source === "workbuddy") return openWorkBuddyImport(project);
+        if (source === "cursor") return openCursorImport(project);
         return openOpenCodeImport(project);
       },
       manageResources: (project) => setProjectResourcesProject(project),
@@ -4345,6 +4345,7 @@ export function App() {
     {openCodeImportProject && <ImportOverlayHost kind="opencode" project={openCodeImportProject} controller={openCodeImportController} onClose={() => setOpenCodeImportProject(null)} />}
     {zcodeImportProject && <ImportOverlayHost kind="zcode" project={zcodeImportProject} controller={zcodeImportController} onClose={() => setZcodeImportProject(null)} />}
     {workbuddyImportProject && <ImportOverlayHost kind="workbuddy" project={workbuddyImportProject} controller={workbuddyImportController} onClose={() => setWorkbuddyImportProject(null)} />}
+    {cursorImportProject && <ImportOverlayHost kind="cursor" project={cursorImportProject} controller={cursorImportController} onClose={() => setCursorImportProject(null)} />}
 
     {/* Scratch Pad（草稿本）：根级渲染，避免受 chat-pane grid 影响定位 */}
     <ScratchPadOverlay controller={scratchPad} />

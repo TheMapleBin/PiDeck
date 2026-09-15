@@ -1,0 +1,134 @@
+name: Publish DSH runtime
+
+# DSH runtime tgz：官方 lite 安装包不随 runtime，用户首次用 DSH 时按需下载。
+# 该文件需要提交到默认分支；否则 GitHub Actions 不会在页面注册/显示本 workflow。
+# 按平台原生打包（node-pty / sharp / koffi 等 prebuild 不能交叉），挂到目标
+# GitHub *应用* Release（vX.Y.Z；留空时取 latest），再按需手动重跑 sync-atomgit。
+# 禁止独立 dsh-runtime tag：会抢走 /releases/latest，把更新检查指到 sidecar。
+# 追加资产只产生 release: edited，不会自动触发 sync-atomgit。
+# 该 workflow 必须存在于默认分支 main；GitHub Actions 列表默认只展示默认分支上的定义。
+# dev 与 main 使用同一份 workflow；dev 也只从 Release 资产下载/上传，不读项目内 runtime。
+# 注意：发布 workflow 不从 dev 分支运行；需要先把此文件合入默认分支，Actions 页面才会出现。
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: >-
+          目标应用 Release tag（如 v0.7.6-beta）。留空则挂到当前 GitHub latest。
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  pack-and-upload:
+    name: Pack ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # pack-dsh-runtime.mjs 用 process.platform/arch 命名产物，必须原生 runner。
+          - name: Windows x64
+            os: windows-latest
+            platform: win32
+            arch: x64
+          - name: Windows arm64
+            os: windows-11-arm
+            platform: win32
+            arch: arm64
+          - name: macOS x64
+            os: macos-15-intel
+            platform: darwin
+            arch: x64
+          - name: macOS arm64
+            os: macos-latest
+            platform: darwin
+            arch: arm64
+          - name: Linux x64
+            os: ubuntu-latest
+            platform: linux
+            arch: x64
+          - name: Linux arm64
+            os: ubuntu-24.04-arm
+            platform: linux
+            arch: arm64
+
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.13.0
+          cache: npm
+
+      - name: Assert runner matches matrix
+        shell: bash
+        run: |
+          got="$(node -p "process.platform + '-' + process.arch")"
+          expect="${{ matrix.platform }}-${{ matrix.arch }}"
+          if [ "$got" != "$expect" ]; then
+            echo "::error::runner 是 ${got}，矩阵期望 ${expect}。原生模块不能交叉打包。"
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: npm ci
+        env:
+          # 只要 @deepseek-ai 闭包和原生 prebuild；不必拉 Electron / Playwright 浏览器。
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+
+      - name: Pack DSH runtime
+        run: node scripts/pack-dsh-runtime.mjs
+
+      - name: Check runtime archive
+        run: node scripts/check-dsh-asar.mjs
+
+      - name: Upload onto app Release
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PAT }}
+          # 手工输入走 env，避免直接拼进 shell。
+          INPUT_TAG: ${{ inputs.tag }}
+          # runtime 只生成轻量 sidecar，不触发完整 app Release；这是有意的独立上传入口。
+        shell: bash
+        run: |
+          ARCHIVE="dsh-runtime-${{ matrix.platform }}-${{ matrix.arch }}.tgz"
+          INDEX="dsh-runtime-${{ matrix.platform }}-${{ matrix.arch }}-releases.json"
+          if [ ! -f "dist-runtime/${ARCHIVE}" ] || [ ! -f "dist-runtime/${INDEX}" ]; then
+            echo "::error::缺少产物 dist-runtime/${ARCHIVE} 或 ${INDEX}"
+            ls -la dist-runtime || true
+            exit 1
+          fi
+          if [ -n "$INPUT_TAG" ]; then
+            TAG="$INPUT_TAG"
+          else
+            TAG=$(gh api "repos/${{ github.repository }}/releases/latest" --jq .tag_name)
+          fi
+          TAG="$(echo "$TAG" | xargs)"
+          if [[ ! "$TAG" =~ ^v[0-9] ]]; then
+            echo "::error::目标不是应用版本 tag（got ${TAG}）。拒绝创建独立 sidecar Release。"
+            exit 1
+          fi
+          echo "Uploading ${ARCHIVE} onto ${TAG}"
+          # 六平台并发往同一 Release 追加时 GitHub API 偶发 422，短回退重试。
+          for i in 1 2 3 4 5; do
+            if gh release upload "$TAG" \
+              "dist-runtime/${ARCHIVE}" \
+              "dist-runtime/${INDEX}" \
+              --clobber \
+              --repo "${{ github.repository }}"; then
+              exit 0
+            fi
+            echo "upload failed, retry ${i}/5"
+            sleep $((i * 5))
+          done
+          echo "::error::上传 ${ARCHIVE} 到 ${TAG} 失败"
+          exit 1

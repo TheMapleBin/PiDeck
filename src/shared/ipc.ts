@@ -260,6 +260,8 @@ export const ipcChannels = {
 	zcodeSessionsImport: "zcode-sessions:import",
 	workbuddySessionsScan: "workbuddy-sessions:scan",
 	workbuddySessionsImport: "workbuddy-sessions:import",
+	cursorSessionsScan: "cursor-sessions:scan",
+	cursorSessionsImport: "cursor-sessions:import",
 	settingsGet: "settings:get",
 	settingsUpdate: "settings:update",
 	/** 重启当前已启用的 Web 服务，不修改 Web 设置 */

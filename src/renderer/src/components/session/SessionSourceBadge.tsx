@@ -12,6 +12,7 @@ const SOURCE_LABELS: Record<SessionSource, string> = {
   opencode: t("sessionSource.opencode"),
   zcode: t("sessionSource.zcode"),
   workbuddy: t("sessionSource.workbuddy"),
+  cursor: t("sessionSource.cursor"),
 };
 
 const SOURCE_TONES: Record<SessionSource, string> = {
@@ -24,6 +25,8 @@ const SOURCE_TONES: Record<SessionSource, string> = {
   zcode: "border-muted-foreground/40 text-muted-foreground",
   // WorkBuddy 同无公开品牌 SVG，沿用中性色 + 自绘 W 字形标记（与 zcode 惯例一致）
   workbuddy: "border-muted-foreground/40 text-muted-foreground",
+  // Cursor 无随包品牌 SVG，用中性色 + 指针标记，避免误用第三方品牌色。
+  cursor: "border-muted-foreground/40 text-muted-foreground",
 };
 
 function SourceLogo(props: { source: SessionSource }) {
@@ -73,6 +76,18 @@ function SourceLogo(props: { source: SessionSource }) {
     return (
       <svg viewBox="0 0 24 24" className="size-3.5" aria-hidden="true" focusable="false">
         <path fill="currentColor" d="M1.6 4h3.3l2.5 12.2L10 4h4l2.6 12.2L19.1 4h3.3l-3.9 16h-3.7l-2.8-12-2.8 12H5.5z" />
+      </svg>
+    );
+  }
+
+  if (props.source === "cursor") {
+    // Cursor 现行品牌是立方体 logomark（cursor.com/brand），不是鼠标指针。
+    // 三面等距立方体用 currentColor + 透明度，14px 徽章上仍能读出体积。
+    return (
+      <svg viewBox="0 0 24 24" className="size-3.5" aria-hidden="true" focusable="false">
+        <path fill="currentColor" d="M12 2.2 20.8 7.2 12 12.2 3.2 7.2Z" />
+        <path fill="currentColor" opacity="0.66" d="M3.2 7.2 12 12.2V21.8L3.2 16.8Z" />
+        <path fill="currentColor" opacity="0.4" d="M12 12.2 20.8 7.2V16.8L12 21.8Z" />
       </svg>
     );
   }

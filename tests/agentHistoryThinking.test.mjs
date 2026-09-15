@@ -142,6 +142,8 @@ function loadAgentManagerModule() {
 			if (specifier === "../../shared/sessionTodo") return { parseTodoSnapshotData: () => undefined };
 			// acp_delegate 推导纯函数：本测试不覆盖（另有 sessionAcpDelegateDerive.test.mjs），空实现满足依赖契约
 			if (specifier === "./derivedSubagents") return { deriveToolSubagentEntries: () => [] };
+			// 会话 JSONL 流式行扫描器：真实加载（索引重建已改为流式，不再整文件 readFile）
+			if (specifier === "../sessions/jsonlLineStream") return loadTsCommonJs("src/main/sessions/jsonlLineStream.ts");
 			// 会话文件汇总纯函数：本测试不覆盖，空实现满足 AgentManager 依赖契约
 			if (specifier === "../../shared/fileChanges") return { collectLatestTurnFileChanges: () => [] };
 			return nodeRequire(specifier);

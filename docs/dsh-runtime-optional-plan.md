@@ -170,8 +170,9 @@ dsh 仍随包分发，但把「runtime 是否可用」做成一等状态并据�
 
 **依赖分区后的行为变化（重要）**
 
-- **dev 模式不受影响**：`@deepseek-ai` 仍在项目 node_modules 里，内置探测仍成功 → 内置回退依旧可用，本地开发 DSH 照常。
-- **打包后不再内置**：electron-builder 只收集 production 依赖，`@deepseek-ai` 不会进 asar；官方 lite 包 extraResources 也是空的 → 首次使用 DSH 必须从 latest 应用 Release 下载 runtime（或手动导入 tgz / 用 `--full` 打离线包）。
+- **dev 与官方 lite 包统一**：`@deepseek-ai` 虽仍在项目 node_modules 供构建/host 使用，但不会再被状态服务当作「随应用安装」的 runtime；dev 首次使用 DSH 同样从 latest 应用 Release 下载到 userData（或手动导入），验证的就是正式版安装链路。
+- **打包后不再内置**：electron-builder 只收集 production 依赖，`@deepseek-ai` 不会进 asar；官方 lite 包 extraResources 也是空的 → 首次使用 DSH 从 latest 应用 Release 下载 runtime（或手动导入 tgz / 用 `--full` 打离线包）。
+- **兼容例外**：显式 `--full` 或存量安装包仍可由装配层开启 bundled fallback；这只是兼容路径，不改变 dev/lite 的默认远程来源。
 
 **剩余一件事（在线更新源）**
 
@@ -180,7 +181,7 @@ dsh 仍随包分发，但把「runtime 是否可用」做成一等状态并据�
 `@img/sharp` 18MB、`@vscode/ripgrep` 5MB。验证方式是排除后用**真实 Electron 启动 host 并发一条消息**，
 而不是只做静态检查。收益/风险比不划算，暂不做。
 
-1. **在线更新源**（官方 lite 包的主路径）：CI 把分平台 tgz 与 `dsh-runtime-<platform>-<arch>-releases.json` 挂到当前 latest 应用 Release（与 runner-node sidecar 同款，禁止独立 `dsh-runtime` tag）。客户端按 `settings.updateSource` 改写归档 URL，sha256 始终校验。自测可设 `DSH_RUNTIME_INDEX_URL` 指向本地索引（url 用 `file://`）。
+1. **在线更新源**（官方 lite 包的主路径）：`release.yml` 发版时随安装包上传当前构建机那份 tgz；单独补发走 `.github/workflows/publish-dsh-runtime.yml`（6 个原生平台矩阵，挂当前 latest 应用 Release，与 runner-node sidecar 同款，禁止独立 `dsh-runtime` tag）。追加资产只产生 `release: edited`，需手动重跑 sync-atomgit。客户端按 `settings.updateSource` 改写归档 URL，sha256 始终校验。自测可设 `DSH_RUNTIME_INDEX_URL` 指向本地索引（url 用 `file://`）。
 
 **验证记录**
 

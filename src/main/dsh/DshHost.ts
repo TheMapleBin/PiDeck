@@ -88,7 +88,8 @@ export class DshHost {
 		private readonly resolveHostProxyEnvPatch: () => HostProxyEnvPatch | undefined = () => undefined,
 		/**
 		 * 外部 DSH runtime 根目录（阶段 2：userData/runtimes/dsh/<version>，其下有 node_modules）。
-		 * 返回 undefined 时回退 app 内置 node_modules（依赖分区前的存量包走这条）。
+		 * 返回 undefined 时仅在旧 full/存量包兼容模式下回退 app 内置 node_modules；新的 dev/lite
+		 * 路径由上层安装态门控，不把项目 node_modules 当作已发布 runtime。
 		 * 只影响 @deepseek-ai/* 的解析；hostEntry 与桥代码始终在 app 内。
 		 */
 		private readonly resolveRuntimeAppRoot: () => string | undefined = () => undefined,
@@ -926,7 +927,8 @@ export class DshHost {
 
 		// 定位 hostEntry 产物与 node_modules 锚点（bareModuleBaseUrl）。
 		// @deepseek-ai/* 现在可能来自外部 runtime（阶段 2：userData/runtimes/dsh/<v>），
-		// 因此 require 基准改用 runtime 目录而不是 appPath；未装 runtime 时回退内置。
+		// 因此 require 基准改用 runtime 目录；新的 dev/lite 未安装时不会启动 host，旧 full/存量包
+		// 才允许通过 appPath 继续解析内置依赖。
 		// hostEntry 仍是 PiDeck 自己的产物，继续从 appPath 解析。
 		const runtimeRoot = this.resolveRuntimeAppRoot?.() ?? this.getAppPath();
 		const require = createRequire(join(runtimeRoot, "package.json"));

@@ -52,6 +52,7 @@ test("sessionPillOf: 导入来源按 source 归属", () => {
 	assert.equal(sessionPillOf({ source: "codex", backend: "pi" }), "codex");
 	assert.equal(sessionPillOf({ source: "claude", backend: "pi" }), "claude");
 	assert.equal(sessionPillOf({ source: "opencode", backend: "pi" }), "opencode");
+	assert.equal(sessionPillOf({ source: "cursor", backend: "pi" }), "cursor");
 });
 
 test("filterSessionsByPills: 只选 Pi 时 DSH 会话不出现（source=pi 不重复命中）", () => {
@@ -68,11 +69,12 @@ test("filterSessionsByPills: 只选 Pi 时 DSH 会话不出现（source=pi 不�
 	assert.equal(all.map((s) => s.id).join(","), "pi-1,dsh-1,codex-1");
 });
 
-test("isSessionFilterPill: 只接受 6 个已知类别（来源 + dsh + imagegen）", () => {
+test("isSessionFilterPill: 只接受已知类别（来源 + dsh + imagegen）", () => {
 	assert.equal(isSessionFilterPill("dsh"), true);
 	assert.equal(isSessionFilterPill("imagegen"), true);
 	assert.equal(isSessionFilterPill("pi"), true);
 	assert.equal(isSessionFilterPill("codex"), true);
+	assert.equal(isSessionFilterPill("cursor"), true);
 	assert.equal(isSessionFilterPill("foo"), false);
 	assert.equal(isSessionFilterPill(1), false);
 	assert.equal(isSessionFilterPill(null), false);

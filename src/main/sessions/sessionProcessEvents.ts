@@ -1,6 +1,7 @@
 import type { SessionProcessEvent, SessionProcessEventKind } from "../../shared/types/trajectory";
 
-const MAX_EVENTS = 240;
+/** 账本最多回传的事件条数（按文件顺序取前 N 条）。 */
+export const MAX_EVENTS = 240;
 const DETAIL_LIMIT = 12_000;
 
 function asString(value: unknown): string | undefined {
@@ -52,64 +53,74 @@ function kindFromType(type: string, customType?: string): SessionProcessEventKin
 
 /**
  * 从会话 JSONL 抽出过程事件。坏行跳过；message 条目不进账本（对话已由 ChatMessage 覆盖）。
+ *
+ * 本模块保持**零运行时依赖**（纯函数，便于单测）。需要从磁盘流式读取的调用方
+ * 走 sessionProcessEventsFile.ts 的 parseSessionProcessEventsFromFile。
  */
 export function parseSessionProcessEvents(raw: string): SessionProcessEvent[] {
 	const events: SessionProcessEvent[] = [];
 	const lines = raw.split(/\r?\n/);
 	for (let index = 0; index < lines.length; index += 1) {
-		const line = lines[index].trim();
-		if (!line) continue;
-		let entry: Record<string, unknown>;
-		try {
-			const parsed: unknown = JSON.parse(line);
-			if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) continue;
-			entry = parsed as Record<string, unknown>;
-		} catch {
-			continue;
-		}
-		const type = asString(entry.type);
-		if (!type || type === "message") continue;
-		const customType = asString(entry.customType);
-		const kind = kindFromType(type, customType);
-		if (!kind) continue;
-
-		const cwd = asString(entry.cwd) ?? asString((entry.header as Record<string, unknown> | undefined)?.cwd);
-		const parentSession = asString(entry.parentSession)
-			?? asString((entry.header as Record<string, unknown> | undefined)?.parentSession);
-		const provider = asString(entry.provider);
-		const modelId = asString(entry.modelId);
-		const thinkingLevel = asString(entry.thinkingLevel);
-		const name = asString(entry.name) ?? asString((entry.data as Record<string, unknown> | undefined)?.name);
-		const tokensBefore = asNumber(entry.tokensBefore);
-		const summaryText = asString(entry.summary);
-		const customContent = asString(entry.content)
-			?? stringifyUnknown(entry.data)
-			?? stringifyUnknown(entry.customData);
-
-		let summary = type;
-		if (kind === "session") summary = cwd ? `cwd ${cwd}` : "session";
-		else if (kind === "sessionInfo") summary = name ?? "session_info";
-		else if (kind === "modelChange") summary = [provider, modelId].filter(Boolean).join("/") || "model_change";
-		else if (kind === "thinkingChange") summary = thinkingLevel ? `thinking ${thinkingLevel}` : "thinking_level_change";
-		else if (kind === "compaction") summary = summaryText ?? "compaction";
-		else if (kind === "custom") summary = customType ?? "custom";
-		else if (kind === "import") summary = customType ?? type;
-
-		events.push({
-			id: eventId(entry, index, kind),
-			kind,
-			timestamp: parseTimestamp(entry.timestamp),
-			summary,
-			detail: customContent ?? summaryText,
-			cwd,
-			parentSession,
-			provider,
-			modelId,
-			thinkingLevel,
-			customType,
-			tokensBefore,
-		});
+		const event = parseSessionProcessEventLine(lines[index], index);
+		if (!event) continue;
+		events.push(event);
 		if (events.length >= MAX_EVENTS) break;
 	}
 	return events;
+}
+
+/** 单行 → 过程事件；非账本条目/坏行返回 undefined。 */
+export function parseSessionProcessEventLine(rawLine: string, index: number): SessionProcessEvent | undefined {
+	const line = rawLine.trim();
+	if (!line) return undefined;
+	let entry: Record<string, unknown>;
+	try {
+		const parsed: unknown = JSON.parse(line);
+		if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return undefined;
+		entry = parsed as Record<string, unknown>;
+	} catch {
+		return undefined;
+	}
+	const type = asString(entry.type);
+	if (!type || type === "message") return undefined;
+	const customType = asString(entry.customType);
+	const kind = kindFromType(type, customType);
+	if (!kind) return undefined;
+
+	const cwd = asString(entry.cwd) ?? asString((entry.header as Record<string, unknown> | undefined)?.cwd);
+	const parentSession = asString(entry.parentSession)
+		?? asString((entry.header as Record<string, unknown> | undefined)?.parentSession);
+	const provider = asString(entry.provider);
+	const modelId = asString(entry.modelId);
+	const thinkingLevel = asString(entry.thinkingLevel);
+	const name = asString(entry.name) ?? asString((entry.data as Record<string, unknown> | undefined)?.name);
+	const tokensBefore = asNumber(entry.tokensBefore);
+	const summaryText = asString(entry.summary);
+	const customContent = asString(entry.content)
+		?? stringifyUnknown(entry.data)
+		?? stringifyUnknown(entry.customData);
+
+	let summary = type;
+	if (kind === "session") summary = cwd ? `cwd ${cwd}` : "session";
+	else if (kind === "sessionInfo") summary = name ?? "session_info";
+	else if (kind === "modelChange") summary = [provider, modelId].filter(Boolean).join("/") || "model_change";
+	else if (kind === "thinkingChange") summary = thinkingLevel ? `thinking ${thinkingLevel}` : "thinking_level_change";
+	else if (kind === "compaction") summary = summaryText ?? "compaction";
+	else if (kind === "custom") summary = customType ?? "custom";
+	else if (kind === "import") summary = customType ?? type;
+
+	return {
+		id: eventId(entry, index, kind),
+		kind,
+		timestamp: parseTimestamp(entry.timestamp),
+		summary,
+		detail: customContent ?? summaryText,
+		cwd,
+		parentSession,
+		provider,
+		modelId,
+		thinkingLevel,
+		customType,
+		tokensBefore,
+	};
 }

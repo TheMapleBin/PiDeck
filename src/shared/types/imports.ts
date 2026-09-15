@@ -183,3 +183,40 @@ export type WorkBuddyImportReport = {
 	imported: number;
 	failed: number;
 };
+
+// ── Cursor Session Import Types ────────────────────────────────────────
+
+/** Cursor 会话导入状态：未导入 / 已是最新 / 源更新后可覆盖。 */
+export type CursorImportStatus = "new" | "current" | "outdated";
+
+export type CursorSessionSummary = {
+	id: string;
+	sourcePath: string;
+	targetPath: string;
+	cwd: string;
+	title: string;
+	preview: string;
+	createdAt: number;
+	updatedAt: number;
+	messageCount: number;
+	status: CursorImportStatus;
+	sourceSize: number;
+	importedSourceMtime?: number;
+};
+
+export type CursorImportResult = {
+	id: string;
+	sourcePath: string;
+	targetPath?: string;
+	title?: string;
+	success: boolean;
+	overwritten?: boolean;
+	messageCount?: number;
+	error?: string;
+};
+
+export type CursorImportReport = {
+	results: CursorImportResult[];
+	imported: number;
+	failed: number;
+};

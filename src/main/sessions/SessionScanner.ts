@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { app, shell } from "electron";
 import { closeSync, existsSync, openSync, readSync } from "node:fs";
-import { mkdir, open as openFile, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, open as openFile, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute, join, resolve } from "node:path";
 import { basename as posixBasename, dirname as posixDirname, isAbsolute as posixIsAbsolute, join as posixJoin } from "node:path/posix";
 import type { ArchivedPiSession, ChatMessage, ChatRole, SessionSummary } from "../../shared/types";
@@ -11,7 +11,7 @@ import { getCodexSessionThreadInfo } from "../../shared/codexSessionMeta";
 import { isInSubagentArtifactsDir, isValidPiSessionFileHead, looksLikePiSessionFileStem, SUBAGENT_ARTIFACTS_DIR_NAME } from "../../shared/sessionIdentity";
 import { extractMessageText, extractThinkingRaw } from "../pi/messageContent";
 import { replaceExpandedRefBlocksWithLabels } from "../../shared/expandedRefBlocks";
-import { toWslLinuxPath, type WslEnvironment } from "../wsl/WslPaths";
+import { toWindowsHostPath, toWslLinuxPath, type WslEnvironment } from "../wsl/WslPaths";
 import { getAppLogger } from "../logging/sharedLogger";
 import {
   isLegacySessionNameEntry,
@@ -20,11 +20,13 @@ import {
   tryRestorePathGluedHeader,
 } from "./sessionNameLine";
 import { SessionSummaryCache, type SessionFileVersion } from "./sessionSummaryCache";
+import { rewriteJsonlLines, scanJsonlLines, type JsonlLineContext } from "./jsonlLineStream";
 
 type SessionScannerCopyKey = Extract<MainProcessTranslationKey,
   | "session.untitled"
   | "session.emptyPreview"
   | "session.copyTitle"
+  | "session.fileTooLargeForWholeRead"
 >;
 
 type SessionScannerCopy = (
@@ -36,6 +38,7 @@ const defaultSessionScannerCopy: Record<SessionScannerCopyKey, string> = {
   "session.untitled": "Untitled",
   "session.emptyPreview": "空会话",
   "session.copyTitle": "{title} copy",
+  "session.fileTooLargeForWholeRead": "This session file is too large ({sizeMb}MB, over the {limitMb}MB whole-read limit); the operation was cancelled to avoid crashing the app.",
 };
 
 function defaultTranslate(
@@ -181,6 +184,24 @@ export class SessionScanner {
   private static readonly SUMMARY_PARSE_MAX_BYTES = 1024 * 1024;
   /** 轻量补名读取窗口：头部用于校验会话/首条消息，尾部用于捕获 pi `/name` 追加的最新 session_info。 */
   private static readonly SUMMARY_NAME_WINDOW_BYTES = 64 * 1024;
+  /**
+   * 整文件读入的体量上限：超过即拒绝（抛可读错误）。
+   *
+   * 主进程 V8 老生代堆上限只有 384MB（见 src/main/v8HeapLimits.ts），而
+   * `readFile(utf8)` 读到的字符串 + `split` 出的行数组合计约为文件体积的 2 倍——
+   * 几百 MB 的会话会让 V8 `FatalProcessOutOfMemory` abort 掉主进程（用户看到「闪退」，
+   * 日志里连堆栈都没有）。32MB 是「安全 × 常见会话都够用」的折中：
+   * 正常会话几 MB 以内，超限的都是该走流式路径的大会话。
+   */
+  private static readonly MAX_IN_MEMORY_SESSION_BYTES = 32 * 1024 * 1024;
+  /**
+   * 「引用历史会话消息」选择器的回传上限（从最新往前保留）。
+   *
+   * 条数与字节双上限：正常会话（几百条 / MB 级）不受影响；只有极端大会话会被截断，
+   * 避免把上万条消息（含工具结果正文）一次回传渲染层——与 #213 的 IPC 负载问题同源。
+   */
+  private static readonly REFERENCE_MESSAGE_LIMIT = 1000;
+  private static readonly REFERENCE_CONTENT_BYTES = 8 * 1024 * 1024;
   /** 多项目同时 list() 时串行化，避免展开多个项目时并行扫盘把 IPC 打爆。 */
   private listQueue: Promise<void> = Promise.resolve();
   private readonly summaryCache = new SessionSummaryCache<SessionSummary | null>();
@@ -257,6 +278,31 @@ export class SessionScanner {
     if (!this.wslConfig) return false;
     // WSL 路径是 Linux 绝对路径（以 / 开头且不以盘符开头）
     return filePath.startsWith("/") && !/^[A-Za-z]:/.test(filePath);
+  }
+
+  /**
+   * 会话文件本体读写用的宿主路径：WSL 会话映射到 `\\wsl.localhost\<distro>\...`。
+   *
+   * 为什么 WSL 不再走 `wsl cat` / `dd`：那是**整文件字符串**通道（execFile 的
+   * maxBuffer 是上限，主进程 384MB 堆是上限），既做不了流式，也做不了按字节定向读。
+   * 映射成 UNC 后 Node fs 可以直接 open/read(position)/write/rename，于是本地那套
+   * 「流式扫描 + 按 offset 定向读 + 临时文件原子改名」对 WSL 会话免费复用。
+   * 这条通路本来就是 PiDeck 读 WSL 会话历史的主路（AgentManager.toSessionHostPath）
+   * 与会话文件编辑的写路（SessionFileEditor：hostPath + temp + rename 重试），不是新引入的能力。
+   *
+   * 注意：catalog 里的身份（SessionRecord.id / filePath）仍是 Linux 路径，
+   * 只在真正落盘处做映射；`wsl cat/dd` 仍保留给确定性小文件（settings、归档索引）。
+   */
+  private hostPathFor(filePath: string): string {
+    if (!this.isWslPath(filePath)) return filePath;
+    const distro = this.wslConfig?.distro;
+    if (!distro) return filePath;
+    try {
+      return toWindowsHostPath(filePath, { distro });
+    } catch {
+      // 无法映射（畸形路径）：退回原路径，由调用方按 IO 失败处理
+      return filePath;
+    }
   }
 
   // ── WSL 文件操作封装 ───────────────────────────────────────────
@@ -695,13 +741,35 @@ export class SessionScanner {
    * 支持 WSL 路径。
    */
   async rename(filePath: string, newName: string): Promise<void> {
-    const wsl = this.isWslPath(filePath);
-    const raw = wsl ? await this.readWslFile(filePath) : await readFile(filePath, "utf8");
-    const output = this.appendSessionInfoLine(raw, newName);
-    if (wsl) {
-      await this.writeWslFile(filePath, output);
-    } else {
-      await writeFile(filePath, output, "utf8");
+    // WSL 与本地同一条流式路径（hostPathFor 把 Linux 路径映射成 UNC）
+    const hostPath = this.hostPathFor(filePath);
+    const appender = this.createSessionInfoAppender();
+    const tempPath = `${hostPath}.pideck-rewrite-${randomUUID().slice(0, 8)}.tmp`;
+    try {
+      await rewriteJsonlLines(hostPath, tempPath, appender.transform);
+      await appendFile(tempPath, `${appender.build(newName)}\n`, "utf8");
+      // 写临时文件再原子改名：大会话重写中途失败不会留下被截断的原会话。
+      // 重试一次：WSL 走 \\wsl.localhost 的 9P 通道，rename 偶发瞬时失败
+      // （SessionFileEditor.renameWithRetry 有同样观察）；失败时原文件不动。
+      await this.renameWithRetry(tempPath, hostPath);
+    } catch (error) {
+      await rm(tempPath, { force: true }).catch(() => {});
+      throw error;
+    }
+  }
+
+  /** 原子改名 + 一次重试（9P/占用导致的偶发 EPERM/EBUSY）。 */
+  private async renameWithRetry(from: string, to: string): Promise<void> {
+    try {
+      await rename(from, to);
+    } catch (error) {
+      void getAppLogger()?.warn("session", "Session file swap failed, retrying once", {
+        from,
+        to,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      await rename(from, to);
     }
   }
 
@@ -714,40 +782,35 @@ export class SessionScanner {
    *
    * pi 要求首条可解析记录是 type:"session" 头，两类损坏都会触发「Session file is not a valid
    * pi session」（exit 1）。先读文件头 4KB 快速探测（避免大文件全量读取拖慢 Agent 启动），
-   * 命中才全量修复并回写；返回是否实际修复。支持 WSL 路径。
+   * 命中才全量修复并回写；返回是否实际修复。WSL 会话同样走 UNC 宿主路径（见 hostPathFor）。
    */
   async repairCorruptSessionHeader(filePath: string): Promise<boolean> {
-    const wsl = this.isWslPath(filePath);
-    const head = wsl ? await this.readWslFileHead(filePath) : await this.readFileHeadNative(filePath, 4096);
+    const hostPath = this.hostPathFor(filePath);
+    const head = await this.readFileHeadNative(hostPath, 4096);
 
     // 模式 1：旧版私有头行（只会出现在文件头部区域；中后段同类行不阻塞 pi 加载，
     // 留待重命名时一并清理，与既有行为一致）
     if (hasLegacySessionNameLine(head)) {
-      const raw = wsl ? await this.readWslFile(filePath) : await readFile(filePath, "utf8");
+      // 修复需要整文件重写：先过体量护栏，超限抛可读错误（大会话整读会 abort 主进程）
+      await this.assertInMemoryReadSafe(hostPath);
+      const raw = await readFile(hostPath, "utf8");
       const stripped = stripLegacySessionNameLine(raw);
       if (stripped === raw) return false;
-      if (wsl) {
-        await this.writeWslFile(filePath, stripped);
-      } else {
-        await writeFile(filePath, stripped, "utf8");
-      }
+      await writeFile(hostPath, stripped, "utf8");
       return true;
     }
 
     // 模式 2：首行路径粘连（.jsonl{ + 合法 session header，见 tryRestorePathGluedHeader）
     const restoredFirstLine = tryRestorePathGluedHeader(head);
     if (restoredFirstLine !== null) {
-      const raw = wsl ? await this.readWslFile(filePath) : await readFile(filePath, "utf8");
+      await this.assertInMemoryReadSafe(hostPath);
+      const raw = await readFile(hostPath, "utf8");
       // 只重写第一行；其余行原样保留（含空行与末尾结构）
       const lines = raw.split(/\r?\n/);
       if (lines[0] === restoredFirstLine) return false;
       lines[0] = restoredFirstLine;
       const output = lines.join("\n");
-      if (wsl) {
-        await this.writeWslFile(filePath, output);
-      } else {
-        await writeFile(filePath, output, "utf8");
-      }
+      await writeFile(hostPath, output, "utf8");
       return true;
     }
 
@@ -767,7 +830,7 @@ export class SessionScanner {
   }
 
   /**
-   * 在 JSONL 文本末尾追加 pi 原生 session_info 记录，返回新文本。
+   * 在会话 JSONL 末尾追加 pi 原生 session_info 记录（rename / copy 共用）。
    *
    * id/parentId 规则与 pi SessionManager 一致：id 为文件内不冲突的 8 位十六进制，
    * parentId 指向追加前最后一条带 id 的记录（没有则 null，由 pi 视为新根）。
@@ -775,43 +838,48 @@ export class SessionScanner {
    *
    * 同时剔除旧版 PiDeck 的 {"sessionName":...} 私有行（无 type 字段）：pi 无法识别，
    * 位于文件头时会破坏首行校验导致整个会话无法加载（#114 的存量受损文件）。
+   *
+   * 这里是**流式版**（唯一实现，本地与 WSL 共用）：逐行消费、不把整文件读成字符串。
+   * 用法：`rewriteJsonlLines(src, tmp, appender.transform)`
+   * → `appendFile(tmp, appender.build(name) + "\n")` → 原子改名覆盖源文件。
    */
-  private appendSessionInfoLine(raw: string, name: string, extra?: Record<string, unknown>): string {
-    // 与 pi appendSessionInfo 相同的清洗规则：换行折叠为空格，避免破坏 JSONL 行结构。
-    const sanitized = name.replace(/[\r\n]+/g, " ").trim();
+  private createSessionInfoAppender(extra?: Record<string, unknown>) {
     const ids = new Set<string>();
     let lastId: string | null = null;
-    const keptLines: string[] = [];
-    for (const line of raw.split(/\r?\n/)) {
+    const transform = (line: string, context: JsonlLineContext | null): string | null => {
+      // context === null：超长行未 decode（jsonlLineStream 语义），无从变换 → 丢弃
+      if (context === null) return null;
       const trimmed = line.trim();
-      if (!trimmed) continue;
+      if (!trimmed) return null;
       let parsed: unknown = null;
       try {
         parsed = JSON.parse(trimmed);
       } catch {
         // 不可解析的行原样保留，不做破坏性清理
       }
-      // 判定旧版私有格式：带 sessionName 且无 type（判定逻辑见 sessionNameLine.ts，与修复路径共用）
-      if (parsed !== null && isLegacySessionNameEntry(parsed)) continue;
+      if (parsed !== null && isLegacySessionNameEntry(parsed)) return null;
       if (parsed !== null && typeof (parsed as { id?: unknown }).id === "string" && (parsed as { id?: string }).id) {
         ids.add((parsed as { id: string }).id);
         lastId = (parsed as { id: string }).id;
       }
-      keptLines.push(trimmed);
-    }
-    // 与 pi generateId 一致：randomUUID 前 8 位，冲突时重试
-    let id = randomUUID().slice(0, 8);
-    while (ids.has(id)) id = randomUUID().slice(0, 8);
-    const entry = {
-      type: "session_info",
-      id,
-      parentId: lastId,
-      timestamp: new Date().toISOString(),
-      name: sanitized,
-      ...extra,
+      return trimmed;
     };
-    keptLines.push(JSON.stringify(entry));
-    return `${keptLines.join("\n")}\n`;
+    const build = (name: string): string => {
+      // 与 pi appendSessionInfo 相同的清洗规则：换行折叠为空格，避免破坏 JSONL 行结构。
+      const sanitized = name.replace(/[\r\n]+/g, " ").trim();
+      // 与 pi generateId 一致：randomUUID 前 8 位，冲突时重试
+      let id = randomUUID().slice(0, 8);
+      while (ids.has(id)) id = randomUUID().slice(0, 8);
+      return JSON.stringify({
+        type: "session_info",
+        id,
+        parentId: lastId,
+        timestamp: new Date().toISOString(),
+        name: sanitized,
+        ...extra,
+      });
+    };
+    return { transform, build };
   }
 
   /**
@@ -1109,35 +1177,44 @@ export class SessionScanner {
   /**
    * 复制会话文件并追加新的 session_info 名称记录（pi 原生格式，见 rename/#114）。
    * 这不是 CLI 的 fork：不裁剪会话树，只生成一个可独立打开/继续的新历史会话文件。
-   * 支持 WSL 路径。
+   * WSL 会话经 UNC 宿主路径走同一条流式复制（见 hostPathFor）。
    */
-  async copy(filePath: string): Promise<SessionSummary> {    const wsl = this.isWslPath(filePath);
-    const raw = wsl ? await this.readWslFile(filePath) : await readFile(filePath, "utf8");
+  async copy(filePath: string): Promise<SessionSummary> {
+    const wsl = this.isWslPath(filePath);
     const current = await this.readSummary(filePath).catch(() => null);
     const copyName = this.translate("session.copyTitle", {
       title: current?.name || this.translate("session.untitled"),
     });
     const targetPath = await this.nextCopyPath(filePath, wsl);
     // copiedFrom 作为附加字段保留来源信息；pi 会忽略未知字段，不影响加载。
-    const content = this.appendSessionInfoLine(raw, copyName, { copiedFrom: filePath });
-
-    if (wsl) {
-      await this.writeWslFile(targetPath, content);
-    } else {
-      await writeFile(targetPath, content, "utf8");
+    // 流式复制：大会话（数百 MB）整文件读入会撞 V8 单字符串上限/主进程堆上限；
+    // 复制中途失败时删掉半截目标文件，避免留下一个「能看见但打不开」的会话。
+    const sourceHostPath = this.hostPathFor(filePath);
+    const targetHostPath = this.hostPathFor(targetPath);
+    const appender = this.createSessionInfoAppender({ copiedFrom: filePath });
+    try {
+      await rewriteJsonlLines(sourceHostPath, targetHostPath, appender.transform);
+      await appendFile(targetHostPath, `${appender.build(copyName)}\n`, "utf8");
+    } catch (error) {
+      await rm(targetHostPath, { force: true }).catch(() => {});
+      throw error;
     }
+    // 摘要仍按 Linux/catalog 路径读（readSummary 内部同样做宿主路径映射），
+    // 保证 SessionSummary.id/filePath 保持 catalog 身份不变。
     const summary = await this.readSummary(targetPath);
     if (!summary) throw new Error("复制后的会话文件无法读取");
     return summary;
   }
 
-  /** 将历史 JSONL 会话直接导出为基础 HTML，支持 WSL 路径 */
+  /** 将历史 JSONL 会话直接导出为基础 HTML，WSL 会话经 UNC 走同一条流式导出 */
   async exportHtml(filePath: string): Promise<{ path: string }> {
-    const wsl = this.isWslPath(filePath);
     const summary = await this.readSummary(filePath);
     if (!summary) throw new Error("会话文件无法读取");
-    const raw = wsl ? await this.readWslFile(filePath) : await readFile(filePath, "utf8");
-    const rows = raw.split(/\r?\n/).filter(Boolean).map((line) => {
+    const title = summary.name || this.translate("session.untitled");
+    const safeName = title.replace(/[\\/:*?\"<>|]/g, "_").slice(0, 80) || "session";
+    const targetPath = join(app.getPath("downloads"), `${safeName}-${Date.now()}.html`);
+    const head = `<!doctype html><html><head><meta charset=\"utf-8\"><title>${this.escapeHtml(title)}</title><style>body{font-family:system-ui,-apple-system,Segoe UI,sans-serif;max-width:920px;margin:32px auto;padding:0 20px;color:#1f2937}.msg{border:1px solid #e5e7eb;border-radius:10px;padding:14px;margin:12px 0;background:#fff}.msg h2{margin:0 0 8px;font-size:13px;color:#64748b}.msg pre{white-space:pre-wrap;margin:0;font:14px/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}</style></head><body><h1>${this.escapeHtml(title)}</h1><p>${new Date(summary.updatedAt).toLocaleString()} · ${summary.messageCount} messages</p>`;
+    const toRow = (line: string): string => {
       try {
         const entry = JSON.parse(line) as any;
         const message = entry.message ?? entry.data?.message ?? entry;
@@ -1148,46 +1225,111 @@ export class SessionScanner {
       } catch {
         return "";
       }
-    }).filter(Boolean).join("\n");
-    const title = summary.name || this.translate("session.untitled");
-    const html = `<!doctype html><html><head><meta charset=\"utf-8\"><title>${this.escapeHtml(title)}</title><style>body{font-family:system-ui,-apple-system,Segoe UI,sans-serif;max-width:920px;margin:32px auto;padding:0 20px;color:#1f2937}.msg{border:1px solid #e5e7eb;border-radius:10px;padding:14px;margin:12px 0;background:#fff}.msg h2{margin:0 0 8px;font-size:13px;color:#64748b}.msg pre{white-space:pre-wrap;margin:0;font:14px/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}</style></head><body><h1>${this.escapeHtml(title)}</h1><p>${new Date(summary.updatedAt).toLocaleString()} · ${summary.messageCount} messages</p>${rows}</body></html>`;
-    const safeName = title.replace(/[\\/:*?\"<>|]/g, "_").slice(0, 80) || "session";
-    const targetPath = join(app.getPath("downloads"), `${safeName}-${Date.now()}.html`);
-    await writeFile(targetPath, html, "utf8");
+    };
+    // 流式导出：逐行转 HTML 直接落盘，不把整份会话（可能数百 MB）与整份 HTML
+    // 同时压在内存里（大会话会撞主进程 384MB 堆上限）。源一律按宿主路径读
+    // （WSL → UNC），导出目标始终落在本机 download 目录，与源环境无关。
+    const handle = await openFile(targetPath, "w");
+    try {
+      await handle.write(head, null, "utf8");
+      let batch: string[] = [];
+      let batchBytes = 0;
+      const flush = async () => {
+        if (batch.length === 0) return;
+        const payload = batch.join("\n");
+        batch = [];
+        batchBytes = 0;
+        await handle.write(payload, null, "utf8");
+      };
+      await scanJsonlLines(this.hostPathFor(filePath), async (line) => {
+        const row = toRow(line);
+        if (!row) return;
+        batch.push(row);
+        batchBytes += row.length;
+        if (batchBytes >= 256 * 1024) await flush();
+      });
+      await flush();
+      await handle.write("</body></html>", null, "utf8");
+    } finally {
+      await handle.close();
+    }
     return { path: targetPath };
   }
 
-  /** 读取会话消息列表，支持 WSL 路径 */
+  /**
+   * 读取会话消息列表（「引用历史会话消息」选择器用），支持 WSL 路径。
+   *
+   * 大会话必须流式读：整文件 `readFile + split` 在数百 MB 会话上会撞 V8 单字符串
+   * 上限（ERR_STRING_TOO_LONG）或主进程 384MB 堆上限（V8 abort → 应用闪退）。
+   * 返回值再叠一层条数/字节上限（只截尾，保留最近的），见 REFERENCE_MESSAGE_LIMIT。
+   */
   async readMessages(filePath: string): Promise<Array<{ role: string; content: string; timestamp: number }>> {
-    const wsl = this.isWslPath(filePath);
-    const raw = wsl ? await this.readWslFile(filePath) : await readFile(filePath, "utf8");
-    const lines = raw.split(/\r?\n/).filter(Boolean);
     const messages: Array<{ role: string; content: string; timestamp: number }> = [];
-    for (const line of lines) {
+    let contentBytes = 0;
+    let truncated = false;
+    const accept = (line: string): void => {
       try {
         const entry = JSON.parse(line) as Record<string, unknown>;
-        if (entry.type && entry.type !== "message") continue;
-        if (entry.sessionName && !entry.message) continue;
+        if (entry.type && entry.type !== "message") return;
+        if (entry.sessionName && !entry.message) return;
         const message = (entry.message ?? (entry.data as Record<string, unknown> | undefined)?.message ?? entry) as Record<string, unknown> | undefined;
-        if (!message?.role) continue;
+        if (!message?.role) return;
         const content = this.extractText(message.content).trim();
-        if (!content) continue;
-        if (message.role !== "user" && message.role !== "assistant") continue;
+        if (!content) return;
+        if (message.role !== "user" && message.role !== "assistant") return;
         messages.push({ role: String(message.role), content, timestamp: Number(entry.ts ?? entry.timestamp ?? Date.now()) });
+        contentBytes += content.length;
+        while (
+          messages.length > SessionScanner.REFERENCE_MESSAGE_LIMIT
+          || (contentBytes > SessionScanner.REFERENCE_CONTENT_BYTES && messages.length > 1)
+        ) {
+          const dropped = messages.shift();
+          contentBytes -= dropped?.content.length ?? 0;
+          truncated = true;
+        }
       } catch {
         // 单行解析失败跳过；大量失败说明 JSONL 结构异常，双写日志文件便于离线排查
         void getAppLogger()?.warn("session", "Skipped unparseable JSONL line", { filePath });
         console.warn(`[SessionScanner] 跳过无法解析的 JSONL 行: ${filePath}`);
       }
+    };
+    // WSL 会话经 UNC 走同一条流式扫描（不再 wsl cat 整文件字符串）
+    await scanJsonlLines(this.hostPathFor(filePath), (line) => {
+      if (line) accept(line);
+    });
+    if (truncated) {
+      void getAppLogger()?.info("session", "Reference message list truncated", {
+        filePath,
+        kept: messages.length,
+        keptBytes: contentBytes,
+      });
     }
     return messages;
   }
 
-  /** 统一读取本地/WSL 会话原文，供 Viewer 与 AgentManager 共享转换管线。 */
+  /**
+   * 统一读取本地/WSL 会话原文（WSL 经 UNC 宿主路径，见 hostPathFor）。
+   *
+   * 注意：这是**整文件进内存**的接口，只适合确定较小的会话文件；大会话请走
+   * `SessionHistoryReader`（流式索引 + 按 offset 定向读单行）。超过
+   * MAX_IN_MEMORY_SESSION_BYTES 时直接抛错，避免重演「打开大会话即闪退」——
+   * 主进程 V8 老生代堆上限只有 384MB（见 v8HeapLimits.ts），几百 MB 的字符串
+   * 会让 V8 FatalProcessOutOfMemory abort 掉主进程，连堆栈都记不下来。
+   */
   async readSessionRawText(filePath: string): Promise<string> {
-    return this.isWslPath(filePath)
-      ? this.readWslFile(filePath)
-      : readFile(filePath, "utf8");
+    const hostPath = this.hostPathFor(filePath);
+    await this.assertInMemoryReadSafe(hostPath);
+    return readFile(hostPath, "utf8");
+  }
+
+  /** 整文件读入前的体量护栏；超限抛可读错误而不是让 V8 终止进程。 */
+  private async assertInMemoryReadSafe(filePath: string): Promise<void> {
+    const info = await stat(filePath);
+    if (info.size <= SessionScanner.MAX_IN_MEMORY_SESSION_BYTES) return;
+    throw new Error(this.translate("session.fileTooLargeForWholeRead", {
+      sizeMb: Math.round(info.size / (1024 * 1024)),
+      limitMb: Math.round(SessionScanner.MAX_IN_MEMORY_SESSION_BYTES / (1024 * 1024)),
+    }));
   }
 
   /**
@@ -1506,7 +1648,7 @@ export class SessionScanner {
     };
   }
 
-  /** 导入器约定文件名：codex_<id>.jsonl / claude_<id>.jsonl / opencode_<id>.jsonl / zcode_<id>.jsonl。 */
+  /** 导入器约定文件名：codex_<id>.jsonl / claude_<id>.jsonl / opencode_<id>.jsonl / zcode_<id>.jsonl / cursor_<id>.jsonl。 */
   private inferSourceFromFileName(filePath: string): NonNullable<SessionSummary["source"]> {
     const base = basename(filePath).toLowerCase();
     if (base.startsWith("codex_")) return "codex";
@@ -1514,6 +1656,7 @@ export class SessionScanner {
     if (base.startsWith("opencode_")) return "opencode";
     if (base.startsWith("zcode_")) return "zcode";
     if (base.startsWith("workbuddy_")) return "workbuddy";
+    if (base.startsWith("cursor_")) return "cursor";
     return "pi";
   }
 
@@ -1610,6 +1753,7 @@ export class SessionScanner {
         else if (entry.type === "opencode_import") source = "opencode";
         else if (entry.type === "zcode_import") source = "zcode";
         else if (entry.type === "workbuddy_import") source = "workbuddy";
+        else if (entry.type === "cursor_import") source = "cursor";
       }
 
       projectPath ||= entry.cwd || entry.projectPath || entry.header?.cwd || entry.data?.cwd || entry.session?.cwd || entry.data?.session?.cwd;

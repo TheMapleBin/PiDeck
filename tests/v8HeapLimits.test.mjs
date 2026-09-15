@@ -27,12 +27,21 @@ function compile(filePath) {
     module,
     exports: module.exports,
     require: () => ({}),
+    // 默认档位读 process.env 里的诊断覆盖变量，沙箱里给出真实 process
+    process,
   }, { filename: filePath });
   return module.exports;
 }
 
-const { MAIN_MAX_OLD_SPACE_MB, RENDERER_MAX_OLD_SPACE_MB, mainProcessJsFlags, rendererHeapAdditionalArguments } =
-  compile("src/main/v8HeapLimits.ts");
+const {
+  MAIN_MAX_OLD_SPACE_MB,
+  RENDERER_MAX_OLD_SPACE_MB,
+  mainProcessJsFlags,
+  rendererHeapAdditionalArguments,
+  mainProcessHeapMb,
+  rendererProcessHeapMb,
+  resolveHeapOverrideMb,
+} = compile("src/main/v8HeapLimits.ts");
 
 test("渲染进程档位必须显著大于主进程档位（否则 #213 会复发）", () => {
   assert.ok(RENDERER_MAX_OLD_SPACE_MB > MAIN_MAX_OLD_SPACE_MB);
@@ -51,3 +60,30 @@ test("渲染进程参数带 --js-flags= 前缀，用于 webPreferences.additiona
   assert.ok(args[0].includes(String(RENDERER_MAX_OLD_SPACE_MB)));
   assert.ok(!args[0].includes(`=${MAIN_MAX_OLD_SPACE_MB}`), "渲染进程不应继承主进程档位");
 });
+
+test("未设诊断变量时档位取常量默认值（进程 env 不含覆盖变量）", () => {
+  assert.equal(mainProcessHeapMb({}), MAIN_MAX_OLD_SPACE_MB);
+  assert.equal(rendererProcessHeapMb({}), RENDERER_MAX_OLD_SPACE_MB);
+});
+
+test("诊断变量可临时抬档（现场复现 OOM 用），非法值回落默认", () => {
+  assert.equal(mainProcessHeapMb({ PIDECK_MAIN_HEAP_MB: "768" }), 768);
+  assert.equal(mainProcessJsFlags({ PIDECK_MAIN_HEAP_MB: "768" }), "--max-old-space-size=768");
+  assert.equal(
+    rendererHeapAdditionalArguments({ PIDECK_RENDERER_HEAP_MB: "3072" })[0],
+    "--js-flags=--max-old-space-size=3072",
+  );
+  // 非数字 / 空值 / 缺失 → 默认档位，避免一个手滑的 env 把兜底搞没
+  assert.equal(mainProcessHeapMb({ PIDECK_MAIN_HEAP_MB: "abc" }), MAIN_MAX_OLD_SPACE_MB);
+  assert.equal(mainProcessHeapMb({ PIDECK_MAIN_HEAP_MB: "  " }), MAIN_MAX_OLD_SPACE_MB);
+  assert.equal(rendererProcessHeapMb({ PIDECK_RENDERER_HEAP_MB: "NaN" }), RENDERER_MAX_OLD_SPACE_MB);
+});
+
+test("越界的诊断值夹到边界：主进程不低于 256MB、渲染不低于 1GB（低于即 #213 危险区）", () => {
+  assert.equal(mainProcessHeapMb({ PIDECK_MAIN_HEAP_MB: "64" }), 256);
+  assert.equal(mainProcessHeapMb({ PIDECK_MAIN_HEAP_MB: "999999" }), 4096);
+  assert.equal(rendererProcessHeapMb({ PIDECK_RENDERER_HEAP_MB: "128" }), 1024);
+  assert.equal(rendererProcessHeapMb({ PIDECK_RENDERER_HEAP_MB: "999999" }), 8192);
+  assert.equal(resolveHeapOverrideMb({ X: "1.6" }, "X", 384, { min: 0, max: 4096 }), 2);
+});
+

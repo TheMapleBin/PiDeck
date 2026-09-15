@@ -10,6 +10,9 @@ const {
 	dshRuntimeArchiveName,
 	dshRuntimeAssetDownloadUrl,
 } = loadTsCommonJs("src/shared/types/dshRuntimeManifest.ts");
+const { resolveDshRuntimeReleaseTag } = loadTsCommonJs(
+	"src/main/dsh/runtime/dshRuntimeReleaseTarget.ts",
+);
 
 const APP_VERSION = "0.7.5";
 
@@ -30,6 +33,7 @@ function makeInstaller({
 	url = "https://idx.test/i.json",
 	manager = {},
 	updateSource = "atomgit",
+	releaseTag,
 } = {}) {
 	const progress = [];
 	const calls = { installFromUrl: [], installFromArchive: [], installFromDirectory: [], uninstall: [] };
@@ -65,12 +69,32 @@ function makeInstaller({
 		manager: fakeManager,
 		indexUrl: () => url,
 		updateSource: () => updateSource,
+		releaseTag: releaseTag ? () => releaseTag : undefined,
 		appVersion: () => APP_VERSION,
 		fetchIndex: async () => index,
 		onProgress: (p) => progress.push(p),
 	});
 	return { installer, progress, calls };
 }
+
+test("dev 未发布同版本 tag 时跟随 latest，避免请求不存在的 beta Release", () => {
+	assert.equal(
+		resolveDshRuntimeReleaseTag({ isPackaged: false, appVersion: "0.7.6-beta" }),
+		undefined,
+	);
+	assert.equal(
+		resolveDshRuntimeReleaseTag({ isPackaged: true, appVersion: "0.7.5" }),
+		"v0.7.5",
+	);
+	assert.equal(
+		resolveDshRuntimeReleaseTag({
+			explicitTag: " v0.7.5 ",
+			isPackaged: false,
+			appVersion: "0.7.6-beta",
+		}),
+		"v0.7.5",
+	);
+});
 
 test("installFromIndex：按兼容区间挑版本并触发下载", async () => {
 	const { installer, calls, progress } = makeInstaller();
@@ -86,6 +110,16 @@ test("installFromIndex：按兼容区间挑版本并触发下载", async () => {
 	// 结束时必须是 done=100，UI 据此收起进度条
 	assert.equal(progress.at(-1).phase, "done");
 	assert.equal(progress.at(-1).percent, 100);
+});
+
+test("installFromIndex：指定 Release tag 时 runtime 归档跟随同一应用版本", async () => {
+	const { installer, calls } = makeInstaller({ releaseTag: "v0.7.6-beta" });
+	const result = await installer.installFromIndex();
+	assert.equal(result.ok, true);
+	assert.equal(
+		calls.installFromUrl[0].archiveUrl,
+		`https://atomgit.com/ayuayue/PiDeck/releases/download/v0.7.6-beta/dsh-runtime-${process.platform}-${process.arch}.tgz`,
+	);
 });
 
 test("installFromIndex：file:// 归档不改写，离线验证直连本地文件", async () => {

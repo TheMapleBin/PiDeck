@@ -26,6 +26,13 @@ export class PiRpcClient extends EventEmitter {
   private readonly pending = new Map<string, PendingRequest>();
   /** 大行按到达顺序排队，保证同一 client 的 response/event 不乱序。 */
   private parseQueue: Promise<void> = Promise.resolve();
+  /**
+   * close() 后 client 为终态：pi 已死/从未起来，再写 stdin 只会拿到
+   * ERR_STREAM_DESTROYED（未监听的 stream error 会变成 uncaughtException），
+   * 新请求也必须立刻失败——否则调用方（如启动握手）会为一个不会再来的响应干等满超时。
+   */
+  private closed = false;
+  private closeReason: Error | null = null;
 
   constructor(
     private readonly stdin: NodeJS.WritableStream,
@@ -39,6 +46,16 @@ export class PiRpcClient extends EventEmitter {
   request(command: Record<string, unknown>, timeoutMs = 30_000): Promise<RpcResponse> {
     const id = String(command.id ?? randomUUID());
     const payload = { ...command, id };
+
+    // 进程已收尾：直接以 close 原因失败。启动握手时 spawn 失败与 get_state 请求存在竞态，
+    // 若这里不短路，用户要等满 rpcTimeout（默认 10 分钟）才看到「启动失败」。
+    if (this.closed) {
+      return Promise.reject(
+        this.closeReason
+          ? new Error(`${this.closeReason.message} (RPC command not sent: ${String(command.type)})`)
+          : new Error(`RPC client closed: ${String(command.type)}`),
+      );
+    }
 
     const promise = new Promise<RpcResponse>((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -60,10 +77,14 @@ export class PiRpcClient extends EventEmitter {
 
   /** 直接向 pi 的 stdin 写入原始 JSONL，不经过 pending 跟踪（用于 extension_ui_response 等消息） */
   sendRaw(payload: Record<string, unknown>) {
+    if (this.closed) return;
     this.stdin.write(`${JSON.stringify(payload)}\n`);
   }
 
   close(error?: Error) {
+    if (this.closed) return;
+    this.closed = true;
+    this.closeReason = error ?? null;
     for (const [id, pending] of this.pending) {
       clearTimeout(pending.timer);
       pending.reject(error ?? new Error(`RPC client closed before response: ${id}`));
@@ -72,6 +93,9 @@ export class PiRpcClient extends EventEmitter {
   }
 
   private write(payload: Record<string, unknown>) {
+    // close 之后不再触碰 stdin：管道已被销毁，写入会抛 ERR_STREAM_DESTROYED
+    // 或以未监听 error 事件的形式冒泡成未捕获异常。
+    if (this.closed) return;
     // 记录发出的 RPC 命令，方便调试
     this.emit("log", { direction: "send", data: payload });
     // pi RPC 使用严格 JSONL 协议；每条命令必须以 LF 结尾，不能依赖 readline 之类的宽松分行。

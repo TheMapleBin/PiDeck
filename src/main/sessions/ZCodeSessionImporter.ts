@@ -14,6 +14,15 @@ import {
 	defaultSessionImportCopy,
 	type SessionImportCopy,
 } from "./SessionImportCopy";
+import { normalizeImportedToolArguments } from "./importToolArguments";
+import {
+	IMPORTED_SKIP_PART_TYPES,
+	capImportedImage,
+	importedAttachmentPlaceholder,
+	importedContentHasToolCall,
+	importedUnknownBlockAsText,
+	normalizeImportedStopReason,
+} from "./importNormalize";
 
 /**
  * zcode（Z.ai CLI）会话导入器。
@@ -222,26 +231,33 @@ export class ZCodeSessionImporter {
 					const callId = String(partData.callID ?? part.id);
 					const name = String(partData.tool ?? "tool");
 					// 工具调用（assistant 侧）进入消息 content；输出留给 toolResult。
-					const input = (partData.state as Record<string, unknown> | undefined)?.input ?? {};
+					const input = (partData.state as Record<string, unknown> | undefined)?.input;
 					content.push({
 						type: "toolCall",
 						id: callId,
 						name,
-						arguments: input,
+						arguments: normalizeImportedToolArguments(input),
 					});
 					toolQueue.push({ part, callId, name });
 				} else if (partData.type === "file") {
 					// 图片附件：尝试从 artifacts 目录还原为 image content（只读，不改源）。
 					const image = await this.resolveFilePart(partData, String(session.meta.id));
-					if (image) content.push(image);
-					else {
-						content.push({
-							type: "text",
-							text: `[zcode attachment: ${String(partData.url ?? "")}]`,
-						});
+					const label = String(partData.url ?? partData.filename ?? "image");
+					if (image) {
+						content.push(
+							capImportedImage(
+								{ type: "image", data: image.data, mimeType: image.mimeType || "image/png" },
+								label,
+							),
+						);
+					} else {
+						content.push(importedAttachmentPlaceholder(label));
 					}
+				} else if (IMPORTED_SKIP_PART_TYPES.has(String(partData.type ?? ""))) {
+					continue;
+				} else if (partData.type) {
+					content.push(importedUnknownBlockAsText(partData));
 				}
-				// timeline / step-start / step-finish 为过程噪声，跳过。
 			}
 
 			if (role === "user") {
@@ -264,7 +280,10 @@ export class ZCodeSessionImporter {
 						api: "zcode-import",
 						provider: messageData.providerID ?? model.providerID ?? "zcode",
 						model: messageData.modelID ?? model.modelID ?? "zcode",
-						stopReason: messageData.finish ?? "stop",
+						stopReason: normalizeImportedStopReason({
+							raw: messageData.finish,
+							hasToolCall: importedContentHasToolCall(content),
+						}),
 						tokens: messageData.tokens,
 					},
 					message.time_created,

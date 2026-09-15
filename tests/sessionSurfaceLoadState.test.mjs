@@ -40,6 +40,7 @@ const timeline = compile("src/renderer/src/hooks/useSessionTimelineController.ts
     "src/renderer/src/components/session/timeline/jumpWindowPolicy.ts",
     { "./turnRenderWindow": { TIMELINE_WINDOW_EXPAND_STEP: 3 } },
   ),
+  "./timeline/browsePin": compile("src/renderer/src/hooks/timeline/browsePin.ts"),
 });
 
 test("session load and send selectors retain current references across background patches", () => {

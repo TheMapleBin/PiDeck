@@ -55,7 +55,13 @@ test("file tree list is shallow by default in the drawer and accepts a scoped di
 });
 
 test("session display index yields during a full rebuild", () => {
+  // 2026-09 流式化：让出事件循环的实现搬进 jsonlLineStream.scanJsonlLines
+  // （按 yieldEveryLines 节流），SessionHistoryReader 只负责传节拍常量。
+  const jsonlLineStreamSource = readFileSync("src/main/sessions/jsonlLineStream.ts", "utf8");
   assert.match(historyReaderSource, /INDEX_PARSE_YIELD_EVERY/);
-  assert.match(historyReaderSource, /setImmediate/);
+  assert.match(historyReaderSource, /yieldEveryLines: SessionHistoryReader\.INDEX_PARSE_YIELD_EVERY/);
+  assert.match(jsonlLineStreamSource, /setImmediate/);
   assert.match(historyReaderSource, /getSessionDisplayIndex/);
+  // 不要再退回整文件读成字符串（V8 单字符串上限 / 主进程 384MB 堆上限，见 jsonlLineStream 注释）
+  assert.doesNotMatch(historyReaderSource, /readFile\(/);
 });

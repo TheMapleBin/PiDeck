@@ -1,5 +1,5 @@
 import { execFile, execFileSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { closeSync, existsSync, openSync, readFileSync, readSync, readdirSync, statSync } from "node:fs";
 import { delimiter, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import { app } from "electron";
 import type { AppSettings, PiInstallStatus } from "../../shared/types";
@@ -85,7 +85,80 @@ export type PiCommandInvocation = {
     user: string;
     piCommand: string;
   };
+  /**
+   * Windows 启动通道（诊断用）。
+   *
+   * `node-direct` = 已把 .cmd 垫片还原成 node + JS 入口直启（没有 cmd.exe 层）；
+   * `cmd-shim` = 退回 `cmd.exe /d /s /c "<整条命令行>"`，附原因。
+   * 之前这条回退是静默的：用户只看到「启动走 cmd.exe」，无从知道为什么没走 node 直启——
+   * 现场正是拿这一点误判成「PiDeck 根本没改成 node 启动」。
+   */
+  windowsLaunch?: {
+    channel: "node-direct" | "cmd-shim";
+    /** cmd-shim 通道的原因；node-direct 时为 undefined。 */
+    reason?: string;
+    /** node-direct 时实际执行的 JS 入口。 */
+    entry?: string;
+  };
 };
+
+/** .cmd 垫片解析结果：命中 node 直启入口，或说明为何不能直启。 */
+export type CmdShimResolution =
+  | { kind: "entry"; entry: string; matchedBy: "prefix-relative" | "shim-relative" }
+  | { kind: "not-cmd" }
+  | { kind: "missing" }
+  | { kind: "unreadable" }
+  | { kind: "unrecognized" }
+  | { kind: "entry-missing"; candidate: string };
+
+/** 把「没能走 node 直启」的解析结果翻成人话（命中时返回 null）。 */
+export function describeCmdShimFallback(resolution: CmdShimResolution, shimPath: string): string | null {
+  switch (resolution.kind) {
+    case "entry":
+      return null;
+    case "missing":
+      return `pi 路径不存在：${shimPath}（版本管理器切换/卸载后路径失效？）`;
+    case "unreadable":
+      return `垫片文件读取失败（权限或占用）：${shimPath}`;
+    case "unrecognized":
+      return "垫片结构不是 npm 生成的 pi.cmd（没有可识别的 node_modules/JS 入口引用）";
+    case "entry-missing":
+      return `垫片引用的 JS 入口不存在：${resolution.candidate}（常见于 nvm/pnpm 切换版本后残留的旧垫片）`;
+    case "not-cmd":
+      return null;
+  }
+}
+
+/**
+ * 入口能否当 node 脚本运行：有 .js/.mjs/.cjs 扩展名，或（无扩展名的 bin 脚本）首行 shebang 指向 node。
+ * 只读文件头，避免为了判断把大文件整个读进内存。
+ */
+function isRunnableNodeEntry(path: string): boolean {
+  try {
+    if (!statSync(path).isFile()) return false;
+  } catch {
+    return false;
+  }
+  if (/\.(?:m?js|cjs)$/i.test(path)) return true;
+  // 本地安装的 bin 脚本（node_modules/<pkg>/bin/<name>）通常无扩展名，靠 shebang 认身份。
+  let fd: number | undefined;
+  try {
+    fd = openSync(path, "r");
+    const buffer = Buffer.alloc(256);
+    const read = readSync(fd, buffer, 0, buffer.length, 0);
+    return /^#![^\n]*\bnode\b/m.test(buffer.subarray(0, read).toString("utf8"));
+  } catch {
+    return false;
+  } finally {
+    if (fd !== undefined) {
+      try {
+        closeSync(fd);
+      } catch {
+        // 关不掉不影响判断结果
+      }
+    }
+  }
+}
 
 /** Resolves the pi CLI across packaged Electron environments where shell PATH is often incomplete. */
 export class PiLocator {
@@ -358,16 +431,17 @@ export class PiLocator {
     //      继续跑（占内存、锁会话文件），进程监控取到的 pid 也是 cmd 而非 pi。
     // 还原出 node + JS 入口即可同时消除这三点：参数由 spawn 按 CreateProcess 规则转义，
     // 不再需要手工维护 cmd 引号。垫片形态不符预期时返回 null，回退下面的 cmd 路径。
-    const shimEntry = this.resolveWindowsCmdShim(command);
-    if (shimEntry) {
+    const shimEntry = this.resolveWindowsCmdShimDetailed(command);
+    if (shimEntry.kind === "entry") {
       const siblingNode = join(dirname(command), "node.exe");
       return {
         // 与垫片自身的 `IF EXIST "%dp0%\node.exe"` 分支等价：优先用与 pi 同目录的 node，
         // 避免 PATH 里另一个 node 版本被误用。
         command: existsSync(siblingNode) ? siblingNode : "node.exe",
-        args: [shimEntry, ...args],
+        args: [shimEntry.entry, ...args],
         shell: false,
         pathPrefix: this.getCommandBinDir(command),
+        windowsLaunch: { channel: "node-direct", entry: shimEntry.entry },
       };
     }
 
@@ -382,13 +456,18 @@ export class PiLocator {
       .join(" ");
     const commandLine = this.needsCmdQuote(command) ? `"${innerCommand}"` : innerCommand;
     return {
-      command: process.env.ComSpec || "cmd.exe",
+      command: this.resolveCmdExe(),
       args: ["/d", "/s", "/c", commandLine],
       shell: false,
       pathPrefix: this.getCommandBinDir(command),
       // 关键：cmd /c 的最后一个参数是完整命令行，里面的引号由 quoteCmdArgument/control 逻辑维护。
       // 若让 Node 再转义一次，`D:\\foo bar\\pi.cmd` 会变成 cmd 无法识别的路径。
       windowsVerbatimArguments: true,
+      // 回退原因一并带出去：静默回到 cmd.exe 会让人以为「改 node 启动没生效」。
+      windowsLaunch: {
+        channel: "cmd-shim",
+        reason: describeCmdShimFallback(shimEntry, command) ?? undefined,
+      },
     };
   }
 
@@ -877,25 +956,79 @@ export class PiLocator {
    * 形态不符（自建包装脚本、非 node 入口、入口文件缺失）返回 null，由调用方回退 cmd 路径。
    */
   private resolveWindowsCmdShim(shimPath: string): string | null {
-    if (!/\.cmd$/i.test(shimPath) || !existsSync(shimPath)) return null;
+    const resolution = this.resolveWindowsCmdShimDetailed(shimPath);
+    return resolution.kind === "entry" ? resolution.entry : null;
+  }
+
+  /**
+   * 解析 .cmd 垫片，还原出可 `node <entry>` 直启的 JS 入口。
+   *
+   * 覆盖两种真实垫片形态（都只在「解析出的入口真实存在」时才接管，否则回退 cmd.exe）：
+   *   ① npm 全局安装：`"%dp0%\node_modules\<包>\<入口>.js"`（全局 bin 目录 = node 根目录）；
+   *   ② npm 本地安装（`node_modules/.bin/*.cmd`）：`"%dp0%\..\<包>\bin\<脚本>"`，
+   *      入口通常**无扩展名**，靠 shebang 认 node 身份。
+   * 形态②此前一律落到 cmd.exe 回退 —— 这就是「pi 不是改成 node 启动了吗」的落差点：
+   * 改动只覆盖了全局垫片。回退原因现在随 `windowsLaunch.reason` 带出，不再静默。
+   *
+   * 安全：垫片来自用户磁盘，属不可信输入。「%dp0%」前缀形态必须解析在垫片目录内；
+   * 「..」形态必须落在某个 node_modules 包目录内，挡住 `node_modules\..\..\evil.js` 这类改写。
+   *
+   * 形态不符（自建包装脚本、非 node 入口、入口文件缺失）返回对应 reason，由调用方回退 cmd 路径。
+   */
+  private resolveWindowsCmdShimDetailed(shimPath: string): CmdShimResolution {
+    if (!/\.cmd$/i.test(shimPath)) return { kind: "not-cmd" };
+    if (!existsSync(shimPath)) return { kind: "missing" };
     let content: string;
     try {
       content = readFileSync(shimPath, "utf8");
     } catch {
-      return null;
+      return { kind: "unreadable" };
     }
-    // %dp0% / %~dp0% 之后紧跟 `\<node_modules 相对路径>`；`\\(` 中的反斜杠是字面量，
+    const baseDir = dirname(shimPath);
+
+    // ① %dp0% / %~dp0% 之后紧跟 `\<node_modules 相对路径>`；`\\(` 中的反斜杠是字面量，
     // 其后的 `(` 即捕获组起点，整段相对路径由该组取回。
     const match = content.match(/%~?dp0%?\\(node_modules[\\/][^"%\r\n]+\.(?:m?js|cjs))/i);
-    if (!match) return null;
-    // 垫片内一律是 Windows 反斜杠；归一成 `/` 使 path.resolve 在 POSIX 宿主上也能正确拼接
-    // （测试会以 Linux/macOS 宿主模拟 win32 跑这条分支）。
-    const baseDir = dirname(shimPath);
-    const entry = resolve(baseDir, match[1].replace(/\\/g, "/"));
-    // 逃逸检查：解析结果必须仍在垫片目录内，挡住 `..\..\` 形态的路径改写。
-    const rel = relative(baseDir, entry);
-    if (!rel || rel.startsWith("..") || isAbsolute(rel)) return null;
-    return existsSync(entry) ? entry : null;
+    if (match) {
+      // 垫片内一律是 Windows 反斜杠；归一成 `/` 使 path.resolve 在 POSIX 宿主上也能正确拼接
+      // （测试会以 Linux/macOS 宿主模拟 win32 跑这条分支）。
+      const entry = resolve(baseDir, match[1].replace(/\\/g, "/"));
+      // 逃逸检查：解析结果必须仍在垫片目录内，挡住 `..\..\` 形态的路径改写。
+      const rel = relative(baseDir, entry);
+      if (!rel || rel.startsWith("..") || isAbsolute(rel)) return { kind: "entry-missing", candidate: entry };
+      return existsSync(entry) ? { kind: "entry", entry, matchedBy: "prefix-relative" } : { kind: "entry-missing", candidate: entry };
+    }
+
+    // ② 本地安装垫片：`"%dp0%\..\<包>\bin\<脚本>"`（可继续带 `..`，但必须留在 node_modules 内）
+    const shimRelative = content.match(/%~?dp0%?\\\.\.\\([^"%\r\n]+)/i);
+    if (shimRelative) {
+      const candidate = resolve(baseDir, `../${shimRelative[1].replace(/\\/g, "/")}`);
+      if (/[\\/]node_modules[\\/]/i.test(candidate) && isRunnableNodeEntry(candidate)) {
+        return { kind: "entry", entry: candidate, matchedBy: "shim-relative" };
+      }
+      return { kind: "entry-missing", candidate };
+    }
+
+    return { kind: "unrecognized" };
+  }
+
+  /**
+   * 跑 .cmd 垫片用的 cmd.exe 路径。
+   *
+   * 不能只信 ComSpec：它可能指向本机并不存在的位置（系统盘换代、环境变量被改、
+   * 从别的机器/环境继承而来），这时 spawn 只会报 "spawn C:\WINDOWS\system32\cmd.exe ENOENT"，
+   * 用户根本看不出是 cmd.exe 路径本身失效。逐级退回：ComSpec（存在才用）→
+   * %SystemRoot%\System32\cmd.exe → 原样（交给 PATH 解析，至少保留可诊断的报错）。
+   */
+  private resolveCmdExe(): string {
+    const fromEnv = process.env.ComSpec?.trim();
+    if (fromEnv && existsSync(fromEnv)) return fromEnv;
+    const systemRoot = process.env.SystemRoot?.trim() || process.env.windir?.trim();
+    if (systemRoot) {
+      const candidate = join(systemRoot, "System32", "cmd.exe");
+      if (existsSync(candidate)) return candidate;
+    }
+    return fromEnv || "cmd.exe";
   }
 
   private quoteCmdArgument(value: string) {

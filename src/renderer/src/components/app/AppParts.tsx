@@ -477,35 +477,63 @@ function loadDevBranch(): Promise<string | undefined> {
 /**
  * Brand lockup：官方 pi 风格 canvas logo + 两行字标（beUI Animated Sidebar 头部风格的文字排布）。
  * 分支名下探为副标题行（仅开发分支时显示，避免视觉噪声）；视觉变形只作用于字标，
- * 品牌语义仍由外层 aria-label 承载。字标扫光做占空比最小化：每 60s 扫一轮
- * （2.5s），其余时间定格为静态渐变、零帧生产——常驻 infinite 循环会在
- * 高分辨率 × 高刷新率窗口下逼 GPU 进程逐帧合成整窗（实测空闲占约 1 核），
- * 放慢周期不省帧，只有拉长静止间隔才有效。
+ * 品牌语义仍由外层 aria-label 承载。字标扫光做占空比最小化：每 5 分钟扫一轮
+ * （2.5s / 300s ≈ 0.8%），休息态卸掉 bg-clip-text 变成普通实色字——常驻
+ * infinite 循环会在高分辨率 × 高刷新率窗口下逼 GPU 进程逐帧合成整窗
+ * （实测空闲占约 1 核）。放慢周期只降占空比；真正零帧要靠休息态不挂 clip。
  */
-export function BrandLockup(props: { replayToken?: number } = {}) {
+export function BrandLockup() {
 	const [branch, setBranch] = useState<string | undefined>(undefined);
 	useEffect(() => {
 		void loadDevBranch().then(setBranch);
 	}, []);
-	// 字标扫光占空循环：扫 2.5s（一轮）→ 静止 60s → 重复。
-	const [shimmerOn, setShimmerOn] = useState(true);
+	// 字标扫光：启动即静止，5 分钟后才扫 2.5s，再静止。后台窗口 / 减少动效时停扫。
+	const [shimmerOn, setShimmerOn] = useState(false);
 	useEffect(() => {
 		const SWEEP_MS = 2500;
-		const REST_MS = 60_000;
+		const REST_MS = 5 * 60_000;
+		const reduceMq = window.matchMedia("(prefers-reduced-motion: reduce)");
 		let cancelled = false;
 		let timer: number | undefined;
-		const schedule = (ms: number, on: boolean) => {
+		const clearTimer = () => {
+			if (timer !== undefined) {
+				window.clearTimeout(timer);
+				timer = undefined;
+			}
+		};
+		const canSweep = () => !document.hidden && !reduceMq.matches;
+		const arm = (ms: number, nextOn: boolean) => {
+			clearTimer();
 			timer = window.setTimeout(() => {
 				if (cancelled) return;
-				setShimmerOn(on);
-				schedule(on ? REST_MS : SWEEP_MS, !on);
+				// 看不见或系统要求少动效时跳过本轮，避免后台窗口白烧合成。
+				if (nextOn && !canSweep()) {
+					setShimmerOn(false);
+					arm(REST_MS, true);
+					return;
+				}
+				setShimmerOn(nextOn);
+				arm(nextOn ? SWEEP_MS : REST_MS, !nextOn);
 			}, ms);
 		};
-		setShimmerOn(true);
-		schedule(SWEEP_MS, false);
+		const park = () => {
+			setShimmerOn(false);
+			arm(REST_MS, true);
+		};
+		arm(REST_MS, true);
+		const onVisibility = () => {
+			if (document.hidden) park();
+		};
+		const onReduceChange = () => {
+			if (reduceMq.matches) park();
+		};
+		document.addEventListener("visibilitychange", onVisibility);
+		reduceMq.addEventListener("change", onReduceChange);
 		return () => {
 			cancelled = true;
-			if (timer !== undefined) clearTimeout(timer);
+			clearTimer();
+			document.removeEventListener("visibilitychange", onVisibility);
+			reduceMq.removeEventListener("change", onReduceChange);
 		};
 	}, []);
 	const brandTitle = branch ? `PiDeck · ${branch}` : "PiDeck";
@@ -514,7 +542,8 @@ export function BrandLockup(props: { replayToken?: number } = {}) {
 	const showLogo = detectRendererPlatform() !== "darwin";
 	return (
 		<div className="brand-lockup flex h-full min-w-0 items-center gap-2" aria-label={brandTitle} title={branch ? brandTitle : undefined}>
-			{showLogo && <PiLogoCanvas size={18} autoPlay playOnClick replayToken={props.replayToken} />}
+			{/* 默认静态定格；点击 logo 才播官方 tetromino 拼装动画，不随会话启动自动播。 */}
+			{showLogo && <PiLogoCanvas size={18} playOnClick />}
 			<span className="flex min-w-0 flex-col justify-center gap-1">
 				<TextShimmer
 					as="span"

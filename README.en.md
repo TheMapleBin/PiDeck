@@ -79,44 +79,23 @@
 
 ## 📋 Changelog
 
-<<<<<<< HEAD
-> **Latest: v0.7.5** (2026-09-11)
-=======
-> **Latest: v0.7.5** (2026-09-12)
->>>>>>> e29db8e76fd5b7cf521ba901d5356df74680b7ed
+> **Latest: v0.7.6-beta** (2026-09-15)
 
-### v0.7.5 Release Highlights
-- 🚀 **Inline reference chips aligned with Proma and self-contained persistence**
-- 🚀 **Sidebar session hover preview card**
-- 🚀 **Configurable Git executable path with detection**
-- 🚀 **Built-in prompt templates restored and AtomGit mirror added**
-<<<<<<< HEAD
-- 🚀 **DeepSeek DSH runtime upgraded to 0.1.5 (Typert Remote)**
-- 🚀 **DSH sessions stream their thinking again, and tool cards show results**
-- 🚀 **DSH runtime version gate**
-- 🚀 **Scheduled tasks (Automation)**
-- 🚀 **In-app update log**
-- 🚀 **Update source now prefers AtomGit**
-- 🚀 **Per-session proxy settings**
-- 🚀 **`pi-deck-trash-guard` built-in extension**
-- ✨ **Kimi Coding multi-window quotas and booster wallet**
-- ✨ **Web Ask prompt missing and sidebar pending-question badge**
-- ✨ **Accent colors no longer bleed into session status lights**
-- ✨ **Dark-mode selected states no longer render white-on-white**
-=======
-- 🚀 **DSH runtime upgraded to 0.1.5 (Typert Remote)**
-- 🚀 **Scheduled tasks and automation**
-- 🚀 **AtomGit-first update source**
-- 🚀 **In-app update changelog**
-- 🚀 **pi-deck-trash-guard built-in extension**
-- 🚀 **Built-in extension remote hot updates**
-- 🚀 **Notice toast truncation with details dialog**
-- 🚀 **Session proxies save-in-effect with full run-state control**
-- ✨ **DSH sandbox hang and console window fixed**
-- ✨ **Second and subsequent DSH sessions respond again**
-- ✨ **DSH journal replay no longer duplicates messages and traces**
-- ✨ **DSH model discovery no longer always reports "0 models fetched"**
->>>>>>> e29db8e76fd5b7cf521ba901d5356df74680b7ed
+### v0.7.6-beta Release Highlights
+- 🚀 **Customizable global shortcuts**
+- 🚀 **Hot updates for official prompt templates and built-in skills**
+- 🚀 **WB enhancement prompt templates in the store**
+- 🚀 **Project-scoped scheduled tasks, management as a modal**
+- 🚀 **Session tab “current session actions”**
+- 🚀 **Ask cards submit on Enter**
+- 🚀 **Import Cursor Agent sessions**
+- 🚀 **Official installer no longer ships DSH runtime**
+- 🚀 **Manual DSH runtime publish**
+- 🚀 **Manual three-platform builds and collaboration templates**
+- ✨ **Image-gen sessions no longer OOM the renderer from inline base64**
+- ✨ **Layered renderer OOM controls**
+- ✨ **Resident caches gain byte budgets**
+- ✨ **Huge sessions no longer fail to open or crash the app**
 
 [View Full Changelog →](CHANGELOG.md)
 

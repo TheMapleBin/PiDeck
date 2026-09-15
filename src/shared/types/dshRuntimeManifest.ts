@@ -138,23 +138,32 @@ export type DshRuntimeReleaseIndex = {
 };
 
 /**
- * 把索引条目的 url 改成当前更新源 latest 应用 Release 的归档资产。
- * 打包脚本写的是归档文件名占位；客户端永远按 latest 拉，国内默认 AtomGit。
- * file:// / 本地路径不改写——离线/内网验证用。
+ * 把索引条目的 url 改成当前更新源应用 Release 的归档资产。
+ * 默认跟随 latest；启动旧版/预发布 app 时可传 releaseTag，避免误从 latest
+ * 下载不匹配当前 app 的 runtime。file:// / 本地路径不改写——离线/内网验证用。
  */
 export function resolveDshRuntimeReleaseUrl(
 	release: DshRuntimeRelease,
 	source: UpdateSourceId,
 	platform: string,
 	arch: string,
+	releaseTag?: string,
 ): string {
 	const url = release.url;
 	if (url.startsWith("file:") || /^[a-zA-Z]:[\\/]/.test(url) || url.startsWith("/")) {
 		return url;
 	}
-	// 相对文件名或任意 http(s) 占位都改写为 latest 资产——
+	// 相对文件名或任意 http(s) 占位都改写为目标应用 Release 资产——
 	// 避免旧索引里的 dsh-runtime tag / 其它直连地址被客户端用上。
-	return dshRuntimeAssetDownloadUrl(source, dshRuntimeArchiveName(platform, arch));
+	const assetName = dshRuntimeArchiveName(platform, arch);
+	const tag = releaseTag?.trim();
+	if (source === "github" && tag) {
+		return `${gitHubLatestDownloadBase().replace(/\/releases\/latest\/download$/, `/releases/download/${encodeURIComponent(tag)}`)}/${encodeURIComponent(assetName)}`;
+	}
+	if (source === "atomgit" && tag) {
+		return `${atomGitFeedUrl().replace(/\/releases\/download\/latest$/, `/releases/download/${encodeURIComponent(tag)}`)}/${encodeURIComponent(assetName)}`;
+	}
+	return dshRuntimeAssetDownloadUrl(source, assetName);
 }
 
 /**

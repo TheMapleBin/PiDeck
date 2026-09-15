@@ -258,6 +258,7 @@ import {
 	readDeclaredDshVersion,
 } from "./dsh/runtime/DshRuntimeManager";
 import { DshRuntimeInstaller } from "./dsh/runtime/DshRuntimeInstaller";
+import { resolveDshRuntimeReleaseTag } from "./dsh/runtime/dshRuntimeReleaseTarget";
 import { resolveDshRuntimeIndexUrl } from "../shared/types/dshRuntimeManifest";
 import { autoUpdateDshRuntimeIfOutdated } from "./dsh/runtime/dshRuntimeAutoUpdate";
 import { createNetDownloader, createTarExtractor, fetchDshRuntimeIndex } from "./dsh/runtime/dshRuntimeIo";
@@ -291,6 +292,7 @@ import { ClaudeSessionImporter } from "./sessions/ClaudeSessionImporter";
 import { OpenCodeSessionImporter } from "./sessions/OpenCodeSessionImporter";
 import { ZCodeSessionImporter } from "./sessions/ZCodeSessionImporter";
 import { WorkBuddySessionImporter } from "./sessions/WorkBuddySessionImporter";
+import { CursorSessionImporter } from "./sessions/CursorSessionImporter";
 import { SettingsStore } from "./settings/SettingsStore";
 import { SecurityStore } from "./security/SecurityStore";
 import { applyDesktopProxy } from "./settings/DesktopProxy";
@@ -432,6 +434,7 @@ let claudeSessionImporter: ClaudeSessionImporter;
 let openCodeSessionImporter: OpenCodeSessionImporter;
 let zcodeSessionImporter: ZCodeSessionImporter;
 let workbuddySessionImporter: WorkBuddySessionImporter;
+let cursorSessionImporter: CursorSessionImporter;
 let settingsStore: SettingsStore;
 let securityStore: SecurityStore;
 let worktreeService: WorktreeService;
@@ -2655,6 +2658,7 @@ function registerIpc() {
 		openCodeSessionImporter,
 		zcodeSessionImporter,
 		workbuddySessionImporter,
+		cursorSessionImporter,
 		appLogger,
 		terminalManager,
 		mainCopy: mainCopy as (key: string, params?: Record<string, string | number>) => string,
@@ -3233,6 +3237,7 @@ app.whenReady().then(async () => {
 	openCodeSessionImporter = new OpenCodeSessionImporter(mainCopy);
 	zcodeSessionImporter = new ZCodeSessionImporter(mainCopy);
 	workbuddySessionImporter = new WorkBuddySessionImporter(mainCopy);
+	cursorSessionImporter = new CursorSessionImporter(mainCopy);
 	settingsStore = new SettingsStore();
 	// 安全管理：配置 owner + 策略快照写入（供 pi-deck-security-gate 扩展消费）
 	securityStore = new SecurityStore({
@@ -3481,12 +3486,11 @@ app.whenReady().then(async () => {
 		log: (scope, message, detail) => void appLogger.info(scope, message, detail),
 	});
 	// DSH runtime 安装态服务先于 DshHost 装配（探测只依赖 appPath，不 fork host）。
-	// 探测顺序：外部已装 runtime 优先 → 回退 app 内置（dev 模式 = 项目 node_modules 的
-	// @deepseek-ai 开发依赖，已随 npm install 存在，直接可用无需安装/下载），
-	// 两边都没有才是 notInstalled。状态变更经 dsh-runtime:status-changed 广播给渲染层。
-	// allowBundledFallback 只在开发态开启：**打包版默认不内置 runtime**（build 走 runtime:pack，默认 lite，
-	// extraResources 只留 .gitkeep）——减小安装体积，需要 DSH 的用户在打包版里按引导下载；
-	// 开发态则直接复用项目 node_modules（零下载、零安装，符合「dev 不需要装 runtime」的诉求）。
+	// 探测顺序：外部已装 runtime 优先 → 兼容旧版 full/存量包时才回退 app 内置。
+	// 官方 lite 包与 dev 都把 runtime 获取统一到 userData 外部目录，未安装时从同一份
+	// Release 索引下载；这样开发环境验证的就是用户实际走的远程安装链路。
+	// allowBundledFallback 仅保留给显式 full/存量包兼容，不再按 app.isPackaged 区分；
+	// 新的 dev/lite 默认关闭，避免项目 node_modules 或残留资源绕过远程安装。
 	dshRuntimeStatus = new DshRuntimeStatusService(
 		() => app.getAppPath(),
 		(scope, message, detail) => void appLogger.info(scope, message, detail),
@@ -3496,7 +3500,9 @@ app.whenReady().then(async () => {
 				? { nodeModules: active.nodeModules, runtimeVersion: active.manifest.runtimeVersion }
 				: undefined;
 		},
-		() => !app.isPackaged,
+		// dev 不把项目 node_modules 当成「已安装 runtime」；统一走外部 Release 下载。
+		() => false,
+		// 保留构造位次供旧调用方兼容；安装入口现在由状态服务统一开放，不读取打包态。
 		() => app.isPackaged,
 		// 声明的配套 dsh 版本（package.json）：与已装 runtime 比对得出 updateAvailable，
 		// 升级 PiDeck 后旧 runtime 仍「兼容」会被一直选用，UI 需要这个信号提示更新。
@@ -3519,16 +3525,23 @@ app.whenReady().then(async () => {
 				updateSource: settingsStore.get().updateSource,
 			}),
 		updateSource: () => settingsStore.get().updateSource,
+		releaseTag: () =>
+			resolveDshRuntimeReleaseTag({
+				explicitTag: process.env.PIDECK_RELEASE_TAG,
+				isPackaged: app.isPackaged,
+				appVersion: app.getVersion(),
+			}),
 		appVersion: () => app.getVersion(),
 		fetchIndex: fetchDshRuntimeIndex,
-		// 随包 runtime（resources/dsh-runtime/）：有就本地解压，不必联网。
-		// dev 模式下 process.resourcesPath 指向 Electron 自己的 resources，
-		// 没有该子目录 → 读不到 → 自然回退到在线/手动导入。
+		// dev 与官方 lite 包统一走远程 Release；只给显式 full/存量包保留离线兼容入口。
+		// 通过显式环境变量开启，避免开发机或新包因残留资源误绕过远程下载链路。
 		bundledRuntime: () =>
-			readBundledRuntime(
-				process.resourcesPath ? join(process.resourcesPath, DSH_BUNDLED_RUNTIME_DIRNAME) : undefined,
-				app.getVersion(),
-			),
+			process.env.PIDECK_DSH_ALLOW_BUNDLED_RUNTIME === "1"
+				? readBundledRuntime(
+					process.resourcesPath ? join(process.resourcesPath, DSH_BUNDLED_RUNTIME_DIRNAME) : undefined,
+					app.getVersion(),
+				)
+				: undefined,
 		onProgress: (progress) => {
 			if (mainWindow && !mainWindow.isDestroyed()) {
 				mainWindow.webContents.send(ipcChannels.dshRuntimeInstallProgress, progress);
@@ -3582,7 +3595,8 @@ app.whenReady().then(async () => {
 				bypass: settingsSnapshot.piProxyBypass,
 			});
 		},
-		// 外部 runtime 根目录（未安装时返回 undefined，回退 app 内置 node_modules）。
+		// 外部 runtime 根目录；未安装时保持 undefined，随后由 canCreateDshSession 门控，
+		// 不再把 dev 项目 node_modules 当作远程 runtime 的隐式回退。
 		() => dshRuntimeStatus.resolveAppRoot(),
 		// 永久删除归档目录：统一走系统回收站（与 pi 会话删除同语义，可恢复；拒绝静默硬删）。
 		async (path) => { await shell.trashItem(path); },
@@ -3753,15 +3767,17 @@ app.whenReady().then(async () => {
 			readCatalogSessionReferenceMessages(sessionId),
 		readSessionMessages: async (sessionId) => {
 			const entry = sessionCatalog.get(sessionId);
-			// DSH 会话没有 pi 会话文件：全量读走 host 历史事件流（一次拉最大页），
-			// 与分页路径同源；未挂载 DSH 后端时返回空数组。
+			// DSH 会话没有 pi 会话文件：读 host 历史事件流的一页（有界），
+			// 与分页路径同源；未挂载 DSH 后端时返回空窗口。
 			if (entry?.backend === "dsh" && entry.dshSessionId && dshAgentManager) {
 				const page = await dshAgentManager.readHistoryPage(entry.dshSessionId, undefined, 1000);
-				return page.messages;
+				return { messages: page.messages, total: page.total, windowStart: 0, truncated: false };
 			}
-			if (!entry?.filePath) return [];
-			const content = await sessionScanner.readSessionRawText(entry.filePath);
-			return agentManager.readSessionDisplayMessages(entry.filePath, sessionId, content);
+			if (!entry?.filePath) return { messages: [], total: 0, windowStart: 0, truncated: false };
+			// 有界加载窗口（9 轮 + 条目预算），不是全量历史：全量下发在大会话上会同时顶爆
+			// 主进程与渲染层（#213）。更早历史请走分页接口（Web：/messages/page）。
+			const window = await agentManager.readSessionLoadWindow(entry.filePath, sessionId);
+			return { ...window, truncated: window.windowStart > 0 };
 		},
 		readSessionMessagePage: async (sessionId, before, pageSize) => {
 			const entry = sessionCatalog.get(sessionId);
@@ -4118,11 +4134,11 @@ app.whenReady().then(async () => {
 	void cleanupPasteFiles?.().catch((error: unknown) => {
 		void appLogger.warn("app", "Paste file cleanup failed during startup", error);
 	});
-	// DSH runtime 自动更新（打包态）：升级 PiDeck 后若已装 runtime 与声明版本不一致
+	// DSH runtime 自动更新：升级 PiDeck 后若已装 runtime 与声明版本不一致
 	// （outdated，被硬门控挡住无法启动 host），启动期后台自动重装配套版本并回收旧
 	// 版本目录——与其让用户手动点「重新安装」，不如升级后首次启动自动完成。
-	// notInstalled 不自动装（用户未选择使用 DSH，保持安装引导）；dev 跳过（项目
-	// node_modules 即声明版本，且 dev 禁止在线下载）。fire-and-forget，不挡首帧。
+	// notInstalled 不自动装（用户未选择使用 DSH，保持安装引导）；dev 与打包版都允许
+	// 手动安装，但自动更新只处理已有 runtime 的版本错配。fire-and-forget，不挡首帧。
 	void autoUpdateDshRuntimeIfOutdated({
 		getStatus: () => dshRuntimeStatus.getStatus(),
 		refresh: () => dshRuntimeStatus.refresh(),

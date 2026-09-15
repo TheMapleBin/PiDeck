@@ -1,7 +1,9 @@
-import { open, readFile, stat } from "node:fs/promises";
+import { open, stat } from "node:fs/promises";
 import type { ChatMessage, ImageContent, PiSubagentEntry, SessionMessagePage, SessionTodoSnapshot } from "../../shared/types";
 import { parseTodoSnapshotData } from "../../shared/sessionTodo";
+import { isFileChangeToolName } from "../../shared/fileChanges";
 import { deriveToolSubagentEntries } from "./derivedSubagents";
+import { scanJsonlLines } from "../sessions/jsonlLineStream";
 import type { MainProcessTranslationKey } from "../../shared/i18n/mainProcessCopy";
 import type { RpcResponse } from "./PiRpcClient";
 import type { AppLogger } from "../logging/AppLogger";
@@ -44,10 +46,14 @@ type SessionDisplayEntry = {
 	customType?: string;
 	/** 消息角色（user/assistant/…）：轮次分页按 user 消息切轮次边界，建索引时顺手捕获 */
 	role?: string;
+	/** 消息条目的 message.toolName：文件汇总按「是否文件类工具」预判前先过滤掉大体量非文件工具结果 */
+	toolName?: string;
 	/** 消息条目的 message.id：编辑/删除/重发缓存未命中时按 messageId 定位文件条目 */
 	messageId?: string;
 	/** 停止后 live ID 的安全回查窗口；只读时间邻近条目，避免整段历史按正文扫描。 */
 	messageTimestamp?: number;
+	/** 超长行降级条目：正文未解析（hasMessage 恒 false），只为维持 parentId 链而保留。 */
+	oversized?: true;
 	summary?: string;
 	firstKeptEntryId?: string;
 	timestamp?: string;
@@ -301,7 +307,10 @@ function deriveSessionHistoryMetadata(
 export class SessionHistoryReader {
 	private readonly sessionDisplayIndexes = new Map<string, SessionDisplayIndex>();
 	private static readonly SESSION_DISPLAY_INDEX_LIMIT = 32;
-	/** 全量重建时每隔这么多行让出事件循环，避免几十 MB JSONL 同步 parse 卡死主进程。 */
+	/**
+	 * 流式扫描每隔这么多行让出一次事件循环（见 jsonlLineStream.scanJsonlLines 的
+	 * yieldEveryLines）：整文件同步 parse 会卡死主进程，IPC/窗口消息都得等它跑完。
+	 */
 	private static readonly INDEX_PARSE_YIELD_EVERY = 400;
 	/** 完整消息文本 LRU 缓存（「查看完整输出」按需读取结果）：键 `${sessionPath}#${messageId}`。 */
 	private readonly fullTextCache = new Map<string, string>();
@@ -347,6 +356,21 @@ export class SessionHistoryReader {
 	 * 但 3 轮 × 数百条仍可超预算；单轮自身超预算时只能整轮保留。
 	 */
 	private static readonly MAX_PAGE_WINDOW_ENTRIES = 600;
+
+	/**
+	 * 文件汇总的条目预算（最新一轮 + 无 user 边界的兜底窗口）。
+	 *
+	 * 单轮条目数正常在几十条量级；给 1600 是防御「单轮上千条工具调用」的极端会话——
+	 * 即便被截断，截断的也是同一轮里最旧的条目，横栏语义（本轮改了什么）仍然成立；
+	 * 横栏只是汇总视图，不像时间线那样需要逐条可见。
+	 */
+	private static readonly MAX_FILE_CHANGE_ENTRIES = 1600;
+
+	/**
+	 * 轮次边界探测次数上限：只为跳过「空文本 user 条目」，正常第一条即命中。
+	 * 超出上限时按索引 role 直接认定，避免异常数据把探测变成全量读盘。
+	 */
+	private static readonly FILE_CHANGE_BOUNDARY_PROBES = 4;
 
 	/** 启动加载窗口条目预算（供 AgentManager 对齐窗口口径）。 */
 	static maxLoadWindowEntries(): number {
@@ -408,6 +432,16 @@ export class SessionHistoryReader {
 		return { text };
 	}
 
+	/**
+	 * 整条活动分支的显示消息（**无字节上界**）。
+	 *
+	 * 危险：`sessionContent === undefined` 分支会把活动分支的每一行都读进内存并
+	 * 逐条投影成显示对象——近 1 GiB 的会话足以顶爆主进程 384MB 老生代堆。
+	 * 只有「确实需要完整时间线」的入口才可以用它；任何「先全量再切片」的用法
+	 * 都必须改成有界读（窗口/分页，或像文件汇总那样按需定向读，
+	 * 见 readFileChangeMessages）。2026-09 的「打开会话即闪退」就是这条路径被
+	 * 「最近一轮修改的文件」借用导致的。
+	 */
 	async readSessionDisplayMessages(
 		sessionPath: string,
 		agentId = "_viewer",
@@ -511,6 +545,117 @@ export class SessionHistoryReader {
 		}
 
 		return this.deps.convertMessages(agentId, finalRaw, activeEntryIds);
+	}
+
+	/**
+	 * 轮内过滤：只有 assistant（toolCall 参数在这里）与「可能是文件类工具」的
+	 * toolResult 参与文件汇总，其余条目整行不进内存。
+	 *
+	 * 保守优先：toolName 没捕获到（老索引/异常行）或 role 未知时一律读入——
+	 * 多读只是浪费一次 IO，漏读会让横栏少显示一个被改过的文件。
+	 * 真正的判定仍在聚合侧（getToolDiffTarget 用同一份 FILE_CHANGE_TOOL_RE），
+	 * 这里只是「要不要把这一行读进内存」的预判。
+	 */
+	private static isFileChangeSource(entry: SessionDisplayEntry): boolean {
+		if (entry.role === "assistant") return true;
+		if (entry.role === "toolResult") {
+			// toolName 缺失时投影会回退到 assistant toolCall 的名字，无法预判 → 读。
+			return !entry.toolName || isFileChangeToolName(entry.toolName);
+		}
+		return entry.role === undefined;
+	}
+
+	/**
+	 * 定位「最新一轮」的起点：最后一个「可展示 user 消息」在活动分支里的下标。
+	 *
+	 * 索引里只捕获了 role，而显示投影会丢掉空文本无图片的 user 条目（那种条目在
+	 * 时间线上不存在，渲染层 collectLatestTurnFileChanges 也不会把它当轮次边界）。
+	 * 为对齐这个口径，对候选条目做单行探测（自尾向前，次数有上限）——正常会话
+	 * 第一条就命中，只多读一行。
+	 *
+	 * 返回 -1 表示整条分支没有 user 边界（异常/老数据）。
+	 */
+	private async resolveFileChangeTurnBoundary(
+		index: SessionDisplayIndex,
+		entries: readonly SessionDisplayEntry[],
+	): Promise<number> {
+		let probes = 0;
+		for (let i = entries.length - 1; i >= 0; i -= 1) {
+			if (entries[i].role !== "user") continue;
+			if (probes >= SessionHistoryReader.FILE_CHANGE_BOUNDARY_PROBES) return i;
+			probes += 1;
+			const raw = await this.readIndexedSessionMessages(index.hostPath, [entries[i]]);
+			const projected = this.deps.convertMessages("_viewer", raw, [entries[i].id]);
+			if (projected.some((message) => message.role === "user")) return i;
+		}
+		return -1;
+	}
+
+	/**
+	 * 「修改的文件」横栏的取数原语：**有界**返回最新一轮中可能产出 diff 的显示消息，
+	 * 调用方用 shared/fileChanges 的 collectSessionFileChanges 聚合。
+	 *
+	 * 为什么不能复用 readSessionDisplayMessages：那条路径是「读整条活动分支 →
+	 * 逐条投影成显示对象 → 再切出最后一轮」。对近 1 GiB 的会话，这等于让主进程
+	 * 把整段历史再全量展开一次：读盘字节 = 历史总字节，投影对象再翻一倍，
+	 * 直接顶爆主进程 384MB 老生代堆（用户表现为「一打开就闪退」）。
+	 *
+	 * 三层有界（全部由索引元数据决定，不靠正文）：
+	 * 1. 轮次边界取自索引里已捕获的 role，不为找边界读全量正文；
+	 * 2. 只读边界之后的条目 —— 读盘字节只与「一轮有多大」有关，与历史总长无关；
+	 * 3. 轮内只读可能产出 diff 的条目（assistant + 文件类工具结果），
+	 *    read/bash 等大体积工具结果整行不 materialize。
+	 *
+	 * 边界：没有 user 边界时回退聚合「尾部有界窗口」（见 MAX_FILE_CHANGE_ENTRIES），
+	 * 结果与 collectLatestTurnFileChanges 的「无 user 消息 → 聚合全部」一致，
+	 * 但不会因为异常数据退回全量展开。
+	 *
+	 * 已知取舍：toolCall 参数只在 assistant 行里，若有工具的 toolResult 落在边界之后、
+	 * 而它的 assistant toolCall 落在边界之前（用户在一轮工具执行中插话），该条会因取不到
+	 * 参数而被跳过。代价是多一个文件不出现在汇总横栏，不是数据丢失；为它把边界前的
+	 * assistant 行也读进来不划算（那正是本方法要避免的全量展开）。
+	 */
+	async readFileChangeMessages(
+		sessionPath: string,
+		agentId = "_viewer",
+	): Promise<ChatMessage[]> {
+		const index = await this.getSessionDisplayIndex(sessionPath);
+		const entries = index.activeMessageEntries;
+		const boundary = await this.resolveFileChangeTurnBoundary(index, entries);
+		const scope = boundary < 0
+			? entries.slice(Math.max(0, entries.length - SessionHistoryReader.MAX_FILE_CHANGE_ENTRIES))
+			: entries.slice(boundary + 1);
+		const readable = scope.filter((entry) => SessionHistoryReader.isFileChangeSource(entry));
+		if (readable.length === 0) return [];
+		const rawMessages = await this.readIndexedSessionMessages(index.hostPath, readable);
+		return this.deps.convertMessages(agentId, rawMessages, readable.map((entry) => entry.id));
+	}
+
+	/**
+	 * 一次性读取「加载窗口」内的历史消息（**有界**，供 Web 接口 / 兼容的整量读入口使用）。
+	 *
+	 * 为什么不做全量：JSONL 保留完整历史，全量下发在大会话上同时顶爆主进程（投影 + IPC
+	 * 序列化）与渲染层（#213），而「读完整历史」这个需求本身应该走轮次分页
+	 * （readSessionDisplayTurnPage / Web 的 /messages/page）。这里返回与桌面启动窗口
+	 * 同口径的尾部窗口 + total/windowStart，让调用方知道是否被截断、从哪继续翻。
+	 */
+	async readLoadWindow(
+		sessionPath: string,
+		agentId = "_viewer",
+		turnCount = SessionHistoryReader.DEFAULT_TURN_PAGE_SIZE,
+		maxEntries = SessionHistoryReader.MAX_LOAD_WINDOW_ENTRIES,
+	): Promise<{ messages: ChatMessage[]; total: number; windowStart: number }> {
+		const index = await this.getSessionDisplayIndex(sessionPath);
+		const total = index.activeMessageEntries.length;
+		const windowStart = boundTurnWindowStart(index.activeMessageEntries, total, turnCount, maxEntries);
+		const entries = index.activeMessageEntries.slice(windowStart);
+		const rawMessages = await this.readIndexedSessionMessages(index.hostPath, entries);
+		const finalRaw = this.insertCompactionSummaryRaw(index, rawMessages);
+		return {
+			messages: this.deps.convertMessages(agentId, finalRaw, entries.map((entry) => entry.id)),
+			total,
+			windowStart,
+		};
 	}
 
 	/**
@@ -888,7 +1033,7 @@ export class SessionHistoryReader {
 
 		// 增量路径：文件变大且旧索引以完整行结尾 → 只读尾部新增字节并追加条目。
 		// pi 运行中持续往 JSONL 追加行，运行中翻历史/看分页会反复触发索引失效；
-		// 全量重建需要整文件 readFile + 逐行 parse，大会话（几十 MB）会造成可感知卡顿。
+		// 全量重建成本随文件线性增长，大会话（几十 MB 以上）会造成可感知卡顿。
 		// 前置条件 endsWithNewline：旧最后一行以 \n 结尾，追加内容与旧内容边界干净。
 		if (cached && version.size > cached.size && cached.endsWithNewline) {
 			const updated = await this.appendIndexFromTail(cached, hostPath, version);
@@ -901,36 +1046,72 @@ export class SessionHistoryReader {
 			// 增量失败（IO 异常/无新增完整行）：回退全量重建
 		}
 
-		const content = await readFile(hostPath, "utf8");
+		// 全量重建必须流式逐行：整文件 `readFile + split` 在大会话上要么撞 V8 单字符串
+		// 上限（ERR_STRING_TOO_LONG），要么先建出几百 MB 字符串再撞主进程 384MB 堆上限
+		// （V8 FatalProcessOutOfMemory → 主进程 abort，用户看到「打开大会话即闪退」）。
+		// 见 src/main/sessions/jsonlLineStream.ts 的模块注释。
 		const entries = new Map<string, SessionDisplayEntry>();
 		let lastEntryId: string | undefined;
-		let byteOffset = 0;
-		// 文件是否以完整行（\n）结尾：决定后续 append 能否走增量索引
-		const endsWithNewline = content.endsWith("\n");
-		const lines = content.split("\n");
-		for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
-			const sourceLine = lines[lineIndex];
-			const hasNewline = lineIndex < lines.length - 1;
-			const byteLength = Buffer.byteLength(sourceLine, "utf8");
-			const parsed = this.parseIndexLine(sourceLine, byteOffset, byteLength);
+		const scan = await scanJsonlLines(hostPath, (line, context) => {
+			const parsed = this.parseIndexLine(line, context.offset, context.byteLength);
 			if (parsed) {
 				entries.set(parsed.id, parsed);
 				lastEntryId = parsed.id;
 			}
-			byteOffset += byteLength + (hasNewline ? 1 : 0);
-			// 大会话全量 rebuild 不能占满主线程：每 N 行让出一轮，IPC/窗口消息才能继续走。
-			if ((lineIndex + 1) % SessionHistoryReader.INDEX_PARSE_YIELD_EVERY === 0) {
-				await new Promise<void>((resolve) => {
-					setImmediate(resolve);
+		}, {
+			yieldEveryLines: SessionHistoryReader.INDEX_PARSE_YIELD_EVERY,
+			onOversizedLine: (info) => {
+				// 单行超过 64MiB（巨型内联 base64 附件等）：不 parse 正文，只从行首前缀
+				// 抢出 id/parentId 保住 parentId 链（丢 id 会让 traceActiveBranch 从这里断链，
+				// 整段更早历史都被判为「非活跃分支」而消失）。正文不进内存，也不进展示。
+				const stub = this.parseOversizedIndexLine(info);
+				if (stub) {
+					entries.set(stub.id, stub);
+					lastEntryId = stub.id;
+				}
+				void this.deps.logger?.warn("session-history", "Oversized JSONL line indexed without body", {
+					hostPath,
+					offset: info.offset,
+					byteLength: info.byteLength,
+					recoveredId: stub?.id,
 				});
-			}
-		}
+			},
+		});
+		const endsWithNewline = scan.endsWithNewline;
 		const activeBranch = this.traceActiveBranch(entries, lastEntryId);
 		const index = this.finishIndex(hostPath, version, entries, activeBranch, endsWithNewline);
 		this.sessionDisplayIndexes.delete(hostPath);
 		this.sessionDisplayIndexes.set(hostPath, index);
 		this.trimDisplayIndexCache();
 		return index;
+	}
+
+	/**
+	 * 超长行的降级索引条目：只从行首前缀里抢 id/parentId/type。
+	 *
+	 * 前缀用正则而不是 JSON.parse（正文根本没进内存）；pi 的 JSONL 由固定序列化器写出，
+	 * 条目对象以 `{"type":…,"id":…,"parentId":…` 开头，所以**第一个** `"id"` 匹配即条目自身 id。
+	 * 抢不到 id 时返回 null：此时无法维持 parentId 链，宁可丢这一条（已记日志），
+	 * 也不编造一个会污染分支回溯的假 id。
+	 */
+	private parseOversizedIndexLine(
+		info: { offset: number; byteLength: number; prefix: string },
+	): SessionDisplayEntry | null {
+		const id = /"id"\s*:\s*"([^"\\]{1,64})"/.exec(info.prefix)?.[1];
+		if (!id) return null;
+		const parentId = /"parentId"\s*:\s*"([^"\\]{1,64})"/.exec(info.prefix)?.[1];
+		const type = /"type"\s*:\s*"([^"\\]{1,32})"/.exec(info.prefix)?.[1] ?? "";
+		return {
+			id,
+			parentId: parentId ?? null,
+			type,
+			offset: info.offset,
+			byteLength: info.byteLength,
+			// body 未解析：不进 activeMessageEntries（不参与分页/展示），
+			// 但保留在 entries 里维持 parentId 链与活动分支回溯。
+			hasMessage: false,
+			oversized: true,
+		};
 	}
 
 	/** 解析单行 JSONL 为索引条目；损坏行返回 null（不影响其他行）。 */
@@ -983,6 +1164,9 @@ export class SessionHistoryReader {
 				assistantModel,
 				thinkingLevel,
 				role: typeof message?.role === "string" ? message.role : undefined,
+				// toolName 同样在建索引时顺手捕获：文件汇总只需要 write/edit/create/patch
+				// 的工具结果，有了它就不必把 read/bash 的大体积结果读进内存再丢弃。
+				toolName: readString(message, "toolName"),
 				messageId: typeof message?.id === "string" ? message.id : undefined,
 				messageTimestamp: typeof message?.timestamp === "number"
 					? message.timestamp
@@ -1051,7 +1235,6 @@ export class SessionHistoryReader {
 	): Promise<SessionDisplayIndex | null> {
 		const length = version.size - cached.size;
 		if (length <= 0) return null;
-		let tail: Buffer;
 		try {
 			const handle = await open(hostPath, "r");
 			try {
@@ -1077,30 +1260,36 @@ export class SessionHistoryReader {
 						return null;
 					}
 				}
-				tail = Buffer.allocUnsafe(length);
-				const { bytesRead } = await handle.read(tail, 0, length, cached.size);
-				if (bytesRead !== length) return null;
 			} finally {
 				await handle.close();
 			}
 		} catch {
 			return null;
 		}
-		const tailText = tail.toString("utf8");
-		// 只解析完整行（以 \n 结尾）；尾部残行（pi 正在写）留给下一次 append/重建
-		const completeLines = tailText.split("\n").slice(0, -1);
+		// 新增区间同样流式扫描：pi 长时间运行后一次性追加也可能很大（几十 MB 工具输出），
+		// 整段 Buffer + toString 与全量重建是同一类堆风险。
 		const entries = new Map(cached.entries);
 		const newEntries: SessionDisplayEntry[] = [];
-		let byteOffset = cached.size;
-		for (const sourceLine of completeLines) {
-			const byteLength = Buffer.byteLength(sourceLine, "utf8");
-			const parsed = this.parseIndexLine(sourceLine, byteOffset, byteLength);
+		const scan = await scanJsonlLines(hostPath, (line, context) => {
+			// 只解析完整行（以 \n 结尾）；尾部残行（pi 正在写）留给下一次 append/重建
+			if (!context.complete) return;
+			const parsed = this.parseIndexLine(line, context.offset, context.byteLength);
 			if (parsed) {
 				entries.set(parsed.id, parsed);
 				newEntries.push(parsed);
 			}
-			byteOffset += byteLength + 1; // 完整行必然带 \n
-		}
+		}, {
+			start: cached.size,
+			end: version.size,
+			yieldEveryLines: SessionHistoryReader.INDEX_PARSE_YIELD_EVERY,
+			onOversizedLine: (info) => {
+				if (!info.complete) return;
+				const stub = this.parseOversizedIndexLine(info);
+				if (!stub) return;
+				entries.set(stub.id, stub);
+				newEntries.push(stub);
+			},
+		});
 		// 无新增完整行（文件还在写）：保持旧索引，下次 mtime 变化再试
 		if (newEntries.length === 0) return null;
 
@@ -1120,7 +1309,7 @@ export class SessionHistoryReader {
 			? cached.activeBranch.slice(0, pivotIndex + 1)
 			: cached.activeBranch;
 		const nextBranch = [...baseBranch, ...chain];
-		return this.finishIndex(hostPath, version, entries, nextBranch, tailText.endsWith("\n"));
+		return this.finishIndex(hostPath, version, entries, nextBranch, scan.endsWithNewline);
 	}
 
 	/** 索引 LRU 上限裁剪：超出上限丢最旧（Map 迭代序 = 插入序）。 */
@@ -1130,21 +1319,74 @@ export class SessionHistoryReader {
 		}
 	}
 
+	/**
+	 * 定向读盘的并发上限。
+	 *
+	 * 一页最多 600~1600 个条目，`Promise.all(entries.map(read))` 会同时申请同等数量的
+	 * Buffer（单条工具结果可达数 MB），并把 libuv 线程池与文件句柄压满——大会话翻页时
+	 * 表现为「内存尖峰 + 主进程 IO 队列打满」。改为固定 worker 池后，峰值内存
+	 * = 并发数 × 单条大小，与页大小解耦。
+	 */
+	private static readonly INDEXED_READ_CONCURRENCY = 8;
+
+	/**
+	 * 单批定向读的字节预算：一批内所有条目的 byteLength 之和不超过该值。
+	 *
+	 * 并发数单独不够：8 条 × 单条 50MB 的消息行仍是 400MB 的 Buffer（再叠 JSON
+	 * 字符串与解析对象就是堆上限级别的尖峰）。字节预算让峰值内存与「一页有多大」
+	 * 解耦，只与预算有关；单条自身超预算时独占一批（不拆行，保正确性）。
+	 */
+	private static readonly INDEXED_READ_BATCH_BYTES = 16 * 1024 * 1024;
+
+	/**
+	 * 按 entry 的 offset/byteLength 精确定向读行（不整文件读）。
+	 *
+	 * 注意：`oversized` 降级条目（正文超 64MiB 未解析）会返回空串——调用方按
+	 * 「损坏行」处理（各自 try/catch 跳过）。不要在此处按 byteLength 分配 buffer，
+	 * 否则等于把当初拒绝进内存的巨型行又搬回来。
+	 */
+	private async readIndexedLines(
+		hostPath: string,
+		entries: SessionDisplayEntry[],
+	): Promise<string[]> {
+		const lines = new Array<string>(entries.length).fill("");
+		if (entries.length === 0) return lines;
+		const handle = await open(hostPath, "r");
+		const readOne = async (index: number): Promise<void> => {
+			const entry = entries[index];
+			if (entry.oversized) return;
+			const buffer = Buffer.allocUnsafe(entry.byteLength);
+			const { bytesRead } = await handle.read(buffer, 0, buffer.length, entry.offset);
+			lines[index] = buffer.subarray(0, bytesRead).toString("utf8").replace(/\r$/, "");
+		};
+		try {
+			let cursor = 0;
+			while (cursor < entries.length) {
+				// 组一批：并发数上限 + 字节预算，两者先到者为准
+				const batch: number[] = [];
+				let batchBytes = 0;
+				while (cursor + batch.length < entries.length
+					&& batch.length < SessionHistoryReader.INDEXED_READ_CONCURRENCY) {
+					const entry = entries[cursor + batch.length];
+					if (batch.length > 0 && batchBytes + entry.byteLength > SessionHistoryReader.INDEXED_READ_BATCH_BYTES) break;
+					batchBytes += entry.byteLength;
+					batch.push(cursor + batch.length);
+				}
+				await Promise.all(batch.map((index) => readOne(index)));
+				cursor += batch.length;
+			}
+		} finally {
+			await handle.close();
+		}
+		return lines;
+	}
+
 	private async readIndexedSessionMessages(
 		hostPath: string,
 		entries: SessionDisplayEntry[],
 	): Promise<unknown[]> {
-		const handle = await open(hostPath, "r");
-		try {
-			return await Promise.all(entries.map(async (entry) => {
-				const buffer = Buffer.allocUnsafe(entry.byteLength);
-				await handle.read(buffer, 0, buffer.length, entry.offset);
-				const line = buffer.toString("utf8").replace(/\r$/, "");
-				return (JSON.parse(line) as { message?: unknown }).message;
-			}));
-		} finally {
-			await handle.close();
-		}
+		const lines = await this.readIndexedLines(hostPath, entries);
+		return lines.map((line) => (JSON.parse(line) as { message?: unknown }).message);
 	}
 	/**
 	 * 与 readIndexedSessionMessages 同 IO 模式，但返回整行解析后的 JSON 对象
@@ -1154,17 +1396,8 @@ export class SessionHistoryReader {
 		hostPath: string,
 		entries: SessionDisplayEntry[],
 	): Promise<unknown[]> {
-		const handle = await open(hostPath, "r");
-		try {
-			return await Promise.all(entries.map(async (entry) => {
-				const buffer = Buffer.allocUnsafe(entry.byteLength);
-				await handle.read(buffer, 0, buffer.length, entry.offset);
-				const line = buffer.toString("utf8").replace(/\r$/, "");
-				return JSON.parse(line);
-			}));
-		} finally {
-			await handle.close();
-		}
+		const lines = await this.readIndexedLines(hostPath, entries);
+		return lines.map((line) => JSON.parse(line));
 	}
 
 
@@ -1364,35 +1597,27 @@ export class SessionHistoryReader {
 	 */
 	async readDerivedSubagentEntries(sessionPath: string): Promise<PiSubagentEntry[]> {
 		const hostPath = this.deps.toHostPath(sessionPath);
-		let content: string;
-		try {
-			content = await readFile(hostPath, "utf8");
-		} catch (error) {
-			void this.deps.logger?.warn("agent", "Failed to read session for subagent derivation", {
-				sessionPath,
-				error: error instanceof Error ? error.message : String(error),
-			});
-			return [];
-		}
 		const rawEntries: unknown[] = [];
-		const lines = content.split("\n");
-		for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
-			const sourceLine = lines[lineIndex];
-			const jsonLine = sourceLine.endsWith("\r") ? sourceLine.slice(0, -1) : sourceLine;
-			if (jsonLine.includes("acp_delegate") || jsonLine.includes("\"subagent\"")) {
+		try {
+			// 流式扫描：本函数是「全量扫」语义（这些插件不落 customType，无法走索引定向读），
+			// 整文件 readFile 在大会话上会撞字符串上限/堆上限（见 jsonlLineStream 模块注释）。
+			// 行级预检保留：不含 "acp_delegate" / "\"subagent\"" 的行直接跳过 JSON.parse。
+			await scanJsonlLines(hostPath, (line) => {
+				const jsonLine = line.endsWith("\r") ? line.slice(0, -1) : line;
+				if (!jsonLine.includes("acp_delegate") && !jsonLine.includes("\"subagent\"")) return;
 				try {
 					const parsed: unknown = JSON.parse(jsonLine);
 					if (isRecord(parsed)) rawEntries.push(parsed);
 				} catch {
 					// 损坏行忽略
 				}
-			}
-			// 与索引重建同一节拍让出主线程，大会话扫描不阻塞 IPC/窗口消息
-			if ((lineIndex + 1) % SessionHistoryReader.INDEX_PARSE_YIELD_EVERY === 0) {
-				await new Promise<void>((resolve) => {
-					setImmediate(resolve);
-				});
-			}
+			}, { yieldEveryLines: SessionHistoryReader.INDEX_PARSE_YIELD_EVERY });
+		} catch (error) {
+			void this.deps.logger?.warn("agent", "Failed to read session for subagent derivation", {
+				sessionPath,
+				error: error instanceof Error ? error.message : String(error),
+			});
+			return [];
 		}
 		return deriveToolSubagentEntries(rawEntries);
 	}
@@ -1404,7 +1629,7 @@ export class SessionHistoryReader {
 	async readTodoSnapshot(sessionPath: string): Promise<SessionTodoSnapshot | undefined> {
 		const index = await this.getSessionDisplayIndex(sessionPath);
 		// 从尾部向前找，避免读出全部 custom 行只为取最后一条
-		const customEntries = [...index.activeBranch].reverse().filter((entry) => entry.type === "custom");
+		const customEntries = [...index.activeBranch].reverse().filter((entry) => entry.type === "custom" && !entry.oversized);
 		for (const entry of customEntries) {
 			const rawLines = await this.readIndexedRawLines(index.hostPath, [entry]);
 			const parsed = rawLines[0];

@@ -23,9 +23,13 @@ test("agent startup writes diagnostics across renderer IPC and pi launch boundar
 	assert.match(mainSource, /Agent get_state request start/);
 	assert.match(mainSource, /handshakePiProcess/);
 	assert.match(mainSource, /retrying without extensions/);
-	// 启动/重连路径的 get_state 必须吃用户配置的 rpcTimeout（而非默认 30s 硬编码），
-	// 否则慢启动场景超时后，诊断卡“调大 RPC 超时”的指引对启动无效（误导）
-	assert.match(mainSource, /client\.request\(\{ type: "get_state" \}, this\.rpcTimeoutMs\)/);
+	// 启动握手（首次 get_state）必须用专用超时（90s 上限），不吃给长任务的 rpcTimeout：
+	// 沿用它会让「进程活着但不就绪」静默等满 10 分钟——现场表现是「不返回失败，直接超时」，
+	// 超时前既没有回退也没有诊断。真正的启动失败（spawn 失败/进程 exit）由 PiProcess 立即终结，
+	// 毫秒级返回，不等超时。长任务路径仍吃用户配置。
+	assert.match(mainSource, /client\.request\(\{ type: "get_state" \}, this\.startupHandshakeTimeoutMs\)/);
+	assert.match(mainSource, /get startupHandshakeTimeoutMs\(\): number/);
+	assert.match(mainSource, /STARTUP_HANDSHAKE_TIMEOUT_MS = 90_000/);
 	assert.match(mainSource, /get rpcTimeoutMs\(\): number/);
 	assert.match(mainSource, /this\.settingsStore\.get\(\)\.rpcTimeout/);
 	assert.match(mainSource, /Prompt RPC request started/);

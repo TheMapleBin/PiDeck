@@ -29,6 +29,8 @@ export type DshRuntimeInstallerDeps = {
 	indexUrl: () => string;
 	/** 当前更新源：用于把索引里的归档文件名改写成 latest 资产 URL。 */
 	updateSource?: () => UpdateSourceId;
+	/** runtime 索引对应的应用 Release tag；省略时使用 latest。 */
+	releaseTag?: () => string | undefined;
 	appVersion: () => string;
 	fetchIndex: DshRuntimeIndexFetcher;
 	onProgress: (progress: DshRuntimeInstallProgress) => void;
@@ -62,8 +64,8 @@ export class DshRuntimeInstaller {
 	/**
 	 * 安装与当前 app 兼容的 runtime。
 	 *
-	 * 优先用随包资源：它是打包时就放在 resources/ 里的同一份归档，本地解压即可，
-	 * 不需要网络也不需要等下载。没有随包资源（lite 包）才走在线索引。
+	 * 官方 dev/lite 路径不依赖 app 内部 node_modules：默认从与应用 Release 同源的索引
+	 * 下载。只有显式 full/存量包注入 bundledRuntime 时才本地解压，作为离线与旧包兼容兜底。
 	 * 索引里没有兼容版本时不下载（避免下完才发现装不上，白耗几十 MB 流量）。
 	 */
 	async installFromIndex(): Promise<DshRuntimeCommandResult> {
@@ -118,6 +120,7 @@ export class DshRuntimeInstaller {
 			deps.updateSource?.() ?? "atomgit",
 			process.platform,
 			process.arch,
+			deps.releaseTag?.(),
 		);
 		const result = await deps.manager.installFromUrl(archiveUrl, release.sha256, {
 			onPhase: (phase) => {

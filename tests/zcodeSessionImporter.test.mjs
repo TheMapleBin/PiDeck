@@ -33,11 +33,15 @@ function loadTranspiled(sourcePath, sandbox) {
 
 function loadImporter(homePath) {
 	const importCopy = loadTranspiled("src/main/sessions/SessionImportCopy.ts", { exports: {} });
+	const toolArgs = loadTranspiled("src/main/sessions/importToolArguments.ts", { exports: {} });
+	const normalize = loadTranspiled("src/main/sessions/importNormalize.ts", { exports: {} });
 	const sandbox = {
 		exports: {},
 		require: (id) => {
 			if (id === "electron") return { app: { getPath: () => homePath } };
 			if (id === "./SessionImportCopy") return importCopy;
+			if (id === "./importToolArguments") return toolArgs;
+			if (id === "./importNormalize") return normalize;
 			return require(id);
 		},
 		process,
@@ -346,6 +350,7 @@ test("zcode import: 生成可被 pi 读取的 JSONL（消息/工具/图片/标�
 		assert.equal(toolCall.id, "call_abc123");
 		assert.equal(toolCall.name, "Bash");
 		assert.deepEqual(toolCall.arguments, { command: "ls", description: "列目录" });
+		assert.equal(asstMsg.message.stopReason, "toolUse");
 
 		// toolResult：紧跟 assistant 之后，输出与 isError 正确
 		const resultMsgs = lines.filter((l) => l.type === "message" && l.message.role === "toolResult");
@@ -508,6 +513,8 @@ function loadZCodeScanner(homePath) {
 	const sessionIdentity = loadScannedModule("src/shared/sessionIdentity.ts", new Map());
 	// SessionScanner 新增的自包含块折叠（纯函数、无依赖）：自定义 loader 需显式提供
 	const expandedRefBlocks = loadScannedModule("src/shared/expandedRefBlocks.ts", new Map());
+	// 会话 JSONL 流式行扫描器（只依赖 node:fs/promises）：自定义 loader 需显式提供
+	const jsonlLineStream = loadScannedModule("src/main/sessions/jsonlLineStream.ts", new Map());
 	const sandbox = {
 		AbortController,
 		AbortSignal,
@@ -524,6 +531,7 @@ function loadZCodeScanner(homePath) {
 			if (id === "./sessionNameLine") return loadZCodeSessionNameLineModule();
 			if (id === "../../shared/sessionIdentity") return sessionIdentity;
 			if (id === "../../shared/expandedRefBlocks") return expandedRefBlocks;
+			if (id === "./jsonlLineStream") return jsonlLineStream;
 			if (id === "../logging/sharedLogger") return { getAppLogger: () => null };
 			return require(id);
 		},

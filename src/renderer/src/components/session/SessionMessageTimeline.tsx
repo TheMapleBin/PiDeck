@@ -39,7 +39,6 @@ import { deriveTimelineRunActivity } from "./timeline/timelineRunActivity";
 import {
   canLoadSessionTimelineMore,
   deriveSessionSurfaceRuntime,
-  restoreTimelineAnchor,
   type SessionTimelineController,
 } from "../../hooks/useSessionTimelineController";
 import { t } from "../../i18n";
@@ -653,39 +652,28 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
   // 而不是一次性把整个历史窗口挂出来导致滚动条骤变。渲染期写 ref，
   // 与 ownerKeyRef 同模式；turnWindowActive 变化低频，不引发额外渲染。
   controller.windowExpandableRef.current = turnWindowActive;
-  // 窗口轮数变化（上滚 3→6→9、点按钮扩大）会在顶部插入内容，需补偿 scrollTop
-  // 保持视口内容不动；数据 prepend 的补偿由 controller 的 loadMoreAnchorRef 负责，
-  // 两者按「窗口轮数变化 / 数据变化」分工，不会同帧双重补偿。贴底时由引擎接管不补偿。
-  const turnWindowStateRef = useRef<{ windowed: boolean; height: number; turns: number }>({
+  // 窗口轮数变化（上滚 3→6→9、点按钮扩大）会在顶部插入内容。
+  // 钉的是扩窗前正在看的那一轮（controller.pinBrowseRow），不是整页 scrollHeight 差；
+  // 数据翻页也走同一钉行；Markdown/图片后增高由内容 ResizeObserver 继续补漂移。
+  const turnWindowStateRef = useRef<{ windowed: boolean; turns: number }>({
     windowed: false,
-    height: 0,
     turns: 0,
   });
-  const pinViewportAfterPrepend = controller.pinViewportAfterPrepend;
+  const pinBrowseRow = controller.pinBrowseRow;
   useLayoutEffect(() => {
-    const timeline = timelineRef.current;
-    if (!timeline) return;
     const prev = turnWindowStateRef.current;
-    const nextHeight = timeline.scrollHeight;
     if (
       prev.windowed &&
       prev.turns !== turnWindowTurns &&
-      nextHeight > prev.height &&
       !followingForTurnWindow
     ) {
-      // 所有窗口扩张都锚定当前视口：新内容只出现在上方，正在读的行不被推走。
-      // 顶部场景同样补偿，避免「加载后整屏往上跳」；按钮与滚动加载体验统一。
-      // 必须走 restoreAt：原生 scrollTop 不会解锁引擎，RO 会在 isAtBottom 时钉回底部。
-      pinViewportAfterPrepend(
-        restoreTimelineAnchor(timeline.scrollTop, nextHeight - prev.height),
-      );
+      pinBrowseRow();
     }
     turnWindowStateRef.current = {
       windowed: turnWindowActive,
-      height: nextHeight,
       turns: turnWindowTurns,
     };
-  }, [displayRuns, followingForTurnWindow, pinViewportAfterPrepend, timelineRef, turnWindowActive, turnWindowTurns]);
+  }, [displayRuns, followingForTurnWindow, pinBrowseRow, turnWindowActive, turnWindowTurns]);
   // 文件修改由 SessionView 提取最近一轮并放在 composer 上方；时间线只负责渲染消息。
   // 时间线里已有用户图片才解析模型目录：原生看图时气泡不能显示视觉桥「转换中」。
   const hasUserImages = useMemo(

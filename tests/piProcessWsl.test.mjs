@@ -70,6 +70,11 @@ function loadPiProcess(spawnCalls) {
 			if (id === "./PiLocator") return { PiLocator: FakePiLocator };
 			if (id === "../wsl/WslPaths") return paths;
 			if (id === "./piExtensionFilter") return extensionFilter;
+			// PiProcess 的 spawn 失败归因模块：vm 沙箱按 tests/ 相对路径解析，需显式登记。
+			if (id === "./piSpawnFailure") return require("../src/main/pi/piSpawnFailure.ts");
+			// killProcessTree：PiProcess 一直直接 import gitProcess，但本文件没跟上登记
+			// → 整个文件报 MODULE_NOT_FOUND（既有缺口，与本次改动无关）。
+			if (id === "../git/gitProcess") return require("../src/main/git/gitProcess.ts");
 			// 25fd516 起 PiProcess 引入内置扩展参数拼接；WSL 测试只关心路径转换，
 			// mock 为原样透传，避免 vm sandbox 的 require 按 tests/ 相对路径误解析。
 			if (id === "../extensions/builtInExtensions") {

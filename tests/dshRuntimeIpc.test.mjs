@@ -10,6 +10,7 @@ const mainEntry = readFileSync("src/main/index.ts", "utf8");
 const preload = readFileSync("src/preload/index.ts", "utf8");
 const browserApi = readFileSync("src/renderer/src/browserApi.ts", "utf8");
 const previewApi = readFileSync("src/renderer/src/previewApi.ts", "utf8");
+const runtimeStatus = readFileSync("src/main/dsh/runtime/DshRuntimeStatus.ts", "utf8");
 
 test("shared/ipc.ts 定义 dsh-runtime 通道（domain:action 命名）", () => {
 	assert.match(ipc, /dshRuntimeGetStatus:\s*"dsh-runtime:get-status"/);
@@ -40,6 +41,13 @@ test("new draft / anonymous 创建在 runtime 不可用时拒绝 dsh 后端", ()
 		2,
 		"两处创建入口都要有 dsh 专用门控",
 	);
+});
+
+test("runtime 状态服务与主进程装配不再按 dev 隐藏远程安装", () => {
+	// dev 必须验证与正式版相同的 Release 下载/解压链路；只能禁用项目
+	// node_modules 的 bundled 探测，不能再用 installEnabled=false 锁死安装入口。
+	assert.match(runtimeStatus, /installEnabled: true/);
+	assert.match(mainEntry, /\/\/ dev 不把项目 node_modules 当成「已安装 runtime」[\s\S]*?\(\) => false/);
 });
 
 test("main entry 把 runtime 状态服务注入 sessionIpc", () => {
