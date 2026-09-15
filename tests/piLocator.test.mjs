@@ -913,3 +913,91 @@ test("resolveArgCharBudget follows the actual launch channel instead of a worst-
 	}
 });
 
+/**
+ * 本地安装（node_modules/.bin/*.cmd）垫片：`"%dp0%\..\<包>\bin\<脚本>"`，入口通常无扩展名。
+ * 此前只认「%dp0%\node_modules\...」的全局形态，本地形态一律落回 cmd.exe——
+ * 用户看到命令行里有 cmd.exe 就会以为「改成 node 启动」没生效（现场误判）。
+ */
+function makeLocalBinShim(entryBody, entryRel = "node_modules/some-cli/bin/run") {
+	const root = join(tmpdir(), `pi-desktop-locator-local-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+	const binDir = join(root, "node_modules", ".bin");
+	mkdirSync(join(root, "node_modules", "some-cli", "bin"), { recursive: true });
+	mkdirSync(binDir, { recursive: true });
+	const piCmd = join(binDir, "pi.cmd");
+	writeFileSync(
+		piCmd,
+		[
+			"@ECHO off",
+			"SETLOCAL",
+			'CALL :find_dp0',
+			'IF EXIST "%dp0%\\node.exe" (',
+			'  SET "_prog=%dp0%\\node.exe"',
+			") ELSE (",
+			'  SET "_prog=node"',
+			")",
+			'endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & "%_prog%"  "%dp0%\\..\\some-cli\\bin\\run" %*',
+			"",
+		].join("\r\n"),
+		"utf8",
+	);
+	writeFileSync(join(root, entryRel), entryBody, "utf8");
+	return { root, binDir, piCmd, entry: join(root, entryRel) };
+}
+
+test("local node_modules/.bin shim with a node shebang is launched via node (not cmd.exe)", () => {
+	const { root, piCmd, entry } = makeLocalBinShim("#!/usr/bin/env node\nconsole.log('pi')\n");
+	try {
+		const { PiLocator } = loadPiLocatorModule("win32", { APPDATA: join(root, "Roaming") }, root);
+		const invocation = new PiLocator().createInvocation(piCmd, ["--mode", "rpc"]);
+
+		assert.equal(invocation.command, "node.exe", "同目录无 node.exe 时回退 PATH 上的 node");
+		eqDeep(invocation.args, [entry, "--mode", "rpc"]);
+		assert.equal(invocation.shell, false);
+		assert.equal(invocation.windowsVerbatimArguments, undefined, "node 直启不该走 cmd 的手工引号路径");
+		eqDeep(invocation.windowsLaunch, { channel: "node-direct", entry });
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("local .bin shim pointing at a non-node script stays on cmd.exe and reports why", () => {
+	// 无扩展名 + shebang 不是 node：不能当 JS 入口跑，必须留在 cmd.exe（由 shell 自己解释）。
+	const { root, piCmd } = makeLocalBinShim("#!/bin/sh\necho hi\n");
+	try {
+		const { PiLocator } = loadPiLocatorModule("win32", { APPDATA: join(root, "Roaming") }, root);
+		const invocation = new PiLocator().createInvocation(piCmd, ["--version"]);
+
+		assert.match(invocation.command.toLowerCase(), /cmd\.exe$/);
+		assert.equal(invocation.windowsLaunch.channel, "cmd-shim");
+		assert.match(invocation.windowsLaunch.reason ?? "", /JS 入口不存在/);
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("cmd.exe fallback carries a reason so 'why not node' is answerable from diagnostics", () => {
+	const { root, piCmd, entry } = makeNpmShimInstall();
+	rmSync(entry, { force: true });
+	try {
+		const { PiLocator } = loadPiLocatorModule("win32", { APPDATA: join(root, "Roaming") }, root);
+		const invocation = new PiLocator().createInvocation(piCmd, ["--version"]);
+		assert.equal(invocation.windowsLaunch.channel, "cmd-shim");
+		assert.match(invocation.windowsLaunch.reason ?? "", /nvm\/pnpm 切换版本后残留的旧垫片/);
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("a missing pi.cmd reports 'path does not exist' instead of a silent cmd fallback", () => {
+	const { root, piCmd } = makeNpmShimInstall();
+	rmSync(piCmd, { force: true });
+	try {
+		const { PiLocator } = loadPiLocatorModule("win32", { APPDATA: join(root, "Roaming") }, root);
+		const invocation = new PiLocator().createInvocation(piCmd, ["--version"]);
+		assert.equal(invocation.windowsLaunch.channel, "cmd-shim");
+		assert.match(invocation.windowsLaunch.reason ?? "", /pi 路径不存在/);
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+

@@ -13,11 +13,11 @@ export interface TextShimmerProps {
   duration?: number;
   className?: string;
   /**
-   * false 时退化为静态渐变文字（等于动画定格在某一帧，视觉几乎无差别）。
-   * 本动画动的是 background-position + bg-clip:text，高分辨率 × 高刷新率
+   * false 时退化为普通实色字，不保留 bg-clip-text 静态渐变。
+   * 扫光动的是 background-position + bg-clip:text：高分辨率 × 高刷新率
    * 窗口下每帧都触发整窗合成，常驻 infinite 循环实测空闲即占约 1 个 CPU
-   * 核心（GPU 进程为最大头）。因此只有「短暂播放」或「任务运行态才挂载」
-   * 的场景允许开启；常驻 UI（如品牌字标）必须传 false 或自行限时。
+   * 核心（GPU 进程为最大头）。关动画却仍挂 clip 渐变，Chromium 还会留一层
+   * 合成；休息态必须卸掉 clip。常驻 UI（品牌字标）只能短暂 enabled。
    */
   enabled?: boolean;
 }
@@ -31,14 +31,13 @@ export function TextShimmer({
 }: TextShimmerProps) {
   return (
     <>
-      <style>
-        {TEXT_SHIMMER_KEYFRAMES}
-      </style>
+      {enabled ? <style>{TEXT_SHIMMER_KEYFRAMES}</style> : null}
       <Comp
         style={enabled ? textShimmerStyle(duration) : undefined}
         className={cn(
           "inline-block",
-          TEXT_SHIMMER_CLASS_NAME,
+          // 休息态用实色字：bg-clip-text 即使 animation:none 也会让 Chromium 留合成层。
+          enabled ? TEXT_SHIMMER_CLASS_NAME : "text-foreground",
           className,
         )}
       >

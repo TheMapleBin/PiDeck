@@ -286,8 +286,6 @@ export function App() {
 
   // 项目的 git worktree 列表：{ parentId -> WorktreeEntry[] }
   const [pendingAgents, setPendingAgents] = useState<PendingAgentTab[]>([]);
-  /** 侧栏 π logo 重播令牌：agent 启动（含历史会话）/关闭时递增，驱动 BrandLockup 动画 */
-  const [brandLogoReplayToken, setBrandLogoReplayToken] = useState(0);
   const [activeProjectId, setActiveProjectId] = useState<string>();
   const activeProjectIdRef = useRef<string | undefined>(activeProjectId);
   activeProjectIdRef.current = activeProjectId;
@@ -2006,11 +2004,6 @@ export function App() {
     void api.sessions.setFocusedSession(currentSessionId).catch(() => undefined);
   }, [currentSessionId]);
 
-
-  // 侧栏 π logo 业务反馈：新建/历史会话启动/关闭 agent 时重播拼装动画。
-  const triggerBrandLogoReplay = useCallback(() => {
-    setBrandLogoReplayToken((token) => token + 1);
-  }, []);
 
   // 已删除内置 goal 完成检测。
 

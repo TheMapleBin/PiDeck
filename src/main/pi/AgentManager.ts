@@ -31,7 +31,7 @@ import type {
 	SessionTodoSnapshot,
 } from "../../shared/types";
 import { ipcChannels } from "../../shared/ipc";
-import { collectLatestTurnFileChanges } from "../../shared/fileChanges";
+import { collectSessionFileChanges } from "../../shared/fileChanges";
 import { PiProcess } from "./PiProcess";
 import { createCompactRpcRequest } from "./compactRpc";
 import { mergeSubagentSources } from "./derivedSubagents";
@@ -41,6 +41,7 @@ import { createPiProcessExtensionResolvers } from "../extensions/piProcessExtens
 import { createPiProcessSkillResolvers } from "../skills/piProcessSkillResolvers";
 import { createPiProcessPromptResolvers } from "../prompts/piProcessPromptResolvers";
 import {
+	describeExtensionFallbackSkip,
 	formatExtensionFallbackDebug,
 	shouldRetryWithoutExtensions,
 } from "./extensionStartupFallback";
@@ -466,12 +467,29 @@ export class AgentManager {
 
 	/**
 	 * 用户配置的 RPC 超时（默认 600s，SettingsStore 另有「低于 600s 自动提升」保险）。
-	 * 发送消息与启动/重连等用户可感知的等待路径统一吃该配置，
+	 * 发送消息等用户可感知的长任务等待路径统一吃该配置，
 	 * 与启动诊断卡里的指引（“Increase the RPC timeout in settings”）保持一致，
 	 * 避免用户调大配置却只对 prompt 生效、启动仍按硬编码 30s 超时的误导。
 	 */
 	private get rpcTimeoutMs(): number {
 		return this.settingsStore.get().rpcTimeout;
+	}
+
+	/**
+	 * 启动握手（首次 get_state）的等待上限。
+	 *
+	 * 为什么不再直接吃 rpcTimeout：那是给长任务（长 bash、大模型调用）的配置，默认 600s。
+	 * 启动路径沿用它，会让「进程起来了但永远不就绪」（扩展初始化卡死、会话文件异常巨大）
+	 * 从确定性故障退化成 10 分钟静默——用户看到的就是「启动失败不报错、直接超时」，
+	 * 而且超时前不会触发任何回退（扩展禁用重试）或诊断。
+	 * 取 min 保留「用户把 rpcTimeout 调小就少等」的语义（设置项本身会被抬到 ≥600s，
+	 * 因此实际生效值就是本常量）。
+	 */
+	private static readonly STARTUP_HANDSHAKE_TIMEOUT_MS = 90_000;
+
+	/** 启动握手实际超时：rpcTimeout 与启动上限取小（见 STARTUP_HANDSHAKE_TIMEOUT_MS）。 */
+	private get startupHandshakeTimeoutMs(): number {
+		return Math.min(this.rpcTimeoutMs, AgentManager.STARTUP_HANDSHAKE_TIMEOUT_MS);
 	}
 
 	constructor(
@@ -653,15 +671,27 @@ export class AgentManager {
 				const diag = failed?.getDiagnostics();
 				const rawMessage = firstError instanceof Error ? firstError.message : String(firstError);
 				const alreadyNoExtensions = Boolean(this.settingsStore.get().piRpcNoExtensions);
-				if (
-					!shouldRetryWithoutExtensions({
-						alreadyNoExtensions,
-						stderr: diag?.stderr.join("") ?? "",
-						errorMessage: rawMessage,
-						exitCode: diag?.exitCode,
-						processStillRunning: failed?.isRunning() ?? false,
-					})
-				) {
+				const fallbackInput = {
+					alreadyNoExtensions,
+					stderr: diag?.stderr.join("") ?? "",
+					errorMessage: rawMessage,
+					exitCode: diag?.exitCode,
+					processStillRunning: failed?.isRunning() ?? false,
+					// spawn 阶段失败（Node 只发 error、不发 exit）：一定与扩展无关，回退无意义。
+					// 没有这个显式判据时，spawn 失败只能靠错误文本里的 ENOENT 兜底识别，容易被改写漏掉。
+					spawnFailed: diag?.spawnFailed === true,
+				};
+				if (!shouldRetryWithoutExtensions(fallbackInput)) {
+					// 不回退也要把原因写清楚，否则用户会以为「说好的自动禁用扩展」失效了。
+					void this.appLogger?.warn("agent", "Pi start failed; extension fallback skipped", {
+						agentId,
+						error: rawMessage,
+						exitCode: diag?.exitCode ?? null,
+						spawnFailed: diag?.spawnFailed === true,
+						cwdMissing: diag?.cwdMissing === true,
+						processStillRunning: fallbackInput.processStillRunning,
+						reason: describeExtensionFallbackSkip(fallbackInput),
+					});
 					throw firstError;
 				}
 
@@ -742,8 +772,14 @@ export class AgentManager {
 			onExit: options.onExit,
 		});
 		const client = await process.start(options.sessionPath, options.trustOverride, options.noSession);
-		void this.appLogger?.info("agent", "Agent get_state request start", { agentId });
-		const state = await client.request({ type: "get_state" }, this.rpcTimeoutMs);
+		void this.appLogger?.info("agent", "Agent get_state request start", {
+			agentId,
+			timeoutMs: this.startupHandshakeTimeoutMs,
+		});
+		// 启动握手用专用超时（90s 上限），不吃用户给长任务配置的 rpcTimeout：
+		// 否则「进程活着但不就绪」要静默等满 10 分钟才报错（见 startupHandshakeTimeoutMs）。
+		// 真正的启动失败（spawn 失败 / 进程 exit）由 PiProcess 立即终结 client，毫秒级返回，不等超时。
+		const state = await client.request({ type: "get_state" }, this.startupHandshakeTimeoutMs);
 		return { client, process, state };
 	}
 
@@ -981,6 +1017,26 @@ export class AgentManager {
 			await this.sessionHistoryReader.readSessionDisplayMessages(sessionPath, agentId, sessionContent),
 		);
 	}
+
+	/**
+	 * 「加载窗口」内的历史消息（有界）+ total/windowStart。
+	 *
+	 * 供 Web 的整量读入口使用：与桌面启动/重载时的窗口口径一致（9 轮 + 条目预算），
+	 * 而不是把整份历史一次吐出——大会话全量下发会同时顶爆主进程与渲染层（#213）。
+	 * 需要更早历史走轮次分页（readSessionDisplayTurnPage / Web 的 /messages/page）。
+	 */
+	async readSessionLoadWindow(
+		sessionPath: string,
+		agentId = "_viewer",
+	): Promise<{ messages: ChatMessage[]; total: number; windowStart: number }> {
+		const window = await this.sessionHistoryReader.readLoadWindow(
+			sessionPath,
+			agentId,
+			AgentManager.DISPLAY_WINDOW_TURNS,
+			AgentManager.MAX_DISPLAY_WINDOW_ENTRIES,
+		);
+		return { ...window, messages: stripToolResultForDelivery(window.messages) };
+	}
 	/**
 	 * 读取会话文件中的子代理记录（subagents:record custom 条目），并合并
 	 * 工具调用推导条目（acp_delegate：billion-context；subagent 工具：nicobailon
@@ -995,15 +1051,21 @@ export class AgentManager {
 
 
 	/**
-	 * 最新一轮文件修改汇总：从会话显示消息中取「最后一个 user 消息之后」的
-	 * 消息聚合 write/edit/create/patch（与渲染层 TimelineFormat 共用
-	 * shared/fileChanges 解析，历史/活会话通用）。
+	 * 最新一轮文件修改汇总：从会话文件中取「最后一个可展示 user 消息之后」的消息
+	 * 聚合 write/edit/create/patch（与渲染层 TimelineFormat 共用 shared/fileChanges
+	 * 解析，历史/活会话通用）。
 	 *
 	 * 为什么只取最新一轮：composer 上方「修改的文件」横栏的语义是「这次
 	 * 提问后 agent 动了哪些文件」，累计全量会让历史轮次文件长期堆积。
+	 *
+	 * 为什么不再走 readSessionDisplayMessages：它是「读整条活动分支 → 投影 → 再切
+	 * 最后一轮」，近 1 GiB 的会话会因此被全量展开一次（主进程堆直接爆）。
+	 * 现在由 SessionHistoryReader.readFileChangeMessages 做有界读（见其注释）。
 	 */
 	async readSessionFileChanges(sessionPath: string): Promise<SessionFileChange[]> {
-		return collectLatestTurnFileChanges(await this.readSessionDisplayMessages(sessionPath, "_viewer"));
+		return collectSessionFileChanges(
+			await this.sessionHistoryReader.readFileChangeMessages(sessionPath, "_viewer"),
+		);
 	}
 
 	/**
@@ -4194,6 +4256,11 @@ export class AgentManager {
 			return `⚠️ Pi RPC 启动失败\n\n${rawMessage}\n\nplatform=${globalThis.process.platform} arch=${globalThis.process.arch}`;
 		}
 		const lines: string[] = [];
+		if (diag.spawnFailed) {
+			// spawn 阶段失败：结论先行。否则用户被 "spawn C:\Windows\system32\cmd.exe ENOENT"
+			// 引去查 cmd.exe/PATH/杀毒软件，而真实原因往往在工作目录或 pi 路径。
+			lines.push("失败阶段: 进程未启动（spawn 失败；此时扩展根本没被加载，与扩展无关）");
+		}
 		if (diag.exitCode !== null) {
 			lines.push(`退出码: ${diag.exitCode}${diag.exitSignal ? ` (signal: ${diag.exitSignal})` : ""}`);
 		}
@@ -4205,8 +4272,34 @@ export class AgentManager {
 		lines.push(`pi 路径: ${diag.command}`);
 		if (diag.customPiPath) lines.push(`自定义路径: ${diag.customPiPath}`);
 		lines.push(`工作目录: ${diag.cwd}`);
-		lines.push(`版本检测: ${diag.versionCheck ? "✓ 通过" : "✗ 失败"}`);
+		if (diag.cwdMissing) {
+			lines.push(
+				"工作目录状态: ✗ 不存在 —— 这才是上面 spawn ENOENT 的真实原因" +
+					"（Windows 会把「工作目录无效」误报成 cmd.exe 找不到，pi/cmd.exe 本身没问题）",
+			);
+		}
+		// 「✗ 失败」只在真的探过 pi --version 时才成立；没探过就说没探过，
+		// 否则用户会被引去重装 pi（现场：真正原因其实是工作目录没了）。
+		const versionCheckFailed = diag.versionCheckProbed !== false && !diag.versionCheck;
+		lines.push(
+			`版本检测: ${
+				diag.versionCheckProbed === false
+					? "未完成（未拿到 pi --version 结果，不代表失败）"
+					: diag.versionCheck
+						? "✓ 通过"
+						: "✗ 失败"
+			}`,
+		);
 		lines.push(`运行环境: ${globalThis.process.platform}/${globalThis.process.arch}`);
+		if (diag.launch && diag.launch.channel === "cmd-shim") {
+			// 「pi 不是改成 node 启动了吗」——把通道与回退原因写进卡片，免得命令行里的 cmd.exe 被当成回归。
+			lines.push(
+				`启动通道: cmd.exe 回退${diag.launch.reason ? `（原因：${diag.launch.reason}）` : ""}` +
+					"（node 直启需要 npm 生成的 pi.cmd 垫片与其中的 JS 入口都存在）",
+			);
+		} else if (diag.launch?.channel === "node-direct") {
+			lines.push("启动通道: node 直启（已还原 JS 入口，无 cmd.exe 中间层）");
+		}
 		if (diag.blockedExtensions && diag.blockedExtensions.length > 0) {
 			// 桌面端已自动隔离的扩展（如 codeisland），方便用户对照「为何 RPC 没加载该扩展」。
 			lines.push(`已自动隔离扩展: ${diag.blockedExtensions.join(", ")}`);
@@ -4221,7 +4314,11 @@ export class AgentManager {
 		}
 		lines.push("");
 		lines.push("━━━ 排查步骤 ━━━");
-		if (!diag.versionCheck) {
+		if (diag.cwdMissing) {
+			lines.push("1. 确认上面的工作目录是否真的存在（被移动/重命名/删除，或所在磁盘/网络盘未挂载）");
+			lines.push("2. 目录不存在时 pi 无法以该目录为工作目录启动，与 pi 是否安装无关");
+			lines.push("3. 在 PiDeck 中重新指定该项目的目录后重启会话");
+		} else if (versionCheckFailed) {
 			lines.push("1. 在终端执行 pi --version，确认 pi 是否已安装且路径正确");
 			lines.push("2. 如未安装，执行 npm install -g @earendil-works/pi-coding-agent");
 			lines.push("3. macOS 若从 Dock 启动，可在设置中填写完整 pi 路径（Homebrew 常见 /opt/homebrew/bin/pi）");
@@ -4229,8 +4326,12 @@ export class AgentManager {
 			lines.push("1. 在终端执行 pi --mode rpc 看是否能正常启动");
 			lines.push("2. 注意终端中的错误信息（架构不匹配/权限/扩展崩溃都会体现在这里）");
 		} else if (!stderrText && diag.exitCode === null) {
-			lines.push("1. 桌面端已自动重试 get_state，但 pi 仍未响应。");
-			lines.push("2. 在终端执行 pi --mode rpc 看是否能正常启动，注意终端中的错误信息");
+			// 进程还活着但不响应握手：与「进程没起来」是两类问题，别让用户反复重装 pi。
+			lines.push(
+				`1. pi 进程已启动，但 ${Math.round(this.startupHandshakeTimeoutMs / 1000)} 秒内未响应 get_state（进程仍存活，不是崩溃）。`,
+			);
+			lines.push("2. 常见原因：某个扩展在初始化阶段卡住、会话文件异常巨大、pi 在等待网络。");
+			lines.push("3. 在终端执行 pi --mode rpc 看是否能正常启动，注意终端中的错误信息");
 		} else {
 			lines.push("1. 在终端执行 pi --mode rpc 确认 pi 能否正常启动");
 			lines.push("2. 检查设置中的 pi 路径是否正确");
@@ -4250,12 +4351,31 @@ export class AgentManager {
 					.join("、")}`,
 			);
 			lines.push("若仍失败，更可能是 pi 本体/路径/会话文件问题，而不是扩展加载。");
+		} else if (diag.spawnFailed) {
+			// 进程都没起来，扩展压根没被加载：让用户去关扩展只是白跑一趟。
+			lines.push("本次失败发生在 pi 进程启动之前（扩展尚未加载），不需要在这里排查扩展/技能。");
 		} else {
 			lines.push("若怀疑某个扩展或技能导致启动失败：");
 			lines.push("1. 打开 设置 → 开发设置");
 			lines.push("2. 临时开启「禁用扩展启动」和/或「禁用技能启动」");
 			lines.push("3. 保存后重新启动 Agent 验证");
 			lines.push("若禁用后能启动，再逐个排查 ~/.pi/agent/extensions 与 skills。");
+		}
+		// 解释「为什么这次没有自动用 --no-extensions 重试」：用户预期启动失败会自动回退，
+		// 缺了这句就会被当成回退功能没生效（现场反馈即如此）。
+		const fallbackSkip = describeExtensionFallbackSkip({
+			alreadyNoExtensions: noExt,
+			stderr: stderrText,
+			errorMessage: rawMessage,
+			exitCode: diag.exitCode,
+			spawnFailed: diag.spawnFailed === true,
+			// 能走到诊断卡且未被判定为 spawn 失败、也没有退出码 ⇒ 进程当时仍存活（握手超时）
+			processStillRunning: diag.spawnFailed !== true && diag.exitCode === null,
+		});
+		if (fallbackSkip) {
+			lines.push("");
+			lines.push("━━━ 扩展回退 ━━━");
+			lines.push(`本次未自动用 --no-extensions 重试：${fallbackSkip}`);
 		}
 		lines.push("");
 		lines.push("如问题持续，可在 GitHub 提交 Issue 并附上以上信息与应用日志。");

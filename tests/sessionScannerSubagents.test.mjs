@@ -169,6 +169,8 @@ function loadSessionScanner(homePath, fsOverrides = {}) {
 	const sessionIdentity = loadTranspiledModule("src/shared/sessionIdentity.ts");
 	// SessionScanner 新增的自包含块折叠（无依赖纯函数）
 	const expandedRefBlocks = loadTranspiledModule("src/shared/expandedRefBlocks.ts");
+	// 会话 JSONL 流式行扫描器（只依赖 node:fs/promises，测试注入真实实现）
+	const jsonlLineStream = loadTranspiledModule("src/main/sessions/jsonlLineStream.ts");
 	const sandbox = {
 		AbortController,
 		AbortSignal,
@@ -187,6 +189,7 @@ function loadSessionScanner(homePath, fsOverrides = {}) {
 			if (id === "./sessionNameLine") return loadSessionNameLineModule();
 			if (id === "../../shared/sessionIdentity") return sessionIdentity;
 			if (id === "../../shared/expandedRefBlocks") return expandedRefBlocks;
+			if (id === "./jsonlLineStream") return jsonlLineStream;
 			// sharedLogger 未注册时 getAppLogger 返回 null，SessionScanner 埋点静默跳过
 			if (id === "../logging/sharedLogger") return { getAppLogger: () => null };
 			if (id === "node:fs") return { ...require(id), ...fsOverrides };

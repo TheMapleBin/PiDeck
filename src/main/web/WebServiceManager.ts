@@ -75,7 +75,17 @@ type WebServiceDependencies = {
 	readSessionReferenceMessages: (
 		sessionId: string,
 	) => Promise<Array<{ role: string; content: string; timestamp: number }>>;
-	readSessionMessages: (sessionId: string) => Promise<ChatMessage[]>;
+	/**
+	 * 整量读入口（有界）：只返回「加载窗口」内的消息 + total/windowStart/truncated。
+	 * 全量历史请用 readSessionMessagePage 翻页——大会话一次全量下发会同时顶爆
+	 * 主进程与渲染层（#213）。
+	 */
+	readSessionMessages: (sessionId: string) => Promise<{
+		messages: ChatMessage[];
+		total: number;
+		windowStart: number;
+		truncated: boolean;
+	}>;
 	readSessionMessagePage: (
 		sessionId: string,
 		before?: number,
@@ -589,10 +599,17 @@ export class WebServiceManager {
 			}
 			const sessionMessagesMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/messages$/);
 			if (sessionMessagesMatch && request.method === "GET") {
-				const messages = await this.deps.readSessionMessages(
+				// 有界窗口（total/windowStart/truncated 一并下发，客户端据 nextBefore 走
+				// /messages/page 翻更早历史），不再一次性吐出整份历史。
+				const window = await this.deps.readSessionMessages(
 					decodeURIComponent(sessionMessagesMatch[1]),
 				);
-				this.sendJson(response, { messages });
+				this.sendJson(response, {
+					messages: window.messages,
+					total: window.total,
+					windowStart: window.windowStart,
+					truncated: window.truncated,
+				});
 				return;
 			}
 			const sessionPromptMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/prompt$/);

@@ -119,6 +119,18 @@ export function stripAnsi(text: string): string {
 	return text.replace(ANSI_RE, "");
 }
 
+/**
+ * 文件修改类工具名（write / edit / create / patch）：产出 diff 目标的工具集合。
+ *
+ * 单一口径：聚合侧（getToolDiffTarget）与读取侧的「预判要不要把这一行读进内存」
+ * （SessionHistoryReader.isFileChangeSource）共用本判定，避免两处正则各写一份漂移。
+ */
+export const FILE_CHANGE_TOOL_RE = /write|edit|create|patch/i;
+
+export function isFileChangeToolName(toolName: string): boolean {
+	return FILE_CHANGE_TOOL_RE.test(toolName);
+}
+
 export function getToolName(message: ChatMessage): string {
 	const fromMeta = message.meta?.toolName;
 	if (typeof fromMeta === "string" && fromMeta.trim()) return fromMeta;
@@ -135,7 +147,7 @@ export function getToolDiffTarget(
 	message: ChatMessage,
 ): { path: string; originalContent: string; content: string; changedLines: number } | undefined {
 	const toolName = getToolName(message);
-	if (!/write|edit|create|patch/i.test(toolName)) return undefined;
+	if (!isFileChangeToolName(toolName)) return undefined;
 	const args = parseToolArgs(message.meta?.args);
 	const path = getToolFilePath(args);
 	if (!args || !path) return undefined;

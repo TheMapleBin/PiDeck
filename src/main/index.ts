@@ -3753,15 +3753,17 @@ app.whenReady().then(async () => {
 			readCatalogSessionReferenceMessages(sessionId),
 		readSessionMessages: async (sessionId) => {
 			const entry = sessionCatalog.get(sessionId);
-			// DSH 会话没有 pi 会话文件：全量读走 host 历史事件流（一次拉最大页），
-			// 与分页路径同源；未挂载 DSH 后端时返回空数组。
+			// DSH 会话没有 pi 会话文件：读 host 历史事件流的一页（有界），
+			// 与分页路径同源；未挂载 DSH 后端时返回空窗口。
 			if (entry?.backend === "dsh" && entry.dshSessionId && dshAgentManager) {
 				const page = await dshAgentManager.readHistoryPage(entry.dshSessionId, undefined, 1000);
-				return page.messages;
+				return { messages: page.messages, total: page.total, windowStart: 0, truncated: false };
 			}
-			if (!entry?.filePath) return [];
-			const content = await sessionScanner.readSessionRawText(entry.filePath);
-			return agentManager.readSessionDisplayMessages(entry.filePath, sessionId, content);
+			if (!entry?.filePath) return { messages: [], total: 0, windowStart: 0, truncated: false };
+			// 有界加载窗口（9 轮 + 条目预算），不是全量历史：全量下发在大会话上会同时顶爆
+			// 主进程与渲染层（#213）。更早历史请走分页接口（Web：/messages/page）。
+			const window = await agentManager.readSessionLoadWindow(entry.filePath, sessionId);
+			return { ...window, truncated: window.windowStart > 0 };
 		},
 		readSessionMessagePage: async (sessionId, before, pageSize) => {
 			const entry = sessionCatalog.get(sessionId);

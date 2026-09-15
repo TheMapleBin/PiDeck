@@ -137,7 +137,12 @@ function fixture(overrides = {}) {
 		readSessionReferenceMessages: async () => [
 			{ role: "user", content: "reference", timestamp: 1 },
 		],
-		readSessionMessages: async () => [],
+		readSessionMessages: async () => ({
+			messages: [{ id: "w1", role: "assistant", text: "window", timestamp: 1 }],
+			total: 42,
+			windowStart: 30,
+			truncated: true,
+		}),
 		readSessionMessagePage: async () => ({ messages: [], total: 0, nextBefore: null }),
 		sendSessionPrompt: async (input) => {
 			calls.send.push(input);
@@ -477,6 +482,18 @@ test("historical message pages stay Session-addressed and bounded", async () => 
 			total: 3,
 			nextBefore: before === 3 ? 1 : null,
 		}),
+	});
+});
+
+test("whole-history read endpoint returns a bounded window with truncation metadata", async () => {
+	// 大会话整量读会同时顶爆主进程与渲染层（#213）：/messages 必须是「加载窗口」，
+	// 并显式告诉客户端被截断、窗口起点在哪，翻更早历史走 /messages/page。
+	await withServer(async ({ baseUrl }) => {
+		const body = await (await fetch(`${baseUrl}/api/sessions/session-1/messages`)).json();
+		assert.equal(body.messages[0].text, "window");
+		assert.equal(body.total, 42);
+		assert.equal(body.windowStart, 30);
+		assert.equal(body.truncated, true);
 	});
 });
 

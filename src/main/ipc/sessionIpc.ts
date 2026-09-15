@@ -34,7 +34,7 @@ import type {
 	ResolvedLaunchDefaults,
 	ArchivedDshSession,
 } from "../../shared/types";
-import { parseSessionProcessEvents } from "../sessions/sessionProcessEvents";
+import { parseSessionProcessEventsFromFile } from "../sessions/sessionProcessEventsFile";
 import { downgradeRunningStartedBefore, downgradeStaleRunning } from "../pi/derivedSubagents";
 import { resolveLaunchDefaultOptions, isModelInModelsConfig } from "../sessions/launchDefaults";
 import { BackgroundScanCoordinator } from "../sessions/BackgroundScanCoordinator";
@@ -895,7 +895,10 @@ export function registerSessionIpc(deps: SessionIpcDeps): void {
 				return (await readImageSessionMessages?.(sessionId)) ?? [];
 			}
 			if (!entry?.filePath) return [];
-			const messages = await agentManager.readSessionDisplayMessages(entry.filePath, sessionId);
+			// 有界「加载窗口」（9 轮 + 条目预算），不是全量历史：整量读出在大会话上
+			// 会同时顶爆主进程与渲染层（#213）；需要更早历史走 readRecordMessagePage。
+			const window = await agentManager.readSessionLoadWindow(entry.filePath, sessionId);
+			const messages = window.messages;
 			const metadata = await agentManager.readSessionDisplayMetadata(entry.filePath);
 			await backfillHistoricalSessionMetadata(sessionId, metadata);
 			return messages;
@@ -946,7 +949,10 @@ export function registerSessionIpc(deps: SessionIpcDeps): void {
 			return records;
 		},
 	);
-	/** 会话级文件修改汇总：从会话文件全量显示消息聚合（历史/活会话通用）。 */
+	/**
+	 * 会话级文件修改汇总：只读会话文件「最新一轮」的 write/edit/create/patch
+	 * （有界读，不展开整条活动分支；历史/活会话通用）。
+	 */
 	ipcMain.handle(
 		ipcChannels.sessionsListFileChanges,
 		async (_event, sessionId: string) => {
@@ -1053,11 +1059,12 @@ export function registerSessionIpc(deps: SessionIpcDeps): void {
 				const target = sessionRuntimeCoordinator.getTarget(sessionId);
 				return readDshProcessEvents(target?.agentId, entry.dshSessionId);
 			}
-			if (!entry?.filePath) return [];
-			const content = await sessionScanner.readSessionRawText(entry.filePath);
-			return parseSessionProcessEvents(content);
-		},
-	);
+		if (!entry?.filePath) return [];
+		// 流式扫描（收够 MAX_EVENTS 即停）：历史大会话读全文会撞 V8 单字符串上限 /
+		// 主进程 384MB 堆上限（闪退），而账本只需要前若干条记录。
+		return parseSessionProcessEventsFromFile(entry.filePath);
+	},
+);
 	ipcMain.handle(
 		ipcChannels.sessionsCatalogReadDshSystemPrompt,
 		async (_event, sessionId: string): Promise<string | undefined> => {

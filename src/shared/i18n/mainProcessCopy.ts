@@ -87,6 +87,8 @@ export const mainProcessZhCN = {
 	"session.untitled": "未命名会话",
 	"session.emptyPreview": "空会话",
 	"session.copyTitle": "{title} 副本",
+	// 整文件读入前的体量护栏（大会话一次性读成字符串会终止主进程，见 jsonlLineStream）
+	"session.fileTooLargeForWholeRead": "会话文件过大（{sizeMb}MB，超过 {limitMb}MB 整读上限），该操作已取消以免应用崩溃。",
 	// fork/clone 产物物理命名后缀：属于会话名的一部分（重命名可删除），展示层不再拼装。
 	"session.forkedSuffix": "(fork)",
 	"session.historyTitle": "{project} 历史会话",
@@ -318,6 +320,8 @@ export const mainProcessEnUS: Record<MainProcessTranslationKey, string> = {
 	"session.untitled": "Untitled session",
 	"session.emptyPreview": "Empty session",
 	"session.copyTitle": "{title} copy",
+	// Whole-file read guard (a huge session read into one string aborts the main process).
+	"session.fileTooLargeForWholeRead": "This session file is too large ({sizeMb}MB, over the {limitMb}MB whole-read limit); the operation was cancelled to avoid crashing the app.",
 	// Physical suffix appended to fork/clone session titles: part of the real name (removable by rename).
 	"session.forkedSuffix": "(fork)",
 	"session.historyTitle": "{project} history",

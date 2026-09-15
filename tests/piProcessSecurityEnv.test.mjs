@@ -109,6 +109,11 @@ function loadPiProcess(
 				};
 			}
 			if (id === "../wsl/WslPaths") return wslPaths;
+			// PiProcess 的 spawn 失败归因模块：vm 沙箱按 tests/ 相对路径解析，需显式登记。
+			if (id === "./piSpawnFailure") return require("../src/main/pi/piSpawnFailure.ts");
+			// killProcessTree（stop() 在 Windows 上的整树强杀）：PiProcess 一直直接 import
+			// gitProcess，但本文件没跟上登记 → 整个文件报 MODULE_NOT_FOUND（既有缺口，与本次改动无关）。
+			if (id === "../git/gitProcess") return require("../src/main/git/gitProcess.ts");
 			if (id === "../extensions/builtInExtensions") {
 				return { appendBuiltInExtensionArgs: (args) => args };
 			}

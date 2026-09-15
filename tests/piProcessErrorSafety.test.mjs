@@ -58,8 +58,11 @@ function loadPiProcess(spawnImpl) {
 					spawn: spawnImpl,
 				};
 			}
-			if (id === "./PiRpcClient") return { PiRpcClient: FakeRpcClient };
-			if (id === "./PiLocator") return { PiLocator: FakePiLocator };
+		if (id === "./PiRpcClient") return { PiRpcClient: FakeRpcClient };
+		if (id === "./PiLocator") return { PiLocator: FakePiLocator };
+		// PiProcess 的 spawn 失败归因模块（cwd 不存在会被误报成 cmd.exe ENOENT）：
+		// vm 沙箱不会自动解析相对模块，新增拆分模块必须在这里登记。
+		if (id === "./piSpawnFailure") return require("../src/main/pi/piSpawnFailure.ts");
 			if (id === "../wsl/WslPaths") return paths;
 			if (id === "./piExtensionFilter") return extensionFilter;
 			// 25fd516 起 PiProcess 引入内置扩展参数拼接；本测试只关心 spawn 错误转发，
@@ -137,7 +140,12 @@ test("PiProcess forwards spawn error to business listeners after start returns",
 	child.emit("error", Object.assign(new Error("spawn EACCES"), { code: "EACCES" }));
 	await new Promise((resolve) => setImmediate(resolve));
 
-	assert.deepEqual(seen, ["spawn EACCES"]);
+	// 转发契约不变（业务侧仍能收到 error），但 spawn 失败会附加可读原因；
+	// 原始 errno 文本必须保留在里面，日志/Issue 仍可按 EACCES/ENOENT 检索。
+	assert.equal(seen.length, 1);
+	assert.match(seen[0], /spawn EACCES/);
+	assert.match(seen[0], /没有权限启动/);
+	assert.equal(pi.isRunning(), false);
 });
 
 test("AgentManager attaches lifecycle listeners before process.start", () => {
