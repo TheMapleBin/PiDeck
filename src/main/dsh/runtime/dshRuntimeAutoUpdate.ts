@@ -1,5 +1,5 @@
 /**
- * DSH runtime 启动期自动更新（打包态）。
+ * DSH runtime 启动期自动更新（dev 与打包态共用）。
  *
  * 背景：runtime manifest 的 maxAppVersion 常为空 = 对任何 app 版本都「兼容」，
  * resolveActive 会一直选中旧版。版本不一致时状态服务判 outdated 并硬门控 host
@@ -10,8 +10,8 @@
  * 边界（有意不做的事）：
  * - notInstalled / broken 不自动装：用户没选过 DSH 就静默下载大体积 runtime
  *   属于越界行为，保持安装引导卡（已展示声明配套版本）由用户决定。
- * - dev 模式跳过：项目 node_modules 就是声明配套版本，不存在「旧 runtime」，
- *   且 dev 本就禁止在线下载（与 installEnabled 的语义一致）。
+ * - dev/打包态都不对 notInstalled 静默下载：用户没选过 DSH 时不能替用户决定；
+ *   手动安装仍通过相同的远程索引 install 链路，已安装但版本不匹配则自动修复。
  * - 回收失败不回滚：旧目录删不掉只影响磁盘占用，不影响新 runtime 启用；
  *   逐个 best-effort 删除，失败记录后继续。
  */
@@ -36,7 +36,7 @@ export type DshRuntimeAutoUpdateDeps = {
 	uninstall: (dirName: string) => Promise<void>;
 	/** 当前 app 版本（回收判定的兼容区间输入）。 */
 	appVersion: () => string;
-	/** 是否打包态；dev 直接跳过。 */
+	/** 是否打包态（兼容旧调用方保留；自动更新策略不按环境区分）。 */
 	isPackaged: () => boolean;
 	/** 安装成功且状态刷新为 installed 后回调（装配层用它补拉 host 预热）。 */
 	onRuntimeReady?: () => void;
@@ -44,7 +44,7 @@ export type DshRuntimeAutoUpdateDeps = {
 };
 
 export type DshRuntimeAutoUpdateResult =
-	| { action: "skipped"; reason: "not-packaged" | "state-not-outdated" }
+	| { action: "skipped"; reason: "state-not-outdated" }
 	| { action: "install-failed"; error: string }
 	| { action: "updated"; runtimeVersion?: string; pruned: string[]; pruneErrors: Array<{ dirName: string; error: string }> };
 
@@ -64,10 +64,8 @@ function errorMessage(error: unknown): string {
 export async function autoUpdateDshRuntimeIfOutdated(
 	deps: DshRuntimeAutoUpdateDeps,
 ): Promise<DshRuntimeAutoUpdateResult> {
-	// dev：项目 node_modules 即声明版本，且 dev 禁止在线下载。
-	if (!deps.isPackaged()) {
-		return { action: "skipped", reason: "not-packaged" };
-	}
+	// dev 与打包版都允许手动安装 runtime；这里只处理「已装但版本不配套」的
+	// 自动修复，避免启动时替用户静默下载几十 MB。手动安装仍走同一 install 链路。
 	const status = deps.getStatus();
 	// 只处理 outdated（已装但与声明版本不一致）。notInstalled / broken 保持
 	// 安装引导，不静默替用户做安装决定。

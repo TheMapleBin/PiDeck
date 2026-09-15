@@ -170,8 +170,9 @@ dsh 仍随包分发，但把「runtime 是否可用」做成一等状态并据�
 
 **依赖分区后的行为变化（重要）**
 
-- **dev 模式不受影响**：`@deepseek-ai` 仍在项目 node_modules 里，内置探测仍成功 → 内置回退依旧可用，本地开发 DSH 照常。
-- **打包后不再内置**：electron-builder 只收集 production 依赖，`@deepseek-ai` 不会进 asar；官方 lite 包 extraResources 也是空的 → 首次使用 DSH 必须从 latest 应用 Release 下载 runtime（或手动导入 tgz / 用 `--full` 打离线包）。
+- **dev 与官方 lite 包统一**：`@deepseek-ai` 虽仍在项目 node_modules 供构建/host 使用，但不会再被状态服务当作「随应用安装」的 runtime；dev 首次使用 DSH 同样从 latest 应用 Release 下载到 userData（或手动导入），验证的就是正式版安装链路。
+- **打包后不再内置**：electron-builder 只收集 production 依赖，`@deepseek-ai` 不会进 asar；官方 lite 包 extraResources 也是空的 → 首次使用 DSH 从 latest 应用 Release 下载 runtime（或手动导入 tgz / 用 `--full` 打离线包）。
+- **兼容例外**：显式 `--full` 或存量安装包仍可由装配层开启 bundled fallback；这只是兼容路径，不改变 dev/lite 的默认远程来源。
 
 **剩余一件事（在线更新源）**
 

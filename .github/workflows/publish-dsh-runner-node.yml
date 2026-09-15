@@ -1,12 +1,18 @@
 name: Publish DSH runner Node
 
 # Windows DSH 沙箱用的 Node 24 zip：不进安装包。
-# 挂到当前 GitHub latest *应用* Release（vX.Y.Z），再由 sync-atomgit 同步到 AtomGit。
+# 挂到目标 GitHub *应用* Release（vX.Y.Z；留空时取 latest），再由 sync-atomgit 同步到 AtomGit。
 # 禁止独立 sidecar tag：会抢走 /releases/latest，把更新检查指到 Node zip。
 # Node 补丁版本不变时不必每次应用发版都重跑。
 
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: '目标应用 Release tag（留空 = 当前 GitHub latest）'
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: write
@@ -27,11 +33,17 @@ jobs:
       - name: Pack both Windows arches
         run: node scripts/pack-dsh-runner-node.mjs --arch x64 && node scripts/pack-dsh-runner-node.mjs --arch arm64
 
-      - name: Upload onto current latest app Release
+      - name: Upload onto target app Release
         env:
           GH_TOKEN: ${{ secrets.RELEASE_PAT }}
+          INPUT_TAG: ${{ inputs.tag }}
         run: |
-          TAG=$(gh api "repos/${{ github.repository }}/releases/latest" --jq .tag_name)
+          if [ -n "$INPUT_TAG" ]; then
+            TAG="$INPUT_TAG"
+          else
+            TAG=$(gh api "repos/${{ github.repository }}/releases/latest" --jq .tag_name)
+          fi
+          TAG="$(echo "$TAG" | xargs)"
           if [[ ! "$TAG" =~ ^v[0-9] ]]; then
             echo "::error::GitHub latest 不是应用版本 tag（got ${TAG}）。拒绝创建独立 sidecar Release。"
             exit 1

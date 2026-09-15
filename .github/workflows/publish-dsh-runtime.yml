@@ -1,10 +1,14 @@
 name: Publish DSH runtime
 
 # DSH runtime tgz：官方 lite 安装包不随 runtime，用户首次用 DSH 时按需下载。
-# 按平台原生打包（node-pty / sharp / koffi 等 prebuild 不能交叉），挂到当前
-# GitHub latest *应用* Release（vX.Y.Z），再按需手动重跑 sync-atomgit。
+# 该文件需要提交到默认分支；否则 GitHub Actions 不会在页面注册/显示本 workflow。
+# 按平台原生打包（node-pty / sharp / koffi 等 prebuild 不能交叉），挂到目标
+# GitHub *应用* Release（vX.Y.Z；留空时取 latest），再按需手动重跑 sync-atomgit。
 # 禁止独立 dsh-runtime tag：会抢走 /releases/latest，把更新检查指到 sidecar。
 # 追加资产只产生 release: edited，不会自动触发 sync-atomgit。
+# 该 workflow 必须存在于默认分支 main；GitHub Actions 列表默认只展示默认分支上的定义。
+# dev 与 main 使用同一份 workflow；dev 也只从 Release 资产下载/上传，不读项目内 runtime。
+# 注意：发布 workflow 不从 dev 分支运行；需要先把此文件合入默认分支，Actions 页面才会出现。
 
 on:
   workflow_dispatch:
@@ -13,6 +17,7 @@ on:
         description: >-
           目标应用 Release tag（如 v0.7.6-beta）。留空则挂到当前 GitHub latest。
         required: false
+        type: string
         default: ""
 
 permissions:
@@ -91,7 +96,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.RELEASE_PAT }}
           # 手工输入走 env，避免直接拼进 shell。
-          INPUT_TAG: ${{ github.event.inputs.tag }}
+          INPUT_TAG: ${{ inputs.tag }}
+          # runtime 只生成轻量 sidecar，不触发完整 app Release；这是有意的独立上传入口。
         shell: bash
         run: |
           ARCHIVE="dsh-runtime-${{ matrix.platform }}-${{ matrix.arch }}.tgz"
@@ -106,6 +112,7 @@ jobs:
           else
             TAG=$(gh api "repos/${{ github.repository }}/releases/latest" --jq .tag_name)
           fi
+          TAG="$(echo "$TAG" | xargs)"
           if [[ ! "$TAG" =~ ^v[0-9] ]]; then
             echo "::error::目标不是应用版本 tag（got ${TAG}）。拒绝创建独立 sidecar Release。"
             exit 1

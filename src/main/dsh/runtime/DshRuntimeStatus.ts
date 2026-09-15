@@ -1,10 +1,9 @@
 /**
- * DSH runtime 安装态探测与状态服务（AgentRuntimeProvider 阶段 1）。
+ * DSH runtime 安装态探测与状态服务（AgentRuntimeProvider 阶段 2）。
  *
- * 阶段 1：dsh runtime（28 个 @deepseek-ai/* 依赖）仍随包分发，探测结果恒 installed；
- * 本模块先把「runtime 是否可用」做成一等状态源，UI 据此门控（见 shared/types/dshRuntime）。
- * 阶段 2 状态源切换为「外部 runtime 目录 manifest 探测 + app 内置 node_modules 回退」时，
- * 消费方（IPC / 渲染层）零改动。
+ * DSH runtime 不再按环境切换来源：dev 与打包版都优先探测 userData 下的外部 runtime；
+ * 仅为兼容依赖分区前的存量安装包，保留由装配层显式开启 app 内置 node_modules 回退。
+ * 本模块把「runtime 是否可用」做成一等状态源，UI 据此门控（见 shared/types/dshRuntime）。
  *
  * 探测锚点与 DshHost.start 完全一致：createRequire(appPath).resolve("@deepseek-ai/dsh-base")
  * ——同一接缝（--dsh-node-modules 的 appRoot 推导），保证「探测可用 = host 可 fork」。
@@ -25,7 +24,7 @@ export type DshRuntimeProbeResult =
 	| { ok: false; error: string };
 
 /**
- * 一次完整的 runtime 探测结果（外部 runtime 优先，内置回退）。
+ * 一次完整的 runtime 探测结果（外部 runtime 优先，兼容性内置回退）。
  * appRoot 语义与阶段 1 一致：包含 node_modules 的那个目录（DshHost 拿它拼
  * `--dsh-node-modules`，hostEntry 再从它建 createRequire）。
  */
@@ -34,13 +33,12 @@ export type DshRuntimeProbe =
 	| { ok: false; error: string };
 
 /**
- * 组合探测：外部已安装 runtime 优先，未安装时回退 app 内置 node_modules。
+ * 组合探测：外部已安装 runtime 优先，未安装时按兼容开关回退 app 内置 node_modules。
  *
  * 为什么保留内置回退：存量安装包（依赖分区前发布）的 asar 内仍带 @deepseek-ai；
  * 有回退才能保证「装了新版 PiDeck 但还没下载 runtime」的用户 DSH 功能不消失。
- * 回退开关（allowBundledFallback）由装配层注入：打包态 true（存量包兼容）、
- * dev 模式 false（项目 node_modules 是开发依赖，不视为随应用分发，强制外部安装）。
- * 依赖分区后的新包内置探测恒失败，行为自动退化为纯外部模式。
+ * 新的 dev/lite 安装路径都以远程 runtime 为准；allowBundledFallback 只服务显式开启的
+ * full/旧包兼容，不应再把 dev 项目 node_modules 或残留资源当作已发布 runtime。
  */
 export function probeDshRuntime(input: {
 	/** 外部 runtime（DshRuntimeManager.resolveActive）；undefined = 未安装。 */
@@ -73,8 +71,8 @@ export function probeDshRuntime(input: {
 }
 
 /**
- * 探测 app 内置 dsh runtime（纯探测，不抛错）：
- * dev = 项目 node_modules；打包 = app.asar(unpacked) 内 node_modules。
+ * 探测兼容性内置 dsh runtime（纯探测，不抛错）：仅供依赖分区前的存量 full 包使用。
+ * 新 dev 与 lite 打包版由装配层关闭此探测，项目 node_modules 不会被当作已发布 runtime。
  * 失败 = runtime 不在（阶段 2 lite 分发 / 依赖被移除），映射为 notInstalled。
  */
 export function probeBundledDshRuntime(appPath: string): DshRuntimeProbeResult {
@@ -123,14 +121,11 @@ export class DshRuntimeStatusService {
 	 * @param log 日志出口。
 	 * @param resolveManaged 外部 runtime 解析（阶段 2：DshRuntimeManager.resolveActive）。
 	 *   缺省 = 纯内置模式（阶段 1 形态，也是不装 runtime 时的自然退路）。
-	 * @param allowBundledFallback 是否允许回退 app 内置 node_modules 探测：
-	 *   打包态 true（依赖分区前的存量安装包内置可用）；dev 模式 false——项目
-	 *   node_modules 里的 @deepseek-ai 是开发依赖，不能当作「随应用分发」的已安装
-	 *   runtime，否则 UI 会显示内置且不可卸载（用户诉求：默认不安装、可安装可卸、
-	 *   安装后显示版本号）。
-	 * @param isPackaged 是否打包态（app.isPackaged）：决定 installEnabled——
-	 *   dev 模式禁止「在线下载安装」入口，runtime 只在打包时随包分发，避免开发者
-	 *   误下载与本地代码不配套的产物。
+	 * @param allowBundledFallback 是否允许回退 app 内置 node_modules 探测：仅用于依赖分区前的
+	 *   存量安装包兼容；dev 装配必须传 false，避免把项目 node_modules 误判为已发布 runtime。
+	 * @param isPackaged 是否打包态（app.isPackaged）：仅用于兼容调用方；
+	 *   dev 与打包态现在都走同一份远程索引/手动导入链路，避免开发环境和用户环境
+	 *   使用两套不同的 runtime 获取行为。
 	 * @param resolveDeclaredVersion 当前 app 声明的配套 dsh 版本（package.json 的
 	 *   @deepseek-ai/dsh）。与已装 runtime 比对得出 updateAvailable——runtime 的
 	 *   maxAppVersion 为空意味着旧版永远「兼容」，没有这个比对用户升级 app 后会
@@ -143,7 +138,8 @@ export class DshRuntimeStatusService {
 			| { nodeModules: string; runtimeVersion: string }
 			| undefined = () => undefined,
 		private readonly allowBundledFallback: () => boolean = () => true,
-		private readonly isPackaged: () => boolean = () => true,
+		// 保留旧构造参数，避免外部装配/测试升级时发生位置错位；来源策略不再读取它。
+		private readonly _isPackaged: () => boolean = () => true,
 		private readonly resolveDeclaredVersion: () => string | undefined = () => undefined,
 	) {}
 
@@ -207,7 +203,7 @@ export class DshRuntimeStatusService {
 	private probeOnceFresh(): DshRuntimeProbe {
 		return probeDshRuntime({
 			managed: this.resolveManaged(),
-			// dev 模式禁止内置回退：项目 node_modules 的包是开发依赖，不视为应用内置。
+			// 由装配层显式关闭兼容性内置回退；项目 node_modules 不是已发布 runtime。
 			bundled: this.allowBundledFallback()
 				? probeBundledDshRuntime(this.getAppPath())
 				: { ok: false, error: "bundled fallback disabled" },
@@ -244,7 +240,8 @@ export class DshRuntimeStatusService {
 						source: probe.source,
 						...(probe.runtimeVersion ? { runtimeVersion: probe.runtimeVersion } : {}),
 						...(probe.source === "managed" && probe.installDir ? { installDir: probe.installDir } : {}),
-						installEnabled: this.isPackaged(),
+						// dev 与打包态统一允许在线下载/重装；两者都从同一份 Release 索引取 runtime。
+						installEnabled: true,
 						...(declaredVersion ? { declaredRuntimeVersion: declaredVersion } : {}),
 					}
 				: {
@@ -254,8 +251,8 @@ export class DshRuntimeStatusService {
 						// 外部 managed runtime 时给出落盘目录（runtimesRoot/<version>），UI 概览页展示/打开用；
 						// builtin 内置分发没有独立安装目录（在 app.asar 内），不填。
 						...(probe.source === "managed" && probe.installDir ? { installDir: probe.installDir } : {}),
-						// 仅打包态允许在线下载/重装；dev 由渲染层隐藏该入口。
-						installEnabled: this.isPackaged(),
+						// dev 与打包态统一允许在线下载/重装；两者都从同一份 Release 索引取 runtime。
+						installEnabled: true,
 						...(declaredVersion ? { declaredRuntimeVersion: declaredVersion } : {}),
 					};
 			return { status, probe };
@@ -265,7 +262,8 @@ export class DshRuntimeStatusService {
 		return {
 			status: {
 				state: "notInstalled",
-				installEnabled: this.isPackaged(),
+				// dev 与打包态统一允许在线下载/重装；未安装时安装引导直接提供远程下载。
+				installEnabled: true,
 				// 未安装无所谓「不一致」，但声明版本仍可带给 UI（安装引导可展示目标版本）。
 				...(declaredVersion ? { declaredRuntimeVersion: declaredVersion } : {}),
 			},

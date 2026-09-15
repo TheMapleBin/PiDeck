@@ -56,14 +56,12 @@ test("自动更新：outdated 时安装 → 刷新 → 回收旧版本 → 就�
 	assert.equal(calls.ready, 1);
 });
 
-test("自动更新：非打包态跳过（dev 项目 node_modules 即声明版本）", async () => {
+test("自动更新：dev 也沿用版本不配套的自动修复策略", async () => {
 	const { deps, calls } = makeDeps({ isPackaged: () => false });
 	const result = await autoUpdateDshRuntimeIfOutdated(deps);
-	// 跨 realm（vm 加载 TS）对象原型不同，逐字段断言而不是 deepStrictEqual。
-	assert.equal(result.action, "skipped");
-	assert.equal(result.reason, "not-packaged");
-	assert.equal(calls.installs, 0);
-	assert.equal(calls.ready, 0);
+	assert.equal(result.action, "updated");
+	assert.equal(calls.installs, 1);
+	assert.equal(calls.ready, 1);
 });
 
 test("自动更新：状态非 outdated（installed/notInstalled）跳过，不静默安装", async () => {

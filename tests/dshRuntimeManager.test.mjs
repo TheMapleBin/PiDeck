@@ -159,6 +159,16 @@ test("runtime 索引挂 latest 应用 Release，禁止独立 dsh-runtime tag", (
 		"file:///C:/tmp/runtime.tgz",
 		"file:// 离线验证不改写",
 	);
+	assert.equal(
+		resolveDshRuntimeReleaseUrl(placeholder, "github", "win32", "x64", "v0.7.6-beta"),
+		"https://github.com/ayuayue/PiDeck/releases/download/v0.7.6-beta/dsh-runtime-win32-x64.tgz",
+		"有明确 Release tag 时下载同一应用版本的 runtime",
+	);
+	assert.equal(
+		resolveDshRuntimeReleaseUrl(placeholder, "atomgit", "win32", "x64", "v0.7.6-beta"),
+		"https://atomgit.com/ayuayue/PiDeck/releases/download/v0.7.6-beta/dsh-runtime-win32-x64.tgz",
+		"AtomGit 也必须跟随同一应用 Release tag，不能回退 latest",
+	);
 });
 
 test("selectRelease：与 selectRuntime 同样按兼容区间 + 取最新", () => {

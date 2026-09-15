@@ -17,11 +17,14 @@ const {
 
 // 注意：loadTsCommonJs 用 vm 沙箱加载，返回对象的原型不是本 realm 的 Object.prototype，
 // deepStrictEqual 会因原型不同而失败——逐字段断言，避开跨 realm 比较。
-const expectVisibility = (state, expected) => {
-	const actual = dshUiVisibilityFor(state);
+const expectVisibility = (state, expected, installEnabled = true) => {
+	const actual = dshUiVisibilityFor(state, installEnabled);
 	assert.equal(actual.canCreateDshSession, expected.canCreateDshSession, `${state}.canCreateDshSession`);
 	assert.equal(actual.showDshConfigForms, expected.showDshConfigForms, `${state}.showDshConfigForms`);
 	assert.equal(actual.showInstallGuide, expected.showInstallGuide, `${state}.showInstallGuide`);
+	if (Object.hasOwn(expected, "showRuntimeDownload")) {
+		assert.equal(actual.showRuntimeDownload, expected.showRuntimeDownload, `${state}.showRuntimeDownload`);
+	}
 };
 
 test("UI 可见性矩阵：只有 installed 才渲染 DSH 表单与允许建会话", () => {
@@ -40,20 +43,21 @@ test("UI 可见性矩阵：只有 installed 才渲染 DSH 表单与允许建会�
 	}
 });
 
-test("dev 模式（installEnabled=false）：不显示在线下载入口，仅保留安装引导说明", () => {
-	// 无论状态，dev 下都不提供在线下载/重装（runtime 只随打包分发）。
+test("dev 模式：不使用随包 runtime，但保留与打包版一致的在线下载入口", () => {
+	// dev 与 lite 打包版都从同一份 Release 索引安装 runtime；只有显式的 full
+	// 打包资源才允许走本地解压，不能再用 installEnabled=false 把 dev 锁死。
 	expectVisibility("notInstalled", {
 		canCreateDshSession: false,
 		showDshConfigForms: false,
 		showInstallGuide: true,
-		showRuntimeDownload: false,
-	}, false);
+		showRuntimeDownload: true,
+	});
 	expectVisibility("installed", {
 		canCreateDshSession: true,
 		showDshConfigForms: true,
 		showInstallGuide: false,
-		showRuntimeDownload: false,
-	}, false);
+		showRuntimeDownload: true,
+	});
 });
 
 test("checking 不显示安装引导：避免首帧闪一下「未安装」再切回正常表单", () => {
@@ -182,17 +186,19 @@ test("订阅者抛错不影响服务：refresh 仍能返回状态", () => {
 	assert.equal(service.refresh().state, "notInstalled");
 });
 
-test("allowBundledFallback=false 时内置探测被禁用（dev 模式强制外部安装）", () => {
+test("dev 模式：禁用随包探测但仍允许远程安装", () => {
 	// dev 模式：项目根 node_modules 里装着 @deepseek-ai 开发依赖，但状态服务
-	// 不应把「node_modules 有包」当作已安装 runtime——否则 UI 显示随应用内置且不可卸载。
+	// 不应把它当作已安装 runtime；同时 UI 必须保留与打包版相同的在线安装出口。
 	const service = new DshRuntimeStatusService(
 		() => process.cwd(),
 		() => {},
 		() => undefined,
 		() => false,
+		() => false,
 	);
 	const status = service.getStatus();
 	assert.equal(status.state, "notInstalled");
+	assert.equal(status.installEnabled, true);
 });
 
 // ── outdated 硬门控：版本不一致时禁用 runtime、强制重装 ──

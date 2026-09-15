@@ -1,10 +1,10 @@
 /**
  * DSH runtime 安装态契约（AgentRuntimeProvider，docs/dsh-runtime-optional-plan.md）。
  *
- * 官方安装包默认 lite：不随 runtime。打包版探测顺序是外部
- * userData/runtimes/dsh/<version> → 随包 extraResources（仅 --full）→ 都没有才是
- * notInstalled（引导从 latest 应用 Release 按需下载）。dev 模式回退项目
- * node_modules 的 @deepseek-ai。UI 按本契约门控，不直接绑分发形态。
+ * 官方安装包默认 lite：不随 runtime。dev 与打包版统一先探测外部
+ * userData/runtimes/dsh/<version>；仅依赖分区前的存量 full 包可额外回退随包资源，
+ * 都没有才是 notInstalled（引导从 latest 应用 Release 按需下载）。dev 不把项目
+ * node_modules 的 @deepseek-ai 当作已发布 runtime。UI 按本契约门控，不直接绑分发形态。
  *
  * 本文件保持纯类型 + 纯函数（无任何运行时层依赖），主/渲染两侧与 node 单测共享。
  */
@@ -25,7 +25,7 @@ export type DshRuntimeState =
 	 *  表可能已变，旧 runtime「能启动」不代表「能工作」，禁止启动 host 并强制重装。 */
 	| "outdated";
 
-/** runtime 来源：内置（随包分发，阶段 1 形态）还是外部安装（阶段 2 形态）。 */
+/** runtime 来源：内置存量包回退，或 userData 下的外部安装。 */
 export type DshRuntimeSource = "builtin" | "managed";
 
 /** DSH runtime 状态快照（IPC：dsh-runtime:get-status / dsh-runtime:status-changed）。 */
@@ -39,8 +39,8 @@ export type DshRuntimeStatus = {
 	reason?: string;
 	/** 已安装 runtime 的落盘目录（外部 managed 时 = runtimesRoot/<version>；内置/builtin 或未安装时缺省）。 */
 	installDir?: string;
-	/** 是否允许在线下载安装 runtime（app.isPackaged）：dev 模式禁止下载——runtime 随
-	 *  打包分发，开发环境不提供在线安装，避免用户误下 dev 不配套的产物。 */
+	/** 是否显示在线下载安装 runtime。dev 与打包版统一走 Release 索引，均为 true；
+	 *  该字段保留用于旧版/受限宿主兼容，不再按 app.isPackaged 隐藏下载入口。 */
 	installEnabled?: boolean;
 	/** 当前 app 声明的配套 dsh 版本（package.json → @deepseek-ai/dsh）；读不到时缺省。 */
 	declaredRuntimeVersion?: string;
@@ -75,7 +75,7 @@ export type DshUiVisibility = {
 	showDshConfigForms: boolean;
 	/** 显示「安装 DSH 后端」引导卡。 */
 	showInstallGuide: boolean;
-	/** 是否显示「在线下载安装/重装」按钮（dev 模式为 false：runtime 随打包分发，开发环境不下载）。 */
+	/** 是否显示「在线下载安装/重装」按钮（dev 与打包版统一为 true）。 */
 	showRuntimeDownload: boolean;
 };
 
