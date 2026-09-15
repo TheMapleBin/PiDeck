@@ -174,9 +174,9 @@ jobs:
           ELECTRON_MIRROR: ${{ matrix.electron_mirror }}
           ELECTRON_BUILDER_BINARIES_MIRROR: ${{ matrix.electron_builder_binaries_mirror }}
 
-      # Node 24 sidecar 跟应用版本 Release 一起发，不另开 tag（独立 tag 会抢走 latest）。
-      # 只在 Windows job 打包：产物文件名按 arch 区分，mac/linux job 没有这些文件，
-      # 下方 fail_on_unmatched_files: false 会跳过缺失 glob。
+      # sidecar 跟应用版本 Release 一起发，不另开 tag（独立 tag 会抢走 GitHub /releases/latest）。
+      # runner-node 只在 Windows job 打两个 arch；DSH runtime tgz 由 npm run build 的 runtime:pack
+      # 按构建机平台产出，各 job 上传自己那份。缺失 glob 由 fail_on_unmatched_files: false 跳过。
       - name: Pack DSH runner Node sidecar
         if: matrix.platform == 'windows'
         run: node scripts/pack-dsh-runner-node.mjs --arch x64 && node scripts/pack-dsh-runner-node.mjs --arch arm64
@@ -207,3 +207,5 @@ jobs:
             ${{ matrix.skip_yml != true && 'release/latest*.yml' || '' }}
             dist-runtime/dsh-runner-node/*.zip
             dist-runtime/dsh-runner-node/dsh-runner-node-releases.json
+            dist-runtime/dsh-runtime-*.tgz
+            dist-runtime/dsh-runtime-*-releases.json

@@ -3,7 +3,12 @@ import test from "node:test";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { hasBuildOutput, isExcluded, isSrcPrunable } from "../scripts/runtime-prune-rules.mjs";
+import {
+	hasBuildOutput,
+	isExcluded,
+	isNpmHashedLeftoverDir,
+	isSrcPrunable,
+} from "../scripts/runtime-prune-rules.mjs";
 
 /**
  * DSH runtime 打包裁剪规则的回归测试。
@@ -130,6 +135,16 @@ test("isSrcPrunable：KEEP_SRC 白名单包（koffi）保留 src，即使入口�
 	} finally {
 		rmSync(root, { recursive: true, force: true });
 	}
+});
+
+test("isNpmHashedLeftoverDir：只匹配 npm 升级残留的 .pkg-<8char> 目录", () => {
+	// 活包名不以点开头，不会误伤；.bin 也不是 hashed leftover。
+	assert.equal(isNpmHashedLeftoverDir(".dsh-base-cFJMOBFY"), true);
+	assert.equal(isNpmHashedLeftoverDir(".dsh-attachment-local-UqFAktYy"), true);
+	assert.equal(isNpmHashedLeftoverDir("dsh-base"), false);
+	assert.equal(isNpmHashedLeftoverDir(".bin"), false);
+	assert.equal(isNpmHashedLeftoverDir(".dsh-base-short"), false, "哈希段不足 8 位不是 npm leftover");
+	assert.equal(isNpmHashedLeftoverDir(undefined), false);
 });
 
 test("isSrcPrunable：常规包（入口在 lib/dist）src 仍可裁；无编译产物不可裁", () => {

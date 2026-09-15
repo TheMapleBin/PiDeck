@@ -7,6 +7,7 @@
 - **Project-scoped scheduled tasks, management as a modal** — Automation tasks can be scoped to a project. The manager is now a modal instead of covering the session workspace, so opening it does not interrupt the current session or split panes.
 - **Session tab “current session actions”** — The ⋯ menu gains the same actions as the sidebar context menu: rename / duplicate / export HTML / copy session file path / open session file. When search lands on a session the sidebar has not rendered, the ⋯ menu is the stable entry.
 - **Ask cards submit on Enter** — Single and batch cards submit with Enter after an answer (including “select then Enter”). IME composition Enter only confirms a candidate and never submits; the editor still uses Enter for newline and Ctrl/Cmd+Enter to submit.
+- **Official installer no longer ships DSH runtime** — The default pack is lite: extraResources stays empty. First DSH use downloads the platform archive from the current latest app Release (AtomGit / GitHub), same sidecar pattern as runner-node. Offline / intranet builds still use `--full`. npm leftover hashed dirs from old DSH upgrades are no longer packed into the tarball.
 
 ### 🐛 Fixes
 - **Image-gen sessions no longer OOM the renderer from inline base64** — Images are content-addressed blobs plus refs; base64 no longer lands in JSONL. Reads use a bounded tail window, and the old format self-migrates on first open. The `reason:"oom"` crash-reload loop and blank window from repeated image gen are gone.
@@ -14,6 +15,7 @@
 - **Resident caches gain byte budgets** — Log-line cache, session-history full-text LRU, and on-disk history messages now have byte / count caps, closing four unbounded-growth paths.
 - **Packaged DSH black console window (koffi)** — koffi is now an app dependency with a complete runtime resolve chain, so host/runner can hide the console after packaging and no longer spawn a visible black window.
 - **DSH sandbox runner uses local Node 24** — On Windows the sandbox runner no longer starts as electron.exe (GUI). It reuses the machine’s `node.exe` (detect / set the path in Developer settings, including nvm/fnm/mise/Scoop). The installer does not ship Node; if none is found you can one-click download a PiDeck-only copy from the current latest app Release (AtomGit/GitHub). PATH stays unchanged.
+- **Installer payload trim** — Drops unused Electron shader DLLs (`dxcompiler` / `dxil` / SwiftShader), the Lark SDK ESM copy (`es/`), and node-pty compile-time trees (`src` / `third_party` / `build` / `deps`). Windows PTY still ships `prebuilds/<platform>/conpty`. Renderer Shiki now aliases a web+coding language set instead of the 346-lang full bundle.
 
 - **Linux “double-click does nothing” after an update** — The single-instance lock now handshakes and checks whether the lock owner still responds. Stale upgrade locks, PID reuse, and zombie owners no longer make the second instance exit silently. Problem-feedback health checks now report lock status.
 - **Stopping a session kills the whole subagent tree** — Child processes spawned by pi-subagents / acp_delegate are cleaned up with the parent, so orphans no longer keep burning tokens.

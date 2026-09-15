@@ -149,7 +149,8 @@
       "!node_modules/sql.js/dist/*-asm*",
       "!node_modules/sql.js/dist/*-debug*",
       "!node_modules/sql.js/dist/*browser*",
-      "!node_modules/sql.js/dist/worker*"
+      "!node_modules/sql.js/dist/worker*",
+      "!node_modules/@larksuiteoapi/node-sdk/es/**"
     ],
     "extraResources": [
       {

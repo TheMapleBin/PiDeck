@@ -14,6 +14,20 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 /**
+ * npm 在 Windows 上升级 scoped 包时，旧目录会被 rename 成 `.pkg-<8char>` 残留。
+ * 这些目录仍有 package.json（内容是上一版），pack 若按「有 package.json 就当活包」
+ * 收进种子/闭包，会把整份旧 @deepseek-ai 作用域再打进归档（实测
+ * `.dsh-base-cFJMOBFY` = @deepseek-ai/dsh-base 0.1.1-rc.2，整作用域 leftover ~99MB）。
+ *
+ * 只匹配「点开头 + 任意名 + 连字符 + 8 位字母数字」：npm 包名不能以点开头，
+ * 活包目录（dsh-base、cordis）不会误伤。嵌套在包内的同类残留同样用此判定跳过。
+ * 顶层 `node_modules/.katex-*` 不在 runtime 种子里，不在本函数的收口范围。
+ */
+export function isNpmHashedLeftoverDir(name) {
+	return typeof name === "string" && /^\..+-[A-Za-z0-9]{8}$/.test(name);
+}
+
+/**
  * 包内是否有编译产物目录。有 lib/ 或 dist/ 时，src/ 只是源码副本，
  * 运行时加载的是产物，src 可以整块丢掉（这是归档里最大的一块冗余）。
  */

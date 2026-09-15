@@ -227,6 +227,13 @@ exports.default = async function (context) {
     { path: "LICENSES.chromium.html", desc: "Chromium 开源许可证大全" },
     { path: "chrome_100_percent.pak", desc: "Chrome 常规 DPI UI 资源" },
     { path: "chrome_200_percent.pak", desc: "Chrome 高DPI UI 资源" },
+    // DirectX Shader Compiler：Chromium 给 WebGPU/Dawn 用。PiDeck 不跑 WebGPU 页面，
+    // 删掉不影响 Chromium 常规渲染（ANGLE / d3dcompiler_47 / vulkan-1 / ffmpeg 必须留）。
+    { path: "dxcompiler.dll", desc: "DirectX Shader Compiler（WebGPU，本应用不用）" },
+    { path: "dxil.dll", desc: "DXIL 校验器（随 dxcompiler）" },
+    // SwiftShader 是 CPU 软渲染 Vulkan；保留 vulkan-1.dll + ANGLE 即可走系统 GPU。
+    { path: "vk_swiftshader.dll", desc: "Vulkan 软件光栅器" },
+    { path: "vk_swiftshader_icd.json", desc: "SwiftShader ICD 清单" },
   ];
 
   for (const { path: filename, desc } of rootCleanups) {
@@ -274,9 +281,17 @@ exports.default = async function (context) {
 
   let totalRemoved = 0;
 
-  // --- 3a. 保留 @larksuiteoapi 的 CJS 运行时入口 ---
+  // --- 3a. 飞书 SDK：保留 CJS 运行时入口 lib/，删除 ESM 副本 es/ ---
   // node-sdk 的 package.json 将 main 指向 ./lib/index.js，且未声明 exports。
-  // Node.js 的动态 import() 仍会按 main 解析，所以不能删除 lib/；否则打包版会找不到 SDK。
+  // 主进程是 CJS，动态 import() 仍按 main 解析，所以不能删 lib/。
+  // es/ 与 lib/ 各约 5MB，内容等价；package.json files 已排除，这里兜底清 asar 内残留。
+  const larkEsDir = path.join(extractDir, "node_modules", "@larksuiteoapi", "node-sdk", "es");
+  if (fs.existsSync(larkEsDir)) {
+    const size = await dirSize(larkEsDir);
+    await rmDir(larkEsDir);
+    totalRemoved += size;
+    console.log(`  [afterPack] 已删除 @larksuiteoapi/node-sdk/es (${(size / 1024 / 1024).toFixed(1)} MB)`);
+  }
 
   // --- 3b. 删除所有 node_modules 中的 source map、文档、测试文件 ---
   const nmExtractDir = path.join(extractDir, "node_modules");
@@ -337,7 +352,20 @@ exports.default = async function (context) {
 
   // --- 3b2. 删除 asar 内 node-pty 非当前平台的 prebuild（.node 文件被 electron-builder 自动解包到 asar.unpacked，
   //    但 asar 内仍保留了所有平台的副本，平台过滤只在 afterPack 上一步做了 asar.unpacked 的清理）---
-  const nodePtyPrebuildDir = path.join(extractDir, "node_modules", "node-pty", "prebuilds");
+  const nodePtyExtract = path.join(extractDir, "node_modules", "node-pty");
+  const nodePtyPrebuildDir = path.join(nodePtyExtract, "prebuilds");
+  // asarUnpack 是影子目录：asar 内仍有 src/ third_party/ build/ 副本，不删会白占 asar 体积。
+  // 运行时加载的是 unpacked 镜像里的 prebuilds，这里只清 asar 里的源码树。
+  if (fs.existsSync(nodePtyExtract)) {
+    for (const extra of ["src", "third_party", "build", "deps", "scripts"]) {
+      const extraDir = path.join(nodePtyExtract, extra);
+      if (!fs.existsSync(extraDir)) continue;
+      const size = await dirSize(extraDir);
+      await rmDir(extraDir);
+      totalRemoved += size;
+      console.log(`  [afterPack] asar 内已删除 node-pty ${extra}/ (${(size / 1024 / 1024).toFixed(1)} MB)`);
+    }
+  }
   if (fs.existsSync(nodePtyPrebuildDir)) {
     try {
       const entries = await fs.promises.readdir(nodePtyPrebuildDir, { withFileTypes: true });
@@ -427,12 +455,27 @@ exports.default = async function (context) {
   }
 
   // ====================================
-  // 5. node-pty 内 source map 清理（asar.unpacked）
+  // 5. node-pty 源码/构建产物清理（asar.unpacked）
+  //    运行时只加载 lib/ + 当前平台 prebuilds（含 conpty/OpenConsole.exe + conpty.dll）。
+  //    loadNativeModule 顺序是 build/Release → build/Debug → prebuilds/<platform>-<arch>，
+  //    删掉 build/ 会落到 prebuilds，这正是打包态要用的路径。src/ third_party/ deps/
+  //    scripts/ 都是编译期材料，运行时不 require。
   // ====================================
   const nodePtyUnpacked = path.join(appOutDir, "resources", "app.asar.unpacked", "node_modules", "node-pty");
   if (fs.existsSync(nodePtyUnpacked)) {
     let mapFiles = 0;
     let mapBytes = 0;
+    let extraBytes = 0;
+
+    // 源码/构建树：必须整目录删。prebuilds 与 lib 一律保留。
+    for (const extra of ["src", "third_party", "build", "deps", "scripts"]) {
+      const extraDir = path.join(nodePtyUnpacked, extra);
+      if (!fs.existsSync(extraDir)) continue;
+      const size = await dirSize(extraDir);
+      await rmDir(extraDir);
+      extraBytes += size;
+      console.log(`  [afterPack] node-pty 已删除 ${extra}/ (${(size / 1024 / 1024).toFixed(1)} MB)`);
+    }
 
     async function walk(dir) {
       try {
@@ -454,6 +497,9 @@ exports.default = async function (context) {
     await walk(nodePtyUnpacked);
     if (mapFiles > 0) {
       console.log(`  [afterPack] node-pty source map: 已删除 ${mapFiles} 个 (${(mapBytes / 1024).toFixed(0)} KB)`);
+    }
+    if (extraBytes > 0) {
+      console.log(`[afterPack] node-pty 源码/构建树: 已删除 ${(extraBytes / 1024 / 1024).toFixed(1)} MB`);
     }
   }
 

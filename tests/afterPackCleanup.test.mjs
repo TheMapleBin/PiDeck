@@ -73,6 +73,11 @@ test("afterPack cleanup preserves the Lark SDK package main entry", async () => 
 			false,
 			"the fixture must exercise an asar repack through normal documentation cleanup",
 		);
+		assert.equal(
+			entries.includes("node_modules/@larksuiteoapi/node-sdk/es/index.js"),
+			false,
+			"asar must drop the ESM copy; CJS main is lib/index.js",
+		);
 	} finally {
 		await rm(appOutDir, { recursive: true, force: true });
 	}
@@ -245,18 +250,42 @@ test("afterPack cleanup keeps node-pty unpacked after asar repack", async () => 
 		const sourceDir = join(appOutDir, "fixture");
 		const archive = join(appOutDir, "resources", "app.asar");
 		const ptyDir = join(sourceDir, "node_modules", "node-pty");
+		// 不传 electronPlatformName 时 keepPrefix = 构建机平台；写死 win32-x64 会在 Linux CI 被删掉。
+		const hostPrebuild = `${process.platform}-${process.arch}`;
+		const ptyNodeRel = `node_modules/node-pty/prebuilds/${hostPrebuild}/pty.node`;
 		await put(join(ptyDir, "lib", "utils.js"), "module.exports = {};\n");
-		await put(join(ptyDir, "prebuilds", "win32-x64", "pty.node"), "NATIVE");
+		await put(join(ptyDir, "src", "index.ts"), "export {};\n");
+		await put(join(ptyDir, "third_party", "conpty", "README.md"), "sources\n");
+		await put(join(ptyDir, "build", "Release", "pty.node"), "NATIVE_BUILD");
+		await put(join(ptyDir, "deps", "winpty", "README.md"), "winpty sources\n");
+		await put(join(ptyDir, "scripts", "post-install.js"), "// compile-time\n");
+		await put(join(ptyDir, "prebuilds", hostPrebuild, "pty.node"), "NATIVE");
+		await put(join(ptyDir, "prebuilds", hostPrebuild, "conpty", "conpty.dll"), "DLL");
 		await put(join(sourceDir, "out", "main", "hostEntry.js"), "module.exports = {};\n");
 		await put(join(sourceDir, "out", "main", "index.js"), "module.exports = {};\n");
 		await put(join(ptyDir, "README.md"), "fixture documentation that forces a repack\n");
 		await mkdir(dirname(archive), { recursive: true });
+		// 生产 asarUnpack 是 node-pty/**；这里用后缀匹配把 .node/.dll 标 unpacked。
 		await createAsarPackageWithOptions(sourceDir, archive, {
-			unpack: "{**/*.node,hostEntry.js}",
+			unpack: "{**/*.node,**/*.dll,hostEntry.js}",
 		});
+		const unpackedPty = join(
+			appOutDir,
+			"resources",
+			"app.asar.unpacked",
+			"node_modules",
+			"node-pty",
+		);
+		// asarUnpack 影子目录：源码树也会出现在 unpacked，afterPack 必须两边都清。
+		await put(join(unpackedPty, "lib", "utils.js"), "module.exports = {};\n");
+		await put(join(unpackedPty, "src", "index.ts"), "export {};\n");
+		await put(join(unpackedPty, "third_party", "conpty", "README.md"), "sources\n");
+		await put(join(unpackedPty, "build", "Release", "pty.node"), "NATIVE_BUILD");
+		await put(join(unpackedPty, "deps", "winpty", "README.md"), "winpty sources\n");
+		await put(join(unpackedPty, "scripts", "post-install.js"), "// compile-time\n");
 
 		assert.equal(
-			isUnpackedInHeader(archive, "node_modules/node-pty/prebuilds/win32-x64/pty.node"),
+			isUnpackedInHeader(archive, ptyNodeRel),
 			true,
 			"fixture must start with an unpacked pty.node so the test exercises the regression",
 		);
@@ -269,7 +298,7 @@ test("afterPack cleanup keeps node-pty unpacked after asar repack", async () => 
 		await afterPackCleanup({ appOutDir });
 
 		assert.equal(
-			isUnpackedInHeader(archive, "node_modules/node-pty/prebuilds/win32-x64/pty.node"),
+			isUnpackedInHeader(archive, ptyNodeRel),
 			true,
 			"repacking asar must keep pty.node unpacked so Electron maps require() to app.asar.unpacked",
 		);
@@ -299,6 +328,71 @@ test("afterPack cleanup keeps node-pty unpacked after asar repack", async () => 
 			false,
 			"repack must not leave app.asar.tmp.unpacked; portable NSIS extracts it before the window appears",
 		);
+		assert.equal(
+			normalizedEntries(archive).includes("node_modules/node-pty/src/index.ts"),
+			false,
+			"asar copy of node-pty src/ is compile-time only",
+		);
+		assert.equal(existsSync(join(unpackedPty, "src")), false, "unpacked node-pty src/ must go");
+		assert.equal(existsSync(join(unpackedPty, "third_party")), false, "unpacked node-pty third_party/ must go");
+		assert.equal(existsSync(join(unpackedPty, "build")), false, "unpacked node-pty build/ must go; runtime loads prebuilds");
+		assert.equal(existsSync(join(unpackedPty, "deps")), false, "unpacked node-pty deps/ is winpty source, not required at runtime");
+		assert.equal(existsSync(join(unpackedPty, "scripts")), false, "unpacked node-pty scripts/ is compile-time only");
+		assert.equal(
+			normalizedEntries(archive).includes("node_modules/node-pty/deps/winpty/README.md"),
+			false,
+			"asar copy of node-pty deps/ must go with the unpacked tree",
+		);
+		assert.equal(
+			normalizedEntries(archive).includes("node_modules/node-pty/lib/utils.js"),
+			true,
+			"asar copy of node-pty lib/ is the JS runtime",
+		);
+		assert.equal(
+			existsSync(join(unpackedPty, "lib", "utils.js")),
+			true,
+			"unpacked node-pty lib/ is the JS runtime; afterPack must keep it",
+		);
+		assert.equal(
+			existsSync(join(unpackedPty, "prebuilds", hostPrebuild, "pty.node")),
+			true,
+			"current-platform prebuild must remain",
+		);
+		assert.equal(
+			existsSync(join(unpackedPty, "prebuilds", hostPrebuild, "conpty", "conpty.dll")),
+			true,
+			"conpty.dll lives beside the .node; afterPack must not sweep files inside the kept prebuild",
+		);
+	} finally {
+		await rm(appOutDir, { recursive: true, force: true });
+	}
+});
+
+test("afterPack cleanup drops unused Electron shader DLLs but keeps ffmpeg/vulkan/ANGLE", async () => {
+	const appOutDir = await mkdtemp(join(tmpdir(), "pideck-after-pack-dll-"));
+	try {
+		await writeFile(join(appOutDir, "dxcompiler.dll"), "x".repeat(100), "utf8");
+		await writeFile(join(appOutDir, "dxil.dll"), "x".repeat(100), "utf8");
+		await writeFile(join(appOutDir, "vk_swiftshader.dll"), "x".repeat(100), "utf8");
+		await writeFile(join(appOutDir, "vk_swiftshader_icd.json"), "{}", "utf8");
+		await writeFile(join(appOutDir, "ffmpeg.dll"), "keep", "utf8");
+		await writeFile(join(appOutDir, "vulkan-1.dll"), "keep", "utf8");
+		await writeFile(join(appOutDir, "libEGL.dll"), "keep", "utf8");
+		await writeFile(join(appOutDir, "libGLESv2.dll"), "keep", "utf8");
+		await writeFile(join(appOutDir, "d3dcompiler_47.dll"), "keep", "utf8");
+
+		await afterPackCleanup({ appOutDir });
+
+		const { existsSync } = await import("node:fs");
+		assert.equal(existsSync(join(appOutDir, "dxcompiler.dll")), false);
+		assert.equal(existsSync(join(appOutDir, "dxil.dll")), false);
+		assert.equal(existsSync(join(appOutDir, "vk_swiftshader.dll")), false);
+		assert.equal(existsSync(join(appOutDir, "vk_swiftshader_icd.json")), false);
+		assert.equal(existsSync(join(appOutDir, "ffmpeg.dll")), true, "ffmpeg is media playback, keep");
+		assert.equal(existsSync(join(appOutDir, "vulkan-1.dll")), true, "vulkan-1 is GPU path, keep");
+		assert.equal(existsSync(join(appOutDir, "libEGL.dll")), true, "ANGLE must stay");
+		assert.equal(existsSync(join(appOutDir, "libGLESv2.dll")), true, "ANGLE must stay");
+		assert.equal(existsSync(join(appOutDir, "d3dcompiler_47.dll")), true, "ANGLE must stay");
 	} finally {
 		await rm(appOutDir, { recursive: true, force: true });
 	}

@@ -28,9 +28,8 @@ const formats = args.length > 0 ? args.join(" ") : "nsis";
 console.log(`[1/4] 构建本地 packages（file: 依赖需要 lib/ 产物）…`);
 execSync("npm run build:packages", { cwd: root, stdio: "inherit", shell: true });
 
-// DSH runtime 随包资源：electron-builder 的 extraResources 会去 dist-runtime/dsh-runtime
-// 取，目录为空（只有 .gitkeep）时打出来的包 DSH 不可用。--if-missing 让后续快速打包
-// 跳过重打（依赖没变的话产物是一样的），只有首次或手动删除后才花那 20 秒。
+// DSH runtime 官方默认 lite：extraResources 目录只留 .gitkeep，安装包不随 runtime。
+// --if-missing 跳过重打 tgz，但仍会清 extraResources，避免本地 --full 残留被打进包。
 // 前置同步声明版本根字段（devDependencies 会被 electron-builder 从 asar 剥掉，
 // 打包版靠根字段做 runtime 版本一致性门控——见 scripts/sync-dsh-declared-version.mjs）。
 console.log(`\n[2/4] 同步 DSH 声明版本 + 准备随包资源（--if-missing）…`);

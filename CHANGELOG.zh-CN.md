@@ -7,6 +7,7 @@
 - **项目级定时任务，管理改模态弹框** — 定时任务可按项目作用域配置；管理界面改为模态弹框，不再覆盖会话工作区，打开管理不打断当前会话 / 分屏。
 - **会话 Tab 栏「当前会话操作」** — ⋯ 菜单新增与侧栏右键同源的操作组：重命名 / 复制会话 / 导出 HTML / 复制会话文件路径 / 打开会话文件。搜索定位到侧栏未渲染的会话时，⋯ 菜单是稳定入口。
 - **提问卡支持直接回车提交** — 单卡 / 批量卡选完即可回车提交（含「选了再回车」），IME 合成中的回车只用于选字不上屏提交；编辑器回车仍换行，Ctrl/Cmd+Enter 提交。
+- **官方安装包不再随 DSH runtime** — 默认 lite：extraResources 留空。首次用 DSH 时从当前 latest 应用 Release（AtomGit / GitHub）按平台下载，跟 runner-node sidecar 同款。离线/内网包仍可 `--full`。旧版 DSH 升级留下的 npm hashed leftover 目录不再打进 tarball。
 
 ### 🐛 修复
 - **生图会话不再因 base64 落盘撑爆渲染进程** — 图片改为内容寻址 blob + 引用，base64 不再进 JSONL；读取只走尾部字节窗口，旧格式首次打开自动迁移。反复生图导致的 `reason:"oom"` 崩溃循环与白屏已消除。
@@ -14,6 +15,7 @@
 - **常驻缓存补字节预算** — 日志行缓存、会话历史全文 LRU、disk 历史消息补上字节 / 条数上限，堵住四处无界增长。
 - **打包版 DSH 黑窗口（koffi）** — koffi 纳入应用依赖并打通 runtime 解析链，打包后 host/runner 能隐藏控制台，不再弹出可见黑窗口。
 - **DSH 沙箱 runner 改走本机 Node 24** — Windows 上沙箱 runner 不再用 electron.exe（GUI）启动，改为复用本机 `node.exe`（开发设置可检测 / 指定，含 nvm/fnm/mise/Scoop）。安装包不带 Node；找不到时可一键从当前 latest 应用 Release（AtomGit/GitHub）下载仅给 PiDeck 用的副本，不改系统 PATH。
+- **安装包体积裁剪** — 删掉本应用不用的 Electron 着色器 DLL（dxcompiler / dxil / SwiftShader）、飞书 SDK 的 ESM 副本（es/）以及 node-pty 编译期目录（src / third_party / build / deps）。Windows 终端仍保留 `prebuilds/<platform>/conpty`。渲染层 Shiki 改走 web+编码语言白名单，不再打 346 种语言的 full bundle。
 - **Linux 升级后双击图标没反应** — 单实例锁改为二次握手并校验锁主人是否仍响应；升级残留锁、PID 复用与僵尸进程不再让次实例静默退出。问题反馈体检新增锁状态。
 - **停止会话整树终止子代理** — 停止父会话时一并清理 pi-subagents / acp_delegate 拉起的子进程，避免孤儿继续烧 token。
 - **模型偏好失效不再阻断发送** — 已保存模型被重命名 / 删除后，沿用 runtime 当前模型并在时间线提示重选，而不再每次发送报「Failed to apply session preferences」。
