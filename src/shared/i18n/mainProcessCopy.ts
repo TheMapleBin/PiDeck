@@ -12,6 +12,10 @@ export const mainProcessZhCN = {
 		"本次启动未加载任何扩展：设置 → 开发设置 的「禁用扩展启动」处于开启状态，todo/plan/ask 等扩展能力不可用。如非排查扩展问题需要，请关闭该开关后重启会话。",
 	"diagnostic.skillWhitelistSkipped":
 		"技能数量过多（{count} 个），已跳过「禁用技能」设置：本次启动由 pi 自动加载全部技能（禁用技能仍可被模型自动调用）。减少技能后重启会话即可恢复。",
+	"diagnostic.extensionWhitelistSkipped":
+		"扩展数量过多（{count} 个），已跳过「禁用扩展」设置：本次启动由 pi 自动加载全部扩展。减少扩展后重启会话即可恢复。",
+	"diagnostic.promptWhitelistSkipped":
+		"提示词模板过多（{count} 个），已跳过「禁用提示词」设置：本次启动由 pi 自动加载全部提示词模板（/名字 仍可展开）。减少模板后重启会话即可恢复。",
 	"diagnostic.modelPreferenceIgnored":
 		"会话保存的模型偏好 {provider}/{model} 已不存在（可能已被重命名或删除），本次发送沿用当前模型。请打开模型选择器重新选择。",
 	"diagnostic.agentStopped": "Agent 进程已停止，请重启 Agent 后重试",
@@ -249,6 +253,10 @@ export const mainProcessEnUS: Record<MainProcessTranslationKey, string> = {
 		"No extension was loaded this run: “Disable extensions on start” is still enabled in Settings → Developer settings, so todo/plan/ask and other extension capabilities are unavailable. Turn that switch off and restart the session unless you are debugging extensions.",
 	"diagnostic.skillWhitelistSkipped":
 		"Too many skills ({count}). The disabled-skill list was skipped for this launch, so pi loaded every skill (disabled ones can still be invoked by the model). Reduce the number of skills and restart the session to restore it.",
+	"diagnostic.extensionWhitelistSkipped":
+		"Too many extensions ({count}). The disabled-extension list was skipped for this launch, so pi loaded every extension. Reduce the number of extensions and restart the session to restore it.",
+	"diagnostic.promptWhitelistSkipped":
+		"Too many prompt templates ({count}). The disabled-prompt list was skipped for this launch, so pi loaded every template (both are still expandable via /name). Reduce the number of templates and restart the session to restore it.",
 	"diagnostic.modelPreferenceIgnored":
 		"The saved model preference {provider}/{model} no longer exists (it may have been renamed or removed). This message was sent with the current model. Pick a model again in the model selector.",
 	"diagnostic.agentStopped": "The Agent process has stopped. Restart the Agent and try again.",

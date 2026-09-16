@@ -119,23 +119,55 @@ type PiProcessOptions = {
 };
 
 /**
- * 估算 --skill 注入占用的命令行字符数（含选项名、分隔符与可能的引号）。
- *
- * 为什么需要：技能白名单（--no-skills + 逐条 --skill）必须由 PiDeck 自己枚举
- * 「pi 本来会加载的全部技能」，命令行长度因此 O(技能数)，技能多的用户会直接撑爆命令行。
- * 该估算与 locator.resolveArgCharBudget() 给出的通道预算比较（各通道上限差 4 倍，
- * 见 PiLocator 中的常量注释），超限就整体放弃注入——pi 走默认发现，本次「禁用技能」
- * 不生效但启动不会失败；跳过的事实记入 diagnostics 供 UI 提示用户。
+ * 白名单注入的资源类型：与 pi 的 `--no-<kind>` 总开关一一对应。
+ * 扩展/技能/提示词三条注入链路完全同构（关自动发现 + 逐条注入路径），
+ * 参数名与预算判断共用一份实现，避免三处各自漂移。
  */
+type WhitelistKind = "extensions" | "skills" | "prompts";
 
-/** 估算 --skill 注入占用的命令行字符数（含选项名、分隔符与可能的引号），用于预算判断。 */
-function estimateSkillWhitelistArgChars(paths: readonly string[]): number {
-  let total = "--no-skills".length;
+/** 各资源白名单对应的 pi 命令行参数（总开关 + 逐条注入用的选项名）。 */
+const WHITELIST_FLAGS: Record<WhitelistKind, { off: string; per: string }> = {
+  extensions: { off: "--no-extensions", per: "--extension" },
+  skills: { off: "--no-skills", per: "--skill" },
+  prompts: { off: "--no-prompt-templates", per: "--prompt-template" },
+};
+
+/** 某类白名单因超出命令行预算被整体跳过时，留给启动诊断的信息。 */
+export type WhitelistSkip = {
+  kind: WhitelistKind;
+  /** 被跳过的条数（用户关心的是「多少个」）。 */
+  count: number;
+  /** 注入后的整条命令行估算字符数（含已有参数），可直接与 budget 比较。 */
+  chars: number;
+  /** 本次注入自身占用的估算字符数，用来说明「谁是撑爆预算的大头」。 */
+  injected: number;
+  budget: number;
+};
+
+/** 估算一组参数占用的命令行字符数（含分隔空格；路径带空格时 spawn 会补引号，一并留余量）。 */
+function estimateArgChars(args: readonly string[]): number {
+  let total = 0;
+  for (const arg of args) total += arg.length + 1 + (arg.includes(" ") ? 2 : 0);
+  return total;
+}
+
+/**
+ * 估算白名单注入（`--no-X` + 逐条 `--x <路径>`）占用的命令行字符数。
+ *
+ * 为什么需要：白名单必须由 PiDeck 自己枚举「pi 本来会加载的全部扩展/技能/提示词」，
+ * 命令行长度因此 O(条数)，条数多的用户会直接撑爆命令行（Windows cmd.exe 通道上限 8191，
+ * 截断后 pi 拿到残缺参数、启动异常）。该估算与 locator.resolveArgCharBudget() 给出的
+ * 通道预算比较（各通道上限差 4 倍，见 PiLocator 中的常量注释），超限就整体放弃注入——
+ * pi 走默认发现，本次「禁用」不生效但启动不会失败；跳过的事实记入 diagnostics 供 UI 提示用户。
+ */
+function estimateWhitelistInjectionChars(kind: WhitelistKind, paths: readonly string[]): number {
+  const flags = WHITELIST_FLAGS[kind];
+  // 总开关本身也占长度，且「空列表」表示全部禁用、依然要注入总开关。
+  let total = flags.off.length + 1;
   for (const path of paths) {
     const trimmed = path.trim();
     if (!trimmed) continue;
-    // "--skill " + 路径；路径含空格时 spawn 会补一对引号，这里一并算上留余量。
-    total += "--skill ".length + trimmed.length + (trimmed.includes(" ") ? 2 : 0);
+    total += flags.per.length + 1 + trimmed.length + (trimmed.includes(" ") ? 2 : 0);
   }
   return total;
 }
@@ -228,10 +260,10 @@ export class PiProcess extends EventEmitter {
     /** 被桌面端 RPC 启动路径自动隔离的扩展名（如 codeisland） */
     blockedExtensions?: string[];
     /**
-     * 因超出命令行注入预算而被跳过的技能白名单信息。
-     * 跳过不影响启动（pi 走默认技能发现），只意味着本次「禁用技能」不生效，需要告知用户。
+     * 因超出命令行注入预算而被跳过的白名单（扩展/技能/提示词，条数多时可能同时命中多项）。
+     * 跳过不影响启动（pi 走默认发现），只意味着本次「禁用」不生效，需要告知用户。
      */
-    skillWhitelistSkipped?: { skills: number; chars: number; budget: number };
+    whitelistSkipped?: WhitelistSkip[];
   } | null = null;
 
   constructor(
@@ -273,7 +305,7 @@ export class PiProcess extends EventEmitter {
     cwdMissing?: boolean;
     launch?: { channel: "node-direct" | "cmd-shim"; reason?: string; entry?: string };
     blockedExtensions?: string[];
-    skillWhitelistSkipped?: { skills: number; chars: number; budget: number };
+    whitelistSkipped?: WhitelistSkip[];
   }> | null {
     return this.diagnostics;
   }
@@ -344,6 +376,11 @@ export class PiProcess extends EventEmitter {
     const includeProjectResources = trustOverride !== "no-approve";
     let blockedNames: string[] = [];
     let startupComplete = false;
+    /**
+     * 被预算兜底跳过的白名单（扩展/技能/提示词）。三类注入共用同一条命令行预算，
+     * 因此统一记账、统一进 diagnostics，而不是各自只算自己那一段。
+     */
+    const whitelistSkipped: WhitelistSkip[] = [];
     try {
       // 仅临时停放 codeisland 等黑名单扩展文件；拒绝 trust 时不得扫描或移动项目扩展。
       blockedNames = this.parkIncompatibleExtensions(includeProjectResources);
@@ -439,6 +476,51 @@ export class PiProcess extends EventEmitter {
       // Approving an old pi retains historical behavior; only denial requires a hard security guarantee.
     }
 
+    /**
+     * 评估某类白名单注入是否超出本通道的命令行预算（node 直启 26000 / cmd.exe 5000）。
+     * 比较对象是「整条命令行」（已有参数 + 本次注入）：三类白名单可同时注入，只算自己
+     * 会漏掉叠加效应，叠加超限同样会撑爆命令行。
+     */
+    const evaluateWhitelistBudget = (kind: WhitelistKind, paths: readonly string[]) => {
+      const injected = estimateWhitelistInjectionChars(kind, paths);
+      const budget = this.locator.resolveArgCharBudget(command);
+      const argvChars = estimateArgChars(finalPiArgs) + injected;
+      return { injected, budget, argvChars, overBudget: argvChars > budget };
+    };
+    /**
+     * 记录「白名单因超预算被跳过」：进 diagnostics 供启动诊断卡与时间线提示，并双写日志。
+     * 跳过不影响启动，但用户看到「禁用的东西又被加载了」会当成 bug，必须可追溯。
+     */
+    const recordWhitelistSkip = (
+      kind: WhitelistKind,
+      count: number,
+      budget: { injected: number; budget: number; argvChars: number },
+    ): void => {
+      whitelistSkipped.push({
+        kind,
+        count,
+        chars: budget.argvChars,
+        injected: budget.injected,
+        budget: budget.budget,
+      });
+      void getAppLogger()?.warn(
+        "pi-process",
+        `${kind} whitelist skipped: injection exceeds command line budget`,
+        {
+          count,
+          estimatedChars: budget.argvChars,
+          injectedChars: budget.injected,
+          budget: budget.budget,
+          cwd: this.cwd,
+        },
+      );
+      console.warn(
+        `[PiProcess] ${kind} whitelist skipped: ${count} entries (~${budget.injected} chars, ` +
+          `argv ~${budget.argvChars}) exceed budget ${budget.budget}; ` +
+          `falling back to default ${kind} discovery (disabled ${kind} will still load)`,
+      );
+    };
+
     // 扩展白名单的版本门槛：-e 的目录/包源语义从 pi 0.60 起才文档化，过低版本传目录
     // 可能 unknown option / path not found 导致 RPC 启动失败。白名单模式这里同步确认版本：
     // - 信任场景 ensureVersionCheck 已 await（versionCache 为 done），无需重复；
@@ -454,21 +536,27 @@ export class PiProcess extends EventEmitter {
       const cachedVersionGate = PiProcess.versionCache.get(command);
       const minorForGate =
         cachedVersionGate?.status === "done" ? cachedVersionGate.minorVersion : this.piMinorVersion;
-      if (
+      const versionTooOld =
         minorForGate !== null &&
         minorForGate !== undefined &&
-        minorForGate < MIN_PI_MINOR_VERSION_FOR_EXTENSION_WHITELIST
-      ) {
-        // 版本过低：白名单不可用。不注入 --no-extensions/-e，恢复 pi 默认扩展发现，
+        minorForGate < MIN_PI_MINOR_VERSION_FOR_EXTENSION_WHITELIST;
+      // 注入预算兜底：逐条 --extension 使命令行长度 O(扩展数)，与技能/提示词同一套判断。
+      const extensionBudget = evaluateWhitelistBudget("extensions", whitelistPaths);
+      if (versionTooOld || extensionBudget.overBudget) {
+        // 降级（版本过低 / 超预算）：不注入 --no-extensions/-e，恢复 pi 默认扩展发现，
         // 并按非白名单路径补回内置扩展，避免降级后连内置扩展都缺失。
         appendBuiltInExtensionArgs(finalPiArgs, builtInPaths, { noExtensions: false });
-        void getAppLogger()?.warn("pi-process", "pi version too old for extension whitelist; falling back to default discovery", {
-          minorVersion: minorForGate,
-          required: MIN_PI_MINOR_VERSION_FOR_EXTENSION_WHITELIST,
-        });
-        console.warn(
-          `[PiProcess] pi ${minorForGate}.x too old for extension disable whitelist (need >= ${MIN_PI_MINOR_VERSION_FOR_EXTENSION_WHITELIST}); disabled extensions will still load`,
-        );
+        if (versionTooOld) {
+          void getAppLogger()?.warn("pi-process", "pi version too old for extension whitelist; falling back to default discovery", {
+            minorVersion: minorForGate,
+            required: MIN_PI_MINOR_VERSION_FOR_EXTENSION_WHITELIST,
+          });
+          console.warn(
+            `[PiProcess] pi ${minorForGate}.x too old for extension disable whitelist (need >= ${MIN_PI_MINOR_VERSION_FOR_EXTENSION_WHITELIST}); disabled extensions will still load`,
+          );
+        } else {
+          recordWhitelistSkip("extensions", whitelistPaths.length, extensionBudget);
+        }
       } else {
         // 白名单模式即使列表为空也要加 --no-extensions：空列表表示「全部禁用」，不是「不启用」。
         // 路径经 spawn 参数数组传递（不经 shell），空格/中文/& 等特殊字符无需转义。
@@ -499,42 +587,16 @@ export class PiProcess extends EventEmitter {
     const requestedSkillPaths: string[] | null =
       skillWhitelistPaths !== null && !this.settings?.piRpcNoSkills ? skillWhitelistPaths : null;
     // 注入预算兜底：白名单逐条 --skill 注入使命令行长度 O(技能数)，技能多的用户会超长
-    // （见 estimateSkillWhitelistArgChars 注释）。预算按实际启动通道取（node 直启 26000 /
+    // （见 estimateWhitelistInjectionChars 注释）。预算按实际启动通道取（node 直启 26000 /
     // cmd.exe 5000 / 非 Windows 不限制），超预算就整体放弃注入，pi 走默认发现——「禁用技能」
     // 本次不生效，但启动不会失败；跳过的事实记入 diagnostics 供 UI 提示用户。
     // 仅在确有白名单需要注入时才解析通道：非白名单模式零额外开销（不必读 .cmd 垫片）。
-    const skillWhitelistArgChars = requestedSkillPaths
-      ? estimateSkillWhitelistArgChars(requestedSkillPaths)
-      : 0;
-    const skillWhitelistArgCharBudget = requestedSkillPaths
-      ? this.locator.resolveArgCharBudget(command)
-      : 0;
-    const skillWhitelistOverBudget =
-      requestedSkillPaths !== null && skillWhitelistArgChars > skillWhitelistArgCharBudget;
-    const skillWhitelistSkipped =
-      requestedSkillPaths !== null && skillWhitelistOverBudget
-        ? {
-            skills: requestedSkillPaths.length,
-            chars: skillWhitelistArgChars,
-            budget: skillWhitelistArgCharBudget,
-          }
-        : undefined;
-    if (skillWhitelistSkipped) {
-      void getAppLogger()?.warn(
-        "pi-process",
-        "Skill whitelist skipped: injection exceeds command line budget",
-        {
-          skills: skillWhitelistSkipped.skills,
-          estimatedChars: skillWhitelistSkipped.chars,
-          budget: skillWhitelistSkipped.budget,
-          cwd: this.cwd,
-        },
-      );
-      console.warn(
-        `[PiProcess] Skill whitelist skipped: ${skillWhitelistSkipped.skills} skills ` +
-          `(~${skillWhitelistSkipped.chars} chars) exceed budget ${skillWhitelistSkipped.budget}; ` +
-          "falling back to default skill discovery (disabled skills will still load)",
-      );
+    const skillBudget = requestedSkillPaths
+      ? evaluateWhitelistBudget("skills", requestedSkillPaths)
+      : null;
+    const skillWhitelistOverBudget = skillBudget !== null && skillBudget.overBudget;
+    if (skillBudget && skillBudget.overBudget && requestedSkillPaths) {
+      recordWhitelistSkip("skills", requestedSkillPaths.length, skillBudget);
     }
     const useSkillWhitelist = requestedSkillPaths !== null && !skillWhitelistOverBudget;
     if (useSkillWhitelist) {
@@ -583,6 +645,11 @@ export class PiProcess extends EventEmitter {
     const usePromptWhitelist =
       promptWhitelistPaths !== null &&
       promptWhitelistPaths !== undefined;
+    // 注入预算兜底：与扩展/技能同构（逐条 --prompt-template 使命令行长度 O(模板数)），
+    // 超预算同样退回默认模板发现（禁用不生效，但启动不会失败）。
+    const promptBudget = promptWhitelistPaths
+      ? evaluateWhitelistBudget("prompts", promptWhitelistPaths)
+      : null;
     if (usePromptWhitelist) {
       if (!trustOverride) await this.ensureVersionCheck(command);
       const cachedPromptGate = PiProcess.versionCache.get(command);
@@ -601,6 +668,8 @@ export class PiProcess extends EventEmitter {
         console.warn(
           `[PiProcess] pi ${minorForPromptGate}.x too old for prompt disable whitelist (need >= ${MIN_PI_MINOR_VERSION_FOR_PROMPT_WHITELIST}); disabled prompts will still load`,
         );
+      } else if (promptBudget && promptBudget.overBudget && promptWhitelistPaths) {
+        recordWhitelistSkip("prompts", promptWhitelistPaths.length, promptBudget);
       } else {
         // 白名单模式即使列表为空也要加 --no-prompt-templates：空列表表示「全部禁用」。
         finalPiArgs.push("--no-prompt-templates");
@@ -664,7 +733,7 @@ export class PiProcess extends EventEmitter {
       versionCheckProbed: cachedVersion?.status === "done",
       launch: invocation.windowsLaunch,
       blockedExtensions: blockedNames.length > 0 ? blockedNames : undefined,
-      skillWhitelistSkipped,
+      whitelistSkipped: whitelistSkipped.length > 0 ? whitelistSkipped : undefined,
     };
     if (invocation.windowsLaunch?.channel === "cmd-shim" && invocation.windowsLaunch.reason) {
       // 显式记录回退原因：命令行里出现 cmd.exe 时，用户与支持人员都要能立刻知道为什么没走 node 直启。

@@ -40,8 +40,9 @@ import {
 	COMPACT_ROUTED_TO_OWNER,
 	COMPACT_USER_ABORT_WINDOW_MS,
 } from "../../shared/compactFeedback";
-import { PiProcess } from "./PiProcess";
+import { PiProcess, type WhitelistSkip } from "./PiProcess";
 import { createCompactRpcRequest } from "./compactRpc";
+import { resolveWhitelistSkipCopy, WHITELIST_SKIP_KIND_COPY } from "./whitelistSkipNotice";
 import {
 	readPiCompactionOwnership,
 	type PiCompactionOwnership,
@@ -918,28 +919,29 @@ export class AgentManager {
 	private readonly disabledExtensionsNoticesSent = new Set<DisabledExtensionsReason>();
 
 	/**
-	 * 技能白名单因超出启动参数预算被跳过：告知用户本次「禁用技能」不生效。
-	 * 跳过本身不影响启动，但用户看到「禁用的技能又被加载了」会当成 bug，必须显式说明。
+	 * 某类白名单（扩展/技能/提示词）因超出启动参数预算被跳过：告知用户本次「禁用」不生效。
+	 * 跳过本身不影响启动，但用户看到「禁用的东西又被加载了」会当成 bug，必须显式说明。
+	 * 三类共用同一条命令行预算（见 PiProcess.evaluateWhitelistBudget），可能同时被跳过，
+	 * 因此按条逐条提示，而不是把两种资源揉成一句话。
 	 * 与扩展回退同一条启动期诊断链路（首个 run 时落到时间线），理由见 queueStartupDiagnostic。
 	 */
-	private notifySkillWhitelistSkipped(
-		agentId: string,
-		info: { skills: number; chars: number; budget: number },
-	): void {
-		void this.appLogger?.warn("agent", "Skill whitelist skipped: too many skills for launch args", {
-			agentId,
-			skills: info.skills,
-			estimatedChars: info.chars,
-			budget: info.budget,
-		});
-		this.queueStartupDiagnostic(agentId, {
-			role: "system",
-			i18nKey: "diagnostic.skillWhitelistSkipped",
-			fallbackText:
-				`技能数量过多（${info.skills} 个，约 ${info.chars} 字符，超出启动参数预算 ${info.budget}），` +
-				"已跳过「禁用技能」设置：本次启动由 pi 自动加载全部技能。",
-			options: { params: { count: info.skills, budget: info.budget } },
-		});
+	private notifyWhitelistSkipped(agentId: string, entries: readonly WhitelistSkip[]): void {
+		for (const entry of entries) {
+			const copy = resolveWhitelistSkipCopy(entry);
+			void this.appLogger?.warn("agent", "Whitelist skipped: too many entries for launch args", {
+				agentId,
+				kind: entry.kind,
+				count: entry.count,
+				estimatedChars: entry.chars,
+				budget: entry.budget,
+			});
+			this.queueStartupDiagnostic(agentId, {
+				role: "system",
+				i18nKey: copy.i18nKey,
+				fallbackText: copy.fallbackText,
+				options: { params: { count: entry.count, budget: entry.budget } },
+			});
+		}
 	}
 
 	/** Windows 主进程文件操作必须使用可由 host 访问的路径。 */
@@ -1719,9 +1721,10 @@ export class AgentManager {
 			cwd: diag?.cwd,
 			fallbackFromExtensions,
 		});
-		// 技能白名单因技能太多被跳过：本次 pi 会加载全部技能（禁用不生效），需显式告知用户。
-		if (diag?.skillWhitelistSkipped) {
-			this.notifySkillWhitelistSkipped(id, diag.skillWhitelistSkipped);
+		// 白名单因条数过多被跳过：本次 pi 按默认发现加载全部扩展/技能/提示词（禁用不生效），
+		// 需显式告知用户。
+		if (diag?.whitelistSkipped && diag.whitelistSkipped.length > 0) {
+			this.notifyWhitelistSkipped(id, diag.whitelistSkipped);
 		}
 
 		try {
@@ -4791,13 +4794,17 @@ export class AgentManager {
 			// 桌面端已自动隔离的扩展（如 codeisland），方便用户对照「为何 RPC 没加载该扩展」。
 			lines.push(`已自动隔离扩展: ${diag.blockedExtensions.join(", ")}`);
 		}
-		if (diag.skillWhitelistSkipped) {
-			// 技能数超命令行预算 → 本次未注入 --no-skills/--skill，pi 加载了全部技能。
-			// 排查「禁用技能为何无效」时这条是关键上下文。
-			lines.push(
-				`技能白名单: 已跳过（${diag.skillWhitelistSkipped.skills} 个技能 ≈ ${diag.skillWhitelistSkipped.chars} 字符，` +
-					`超出预算 ${diag.skillWhitelistSkipped.budget}）→ 本次「禁用技能」不生效`,
-			);
+		if (diag.whitelistSkipped && diag.whitelistSkipped.length > 0) {
+			// 白名单条数超命令行预算 → 本次未注入 --no-extensions/--no-skills/--no-prompt-templates，
+			// pi 按默认发现加载了全部资源，对应「禁用」在本会话不生效。
+			// 排查「禁用为何无效」时这条是关键上下文。
+			const skipped = diag.whitelistSkipped
+				.map((entry) => {
+					const meta = WHITELIST_SKIP_KIND_COPY[entry.kind];
+					return `${meta.label} ${entry.count} 个（≈ ${entry.chars} 字符 / 预算 ${entry.budget}）`;
+				})
+				.join("、");
+			lines.push(`白名单注入: 已跳过 ${skipped} → 本次「禁用」不生效`);
 		}
 		lines.push("");
 		lines.push("━━━ 排查步骤 ━━━");
