@@ -1823,6 +1823,11 @@ async function createWindow() {
 			mainWindow.webContents.send(ipcChannels.appShortcutTriggered, "openSearch");
 			return;
 		}
+		if (isShortcutInput("openCommandPalette", input)) {
+			event.preventDefault();
+			mainWindow.webContents.send(ipcChannels.appShortcutTriggered, "openCommandPalette");
+			return;
+		}
 		if (isShortcutInput("toggleDevTools", input)) {
 			event.preventDefault();
 			toggleMainWindowDevTools(mainWindow);

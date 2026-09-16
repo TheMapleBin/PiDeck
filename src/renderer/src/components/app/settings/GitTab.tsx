@@ -116,6 +116,7 @@ export const GitTab = memo(function GitTab(props: GitTabProps) {
 		/* Git：id 供「去设置」深链滚动到摘要模型 */
 		<SettingsSection id="settings-section-git" title={t("settings.git")}>
 			<SettingSwitchRow
+				anchor="git-management"
 				title={t("settings.gitManagement")}
 				description={t("settings.gitManagementDesc")}
 				checked={draft.enableGitManagement}
@@ -232,6 +233,7 @@ export const GitTab = memo(function GitTab(props: GitTabProps) {
 						</Button>
 					</SettingRow>
 					<SettingTextarea
+						anchor="git-commit-message-prompt"
 						title={t("settings.gitCommitMessagePrompt")}
 						description={t("settings.gitCommitMessagePromptDesc")}
 						value={draft.gitCommitMessagePrompt}

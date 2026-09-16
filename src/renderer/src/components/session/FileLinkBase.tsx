@@ -48,6 +48,14 @@ export function useFileLinkBaseDir(): string | undefined {
 }
 
 /**
+ * 文件链接右键菜单等场景需要完整的解析上下文（baseDir/projectRoot/scope），
+ * 与存在性校验共用同一份基准，保证「菜单里复制的路径」=「点击打开的路径」。
+ */
+export function useFileLinkContext(): FileLinkBase {
+	return useContext(FileLinkBaseContext);
+}
+
+/**
  * 单个路径的存在性判定订阅：首次遇到未校验路径时登记批量请求（store 内部
  * 去抖合并 IPC），结果经缓存广播回来；undefined 表示未知/校验中。
  * 每个文件锚点独立订阅自己的键，避免一条长回复整体重渲染。

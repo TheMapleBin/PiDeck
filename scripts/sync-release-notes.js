@@ -207,10 +207,24 @@ function updateDocsSite(data) {
   }
   newEntry.push("");
 
+  // 同版本段落已存在时「替换」而不是再插一份。
+  //
+  // 触发场景：往当期**已发布**版本的 CHANGELOG 段里补条目后重跑同步（2026-09-16 实测，
+  // 补 Ctrl+P 命令面板条目时就撞上）——纯插入会让文档站出现两份同名版本段落。
+  // 这与上面 v0.6.6 的历史重复是同一类问题，只是那次是版本号改名（beta → 正式）造成的。
+  // 替换时保持原位置，不打乱「新版本在上」的倒序。
+  const existingIdx = lines.findIndex((l) => l.trimEnd() === `## ${version}`);
+  const startIdx = existingIdx === -1 ? firstVersionIdx : existingIdx;
+  let endIdx = firstVersionIdx;
+  if (existingIdx !== -1) {
+    const nextIdx = lines.findIndex((l, i) => i > existingIdx && /^##\s+v0/.test(l));
+    endIdx = nextIdx === -1 ? lines.length : nextIdx;
+  }
+
   const newContent = [
-    ...lines.slice(0, firstVersionIdx),
+    ...lines.slice(0, startIdx),
     ...newEntry,
-    ...lines.slice(firstVersionIdx),
+    ...lines.slice(endIdx),
   ].join("\n");
 
   fs.writeFileSync(filePath, newContent);

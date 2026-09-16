@@ -32,8 +32,20 @@ import type {
 } from "../../shared/types";
 import { ipcChannels } from "../../shared/ipc";
 import { collectSessionFileChanges } from "../../shared/fileChanges";
+import {
+	COMPACT_CANCELLED_BY_OWNER,
+	COMPACT_CANCELLED_BY_USER_ABORT,
+	COMPACT_HOOK_REJECT_MAX_MS,
+	COMPACT_OBSERVATION_MAX_AGE_MS,
+	COMPACT_ROUTED_TO_OWNER,
+	COMPACT_USER_ABORT_WINDOW_MS,
+} from "../../shared/compactFeedback";
 import { PiProcess } from "./PiProcess";
 import { createCompactRpcRequest } from "./compactRpc";
+import {
+	readPiCompactionOwnership,
+	type PiCompactionOwnership,
+} from "./compactionOwner";
 import { mergeSubagentSources } from "./derivedSubagents";
 import { parseAvailableThinkingLevelsResponse } from "./thinkingLevels";
 import { listActiveBuiltInExtensionPaths } from "../extensions/builtInExtensions";
@@ -360,6 +372,28 @@ export class AgentManager {
 	 * 用户随后发送的新消息可能撞上 Pi 内部 compaction，表现为“会话中断”。
 	 */
 	private readonly rpcCompactingAgents = new Set<string>();
+	/**
+	 * 用户最近一次主动 abort 的时间戳（abort() 里写入）。
+	 *
+	 * `recentlyAborted` 会在 agent_start/settled 时被清掉，而压缩的取消结果要等
+	 * RPC 返回才到；只靠那个集合会把「自己按停止打断的压缩」误判成扩展接管。
+	 * 这里用时间戳 + 窗口判定（COMPACT_USER_ABORT_WINDOW_MS），不受事件清标影响。
+	 */
+	private readonly lastUserAbortAt = new Map<string, number>();
+	/**
+	 * 每个 agent 最近一次 compaction 的观测（start/end 事件之间的耗时与结果）。
+	 *
+	 * 用途只有一个：手动压缩失败时判定取消来源。pi 的
+	 * 「Compaction cancelled」在「扩展钩子拒绝」与「abort 打断」两条路径上是同一个
+	 * 字符串，唯一的客观差别是——钩子拒绝发生在总结开始前（compaction_start→end
+	 * 几乎无耗时、没有 LLM 调用）。没有这份观测就只能对用户说「取消了」而说不出谁。
+	 */
+	private readonly lastCompactionObservation = new Map<
+		string,
+		{ aborted: boolean; reason?: string; elapsedMs?: number; at: number }
+	>();
+	/** compaction_start 的到达时间（end 到达时算耗时，随即删除）。 */
+	private readonly compactionStartedAt = new Map<string, number>();
 	/**
 	 * pi 的逻辑模型回合边界（agent_start → true，agent_end → false）。
 	 * 与 tab.status 分离：压缩/重试收尾时 runtime 仍 busy，但上一轮回答已经完成。
@@ -2186,6 +2220,9 @@ export class AgentManager {
 		// 必须在发送 abort RPC 之前加入集合，避免事件处理函数在 RPC 发出后、
 		// handlePiEvent 返回前收到管道中的旧事件并重建 assistant 消息。
 		this.recentlyAborted.add(agentId);
+		// pi 的 abort() 内部会 abortCompaction()：压缩被取消时用它区分「自己打断」
+		// 与「扩展接管」（见 resolveCompactCancelMessage）。
+		this.lastUserAbortAt.set(agentId, Date.now());
 		this.setAgentTurnActive(agentId, false);
 		// 封印当前 stream generation：比 recentlyAborted 更硬，不依赖 activeAssistantMessageIds 例外条件，
 		// 残留 thinking/text/tool 事件在 abort settled 前一律丢弃。
@@ -2274,6 +2311,14 @@ export class AgentManager {
 			throw new Error("already compacting");
 		}
 
+		// 接管者改写：会话的上下文窗口可能已被扩展独占（它用 session_before_compact
+		// 钩子取消 pi 的压缩）。这时发 compact RPC 注定拿到 Compaction cancelled，
+		// 必须改成它自己的入口（如 Magic Context 的 /ctx-wrapup），否则用户只看到「没反应」。
+		const ownership = await this.resolveSessionCompactionOwnership(runtime);
+		if (ownership && ownership.owners.length > 0) {
+			return await this.routeCompactToOwner(runtime, ownership);
+		}
+
 		// 标记压缩中，退出处理器据此区分压缩重启与异常崩溃
 		this.compactingAgents.add(agentId);
 		// 立即推送 isCompacting=true（getRuntimeState 合并 compactingAgents 集合）：
@@ -2315,12 +2360,19 @@ export class AgentManager {
 		} catch (error) {
 			const errorMsg = error instanceof Error ? error.message : String(error);
 			const processAlive = runtime.process.isRunning();
+			// 取消来源判定必须在这里做（compact 完成后观测就会被下一次压缩覆盖）：
+			// 只有它能让「点了压缩没反应」变成可解释的提示 + 可排查的日志。
+			const cancelSource = processAlive
+				? this.resolveCompactCancelMessage(agentId, errorMsg)
+				: undefined;
 			void this.appLogger?.error("agent", "Compact failed", {
 				agentId,
 				elapsedMs: Date.now() - startTime,
 				error: errorMsg,
 				processAlive,
 				hasSessionPath: !!runtime.tab.sessionPath,
+				...(cancelSource ? { cancelSource } : {}),
+				...this.compactionCancelEvidence(agentId),
 			});
 
 			this.compactingAgents.delete(agentId);
@@ -2346,6 +2398,16 @@ export class AgentManager {
 					agentId,
 					totalElapsedMs: Date.now() - startTime,
 				});
+			} else if (cancelSource) {
+				// 抛带来源的稳定文案：渲染层据此给出「扩展接管 / 被自己打断」的可操作
+				// 提示，而不是原来那条被归成静默的 pi 原文（用户只看到「没反应」）。
+				void this.appLogger?.warn("agent", "Compact cancelled", {
+					agentId,
+					cancelSource,
+					piError: errorMsg,
+					sessionId: runtime.tab.deckSessionId,
+				});
+				throw new Error(cancelSource);
 			} else {
 				// 非退出相关的 RPC 错误，正常抛出
 				throw error;
@@ -2353,6 +2415,168 @@ export class AgentManager {
 		}
 
 		return this.getRuntimeState(agentId);
+	}
+
+	/**
+	 * 判定「手动压缩被取消」的来源，返回 shared/compactFeedback 里的稳定标记文案；
+	 * 判不出来时返回 undefined（原样抛 pi 错误，渲染层归到 cancelled 仍会提示）。
+	 *
+	 * pi 侧同一个 `Compaction cancelled` 有两个来源（agent-session.js）：扩展钩子
+	 * `session_before_compact` 返回 `{cancel:true}`（1507 行）、以及压缩期间被
+	 * `session.abort()` 打断（1537 行）。可用的客观差别只有两个：
+	 *
+	 * 1. 我们自己发过 abort（PiDeck 的停止按钮）→ 是用户自己打断的；
+	 * 2. 钩子拒绝发生在生成摘要**之前**：compaction_start → compaction_end 几乎无耗时
+	 *    （扩展在钩子里直接 return，不会走 LLM 调用）。真正的压缩必然是秒级起步。
+	 *
+	 * 判不出的情况（例如 compaction_end 事件丢了、或别的路径 abort）不硬猜，
+	 * 让渲染层给中性提示，日志里仍有 compactionCancelEvidence 供排查。
+	 */
+	private resolveCompactCancelMessage(
+		agentId: string,
+		errorMessage: string,
+	): string | undefined {
+		if (!/cancel/i.test(errorMessage)) return undefined;
+		const observation = this.lastCompactionObservation.get(agentId);
+		// 观测过期（上次压缩是很久以前）不能用来解释这次取消。
+		const fresh =
+			observation && Date.now() - observation.at <= COMPACT_OBSERVATION_MAX_AGE_MS
+				? observation
+				: undefined;
+		const abortedAt = this.lastUserAbortAt.get(agentId) ?? 0;
+		const referenceAt = fresh?.at ?? Date.now();
+		if (abortedAt > 0 && referenceAt - abortedAt <= COMPACT_USER_ABORT_WINDOW_MS) {
+			return COMPACT_CANCELLED_BY_USER_ABORT;
+		}
+		if (
+			fresh?.aborted === true &&
+			typeof fresh.elapsedMs === "number" &&
+			fresh.elapsedMs <= COMPACT_HOOK_REJECT_MAX_MS
+		) {
+			return COMPACT_CANCELLED_BY_OWNER;
+		}
+		return undefined;
+	}
+
+	/** 压缩取消的排查证据（写进 applog；不改任何状态）。 */
+	private compactionCancelEvidence(agentId: string): Record<string, unknown> {
+		const observation = this.lastCompactionObservation.get(agentId);
+		const abortedAt = this.lastUserAbortAt.get(agentId);
+		return {
+			lastCompactionReason: observation?.reason,
+			lastCompactionAborted: observation?.aborted,
+			lastCompactionElapsedMs: observation?.elapsedMs,
+			userAbortAgoMs: abortedAt ? Date.now() - abortedAt : undefined,
+		};
+	}
+
+	/**
+	 * 探测「这个会话的上下文窗口由谁管」（见 pi/compactionOwner.ts 的背景说明）。
+	 *
+	 * 两层证据：
+	 * 1. 「装了且启用」：用与 spawn 同源的扩展白名单解析（`resolveEnabledExtensionPaths`）——
+	 *    PiDeck 扩展管理里禁用的扩展不会出现在路径集合里，不能按磁盘 packages 判接管；
+	 * 2. 「命令本次可用」：`get_commands` 确认 /ctx-wrapup 已注册（compaction-off 模式 /
+	 *    子会话下 MC 不注册它）。
+	 * 接管开关只能读磁盘配置（pi 没有「列出已加载扩展钩子」的 RPC）。
+	 * 探测本身绝不抛：探测失败按「没有接管者」处理，退回原来的 compact RPC，
+	 * 失败时由 cancel 来源判定兜底提示。
+	 */
+	private async resolveSessionCompactionOwnership(
+		runtime: AgentRuntime,
+	): Promise<PiCompactionOwnership | undefined> {
+		try {
+			const project = runtime.tab.projectId ? this.getProject(runtime.tab.projectId) : undefined;
+			const projectCwd = project?.path;
+			const sessionCommandNames = await this.listRegisteredCommandNames(runtime);
+			// 与 spawn 同源的白名单解析；拿不到项目 cwd 时传 undefined（退回磁盘 packages 推导）
+			const loadedExtensionPaths = projectCwd
+				? createPiProcessExtensionResolvers(projectCwd, this.settingsStore.get())
+					.resolveEnabledExtensionPaths()
+				: undefined;
+			return readPiCompactionOwnership({
+				projectCwd,
+				sessionCommandNames,
+				loadedExtensionPaths,
+			});
+		} catch (error) {
+			void this.appLogger?.warn("agent", "Compaction ownership probe failed", {
+				agentId: runtime.tab.id,
+				error: error instanceof Error ? error.message : String(error),
+			});
+			return undefined;
+		}
+	}
+
+	/**
+	 * 列出 pi 已注册的命令名；探测失败返回 undefined（=「不确定」，不是「没有」）。
+	 * 不区分 extension/prompt/skill 来源：`/ctx-wrapup` 这类接管者命令只可能来自扩展。
+	 */
+	private async listRegisteredCommandNames(runtime: AgentRuntime): Promise<string[] | undefined> {
+		const response = await runtime.process.client
+			.request({ type: "get_commands" }, 10_000)
+			.catch(() => undefined);
+		const commands = (response?.data as { commands?: unknown[] } | undefined)?.commands;
+		if (!Array.isArray(commands)) return undefined;
+		return commands
+			.map((command) =>
+				command && typeof command === "object"
+					? (command as { name?: unknown }).name
+					: undefined,
+			)
+			.filter((name): name is string => typeof name === "string" && name.length > 0);
+	}
+
+	/**
+	 * 上下文窗口被扩展独占时的压缩改写 / 拒绝。
+	 *
+	 * 为什么用 throw 表达「已改写」：compact() 的返回契约是 runtime state，没有
+	 * 「我改用了别的命令」这种位；渲染层本来就把错误文案当分类通道（见
+	 * shared/compactFeedback 的稳定标记），所以这里抛标记而不是伪造成功状态——
+	 * 渲染层因此不会误报「压缩完成」（真正的结果由接管者自己的状态提示给出）。
+	 */
+	private async routeCompactToOwner(
+		runtime: AgentRuntime,
+		ownership: PiCompactionOwnership,
+	): Promise<AgentRuntimeState> {
+		const agentId = runtime.tab.id;
+		const command = ownership.manualCommand;
+		void this.appLogger?.warn("agent", "Compact handled by context owner", {
+			agentId,
+			owners: ownership.owners,
+			conflicted: ownership.conflicted,
+			manualCommand: command,
+			ownerReady: ownership.ownerReady,
+			piAutoCompactionEnabled: ownership.piAutoCompactionEnabled,
+			notes: ownership.notes,
+		});
+
+		if (!command || !ownership.ownerReady) {
+			// 接管者没有自己的手动入口（billion-context）或还没配好（MC 未配 historian 模型）：
+			// 说清原因比静默失败重要——这正是「pi 压不了、它自己也压不了」的状态。
+			throw new Error(
+				`${COMPACT_CANCELLED_BY_OWNER}: ${ownership.notes.join("；") || "该扩展取消了 pi 的压缩"}`,
+			);
+		}
+
+		const startedAt = Date.now();
+		const response = await runtime.process.client
+			.request({ type: "prompt", message: command }, this.settingsStore.get().rpcTimeout)
+			.catch((error) => ({
+				success: false,
+				error: error instanceof Error ? error.message : String(error),
+			}));
+		void this.appLogger?.info("agent", "Compact owner command dispatched", {
+			agentId,
+			command,
+			elapsedMs: Date.now() - startedAt,
+			success: response.success,
+			error: response.success ? undefined : response.error,
+		});
+		if (!response.success) {
+			throw new Error(`${COMPACT_CANCELLED_BY_OWNER}: ${response.error ?? command}`);
+		}
+		throw new Error(`${COMPACT_ROUTED_TO_OWNER}: ${command}`);
 	}
 
 	/**
@@ -3299,6 +3523,10 @@ export class AgentManager {
 		this.lastSentThinkingByAgent.delete(agentId);
 		this.thinkingPushCountByAgent.delete(agentId);
 		this.rpcCompactingAgents.delete(agentId);
+		// 取消来源判定用的运行期观测随生命周期清理（agentId 每次 spawn 都是新 UUID）
+		this.lastUserAbortAt.delete(agentId);
+		this.lastCompactionObservation.delete(agentId);
+		this.compactionStartedAt.delete(agentId);
 		this.agentTurnActiveById.delete(agentId);
 		this.autoRestartAttempted.delete(agentId);
 		this.messagePerfByAgent.delete(agentId);
@@ -4610,6 +4838,10 @@ export class AgentManager {
 		// 用于记录压缩耗时和结果，便于排查压缩性能问题。
 		if (typed.type === "compaction_start") {
 			this.rpcCompactingAgents.add(agentId);
+			// 记开始时间：结束后算耗时，用于判定「钩子在总结前拒绝」（见
+			// resolveCompactCancelMessage）。start 可能连发（自动重试多段压缩），
+			// 以最后一次为准。
+			this.compactionStartedAt.set(agentId, Date.now());
 			// 用户已主动中止或出错时不重新激活 running 状态
 			if (runtime && !this.recentlyAborted.has(agentId) && runtime.tab.status !== "error") {
 				// 自动压缩在 agent_end 之后触发：Pi 仍在改写上下文，但不会再发 agent_start。
@@ -4625,6 +4857,17 @@ export class AgentManager {
 		}
 		if (typed.type === "compaction_end") {
 			this.rpcCompactingAgents.delete(agentId);
+			// 观测留给 compact() 的失败分支做来源判定：同一个 "Compaction cancelled"
+			// 到底是「扩展钩子拒绝」还是「abort 打断」，唯一客观线索就是这段耗时。
+			const startedAt = this.compactionStartedAt.get(agentId);
+			this.compactionStartedAt.delete(agentId);
+			const elapsedMs = startedAt ? Date.now() - startedAt : undefined;
+			this.lastCompactionObservation.set(agentId, {
+				aborted: typed.aborted === true,
+				reason: typeof typed.reason === "string" ? typed.reason : undefined,
+				elapsedMs,
+				at: Date.now(),
+			});
 			if (runtime) {
 				// compaction 成功时才会向 session JSONL 写入新的边界记录；只有此时才需要重载，
 				// 否则前端仍展示压缩前分支，下一轮继续对话时看起来像“断在旧会话”。
@@ -4658,6 +4901,8 @@ export class AgentManager {
 				aborted: typed.aborted,
 				willRetry: typed.willRetry,
 				errorMessage: typed.errorMessage,
+				// 耗时是区分「扩展钩子拒绝」（毫秒级）与「真实压缩」的关键字段。
+				elapsedMs,
 			});
 		}
 

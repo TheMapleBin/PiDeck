@@ -201,6 +201,7 @@ export const AppearanceTab = memo(function AppearanceTab(props: AppearanceTabPro
           </div>
         </SettingRow>
         <SettingRow
+          anchor="appearance-background-image-opacity"
           title={<span>{t("settings.backgroundImageOpacity")}</span>}
         >
           <div className="flex w-full items-center gap-2">
@@ -288,6 +289,7 @@ export const AppearanceTab = memo(function AppearanceTab(props: AppearanceTabPro
           </Select>
         </SettingRow>
         <SettingSwitchRow
+          anchor="appearance-font-size-per-area"
           title={t("settings.fontSizePerArea")}
           description={t("settings.fontSizePerAreaDesc")}
           checked={props.perAreaFontSize}
@@ -433,6 +435,7 @@ export const AppearanceTab = memo(function AppearanceTab(props: AppearanceTabPro
       {/* 聊天排版 */}
       <SettingsSection title={t("settings.sectionChatLayout")}>
         <SettingRow
+          anchor="appearance-content-width"
           title={<span>{t("settings.contentWidthPct")}</span>}
           description={t("settings.contentWidthPctDesc")}
         >
@@ -457,6 +460,7 @@ export const AppearanceTab = memo(function AppearanceTab(props: AppearanceTabPro
       {/* 窗口样式 */}
       <SettingsSection title={t("settings.sectionWindowStyle")}>
         <SettingSwitchRow
+          anchor="appearance-native-title-bar"
           title={t("settings.nativeTitleBar")}
           checked={draft.useNativeTitleBar}
           onChange={(checked) =>
@@ -464,6 +468,7 @@ export const AppearanceTab = memo(function AppearanceTab(props: AppearanceTabPro
           }
         />
         <SettingSwitchRow
+          anchor="appearance-native-menu"
           title={t("settings.nativeMenu")}
           checked={draft.showNativeMenu}
           onChange={(checked) =>

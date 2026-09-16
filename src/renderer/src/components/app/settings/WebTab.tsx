@@ -114,6 +114,7 @@ export const WebTab = memo(function WebTab(props: WebTabProps) {
   return (
     <SettingsSection title={t("settings.webLocalService")} description={t("settings.webLocalServiceDesc")}>
       <SettingSwitchRow
+        anchor="web-enable-service"
         title={t("settings.enableWebService")}
         description={
           props.webServiceChanging

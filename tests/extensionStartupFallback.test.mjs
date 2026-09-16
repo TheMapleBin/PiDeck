@@ -201,7 +201,10 @@ test("禁用扩展启动会提示用户：每次运行一次 toast + 去设置�
 	assert.match(bridge, /openSettingsAtom, \{ tab: "dev", section: "dev-pi-rpc" \}/);
 
 	const atoms = readFileSync("src/renderer/src/atoms/app-ui-atoms.ts", "utf8");
-	assert.match(atoms, /SettingsSectionId = "git" \| "dsh-runner-node" \| "dev-pi-rpc"/);
+	// section 保持「字面量联合」而不是宽松 string：锚点拼错必须在编译期被拦住
+	// （运行时找不到元素只会静默不滚动）。固定分区显式列出，细粒度设置项由清单推导。
+	assert.match(atoms, /"dev-pi-rpc"/);
+	assert.match(atoms, /SettingsFieldAnchorSlug/);
 	// 锚点必须真实存在，否则深链滚动到空气（useSettingsFocus 2s 后静默放弃）
 	const devTab = readFileSync("src/renderer/src/components/app/settings/DevTab.tsx", "utf8");
 	assert.match(devTab, /id="settings-section-dev-pi-rpc"/);

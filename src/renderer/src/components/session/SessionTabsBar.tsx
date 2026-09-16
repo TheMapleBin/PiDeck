@@ -8,6 +8,7 @@ import {
   Copy,
   FileDown,
   FileText,
+  Fingerprint,
   Folder,
   Globe,
   Link2,
@@ -43,6 +44,7 @@ import {
   projectInventoryByIdAtom,
 } from "../../atoms";
 import { t } from "../../i18n";
+import { copyTextWithCopiedNotice } from "../../utils/clipboardNotice";
 import { AnimatedBadge } from "../motion/animated-badge";
 import { sessionStatusBadge } from "../../utils/sessionStatusBadge";
 import {
@@ -214,6 +216,12 @@ export type SessionTabsBarProps = {
     isStopping?: boolean;
     isRestarting?: boolean;
     isReloading?: boolean;
+    /**
+     * 当前绑定运行实例的 agentId，仅用于「复制 Agent ID」。
+     * 它与会话记录 id 不是一回事：agentId 每次 spawn 都换（排查问题时要贴进日志），
+     * SessionRecord.id 才跨重启稳定。无绑定时为 undefined，菜单项隐藏。
+     */
+    agentId?: string;
     onAction: (action: SessionRunAction) => void;
   };
   /**
@@ -1295,6 +1303,9 @@ function RunControlItems(props: {
       ? t("tabs.startAgent")
       : t("app.restart");
 
+  // 先取成局部常量：在 onSelect 闭包里读 control.agentId 会丢掉窄化
+  const agentId = control.agentId;
+
   return (
     <>
       <DropdownMenuItem
@@ -1332,6 +1343,16 @@ function RunControlItems(props: {
           {control.isReloading ? t("app.reloading") : t("menu.reloadSession")}
         </span>
       </DropdownMenuItem>
+      {/* 复制 Agent ID：与运行控制同组（它标识的就是当前绑定实例）；
+          无绑定（从未启动/已解绑）时不渲染，避免复制一个不存在的 id。 */}
+      {agentId ? (
+        <DropdownMenuItem onSelect={() => void copyTextWithCopiedNotice(agentId)}>
+          <span className="inline-flex items-center gap-2">
+            <Fingerprint className="size-3.5" aria-hidden="true" />
+            {t("menu.copyAgentId")}
+          </span>
+        </DropdownMenuItem>
+      ) : null}
     </>
   );
 }

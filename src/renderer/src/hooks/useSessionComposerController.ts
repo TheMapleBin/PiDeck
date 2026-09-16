@@ -29,6 +29,8 @@ import { resolveBusySendDelivery } from "../../../shared/busySendDelivery";
 import { FILE_TREE_ABSOLUTE_MAX_DEPTH } from "../../../shared/fileTree";
 import {
   classifyCompactError,
+  compactOwnerReason,
+  compactRoutedCommand,
   type CompactNoticeKind,
 } from "../../../shared/compactFeedback";
 import { findImageGenProvider } from "../../../shared/imageGenConfig";
@@ -137,7 +139,7 @@ import {
   type VoiceTranscriptionTarget,
 } from "../utils/voiceTranscriptionInsert";
 
-/** 统一压缩结果 → 用户可见文案；silent 不弹 toast。 */
+/** 统一压缩结果 → 用户可见文案；所有分支都给文案（取消也要可见，见 classifyCompactError）。 */
 function compactNotice(kind: CompactNoticeKind, detail?: string): string | null {
   switch (kind) {
     case "done":
@@ -148,8 +150,23 @@ function compactNotice(kind: CompactNoticeKind, detail?: string): string | null 
       return t("app.compactSessionTooSmall");
     case "inProgress":
       return t("app.compactInProgress");
-    case "silent":
-      return null;
+    case "routedToOwner": {
+      // 接管者有自己的入口：主进程已把请求改写成它的扩展命令（标记后跟命令名）。
+      const command = compactRoutedCommand(detail ?? "");
+      return command
+        ? t("app.compactRoutedToOwner", { command })
+        : t("app.compactDone");
+    }
+    case "cancelledByOwner": {
+      const reason = compactOwnerReason(detail ?? "");
+      return reason
+        ? t("app.compactCancelledByOwnerWithReason", { reason })
+        : t("app.compactCancelledByOwner");
+    }
+    case "interrupted":
+      return t("app.compactInterrupted");
+    case "cancelled":
+      return t("app.compactCancelled");
     case "failed":
       return detail
         ? t("app.compactFailedWithReason", { error: detail })
@@ -160,10 +177,14 @@ function compactNotice(kind: CompactNoticeKind, detail?: string): string | null 
 /**
  * compact 错误友好文案：requireSessionCommand 的 message 是 i18n 通用失败，
  * pi 原错在 debugDetails。分类走 shared/compactFeedback（按钮 / /compact 共用）。
- * silent：压缩被取消（自动压缩撞车 / 新消息打断）不弹 toast——取消响应可能
- * 延迟到正常对话后返回（RPC 最长 120s），表现为「没点压缩却弹提示」。
+ *
+ * 取消类（cancelled / cancelledByOwner / interrupted）必须弹提示：手动压缩是用户
+ * 主动点的，静默会让「压缩被扩展接管」表现为「点了没反应」。延迟到达的取消响应
+ * 也不会误导——文案本身就是「已取消」，不再依赖「不提示」掩盖。
  */
-function friendlyCompactError(error: unknown): string | null {
+function friendlyCompactError(
+  error: unknown,
+): { text: string; durationMs: number } | null {
   const debugDetails =
     error && typeof error === "object" && "debugDetails" in error
       ? String((error as { debugDetails?: unknown }).debugDetails ?? "").trim()
@@ -174,7 +195,16 @@ function friendlyCompactError(error: unknown): string | null {
     .replace(/^Error invoking remote method ['"][^'"]+['"]:\s*/i, "")
     .replace(/^Error:\s*/i, "")
     .trim();
-  return compactNotice(classifyCompactError(detail), detail);
+  const kind = classifyCompactError(detail);
+  const text = compactNotice(kind, detail);
+  if (!text) return null;
+  // 取消 / 改写类提示要用户看见「压缩为什么换了个方式」，停留时间长于普通完成提示。
+  const durationMs = kind === "done"
+    ? 4000
+    : kind === "cancelledByOwner" || kind === "routedToOwner"
+      ? 10000
+      : 7000;
+  return { text, durationMs };
 }
 
 export type ComposerPickerKind = "model" | "thinking" | "template" | "skill";
@@ -1018,8 +1048,8 @@ export function useSessionComposerController(
       requireSessionCommand(await desktopApi.sessions.compactRuntime(target, prompt));
       showNotice(t("app.compactDone"), 4000);
     } catch (error) {
-      const message = friendlyCompactError(error);
-      if (message) showNotice(message, 6000);
+      const notice = friendlyCompactError(error);
+      if (notice) showNotice(notice.text, notice.durationMs);
     }
   }, [sessionId, store]);
 

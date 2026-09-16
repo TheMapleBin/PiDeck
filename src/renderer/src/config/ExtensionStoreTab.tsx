@@ -68,6 +68,8 @@ export function ExtensionStoreTab(props: {
 	onInstalled?: () => void;
 }) {
 	const [query, setQuery] = useState("");
+	/** 已提交的搜索词：只有回车/搜索按钮触发才更新，避免每敲一个字符就打一次 pi.dev 目录 */
+	const [appliedQuery, setAppliedQuery] = useState("");
 	const [type, setType] = useState("");
 	const [sort, setSort] = useState<"downloads" | "recent">("downloads");
 	const [page, setPage] = useState(1);
@@ -90,7 +92,7 @@ export function ExtensionStoreTab(props: {
 		try {
 			const data = await api.extensions.catalog({
 				page: opts.page ?? page,
-				query: query.trim(),
+				query: appliedQuery.trim(),
 				type,
 				sort,
 				...(opts.refresh ? { refresh: true } : {}),
@@ -105,20 +107,24 @@ export function ExtensionStoreTab(props: {
 		} finally {
 			if (seq === requestSeq.current) setLoading(false);
 		}
-	}, [page, query, type, sort]);
+	}, [page, appliedQuery, type, sort]);
 
-	// 首次挂载加载第一页
+	// 搜索词不参与自动加载：只在 appliedQuery / 类型 / 排序 变化时回到第一页重新加载；
+	// 挂载时该 effect 同样执行，即为首次加载
 	useEffect(() => {
 		void load({ page: 1 });
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, []);
+	}, [appliedQuery, type, sort]);
 
-	// 查询/类型/排序变化：回到第一页重新加载（搜索防抖 300ms）
-	useEffect(() => {
-		const timer = setTimeout(() => void load({ page: 1 }), 300);
-		return () => clearTimeout(timer);
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [query, type, sort]);
+	/** 手动提交搜索（回车 / 搜索按钮）：词未变化时直接重载（按钮语义含 refresh，可绕过目录缓存） */
+	const submitSearch = (refresh = false) => {
+		if (query.trim() === appliedQuery.trim()) {
+			void load({ page: 1, ...(refresh ? { refresh: true } : {}) });
+		} else {
+			// appliedQuery 变化会命中上面的 effect，自动回到第一页
+			setAppliedQuery(query);
+		}
+	};
 
 	/** 已安装判断：installSource（npm:<name>）与已安装扩展的 source 精确匹配 */
 	const isInstalled = useCallback(
@@ -166,7 +172,10 @@ export function ExtensionStoreTab(props: {
 					onChange={setQuery}
 					placeholder={t("config.extensionStoreSearchPlaceholder")}
 					searching={loading}
-					onSearch={() => void load({ page: 1, refresh: true })}
+					onKeyDown={(e) => {
+						if (e.key === "Enter") submitSearch();
+					}}
+					onSearch={() => submitSearch(true)}
 					className="min-w-0 flex-1"
 				/>
 				{/* 类型过滤（目录页 type 参数） */}
