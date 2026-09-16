@@ -44,6 +44,8 @@ type SessionDisplayEntry = {
 	thinkingLevel?: string;
 	/** custom 条目的 customType（subagents:record / pi-deck-todo 等）：按类型过滤时免读行 */
 	customType?: string;
+	/** custom_message 条目的 display 标志：false = 内部上下文注入（不画卡片，但仍是回合边界） */
+	customDisplay?: boolean;
 	/** 消息角色（user/assistant/…）：轮次分页按 user 消息切轮次边界，建索引时顺手捕获 */
 	role?: string;
 	/** 消息条目的 message.toolName：文件汇总按「是否文件类工具」预判前先过滤掉大体量非文件工具结果 */
@@ -301,6 +303,28 @@ function deriveSessionHistoryMetadata(
 }
 
 /**
+ * 按下标插入卡片（降序 splice，避免前一次插入把后一次的偏移推移）。
+ *
+ * `toArrayIndex` 把「绝对消息条目下标」映射成目标数组下标：普通页 / 加载窗口里
+ * 消息与条目一一对应（减 start 即可），而压缩页里已经有一张压缩卡片占了槽位，
+ * 落在它之后的卡片需要整体 +1 补偿（见 convertCompactionPageMessages）。
+ */
+function spliceCardsByOffset<T>(
+	items: T[],
+	cards: ReadonlyArray<{ offset: number; card: T }>,
+	toArrayIndex: (absoluteOffset: number) => number,
+): T[] {
+	if (cards.length === 0) return items;
+	const next = [...items];
+	const ordered = [...cards].sort((a, b) => b.offset - a.offset);
+	for (const entry of ordered) {
+		const index = Math.min(Math.max(toArrayIndex(entry.offset), 0), next.length);
+		next.splice(index, 0, entry.card);
+	}
+	return next;
+}
+
+/**
  * Reads persisted Session JSONL without starting Pi. Runtime ownership remains in
  * AgentManager; this reader owns bounded display paging and compaction recovery.
  */
@@ -455,7 +479,20 @@ export class SessionHistoryReader {
 			const rawMessages = await this.readIndexedSessionMessages(index.hostPath, entries);
 			const entryIds = entries.map((entry) => entry.id);
 			const finalRaw = this.insertCompactionSummaryRaw(index, rawMessages);
-			return this.deps.convertMessages(agentId, finalRaw, entryIds);
+			const messages = this.deps.convertMessages(agentId, finalRaw, entryIds);
+			// 整条分支读取：通知卡片同样要补（Web/Viewer 与桌面时间线保持同一口径，
+			// 否则同一会话在两处会呈现不同的回合切分）。
+			const cards = await this.buildCustomMessageCards(index, agentId, {
+				start: 0,
+				end: entries.length,
+				isTailWindow: true,
+			});
+			return this.applyCustomMessageCards(
+				messages,
+				cards,
+				0,
+				this.resolveCompactionInsertOffset(index),
+			);
 		}
 		const content = sessionContent;
 		const entries: Array<{
@@ -651,8 +688,20 @@ export class SessionHistoryReader {
 		const entries = index.activeMessageEntries.slice(windowStart);
 		const rawMessages = await this.readIndexedSessionMessages(index.hostPath, entries);
 		const finalRaw = this.insertCompactionSummaryRaw(index, rawMessages);
+		// 加载窗口覆盖到文件尾部：末条通知（offset === total）也属于它
+		const cards = await this.buildCustomMessageCards(index, agentId, {
+			start: windowStart,
+			end: total,
+			isTailWindow: true,
+		});
+		const messages = this.deps.convertMessages(agentId, finalRaw, entries.map((entry) => entry.id));
 		return {
-			messages: this.deps.convertMessages(agentId, finalRaw, entries.map((entry) => entry.id)),
+			messages: this.applyCustomMessageCards(
+				messages,
+				cards,
+				windowStart,
+				this.resolveCompactionInsertOffset(index),
+			),
 			total,
 			windowStart,
 		};
@@ -733,8 +782,20 @@ export class SessionHistoryReader {
 			const messages = await this.convertCompactionPageMessages(
 				index, agentId, rawMessages, entries.map((entry) => entry.id), start,
 			);
+			// 压缩页里已有一张压缩卡片占了槽位，通知卡片按同一插入点做 +1 补偿
+			const cards = await this.buildCustomMessageCards(index, agentId, {
+				start,
+				end: boundedBefore,
+				// 只有末页（游标已到文件尾部）才包含 offset === total 的尾部通知
+				isTailWindow: boundedBefore >= total,
+			});
 			return {
-				messages,
+				messages: this.applyCustomMessageCards(
+					messages,
+					cards,
+					start,
+					this.resolveCompactionInsertOffset(index),
+				),
 				total,
 				nextBefore: start > 0 ? start : null,
 				nextBeforeEntryId: start > 0 ? index.activeMessageEntries[start]?.id : undefined,
@@ -745,8 +806,19 @@ export class SessionHistoryReader {
 
 		const entries = index.activeMessageEntries.slice(start, boundedBefore);
 		const rawMessages = await this.readIndexedSessionMessages(index.hostPath, entries);
+		// 通知卡片归属唯一一页：半开区间 [start, end) 不含 offset === end（那是下一页的开头）；
+		// 末页例外——它后面没有更新的页，offset === total 的尾部通知属于它。
+		const cards = await this.buildCustomMessageCards(index, agentId, {
+			start,
+			end: boundedBefore,
+			isTailWindow: boundedBefore >= total,
+		});
 		return {
-			messages: this.deps.convertMessages(agentId, rawMessages, entries.map((entry) => entry.id)),
+			messages: this.applyCustomMessageCards(
+				this.deps.convertMessages(agentId, rawMessages, entries.map((entry) => entry.id)),
+				cards,
+				start,
+			),
 			total,
 			nextBefore: start > 0 ? start : null,
 			nextBeforeEntryId: start > 0 ? index.activeMessageEntries[start]?.id : undefined,
@@ -857,6 +929,122 @@ export class SessionHistoryReader {
 	}
 
 	/**
+	 * 把范围内的 custom_message 条目构造成时间线卡片（含插入偏移）。
+	 *
+	 * 为什么要在读侧合成：PiDeck 不写 pi 的会话文件（会话读写归 pi），而 pi 用
+	 * custom_message 承载「扩展对用户的通知」——子代理后台任务完成时正是用这条消息
+	 * 唤醒父会话（sendCustomMessage + triggerTurn）。projector 只识别
+	 * user/assistant/toolResult，于是这条消息既不可见、也不构成回合边界：唤醒后的
+	 * 回答会和上一轮并进同一个 run，上一轮「最终回答」退化成「中间回答」被折叠。
+	 * 这里把它投影成 role="system" + meta.type="customMessage" 的消息，渲染层按
+	 * customType 白名单决定是否画成通知卡（display:false 的内部上下文注入不画，
+	 * 但仍参与回合边界判定）。
+	 *
+	 * 偏移语义：offset = 该通知之前有多少条消息条目（即「下一条消息之前」），
+	 * 与压缩卡片的 insertAt 同一（activeMessageEntries 绝对下标）空间。
+	 * 范围取半开区间 [start, end)，只有尾部窗口/最新页才包含 offset === total
+	 * 的「末条通知」——否则上下相邻两页会各自插一张，卡片重复出现。
+	 *
+	 * IO 约束：只对范围内真正要展示的几行发起磁盘读（与 readSubagentRecords 同模式）。
+	 */
+	private async buildCustomMessageCards(
+		index: SessionDisplayIndex,
+		agentId: string,
+		options: { start: number; end: number; isTailWindow: boolean },
+	): Promise<Array<{ offset: number; card: ChatMessage }>> {
+		const { start, end } = options;
+		const inRange = (offset: number) =>
+			offset >= start && (offset < end || (options.isTailWindow && offset === end));
+		// 活动分支上按顺序累计消息条目数：custom_message 的位置就是「它之前有多少条消息」。
+		const placements: Array<{ entry: SessionDisplayEntry; offset: number }> = [];
+		let messageCount = 0;
+		for (const entry of index.activeBranch) {
+			if (entry.type === "message" && entry.hasMessage) {
+				messageCount += 1;
+				continue;
+			}
+			if (entry.type !== "custom_message") continue;
+			if (!inRange(messageCount)) continue;
+			placements.push({ entry, offset: messageCount });
+		}
+		if (placements.length === 0) return [];
+
+		const rawLines = await this.readIndexedRawLines(index.hostPath, placements.map((item) => item.entry));
+		const cards: Array<{ offset: number; card: ChatMessage }> = [];
+		for (let i = 0; i < placements.length; i++) {
+			const parsed = rawLines[i];
+			if (!isRecord(parsed)) continue;
+			const content = typeof parsed.content === "string" ? parsed.content : "";
+			// 空正文没有可展示信息：不占位（仍不影响回合边界——边界由 stopReason 兜底）
+			if (!content.trim()) continue;
+			const customType = readString(parsed, "customType") ?? placements[i].entry.customType;
+			const timestamp = typeof parsed.timestamp === "string" ? Date.parse(parsed.timestamp) : Number.NaN;
+			cards.push({
+				offset: placements[i].offset,
+				card: {
+					// 与投影消息同一套合成 id 风格；条目 id 稳定，跨页不重复
+					id: `${agentId}-custom-${placements[i].entry.id}`,
+					agentId,
+					role: "system",
+					text: content,
+					timestamp: Number.isFinite(timestamp) ? timestamp : Date.now(),
+					meta: {
+						type: "customMessage",
+						...(customType ? { customType } : {}),
+						display: placements[i].entry.customDisplay === true,
+						entryId: placements[i].entry.id,
+					},
+				},
+			});
+		}
+		return cards;
+	}
+
+	/**
+	 * 压缩卡片在 activeMessageEntries 绝对下标空间里的插入点（无压缩条目时 undefined）。
+	 *
+	 * firstKeptEntryId 优先，缺省回退「压缩条目之后的消息数」。抽成单一入口是因为
+	 * 加载窗口/轮次页的压缩卡片与通知卡片共用同一空间：两边各算一次偏移，迟早错位。
+	 */
+	private resolveCompactionInsertOffset(index: SessionDisplayIndex): number | undefined {
+		const lastCompaction = index.activeBranch.findLast((entry) => entry.type === "compaction");
+		if (!lastCompaction) return undefined;
+		const firstKeptPos = lastCompaction.firstKeptEntryId
+			? index.activeMessageEntries.findIndex((entry) => entry.id === lastCompaction.firstKeptEntryId)
+			: -1;
+		if (firstKeptPos >= 0) return firstKeptPos;
+		const lastCompactionIndex = index.activeBranch.findIndex((entry) => entry.id === lastCompaction.id);
+		if (lastCompactionIndex < 0) return index.activeMessageEntries.length;
+		return index.activeBranch
+			.slice(0, lastCompactionIndex + 1)
+			.filter((entry) => entry.type === "message" && entry.hasMessage).length;
+	}
+
+	/**
+	 * 把通知卡片按绝对下标插进窗口消息。
+	 *
+	 * `compactionInsertOffset` 给定时说明本窗口还插了一张压缩卡片：卡片在数组里占位、
+	 * 但不消耗条目下标，所以落在它之后的通知要 +1 补偿，否则会错位一格。
+	 * （是否真的插了压缩卡片按消息 meta 实判，避免依赖调用方的假设。）
+	 */
+	private applyCustomMessageCards(
+		messages: ChatMessage[],
+		cards: Array<{ offset: number; card: ChatMessage }>,
+		windowStart: number,
+		compactionInsertOffset?: number,
+	): ChatMessage[] {
+		if (cards.length === 0) return messages;
+		const hasCompactionCard = messages.some((message) => message.meta?.type === "compaction");
+		return spliceCardsByOffset(messages, cards, (offset) => {
+			const afterCompaction =
+				hasCompactionCard &&
+				compactionInsertOffset !== undefined &&
+				offset >= compactionInsertOffset;
+			return offset - windowStart + (afterCompaction ? 1 : 0);
+		});
+	}
+
+	/**
 	 * 把最近一次压缩摘要插进 rawMessages（与离线 Viewer / loadMessages 同一插入点）。
 	 * compactionSummary 不消费 entryId 槽位，插在 firstKeptEntryId 之前。
 	 */
@@ -866,16 +1054,8 @@ export class SessionHistoryReader {
 	): unknown[] {
 		const lastCompaction = index.activeBranch.findLast((entry) => entry.type === "compaction");
 		if (!lastCompaction) return rawMessages;
-		const firstKeptPos = lastCompaction.firstKeptEntryId
-			? index.activeMessageEntries.findIndex((entry) => entry.id === lastCompaction.firstKeptEntryId)
-			: -1;
-		const lastCompactionIndex = index.activeBranch.findIndex((entry) => entry.id === lastCompaction.id);
-		const insertAt = firstKeptPos >= 0
-			? firstKeptPos
-			: lastCompactionIndex >= 0
-				? index.activeBranch.slice(0, lastCompactionIndex + 1)
-					.filter((entry) => entry.type === "message" && entry.hasMessage).length
-				: rawMessages.length;
+		// 与压缩页/通知卡片共用同一偏移口径（firstKeptEntryId 优先，回退压缩条目后的消息数）
+		const insertAt = this.resolveCompactionInsertOffset(index) ?? rawMessages.length;
 		const card = {
 			role: "compactionSummary",
 			summary: lastCompaction.summary || this.deps.translate("session.summaryPlaceholder"),
@@ -1143,7 +1323,13 @@ export class SessionHistoryReader {
 				: undefined;
 			// custom 条目的 customType 在建索引时捕获：readSubagentRecords 等读者
 			// 按 customType 过滤后只对目标行发起磁盘 IO，todo/om 等高频快照零读取。
-			const customType = type === "custom" ? readString(parsed, "customType") : undefined;
+			// custom_message（pi 的扩展通知落盘形态，子代理完成唤醒父会话就走这条）
+			// 一并捕获：正文在条目顶层 content 而不是 message 里，建索引阶段只记类型与
+			// display，正文留给需要展示的那一页懒读（会话文件可能有上千条这类快照）。
+			const isCustomMessage = type === "custom_message";
+			const customType = type === "custom" || isCustomMessage
+				? readString(parsed, "customType")
+				: undefined;
 			const assistantModel = message?.role === "assistant"
 				? (() => {
 					const provider = readString(message, "provider");
@@ -1156,6 +1342,7 @@ export class SessionHistoryReader {
 				parentId: typeof parsed.parentId === "string" ? parsed.parentId : null,
 				type,
 				customType,
+				customDisplay: isCustomMessage ? parsed.display === true : undefined,
 				offset,
 				byteLength,
 				hasMessage: parsed.message !== undefined && parsed.message !== null,

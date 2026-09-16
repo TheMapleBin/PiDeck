@@ -475,3 +475,59 @@ function pi4acp(lifecycle, appendedEntries) {
 		appendEntry: (type, data) => { appendedEntries.push({ type, data }); },
 	};
 }
+
+test("bridge extension: session_shutdown 把在飞条目补成 stopped 终态", () => {
+	const { default: bridge } = loadBridgeModule();
+	const { pi, handlers, lifecycle, appendedEntries } = createMockPi();
+	bridge(pi);
+
+	// 一个仍在跑的（created + started）+ 一个已完成的（不该被重复写终态）
+	handlers.get("subagents:created")({ id: "live1", type: "Explore", description: "d" });
+	handlers.get("subagents:started")({ id: "live1" });
+	handlers.get("subagents:created")({ id: "done1", type: "code", description: "d" });
+	handlers.get("subagents:completed")({ id: "done1", status: "completed", result: "ok" });
+	appendedEntries.length = 0;
+
+	lifecycle.get("session_shutdown")({ type: "session_shutdown", reason: "resume" });
+
+	// 会话关闭后旧会话文件再也等不到终态写入 → 面板永远「运行中」、时长无限增长，
+	// 所以关闭时补一条 stopped（读取侧后写覆盖先写，runner 事后真完成会被覆盖）
+	assert.equal(appendedEntries.length, 1);
+	assert.equal(appendedEntries[0].type, "subagents:record");
+	assert.equal(appendedEntries[0].data.id, "live1");
+	assert.equal(appendedEntries[0].data.status, "stopped");
+	assert.equal(typeof appendedEntries[0].data.completedAt, "number");
+	assert.ok(appendedEntries[0].data.completedAt >= appendedEntries[0].data.startedAt);
+});
+
+test("bridge extension: session_shutdown 无在飞条目时不落盘、落盘失败不抛错", () => {
+	const { default: bridge } = loadBridgeModule();
+	const { pi, handlers, lifecycle, appendedEntries } = createMockPi();
+	bridge(pi);
+
+	// 没有任何条目的干净会话：不该凭空写 record
+	lifecycle.get("session_shutdown")({ type: "session_shutdown", reason: "quit" });
+	assert.equal(appendedEntries.length, 0);
+
+	// teardown 阶段 appendEntry 抛错（会话已在收尾）不能冒泡打断 pi 的会话切换
+	const throwingLifecycle = new Map();
+	const throwingPi = {
+		events: { on: () => {} },
+		on: (name, cb) => { throwingLifecycle.set(name, cb); },
+		appendEntry: () => { throw new Error("session closed"); },
+	};
+	bridge(throwingPi);
+	// 需要再造一个在飞条目：走 acp 派发路径（无 ctx 也能进快照）
+	throwingLifecycle.get("tool_execution_start")({
+		toolCallId: "acp_delegate_9",
+		toolName: "acp_delegate",
+		args: { agent: "worker", task: "do it" },
+	});
+	let threw = false;
+	try {
+		throwingLifecycle.get("session_shutdown")({ type: "session_shutdown", reason: "resume" });
+	} catch {
+		threw = true;
+	}
+	assert.equal(threw, false);
+});

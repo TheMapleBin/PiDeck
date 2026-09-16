@@ -129,10 +129,14 @@ function makeFakeGateway(backend, { supportsOptional = true } = {}) {
 				async restoreCheckpoint(agentId, checkpointId, scope) {
 					calls.push(["restoreCheckpoint", backend, agentId, checkpointId, scope]);
 				},
-				async mutatePersistedSessionMessage(sessionPath, messageId, operation, extra) {
-					calls.push(["mutatePersistedSessionMessage", backend, sessionPath, messageId, operation, extra]);
-					return operation === "resend" ? { text: "hello" } : undefined;
-				},
+			async mutatePersistedSessionMessage(sessionPath, messageId, operation, extra) {
+				calls.push(["mutatePersistedSessionMessage", backend, sessionPath, messageId, operation, extra]);
+				return operation === "resend" ? { text: "hello" } : undefined;
+			},
+			reviveIfProcessAlive(agentId) {
+				calls.push(["reviveIfProcessAlive", backend, agentId]);
+				return backend === "pi";
+			},
 			}
 			: {}),
 	};
@@ -241,6 +245,16 @@ test("无 runtime 的 JSONL 改写按 pi 网关转发，不落到 DSH", async ()
 		["mutatePersistedSessionMessage", "pi", "C:/sessions/a.jsonl", "m1", "edit", { newText: "x" }],
 	);
 	assert.equal(dsh.calls.some(([name]) => name === "mutatePersistedSessionMessage"), false);
+});
+
+test("reviveIfProcessAlive 转发到 owner；dsh 未实现时返回 false 不抛错", async () => {
+	const { pi, dsh, composite } = makeComposite();
+	const piTab = await composite.create({ projectId: "p1", backend: "pi" });
+	const dshTab = await composite.create({ projectId: "p1", backend: "dsh" });
+	assert.equal(composite.reviveIfProcessAlive(piTab.id), true);
+	assert.equal(composite.reviveIfProcessAlive(dshTab.id), false);
+	assert.deepEqual(pi.calls.filter(([name]) => name === "reviveIfProcessAlive").at(-1), ["reviveIfProcessAlive", "pi", piTab.id]);
+	assert.equal(dsh.calls.some(([name]) => name === "reviveIfProcessAlive"), false);
 });
 
 test("restart 走 owner 网关且缓存保持（不因其他网关 list 内容漂移）", async () => {

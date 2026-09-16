@@ -795,6 +795,16 @@ export const enUS: Record<TranslationKey, string> = {
   "sessionSubagents.status.aborted": "Aborted",
   "sessionSubagents.status.steered": "Steered",
   "sessionSubagents.status.unknown": "Unknown",
+  "sessionSubagents.status.lost": "Stopped (lost)",
+  "sessionSubagents.lostHint": "No final status received for a long time; the run process likely exited. Shown as stopped — check the child session for the real outcome.",
+  // Extension notice card (pi custom_message): background subagent completion wakes the parent session
+  "notify.customTitle": "Extension notice",
+  "notify.subagent.completed": "Subagent finished",
+  "notify.subagent.failed": "Subagent failed",
+  "notify.subagent.paused": "Subagent paused",
+  "notify.subagent.stopped": "Subagent stopped",
+  "notify.expand": "Show full notice",
+  "notify.collapse": "Collapse notice",
   // Modified files strip (session-scoped file summary)
   "sessionFiles.title": "Modified Files",
   "sessionFiles.empty": "No files changed in this session",

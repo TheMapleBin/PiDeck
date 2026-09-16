@@ -536,3 +536,103 @@ test("全空 run（连续 error 空消息）：无可折叠内容，不渲染汇
 	assert.equal(hasFoldableContent(items), false);
 	assert.equal(buildProcessSummary(items).interimCount, 0);
 });
+
+/* ── 无触发消息的回合边界：后台子代理唤醒父回合（用户反馈「输出被折叠、后面的变成最后」） ── */
+
+/** run 结构摘要：每个 agent-run 列出其 assistant 文本，system 卡片单列。 */
+function outlineRuns(rendered) {
+	return [...rendered].map((item) => {
+		if (item.kind !== "agent-run") return `card:${item.message.meta?.type ?? item.message.role}`;
+		const texts = [...item.items]
+			.filter((sub) => sub.kind === "message")
+			.map((sub) => `${sub.message.role}:${sub.message.text ?? ""}`);
+		return `run[${texts.join("|")}]`;
+	});
+}
+
+test("上一轮 stop 收尾后又来 assistant：拆成两个 run，上一轮回答不退化为中间回答", () => {
+	const { groupToolMessages } = loadAppUtils();
+	// 场景：父回合已结束（a1 带 stopReason="stop"），后台子代理完成唤醒父会话，
+	// 新回合的 assistant（a2）到来。pi 的唤醒消息是 role="custom"，旧实现整条丢弃，
+	// 于是两个回合并进同一个 run：a1 变成「中间回答」被折叠、a2 成为最终回答（错位）。
+	const user = { id: "u1", agentId: "a", role: "user", text: "问题", timestamp: 1 };
+	const a1 = { id: "a1", agentId: "a", role: "assistant", text: "上一轮回答", timestamp: 2, stopReason: "stop" };
+	const a2 = { id: "a2", agentId: "a", role: "assistant", text: "唤醒后的回答", timestamp: 3, stopReason: "stop" };
+	const rendered = groupToolMessages([user, a1, a2]);
+	assert.equal(JSON.stringify(outlineRuns(rendered)), JSON.stringify([
+		"card:user",
+		"run[assistant:上一轮回答]",
+		"run[assistant:唤醒后的回答]",
+	]));
+});
+
+test("唤醒回合以工具开头（assistant 尚未到来）也先断开上一轮", () => {
+	const { groupToolMessages } = loadAppUtils();
+	const user = { id: "u1", agentId: "a", role: "user", text: "问题", timestamp: 1 };
+	const a1 = { id: "a1", agentId: "a", role: "assistant", text: "上一轮回答", timestamp: 2, stopReason: "stop" };
+	// 新回合先执行工具：工具不能留在上一轮的折叠区里
+	const tool = { id: "t1", agentId: "a", role: "tool", text: "✓ read", timestamp: 3, meta: { toolName: "read", status: "done" } };
+	const a2 = { id: "a2", agentId: "a", role: "assistant", text: "新回合回答", timestamp: 4, stopReason: "stop" };
+	const rendered = groupToolMessages([user, a1, tool, a2]);
+	assert.equal(JSON.stringify(outlineRuns(rendered)), JSON.stringify([
+		"card:user",
+		"run[assistant:上一轮回答]",
+		"run[assistant:新回合回答]",
+	]));
+});
+
+test("未收尾的 run 不拆：中间 assistant（toolUse）后跟工具不算回合边界", () => {
+	const { groupToolMessages } = loadAppUtils();
+	const user = { id: "u1", agentId: "a", role: "user", text: "问题", timestamp: 1 };
+	const a1 = { id: "a1", agentId: "a", role: "assistant", text: "先查一下", timestamp: 2, stopReason: "toolUse" };
+	const tool = { id: "t1", agentId: "a", role: "tool", text: "✓ read", timestamp: 3, meta: { toolName: "read", status: "done" } };
+	const a2 = { id: "a2", agentId: "a", role: "assistant", text: "查完了", timestamp: 4, stopReason: "stop" };
+	const rendered = groupToolMessages([user, a1, tool, a2]);
+	assert.equal(JSON.stringify(outlineRuns(rendered)), JSON.stringify([
+		"card:user",
+		"run[assistant:先查一下|assistant:查完了]",
+	]));
+});
+
+test("customMessage 卡片落在两轮之间，并断开当前 run", () => {
+	const { groupToolMessages } = loadAppUtils();
+	const user = { id: "u1", agentId: "a", role: "user", text: "问题", timestamp: 1 };
+	const a1 = { id: "a1", agentId: "a", role: "assistant", text: "上一轮回答", timestamp: 2, stopReason: "stop" };
+	const card = {
+		id: "cm1",
+		agentId: "a",
+		role: "system",
+		text: "Background task completed: **delegate**",
+		timestamp: 3,
+		meta: { type: "customMessage", customType: "subagent-notify" },
+	};
+	const a2 = { id: "a2", agentId: "a", role: "assistant", text: "唤醒后的回答", timestamp: 4, stopReason: "stop" };
+	const rendered = groupToolMessages([user, a1, card, a2]);
+	assert.equal(JSON.stringify(outlineRuns(rendered)), JSON.stringify([
+		"card:user",
+		"run[assistant:上一轮回答]",
+		"card:customMessage",
+		"run[assistant:唤醒后的回答]",
+	]));
+});
+
+test("askQuestion 卡片仍不打断 run（自定义通知卡的边界规则不误伤既有语义）", () => {
+	const { groupToolMessages } = loadAppUtils();
+	const ask = {
+		id: "q1",
+		agentId: "a",
+		role: "system",
+		text: "请选择",
+		timestamp: 2,
+		meta: { type: "askQuestion" },
+	};
+	const a1 = { id: "a1", agentId: "a", role: "assistant", text: "问题一", timestamp: 3, stopReason: "toolUse" };
+	const a2 = { id: "a2", agentId: "a", role: "assistant", text: "问题二", timestamp: 4, stopReason: "toolUse" };
+	const rendered = groupToolMessages([{ id: "u1", agentId: "a", role: "user", text: "问题", timestamp: 1 }, ask, a1, a2]);
+	// 卡片原位落盘、run 保持完整（两张 assistant 属同一轮）——既有语义不变。
+	assert.equal(JSON.stringify(outlineRuns(rendered)), JSON.stringify([
+		"card:user",
+		"card:askQuestion",
+		"run[assistant:问题一|assistant:问题二]",
+	]));
+});

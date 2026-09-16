@@ -449,6 +449,24 @@ export class AgentManager {
 	private static readonly ABORT_SETTLED_FALLBACK_MS = 1500;
 	/** abort 升级验证窗口：abort_bash + 二次 abort 后仍 running 则提示用户。 */
 	private static readonly ABORT_ESCALATION_VERIFY_MS = 4000;
+	/**
+	 * 最近一次用户 abort 的时刻（毫秒）。退出处理器用它识别「终止窗口内的进程退出」：
+	 * pi 在处理 abort 时可能自行崩溃（上游 #2716 族：abort 期间 unhandled rejection
+	 * 直接杀 Node 进程，WSL 慢链路下尤甚），此时应按会话文件重连一次保住会话，
+	 * 而不是把会话打成 closed 终态。窗口覆盖 abort settled 之后的收尾期。
+	 */
+	private readonly lastAbortAtByAgent = new Map<string, number>();
+	/** 终止窗口判定时长：覆盖 abort RPC ack（pi 等 idle 才响应）+ settled + 收尾清理。 */
+	private static readonly ABORT_EXIT_REATTACH_WINDOW_MS = 15_000;
+	/**
+	 * 进行中的 abort 升级上下文。pi 的 abort RPC 语义是「中止并等 idle 才响应」，
+	 * ack 迟到是正常路径；升级（补 abort_bash / 二次 abort）必须感知 ack 状态，
+	 * 否则 WSL 慢链路下 1.5s 兜底会对正在收尾的 pi 补刀（老版本 pi 有崩溃史）。
+	 */
+	private readonly pendingAbortEscalations = new Map<
+		string,
+		{ hadActiveTool: boolean; acked: boolean; failed: boolean }
+	>();
 
 	/**
 	 * 待处理的 Extension UI 请求。key 为 agentId，value 为 Map<requestId, { method, title, raisedAt }>。
@@ -2186,15 +2204,30 @@ export class AgentManager {
 		// 必须在发送 abort RPC 之前加入集合，避免事件处理函数在 RPC 发出后、
 		// handlePiEvent 返回前收到管道中的旧事件并重建 assistant 消息。
 		this.recentlyAborted.add(agentId);
+		this.lastAbortAtByAgent.set(agentId, Date.now());
 		this.setAgentTurnActive(agentId, false);
 		// 封印当前 stream generation：比 recentlyAborted 更硬，不依赖 activeAssistantMessageIds 例外条件，
 		// 残留 thinking/text/tool 事件在 abort settled 前一律丢弃。
 		this.sealAgentStream(agentId);
 		this.scheduleAbortSettledFallback(agentId);
 
+		// abort 升级上下文：记录 abort 时是否有工具在执行 + RPC ack 状态。
+		// pi 的 abort RPC 要等会话 idle 才响应，ack 迟到 ≠ 卡死；升级逻辑据此避免补刀。
+		const hadActiveTool = Boolean(
+			this.toolExecutingByAgent.get(agentId) ||
+			(this.activeToolCallsByAgent.get(agentId)?.size ?? 0) > 0,
+		);
+		this.pendingAbortEscalations.set(agentId, { hadActiveTool, acked: false, failed: false });
+
 		runtime.process.client
 			.request({ type: "abort" }, 10_000)
+			.then(() => {
+				const escalation = this.pendingAbortEscalations.get(agentId);
+				if (escalation) escalation.acked = true;
+			})
 			.catch((error) => {
+				const escalation = this.pendingAbortEscalations.get(agentId);
+				if (escalation) escalation.failed = true;
 				// abort 超时或失败不影响前端状态切换，但必须留痕：abort 失败后
 				// pi 可能仍在流式输出而 UI 已显示停止，是排查状态错位的关键线索。
 				void this.appLogger?.warn("agent", "Abort RPC failed", {
@@ -2217,10 +2250,6 @@ export class AgentManager {
 		this.streamingText.delete(agentId);
 		this.lastSentTextByAgent.delete(agentId);
 		this.textPushCountByAgent.delete(agentId);
-		const hadActiveTool = Boolean(
-			this.toolExecutingByAgent.get(agentId) ||
-			(this.activeToolCallsByAgent.get(agentId)?.size ?? 0) > 0,
-		);
 		this.toolMessageIds.delete(agentId);
 		this.activeToolCallsByAgent.delete(agentId);
 		this.toolExecutingByAgent.set(agentId, null);
@@ -3305,6 +3334,8 @@ export class AgentManager {
 		this.lastPerfByAgent.delete(agentId);
 		this.notifiedAskAgents.delete(agentId);
 		this.abortedDuringAsk.delete(agentId);
+		this.pendingAbortEscalations.delete(agentId);
+		this.lastAbortAtByAgent.delete(agentId);
 		this.pendingUIRequests.delete(agentId);
 		this.startupHandshakeAgents.delete(agentId);
 		// 启动期诊断与首 run 标记随生命周期清理：重启/关闭后新 runtime 重新队列
@@ -3929,6 +3960,27 @@ export class AgentManager {
 		return this.rpcLoggingAgents.has(agentId);
 	}
 
+	/**
+	 * error 终态但 pi 进程仍存活时的原进程复活（Issue #218）。
+	 * 回复级错误（API 400/模型报错/prompt 投递未知）只结束本轮回复，进程本身没死；
+	 * 此前被标成终态 error 后，下次激活要么抛「启动失败」、要么停掉活进程重建——
+	 * 重建在扩展有问题时还会触发无插件回退，用户体感是「出错后会话被自动关闭」。
+	 * 复活只翻状态（error → idle），错误卡片保留在时间线里，进程与内存消息原样复用。
+	 */
+	reviveIfProcessAlive(agentId: string): boolean {
+		const runtime = this.agents.get(agentId);
+		if (!runtime) return false;
+		if (runtime.tab.status !== "error") return false;
+		if (!runtime.process.isRunning()) return false;
+		runtime.tab.status = "idle";
+		this.emitState();
+		void this.appLogger?.info("agent", "Error-state agent revived with live process", {
+			agentId,
+			sessionPath: runtime.tab.sessionPath,
+		});
+		return true;
+	}
+
 	async stop(agentId: string) {
 		const runtime = this.agents.get(agentId);
 		if (!runtime) return;
@@ -4225,6 +4277,53 @@ export class AgentManager {
 			});
 			return;
 		}
+		// 终止窗口内的意外退出（Issue #218 WSL）：pi 在处理 abort 时可能自行崩溃
+		// （上游 #2716 族：abort 期间 unhandled rejection 直接杀 Node 进程），且任何
+		// 退出码都可能。此时不把会话打成 closed 终态，而是按会话文件重连一次，
+		// 保住会话可用性——用户只是终止了一条回复，不该丢掉整个会话。
+		const lastAbortAt = this.lastAbortAtByAgent.get(agentId);
+		const withinAbortWindow =
+			lastAbortAt !== undefined &&
+			Date.now() - lastAbortAt < AgentManager.ABORT_EXIT_REATTACH_WINDOW_MS;
+		if (withinAbortWindow && !this.autoRestartAttempted.has(agentId) && tab.sessionPath) {
+			this.autoRestartAttempted.add(agentId);
+			tab.status = "starting";
+			this.emitState();
+			void this.appLogger?.warn("agent", "Agent exited during abort window; reattaching session", {
+				agentId,
+				code: payload.code,
+				signal: payload.signal,
+				sessionPath: tab.sessionPath,
+			});
+			this.reattachProcess(agentId, tab.sessionPath)
+				.then(() => {
+					tab.status = "idle";
+					this.addLocalizedMessage(
+						agentId,
+						"system",
+						"diagnostic.abortReconnected",
+						"终止后进程异常退出，会话已自动恢复",
+					);
+					this.emitState();
+				})
+				.catch(() => {
+					tab.status = "closed";
+					void this.appLogger?.error("agent", "Agent reattach after abort-window exit failed", {
+						agentId,
+						code: payload.code,
+						sessionPath: tab.sessionPath,
+					});
+					this.addLocalizedMessage(
+						agentId,
+						"error",
+						"diagnostic.processReconnectFailed",
+						"Agent 进程意外退出，自动重连失败",
+					);
+					this.clearAgentState(agentId);
+					this.emitState();
+				});
+			return;
+		}
 		// 自动压缩 / 进程干净退出（exit code 0）且有会话路径 → 尝试一次自动重连
 		if (!this.autoRestartAttempted.has(agentId) && tab.sessionPath && payload.code === 0) {
 			this.autoRestartAttempted.add(agentId);
@@ -4300,6 +4399,52 @@ export class AgentManager {
 				code: payload.code,
 				signal: payload.signal,
 			});
+			return;
+		}
+		// 终止窗口内的意外退出（Issue #218 WSL）：与 create 路径同款处理，
+		// pi 在 abort 处理中崩溃时按会话文件重连一次，而不是把会话打成 closed。
+		const lastAbortAt = this.lastAbortAtByAgent.get(agentId);
+		const withinAbortWindow =
+			lastAbortAt !== undefined &&
+			Date.now() - lastAbortAt < AgentManager.ABORT_EXIT_REATTACH_WINDOW_MS;
+		if (withinAbortWindow && !this.autoRestartAttempted.has(agentId) && runtime.tab.sessionPath) {
+			this.autoRestartAttempted.add(agentId);
+			runtime.tab.status = "starting";
+			this.emitState();
+			void this.appLogger?.warn("agent", "Agent exited during abort window; reattaching session (reattach path)", {
+				agentId,
+				code: payload.code,
+				signal: payload.signal,
+				sessionPath: runtime.tab.sessionPath,
+			});
+			this.reattachProcess(agentId, runtime.tab.sessionPath)
+				.then(() => {
+					runtime.tab.status = "idle";
+					this.addLocalizedMessage(
+						agentId,
+						"system",
+						"diagnostic.abortReconnected",
+						"终止后进程异常退出，会话已自动恢复",
+					);
+					this.emitState();
+				})
+				.catch(() => {
+					runtime.tab.status = "closed";
+					this.addLocalizedMessage(
+						agentId,
+						"error",
+						"diagnostic.processReconnectFailed",
+						"Agent 进程意外退出，自动重连失败",
+					);
+					void this.appLogger?.error("agent", "Agent reattach after abort-window exit failed (reattach path)", {
+						agentId,
+						code: payload.code,
+						signal: payload.signal,
+						sessionPath: runtime.tab.sessionPath,
+					});
+					this.clearAgentState(agentId);
+					this.emitState();
+				});
 			return;
 		}
 		// 自动压缩也可能发生在重连后的进程中；继续复用同一会话文件重附加，
@@ -4530,6 +4675,8 @@ export class AgentManager {
 			// 1) 清理 recentlyAborted，允许状态机恢复 running
 			// 2) 推进 stream generation，解封流式闸门（唯一合法解封点）
 			this.recentlyAborted.delete(agentId);
+			// 上一轮的 abort 升级上下文随之作废（新一轮 run 与上次终止无关）
+			this.pendingAbortEscalations.delete(agentId);
 			this.notifiedAskAgents.delete(agentId);
 			this.openAgentStream(agentId);
 			this.setAgentTurnActive(agentId, true);
@@ -4704,6 +4851,12 @@ export class AgentManager {
 				(typeof contentError?.message === "string"
 					? contentError.message
 					: undefined);
+			// 用户主动 abort 的回合偶发携带错误文本（工具被 abort_bash 杀掉、abort 与
+			// 工具事件交错等）：终止不应该把仍存活的进程标成终态 error，否则下次激活
+			// 会被当成启动失败或杀掉重建（Issue #218「终止恢复有些特殊情况进程被杀掉」）。
+			// 错误卡片照常保留，状态交给 agent_settled 收敛回 idle。
+			const abortedTurn =
+				typed.stopReason === "aborted" || this.recentlyAborted.has(agentId);
 			if (typed.willRetry === true) {
 				// agent_end.willRetry 表示 pi 已判定本次错误会进入自动重试；
 				// 此时不写入最终错误，避免用户误以为会话已经失败。
@@ -4724,8 +4877,9 @@ export class AgentManager {
 			} else if (errorMsg) {
 				this.addDetailedErrorMessage(agentId, String(errorMsg));
 				// 有错误且不会重试 → Agent 进入 error 态，宠物聚合为 failed（行5），
-				// 否则会被误置为 idle 触发"所有任务完成"通知
-				if (runtime) runtime.tab.status = "error";
+				// 否则会被误置为 idle 触发"所有任务完成"通知。
+				// 例外：用户主动 abort 的回合不置终态（进程还活着，见上方 abortedTurn 注释）。
+				if (runtime && !abortedTurn) runtime.tab.status = "error";
 				// agent_end 携带错误且不重试：错误原文（API 400/模型报错等）必须进 applog，
 				// 会话气泡只面向用户，排查时依赖这里的结构化记录。
 				void this.appLogger?.error("agent", "Agent run ended with error", {
@@ -4738,7 +4892,8 @@ export class AgentManager {
 				errorMessages.length > 0
 			) {
 				this.addDetailedErrorMessage(agentId);
-				if (runtime) runtime.tab.status = "error";
+				// 与上一分支同款 abort 例外：终止回合不把活进程标成终态。
+				if (runtime && !abortedTurn) runtime.tab.status = "error";
 				// 与上一分支同款留痕：无显式错误文本时也记下 stopReason 与最后一条
 				// error 消息的 errorMessage，避免「会话失败但原因未知」完全不可追溯。
 				void this.appLogger?.error("agent", "Agent run ended with error", {
@@ -6416,10 +6571,17 @@ export class AgentManager {
 	}
 
 	/**
-	 * abort 升级：兜底窗口已过但 pi 仍在流式/执行，补发专用命令并验证。
-	 * - abort_bash：pi 提供的杀 bash 进程树命令（RPC abort 不覆盖 bash 阻塞场景）
-	 * - 二次 abort：覆盖 abort 事件与工具事件交错时被丢弃的竞态
-	 * - 仍未停止则通过 notice 明确告知用户（stop 慢是可见问题，不能只写日志）
+	 * abort 升级：兜底窗口已过但 pi 仍在流式/执行，按 ack 状态决定是否补命令。
+	 * pi 的 abort RPC 语义是「中止当前操作并等到会话空闲才响应」（上游 rpc.md），
+	 * 因此 ack 迟到是正常路径，不代表卡死；对正在收尾 abort 的 pi 补二次中止，
+	 * 在老版本 pi 上有 unhandled rejection 直接杀进程的崩溃史（上游 #2716），
+	 * WSL 慢链路下 1.5s 兜底几乎必误触发（Issue #218 WSL 终止必挂）。
+	 *
+	 * 策略：
+	 * - bash 工具确实在执行 → 补 abort_bash（升级的本意：解卡被 bash 阻塞的 abort）；
+	 * - abort RPC 已失败/超时（pi 可能没收到）→ 补二次 abort；
+	 * - 其余（ack pending / acked 且无工具）→ 不补刀，等 pi 自然 settle。
+	 * - 仍卡死则通过 notice 明确告知用户（stop 慢是可见问题，不能只写日志）
 	 */
 	private async escalateAbortIfStillRunning(agentId: string) {
 		const runtime = this.agents.get(agentId);
@@ -6432,15 +6594,32 @@ export class AgentManager {
 				response?.success &&
 				Boolean((response.data as { isStreaming?: boolean } | undefined)?.isStreaming);
 			if (!isStreaming) return; // pi 已停，无需升级
+			const escalation = this.pendingAbortEscalations.get(agentId);
+			const shouldSendAbortBash = escalation?.hadActiveTool === true;
+			const shouldResendAbort = !escalation || escalation.failed;
+			if (!shouldSendAbortBash && !shouldResendAbort) {
+				// ack pending / acked 且无工具在跑：pi 正在按语义收敛到 idle，不补刀。
+				void this.appLogger?.info("agent", "Abort escalation skipped: abort RPC ack pending/acked, waiting for idle", {
+					agentId,
+					acked: escalation?.acked === true,
+				});
+				return;
+			}
 			void this.appLogger?.warn("agent", "Abort escalation: pi still streaming after abort", {
 				agentId,
+				abortBash: shouldSendAbortBash,
+				resendAbort: shouldResendAbort,
 			});
-			await runtime.process.client
-				.request({ type: "abort_bash" }, 5_000)
-				.catch(() => undefined);
-			await runtime.process.client
-				.request({ type: "abort" }, 5_000)
-				.catch(() => undefined);
+			if (shouldSendAbortBash) {
+				await runtime.process.client
+					.request({ type: "abort_bash" }, 5_000)
+					.catch(() => undefined);
+			}
+			if (shouldResendAbort) {
+				await runtime.process.client
+					.request({ type: "abort" }, 5_000)
+					.catch(() => undefined);
+			}
 			// 第二轮验证：仍未停则通知用户，提示可重启会话。
 			const verifyTimer = setTimeout(() => {
 				void this.appLogger?.warn("agent", "Abort escalation: still running after second attempt", {

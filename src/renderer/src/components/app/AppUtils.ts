@@ -430,6 +430,38 @@ export function groupToolMessages(
 		currentRun.push({ kind: "message", message });
 	}
 
+	/**
+	 * 当前 run 里是否已包含上一个回合的「最终回答」（assistant 带 stopReason="stop"）。
+	 *
+	 * 用途：无触发消息的回合边界。pi 每轮最后一条 assistant 带 stopReason="stop"
+	 * （中间消息为 toolUse，见 AgentMessageProjector 的 provider 归一化），所以 run 末尾
+	 * 已出现 stop 又来了新的 assistant/tool/thinking，就说明新回合已经开始。
+	 *
+	 * 典型场景：父回合已结束，后台子代理完成时 pi 用 sendCustomMessage(triggerTurn)
+	 * 唤醒父会话；（a）唤醒消息是 role="custom"，旧实现整条丢弃 —— 既不可见也没有
+	 * 边界；（b）两个回合于是合并成一个 run，于是上一轮最终回答退化为「中间回答」被
+	 * 折叠，新回合内容变成时间线末尾的最终回答——用户反馈的「输出被折叠、后面的变成
+	 * 最后」。这里按 stopReason 断开，即使唤醒消息没进消息列表也不会串轮。
+	 * 只看 run 内最后一条 assistant：它才是「本轮是否已收尾」的判据。
+	 */
+	function hasFinishedTurnInRun() {
+		for (let i = currentRun.length - 1; i >= 0; i -= 1) {
+			const item = currentRun[i];
+			if (item.kind !== "message" || item.message.role !== "assistant") continue;
+			return item.message.stopReason === "stop";
+		}
+		return false;
+	}
+
+	/** 回合边界收口：把暂存 run 并在当前 run 后整体 flush（无副作用，无内容时不做事）。 */
+	function flushRunForTurnBoundary() {
+		if (pendingRun) {
+			currentRun.push(...pendingRun);
+			pendingRun = null;
+		}
+		if (hasFinishedTurnInRun()) flushRun();
+	}
+
 	// 暂存区：仅用于 ask_question 续答——system 卡片后用户回复时，把卡片前的工具/思考
 	// 暂存起来，等下一条 assistant 到来后合并为同一 agent-run。
 	// 普通「上一轮只有工具/思考、用户又发新问题」场景不得使用此暂存，否则会串轮。
@@ -438,6 +470,8 @@ export function groupToolMessages(
 	for (const message of messages) {
 		if (isThinkingOnly(message)) {
 			flushTools();
+			// 上一回合已收尾（末尾 assistant 带 stop）：这个 thinking 属于新回合，先断开
+			flushRunForTurnBoundary();
 			if (currentRun.length === 0 && currentThinking.length === 0) {
 				runStartedAt = message.timestamp;
 			}
@@ -446,6 +480,8 @@ export function groupToolMessages(
 			// 立即成组：禁止多条 thinking-only 积压后 join 成一张卡。
 			flushThinking();
 		} else if (message.role === "assistant") {
+			// 无触发消息的新回合（如后台子代理唤醒）先断开，避免上一轮最终回答被折叠
+			flushRunForTurnBoundary();
 			// 有暂存 run 时先合并到当前 run
 			if (pendingRun) {
 				currentRun.push(...pendingRun);
@@ -453,6 +489,8 @@ export function groupToolMessages(
 			}
 			appendRunMessage(message);
 		} else if (message.role === "tool") {
+			// 新回合可能直接从工具开始（唤醒后先调用工具），同样需要先断开
+			flushRunForTurnBoundary();
 			flushThinking();
 			if (currentRun.length === 0) runStartedAt = message.timestamp;
 			currentTools.push(message);
@@ -461,7 +499,15 @@ export function groupToolMessages(
 			// 工具、thinking 和后续 assistant 消息应合并为同一轮回答，
 			// 否则会被拆成两个独立的折叠区域。
 			// 若已有暂存 run（前一次 ask_question 未合并），先 flush 掉。
-			if (pendingRun) {
+			//
+			// 例外：扩展 custom 消息（meta.type === "customMessage"）本身是回合边界
+			// ——pi 在回合之间写入 custom_message 条目（如后台子代理完成唤醒），
+			// 卡片要正好落在两轮之间，否则后续回合会与上一轮合并、最终回答被折叠。
+			// 未渲染的 custom（display:false 的上下文注入）同样断开：不可见但边界真实。
+			const isCustomMessage = message.meta?.type === "customMessage";
+			if (isCustomMessage) {
+				flushRunForTurnBoundary();
+			} else if (pendingRun) {
 				currentRun.push(...pendingRun);
 				pendingRun = null;
 				flushRun();

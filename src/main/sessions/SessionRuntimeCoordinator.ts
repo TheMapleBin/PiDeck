@@ -71,6 +71,13 @@ export interface SessionAgentGateway {
 	abort(agentId: string): Promise<void>;
 	compact(agentId: string, prompt?: string): Promise<AgentRuntimeState>;
 	getRuntimeState(agentId: string): Promise<AgentRuntimeState>;
+	/**
+	 * 可选能力：error 终态但进程仍存活时的原进程复活（error → idle，Issue #218）。
+	 * 回复级错误（API 400/模型报错/投递未知）不会杀死 pi 进程，此前被标成终态后，
+	 * 下一次激活要么抛「启动失败」、要么停掉活进程重建（扩展有问题时还会触发无插件回退）。
+	 * pi 网关实现进程存活探测；dsh 未实现则保持原终态语义。
+	 */
+	reviveIfProcessAlive?(agentId: string): boolean;
 	/** 可选能力：会话内命令列表（pi 经 get_commands RPC；dsh 经 host 命令注册表枚举桥 D15）。 */
 	getCommands?(agentId: string): Promise<unknown[]>;
 	getAvailableModels(agentId: string): Promise<AvailableModel[]>;
@@ -334,6 +341,10 @@ export class SessionRuntimeCoordinator {
 		// pi may emit an interactive recovery request immediately before reporting
 		// an error. Keep that runtime addressable until the user answers the request.
 		if (tab?.status === "error" && this.hasPendingUiRequest(sessionId, agentId)) return agentId;
+		// Issue #218：回复级错误（API 400/模型报错/投递未知）不会杀进程。error 终态
+		// 但进程仍存活时先复活（error → idle），让激活/发送复用原进程，而不是在此
+		// 解绑后走 stop+create 重建——重建在扩展有问题时还会触发无插件回退。
+		if (tab?.status === "error" && this.reviveTerminalAgent(agentId)) return agentId;
 		// A terminal process cannot safely receive a delayed prompt result. Remove
 		// the binding even if its dispatch lease has not unwound yet, which makes
 		// that result fail closed instead of reviving a dead runtime association.
@@ -1384,6 +1395,11 @@ export class SessionRuntimeCoordinator {
 		if (mappedAgentId) {
 			const mappedTab = this.agents.list().find((candidate) => candidate.id === mappedAgentId);
 			if (mappedTab) {
+				// 回复级错误会把仍存活的进程标成终态 error（Issue #218）：先尝试原进程
+				// 复活；复活失败（进程真死了）才按启动失败拒绝，保持原终态语义。
+				if (isTerminalAgent(mappedTab) && !this.reviveTerminalAgent(mappedTab.id)) {
+					throw this.startupFailure(mappedTab);
+				}
 				const ready = await this.waitUntilReady(mappedTab);
 				// 预热已经 bind 后，用户仍可能改 catalog 模型再点发送。旧逻辑直接
 				// waitUntilReady 返回，跳过 applyPreferences，发送就会带着旧模型走。
@@ -1402,8 +1418,12 @@ export class SessionRuntimeCoordinator {
 
 		let tab = entry.filePath ? this.findAgentBySessionPath(entry) : undefined;
 		if (tab && isTerminalAgent(tab)) {
-			await this.agents.stop(tab.id);
-			tab = undefined;
+			// 进程仍存活的 error 终态（回复级错误标出，Issue #218）优先复活复用，
+			// 而不是停掉活进程重建——重建在扩展有问题时会触发无插件回退。
+			if (!this.reviveTerminalAgent(tab.id)) {
+				await this.agents.stop(tab.id);
+				tab = undefined;
+			}
 		}
 		if (tab?.status === "starting") tab = await this.waitUntilReady(tab);
 
@@ -1616,6 +1636,23 @@ export class SessionRuntimeCoordinator {
 			return false;
 		}
 		return /model not found/i.test(errorMessage(error));
+	}
+
+	/**
+	 * error 终态 agent 的原进程复活：进程仍存活（回复级错误不会杀进程）时把状态
+	 * 回复为 idle 并复用，避免「激活即抛启动失败」或「发消息就杀掉活进程重建」
+	 * （重建在扩展有问题时还会触发无插件回退，Issue #218）。
+	 * 网关未实现该能力（dsh）或进程确已死亡时返回 false，调用方走原终态路径。
+	 */
+	private reviveTerminalAgent(agentId: string): boolean {
+		if (typeof this.agents.reviveIfProcessAlive !== "function") return false;
+		const revived = this.agents.reviveIfProcessAlive(agentId);
+		if (revived) {
+			void this.logger?.info("session-runtime", "Terminal agent revived with live process", {
+				agentId,
+			});
+		}
+		return revived;
 	}
 
 	private async waitUntilReady(initialTab: AgentTab): Promise<AgentTab> {

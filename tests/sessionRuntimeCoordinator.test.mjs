@@ -531,6 +531,105 @@ test("reuses an already-running historical session by canonical path", async () 
   assert.equal(harness.calls.send, 1);
 });
 
+// ── Issue #218：回复级错误把仍存活的进程标成终态 error 后的复活复用 ──
+
+function errorStateTab(overrides = {}) {
+  return {
+    id: "agent-err",
+    projectId: "project-1",
+    cwd: "C:/project",
+    title: "Session 1",
+    status: "error",
+    sessionId: "pi-session-1",
+    sessionPath: "C:/sessions/session-1.jsonl",
+    createdAt: 1,
+    ...overrides,
+  };
+}
+
+test("send revives an error-state agent with a live process instead of respawning", async () => {
+  const { SessionRuntimeCoordinator } = loadCoordinator();
+  // 回复级错误（API 400/模型报错）不杀进程：tab 被标成 error 但进程仍存活。
+  const tab = errorStateTab();
+  const harness = createHarness({ tabs: [tab] });
+  // 模拟 AgentManager.reviveIfProcessAlive：原地翻状态（list() 返回同一引用）。
+  harness.agents.reviveIfProcessAlive = (agentId) => {
+    if (agentId !== tab.id || !harness.processAlive) return false;
+    tab.status = "idle";
+    return true;
+  };
+  harness.processAlive = true;
+  const coordinator = new SessionRuntimeCoordinator(
+    harness.catalog,
+    harness.agents,
+    harness.sender,
+  );
+  coordinator.bindExistingAgent("session-1", tab.id);
+
+  const result = await coordinator.send(prompt());
+
+  assert.equal(result.accepted, true);
+  assert.equal(result.agentId, tab.id);
+  // 关键断言：不重建（create=0）、不停旧进程（stop=0），提示词直达原进程。
+  assert.equal(harness.calls.create, 0);
+  assert.equal(harness.calls.stop, 0);
+  assert.equal(harness.calls.send, 1);
+});
+
+test("send rebuilds a fresh runtime when the error-state process is really dead", async () => {
+  const { SessionRuntimeCoordinator } = loadCoordinator();
+  // 进程真死：revive 返回 false → 保持原语义，按 sessionPath 停旧建新恢复。
+  const tab = errorStateTab();
+  const harness = createHarness({
+    entry: { status: "active", filePath: "C:/sessions/session-1.jsonl" },
+    tabs: [tab],
+  });
+  harness.agents.reviveIfProcessAlive = () => false;
+  const coordinator = new SessionRuntimeCoordinator(
+    harness.catalog,
+    harness.agents,
+    harness.sender,
+  );
+  coordinator.bindExistingAgent("session-1", tab.id);
+
+  const result = await coordinator.send(prompt());
+
+  assert.equal(result.accepted, true);
+  // 走的是既有恢复链路：停掉死进程引用并新建 runtime，而不是复用死进程。
+  assert.equal(harness.calls.stop, 1);
+  assert.equal(harness.calls.create, 1);
+  assert.equal(harness.calls.send, 1);
+});
+
+test("path-matched error-state session revives the live agent without stop+recreate", async () => {
+  const { SessionRuntimeCoordinator } = loadCoordinator();
+  // 无绑定（旧 catalog）：activate 靠 sessionPath 找到 error 态 tab。
+  const tab = errorStateTab();
+  const harness = createHarness({
+    entry: { status: "active", filePath: "C:/sessions/session-1.jsonl" },
+    tabs: [tab],
+  });
+  harness.agents.reviveIfProcessAlive = (agentId) => {
+    if (agentId !== tab.id) return false;
+    tab.status = "idle";
+    return true;
+  };
+  const coordinator = new SessionRuntimeCoordinator(
+    harness.catalog,
+    harness.agents,
+    harness.sender,
+  );
+
+  const result = await coordinator.send(prompt());
+
+  assert.equal(result.accepted, true);
+  assert.equal(result.agentId, tab.id);
+  // 复活成功：不走 stop + create 重建链（重建会触发无插件回退，Issue #218）。
+  assert.equal(harness.calls.stop, 0);
+  assert.equal(harness.calls.create, 0);
+  assert.equal(harness.calls.send, 1);
+});
+
 test("keeps a draft unbound when Agent startup fails", async () => {
   const { SessionRuntimeCoordinator } = loadCoordinator();
   const harness = createHarness({

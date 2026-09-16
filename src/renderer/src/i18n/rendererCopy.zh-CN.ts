@@ -792,6 +792,16 @@ export const zhCN = {
   "sessionSubagents.status.aborted": "已中止",
   "sessionSubagents.status.steered": "已转向",
   "sessionSubagents.status.unknown": "未知状态",
+  "sessionSubagents.status.lost": "已停止（失联）",
+  "sessionSubagents.lostHint": "长时间未收到终态，运行进程可能已退出；已按已停止展示，具体完成情况以子会话记录为准。",
+  // 扩展通知卡（pi custom_message）：子代理后台任务完成会唤醒父会话，卡片说明「为什么又出一段回答」
+  "notify.customTitle": "扩展通知",
+  "notify.subagent.completed": "子代理已完成",
+  "notify.subagent.failed": "子代理失败",
+  "notify.subagent.paused": "子代理已暂停",
+  "notify.subagent.stopped": "子代理已停止",
+  "notify.expand": "展开完整通知",
+  "notify.collapse": "收起完整通知",
   // 修改的文件横栏（会话级文件汇总）
   "sessionFiles.title": "修改的文件",
   "sessionFiles.empty": "会话暂无文件修改",

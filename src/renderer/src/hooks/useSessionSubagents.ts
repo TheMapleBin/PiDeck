@@ -16,6 +16,7 @@ import { desktopApi } from "../desktopApi";
 import {
 	sessionRuntimeUiBySessionIdAtomFamily,
 } from "../atoms";
+import { isTerminalSubagentStatus } from "../components/session/subagentStatus";
 
 /* ------------------------------------------------------------------ */
 /* 纯函数合并逻辑（可单测）                                              */
@@ -190,9 +191,14 @@ export function parseSubagentAsyncSnapshot(
 }
 
 /**
- * 将 subagent-async widget 快照条目叠加进合并结果：快照是运行态唯一实时真源，
+ * 将 subagent-async widget 快照条目叠加进合并结果：快照是运行态实时真源，
  * 同 id 时以快照为准（状态更新）；快照条目无 task 文本（description 为空），
  * 已存在同 id 条目时保留其 description（主进程从派发 args.task 推导）。
+ *
+ * 唯一的反向约束：**终态不可被复活**。主进程已按 runtime 换代/无活 runtime
+ * 对账把条目降级为 stopped（权威判定），而插件内存快照在 runner 进程已死时会
+ * 一直停在 running——无条件覆盖会让僵尸条目永远「运行中」，时长无限增长
+ * （用户实测「几千分钟」）。
  */
 export function applyAsyncSnapshotEntries(
 	existing: PiSubagentEntry[],
@@ -202,10 +208,21 @@ export function applyAsyncSnapshotEntries(
 	const byId = new Map(existing.map((entry) => [entry.id, entry]));
 	for (const entry of asyncEntries) {
 		const prev = byId.get(entry.id);
-		byId.set(
-			entry.id,
-			!entry.description && prev?.description ? { ...entry, description: prev.description } : entry,
-		);
+		if (prev && isTerminalSubagentStatus(prev.status) && !isTerminalSubagentStatus(entry.status)) {
+			continue;
+		}
+		byId.set(entry.id, {
+			// 快照缺字段时沿用已有值：description/toolUses/tokens/childSessionId/
+			// result 由主进程推导或 record 携带，快照（label + 运行态）不携带这些信息，
+			// 整体替换会让「打开子会话 / 完整结果」入口凭空消失。
+			...prev,
+			...entry,
+			description: entry.description || prev?.description || "",
+			startedAt: entry.startedAt ?? prev?.startedAt,
+			completedAt: entry.completedAt ?? prev?.completedAt,
+			toolUses: entry.toolUses ?? prev?.toolUses,
+			tokens: entry.tokens ?? prev?.tokens,
+		});
 	}
 	return [...byId.values()];
 }

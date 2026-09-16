@@ -34,6 +34,7 @@ import {
 } from "./ComposerWidgetLayout";
 import {
 	isFailureSubagentStatus,
+	isSubagentRunLost,
 	subagentIconKind,
 	subagentStatusLabelSuffix,
 } from "./subagentStatus";
@@ -89,9 +90,19 @@ function subagentStatusBadgeClass(status: string): string {
 	}
 }
 
+/**
+ * 时长格式化（子代理行与详情共用）。
+ *
+ * 必须带小时/天档位：子代理是长任务，只到分钟档会输出「3120m 0s」这种读不出来的数字
+ * （用户反馈「几千分钟」）。秒级只保留在 1 分钟内，避免长任务末尾抖动。
+ */
 function formatDuration(ms: number): string {
 	if (ms < 60000) return `${Math.round(ms / 1000)}s`;
-	return `${Math.round(ms / 60000)}m ${Math.round((ms % 60000) / 1000)}s`;
+	const totalMinutes = Math.floor(ms / 60000);
+	if (totalMinutes < 60) return `${totalMinutes}m ${Math.round((ms % 60000) / 1000)}s`;
+	const totalHours = Math.floor(totalMinutes / 60);
+	if (totalHours < 24) return `${totalHours}h ${totalMinutes % 60}m`;
+	return `${Math.floor(totalHours / 24)}d ${totalHours % 24}h`;
 }
 
 /* ------------------------------------------------------------------ */
@@ -106,13 +117,19 @@ const PiSubagentEntryRow = (props: {
 	onOpenChildSession?: (sessionId: string) => void;
 }) => {
 	const { entry } = props;
+	const now = Date.now();
+	// 失联判定：runner 进程已死但记录仍是 running/queued（父进程换代/被杀后
+	// 永远等不到终态写盘）时，按「已停止」呈现——否则条目永远亮着「运行中」，
+	// 时长还会一直涨到几千分钟。仅改展示，不回写数据。
+	const lost = isSubagentRunLost(entry, now);
+	const effectiveStatus = lost ? "stopped" : entry.status;
 	// 失败类终态默认展开，让失败原因一眼可见；其余默认收起。
 	// 本组件在 ComposerWidgetLayoutProvider 内，行级折叠走 composer 通道记忆
 	const { collapsed, toggleCollapsed } = useComposerWidgetCollapsed(
 		`subagent-entry:${entry.id}`,
-		!isFailureSubagentStatus(entry.status),
+		!isFailureSubagentStatus(effectiveStatus),
 	);
-	const isActive = entry.status === "running" || entry.status === "queued";
+	const isActive = !lost && (entry.status === "running" || entry.status === "queued");
 	const [resultDialogOpen, setResultDialogOpen] = useState(false);
 	// 运行中时长平滑走秒：时长是 Date.now() - startedAt 的派生值，仅靠 bridge 事件
 	// 推送重渲染会"一会儿蹦一下"；运行中的行自己挂 1s 心跳，终态/卸载时清理
@@ -143,10 +160,12 @@ const PiSubagentEntryRow = (props: {
 	}, [resultDialogOpen, entry.id, props.sessionId]);
 	const hasLongText = Boolean(entry.result || entry.error);
 	const displayResult = fullResult ?? entry.result ?? undefined;
+	// 失联条目也要显示已运行的时长（就是用户看到的那个「几千分钟」），
+	// 所以与运行中同样取 now - startedAt，只在有 startedAt 时展示。
 	const duration = entry.completedAt && entry.startedAt
 		? formatDuration(entry.completedAt - entry.startedAt)
-		: entry.startedAt && isActive
-			? formatDuration(Date.now() - entry.startedAt)
+		: entry.startedAt && (isActive || lost)
+			? formatDuration(now - entry.startedAt)
 			: null;
 
 	return (
@@ -158,7 +177,7 @@ const PiSubagentEntryRow = (props: {
 				onClick={toggleCollapsed}
 			>
 				<span className="grid size-5 shrink-0 place-items-center">
-					<SubagentStatusIcon status={entry.status} />
+					<SubagentStatusIcon status={effectiveStatus} />
 				</span>
 				<span className="shrink-0 font-medium text-foreground">{entry.type}</span>
 				<span className="min-w-0 flex-1 truncate text-text-secondary">{entry.description}</span>
@@ -174,8 +193,8 @@ const PiSubagentEntryRow = (props: {
 				<div className="flex flex-col gap-1.5 px-2 pb-2 pl-9 text-xs leading-5 text-text-secondary">
 					{/* 元信息行：本地化状态徽标 + 起止时间与量化指标 */}
 					<div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-text-tertiary">
-						<span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${subagentStatusBadgeClass(entry.status)}`}>
-							{t(`sessionSubagents.status.${subagentStatusLabelSuffix(entry.status)}`)}
+						<span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${subagentStatusBadgeClass(effectiveStatus)}`}>
+							{t(lost ? "sessionSubagents.status.lost" : `sessionSubagents.status.${subagentStatusLabelSuffix(effectiveStatus)}`)}
 						</span>
 						{entry.toolUses != null && entry.toolUses > 0 && (
 							<span>{t("sessionSubagents.detailToolUses", { count: entry.toolUses })}</span>
@@ -190,6 +209,11 @@ const PiSubagentEntryRow = (props: {
 							<span>{t("sessionSubagents.detailCompletedAt", { time: new Date(entry.completedAt).toLocaleTimeString() })}</span>
 						)}
 					</div>
+					{lost && (
+						<p className="rounded border border-danger/30 bg-danger-soft px-2 py-1.5 text-danger">
+							{t("sessionSubagents.lostHint")}
+						</p>
+					)}
 					{entry.description && (
 						<p className="whitespace-pre-wrap break-words">{entry.description}</p>
 					)}
