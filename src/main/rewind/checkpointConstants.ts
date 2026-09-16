@@ -50,6 +50,18 @@ export const MIN_CHECKPOINT_INTERVAL_MS = 8_000;
 export const DEFAULT_MAX_CHECKPOINTS = 50;
 
 /**
+ * 当前会话裁剪的最小间隔：打点成功后触发 pruneCheckpoints，但不必每次都全量扫
+ * refs（for-each-ref + cat-file --batch），60s 一次足够把超限部分削掉。
+ */
+export const PRUNE_CURRENT_MIN_INTERVAL_MS = 60_000;
+
+/**
+ * 旧会话清理的最小间隔（per 仓库）：会话首轮 run 时触发 pruneOldSessions，
+ * 顺带消化历史积压 ref；10 分钟一次已覆盖会话切换频率。
+ */
+export const PRUNE_OLD_SESSIONS_MIN_INTERVAL_MS = 10 * 60_000;
+
+/**
  * 快照忽略目录（匹配路径任意段）。
  * 前半部分与 pi-rewind 同源（node_modules/env/dist 等），保证两边创建的快照
  * 语义一致；`.runs`/`out`/`target`/`shots` 是 PiDeck 侧扩展（2026-09-13 用户

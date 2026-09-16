@@ -222,10 +222,14 @@ export function PetOverlay({ sprite, state, notification, scale, fontMode, fontS
 		// —— 按需调度（替代常驻 rAF）：只在「画面会变化」的时刻重绘 ——
 		// 需要连续绘制的阶段只有通知淡入/淡出（16ms 逐帧）；动画帧推进按帧间隔；
 		// 其余静止期（idle/failed 暂停、通知稳定显示）零绘制，100ms 低频兜底检查。
-		const check = (now: number) => {
+		const check = () => {
 			if (!alive) return;
 			// 用真实流逝时间而非固定步长：setTimeout 在后台窗口会被节流，
 			// 恢复后 delta 大跳由 acc 上限兜底（防跳帧），不会补播动画。
+			// 注意：本循环由 setTimeout 驱动（替代常驻 rAF），回调不携带时间戳，
+			// 必须自取 performance.now()——写成 now 形参会得到 undefined→NaN，
+			// 帧号永不推进（定格第一帧）且延迟 NaN 被 setTimeout 强转为 0 空转。
+			const now = performance.now();
 			const delta = Math.max(0, now - lastT);
 			lastT = now;
 

@@ -37,8 +37,8 @@ export type SettingsTabId =
 	| "vision"
 	| "imagegen";
 
-/** 常用设置内部可滚动分区；目前只有 Git 摘要需要从面板直达。 */
-export type SettingsSectionId = "git" | "dsh-runner-node";
+/** 常用设置内部可滚动分区：Git 摘要与 DSH 运行时从面板直达，dev-pi-rpc 供「禁用扩展启动」提示回跳。 */
+export type SettingsSectionId = "git" | "dsh-runner-node" | "dev-pi-rpc";
 
 /** 设置窗口顶层分区：系统设置 / 配置管理（顶部 tab，样式同配置页 Pi/DSH 分页）。 */
 export type SettingsPaneId = "settings" | "config";

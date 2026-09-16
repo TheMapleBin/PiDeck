@@ -34,9 +34,10 @@ test("SessionTabsBar dangerous actions are configured with variant=destructive",
   );
 
   // 右侧更多菜单中的“停止 Agent”操作应标记为 destructive
+  // （ onSelect 已从 props.onStopCurrent 重构为 control.onAction("stop")，语义不变）
   assert.match(
     tabsSrc,
-    /<DropdownMenuItem[\s\S]*?variant="destructive"[\s\S]*?onSelect=\{props\.onStopCurrent\}/,
+    /<DropdownMenuItem[\s\S]*?variant="destructive"[\s\S]*?onSelect=\{\(\) => control\.onAction\("stop"\)\}/,
     "Stop Agent action in more dropdown menu should have variant='destructive'"
   );
 

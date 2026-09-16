@@ -928,6 +928,10 @@ export const enUS: Record<TranslationKey, string> = {
   "common.copyVisible": "Copy Visible",
   "notice.viewDetails": "View details",
   "notice.detailsTitle": "Notification details",
+  // Toast for sessions started without extensions: the settings switch is persistent, the auto-fallback lasts this run only.
+  "notice.extensionsDisabledBySetting": "\"Disable extensions on start\" is on: this session loaded no extensions, so todo/plan/ask are unavailable. Turn the switch off in settings unless you are debugging extensions.",
+  "notice.extensionsDisabledFallback": "Extensions failed to load, so this run temporarily disables them (nothing was written to settings). Send this session's error details to the AI to troubleshoot.",
+  "notice.openDevExtensionsSettings": "Open settings",
   "common.delete": "Delete",
   "common.paste": "Paste",
   "common.deleteConfirm": "Confirm Delete",
@@ -1451,6 +1455,7 @@ export const enUS: Record<TranslationKey, string> = {
   "dshPermission.switchNotice": "Permission preset switched: {name}",
   "dshPermission.switchFailed": "The DSH host did not confirm the requested permission preset.",
   "dshPermission.presetPendingNotice": "Permission preset {name} saved; it will take effect when the session starts (send a message to start).",
+  "dshPermission.presetNeedsSession": "No real session exists yet on this start page: send a message to create one, then set the permission preset.",
   "dshPermission.fullAccessConfirmTitle": "Switch to full access?",
   "dshPermission.fullAccessConfirmBody": "Full access (danger-full-access) runs tool calls without per-call approval and can execute arbitrary commands and write anywhere. Switch to this preset?",
   "dshPermission.fullAccessConfirmLabel": "Switch anyway",

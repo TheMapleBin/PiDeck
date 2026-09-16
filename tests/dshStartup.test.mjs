@@ -50,9 +50,12 @@ test("startDshHostInBackground skips warmup when enabled is false", () => {
 test("startup integration warms DSH after the main window only when default backend is dsh", () => {
 	// AgentRuntimeProvider 阶段 1：预热再加一道 runtime 门控——runtime 不在时 boot 必然失败，
 	// 白起一个 utilityProcess（约 200MB）没有意义。
+	// 43f8b7c2 起 createWindow 与直连预热之间插入了 runtime 版本错配自动更新块
+	// （其 onRuntimeReady 也用同一门控补预热），窗口放宽到 2400 字符；
+	// 门控条件本身（default backend dsh + canCreateDshSession）不变。
 	assert.match(
 		main,
-		/await createWindow\(\);[\s\S]{0,600}startDshHostInBackground\(dshHost, appLogger, \{\s*enabled:\s*settingsStore\.get\(\)\.defaultAgentBackend === "dsh" && dshRuntimeStatus\.canCreateDshSession\(\),\s*\}\)/,
+		/await createWindow\(\);[\s\S]{0,2400}startDshHostInBackground\(dshHost, appLogger, \{\s*enabled:\s*settingsStore\.get\(\)\.defaultAgentBackend === "dsh" && dshRuntimeStatus\.canCreateDshSession\(\),\s*\}\)/,
 	);
 	assert.match(configTab, /const restartHost = async \(\) =>/);
 	assert.match(configTab, /desktopApi\.sessions\.restartDshHost\(\)/);

@@ -32,6 +32,7 @@ import {
 	loadAllCheckpoints,
 	listCheckpointRefs,
 	deleteCheckpoint,
+	deleteCheckpoints,
 	pruneCheckpoints,
 	pruneOldSessions,
 	diffCheckpoints,
@@ -48,6 +49,7 @@ import { MAX_UNTRACKED_TOTAL_BYTES } from "../src/main/rewind/checkpointConstant
 const LARGE_BYTES = 10 * 1024 * 1024 + 1;
 const UUID_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const UUID_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const UUID_C = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
 /** 建一个干净的临时 git 仓库并返回 { dir, git }；git 为同步执行封装。 */
 function makeRepo() {
@@ -391,6 +393,80 @@ test("pruneOldSessions：清理其他会话的 checkpoint", async (t) => {
 
 	const remaining = await loadAllCheckpoints(dir);
 	assert.deepEqual(remaining.map((c) => c.id), [cpA.id]);
+});
+
+test("pruneOldSessions：keep 集合为数组时保留全部活跃会话", async (t) => {
+	const { dir, git } = makeRepo();
+	t.after(() => rmSync(dir, { recursive: true, force: true }));
+
+	writeFileSync(join(dir, "a.txt"), "v1\n");
+	commitAll(git, "init");
+
+	const cpA = await createCheckpoint({
+		root: dir,
+		id: cpId(UUID_A, 1),
+		sessionId: UUID_A,
+		trigger: "turn",
+		turnIndex: 1,
+	});
+	const cpB = await createCheckpoint({
+		root: dir,
+		id: cpId(UUID_B, 1),
+		sessionId: UUID_B,
+		trigger: "turn",
+		turnIndex: 1,
+	});
+	await createCheckpoint({
+		root: dir,
+		id: cpId(UUID_C, 1),
+		sessionId: UUID_C,
+		trigger: "turn",
+		turnIndex: 1,
+	});
+
+	const deleted = await pruneOldSessions(dir, [UUID_A, UUID_B], 0);
+	assert.equal(deleted, 1, "只清非活跃会话 C");
+
+	const remaining = await loadAllCheckpoints(dir);
+	assert.deepEqual(
+		remaining.map((c) => c.id).sort(),
+		[cpA.id, cpB.id].sort(),
+		"活跃会话 A/B 的点全部保留",
+	);
+});
+
+test("deleteCheckpoints：批量删除 ref，缺失 id 容忍", async (t) => {
+	const { dir, git } = makeRepo();
+	t.after(() => rmSync(dir, { recursive: true, force: true }));
+
+	writeFileSync(join(dir, "a.txt"), "v1\n");
+	commitAll(git, "init");
+
+	const ids = [];
+	for (let i = 1; i <= 3; i++) {
+		const cp = await createCheckpoint({
+			root: dir,
+			id: cpId(UUID_A, i),
+			sessionId: UUID_A,
+			trigger: "turn",
+			turnIndex: i,
+		});
+		ids.push(cp.id);
+	}
+
+	// 混入一个不存在的 id（并发裁剪场景），批次不应失败
+	await deleteCheckpoints(dir, [ids[0], "no-such-id", ids[2]]);
+
+	const remaining = await loadAllCheckpoints(dir);
+	assert.deepEqual(
+		remaining.map((c) => c.id),
+		[ids[1]],
+		"仅中间那个点保留",
+	);
+	assert.equal(
+		String(git(["for-each-ref", "refs/pi-checkpoints", "--format=%(refname)"])).trim().split("\n").length,
+		1,
+	);
 });
 
 test("diff：两个 checkpoint 之间的变更摘要", async (t) => {

@@ -21,6 +21,31 @@ const fail = (message) => {
 	app.exit(1);
 };
 
+/**
+ * 加载纯常量/纯函数的 .ts 模块（Electron 内置 Node 不支持 type stripping，
+ * 普通 node 24 可以；与 PetWindow 同样用 transpile+vm）。沙箱内 require 一律
+ * 抛错：进到这里的前提就是模块无运行时依赖。
+ */
+const loadPureTsModule = (sourcePath) => {
+	const src = fs.readFileSync(sourcePath, "utf8");
+	const { outputText } = ts.transpileModule(src, {
+		compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+	});
+	const mod = { exports: {} };
+	vm.runInNewContext(
+		outputText,
+		{
+			module: mod,
+			exports: mod.exports,
+			// 纯模块的函数默认参数可能取 process.env（如 v8HeapLimits），透传真实 process
+			process,
+			require: (id) => { throw new Error(`pure module ${path.basename(sourcePath)} must not require(${id})`); },
+		},
+		{ filename: path.basename(sourcePath) },
+	);
+	return mod.exports;
+};
+
 app.whenReady().then(async () => {
 	try {
 		// ── 加载 PetWindow.ts（与 tests/petWindowCaps.test.mjs 相同手法，但 electron 用真模块）──
@@ -49,19 +74,15 @@ app.whenReady().then(async () => {
 				if (id === "../settings/SettingsStore") {
 					return { readElectronChromiumSandboxPreference: () => false };
 				}
-				// PetWindow 新增依赖（shared 纯几何常量，node 24 type stripping 直接加载；
-				// 后两者仅取常量/无副作用，stub 避免拖入 electron 协议注册与日志实现）
+				// PetWindow 新增依赖（shared 纯几何常量；v8HeapLimits 纯常量/纯函数，
+				// #213 渲染堆档位——两者均无运行时依赖，用 loadPureTsModule 加载真实源码，
+				// stub 会与实现漂移）
 				if (id === "../../shared/petNotificationLayout") {
-				// Electron 内置 Node 不支持 .ts type stripping（普通 node 24 可以），
-				// 与 PetWindow 同样用 transpile+vm 加载纯常量模块（仅 type-only import，无运行时依赖）
-				const layoutSrc = fs.readFileSync(path.join(__dirname, "../src/shared/petNotificationLayout.ts"), "utf8");
-				const { outputText: layoutOut } = ts.transpileModule(layoutSrc, {
-					compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-				});
-				const layoutModule = { exports: {} };
-				vm.runInNewContext(layoutOut, { module: layoutModule, exports: layoutModule.exports, require: (i) => { throw new Error("unexpected layout require " + i); } }, { filename: "petNotificationLayout.ts" });
-				return layoutModule.exports;
-			}
+					return loadPureTsModule(path.join(__dirname, "../src/shared/petNotificationLayout.ts"));
+				}
+				if (id === "../v8HeapLimits") {
+					return loadPureTsModule(path.join(__dirname, "../src/main/v8HeapLimits.ts"));
+				}
 				if (id === "../logging/sharedLogger") return { getAppLogger: () => undefined };
 				if (id === "./petSpriteProtocol") return { PET_WINDOW_PARTITION: "persist:pet" };
 				throw new Error(`pet-smoke: unexpected require(${id})`);

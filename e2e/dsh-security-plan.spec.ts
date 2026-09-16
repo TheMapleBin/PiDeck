@@ -37,12 +37,13 @@ test("DSH 权限预设切换、plan 模式与配置页分区", async ({ window }
 	// ── 2.5 草稿期权限预选（回归：未启动时下拉可点、不可灰）──────────────────
 	// 旧 bug：会话未启动时权限下拉能弹出但选项是灰的、无法选中。修复后草稿期
 	// 选择只写会话记录（启动时 applyPreferences 应用），选项必须可点击。
+	// #214 统一后触发按钮为纯图标（与 pi 安全等级菜单同款），当前档位走 title 提示。
 	const securityBtn = window.locator(".composer-bar-btn.security.dsh");
 	await expect(securityBtn).toBeVisible();
 	// 草稿期展示 settings permission.defaultPreset（workspace-write）
-	await expect(securityBtn).toContainText("Workspace Write", { timeout: 10_000 });
+	await expect(securityBtn).toHaveAttribute("title", /Workspace Write/, { timeout: 10_000 });
 	await securityBtn.click();
-	const permissionPicker = window.locator(".dsh-permission-picker");
+	const permissionPicker = window.locator(".dsh-permission-menu");
 	await expect(permissionPicker).toBeVisible();
 	await expect(permissionPicker.locator('[data-picker-value="read-only"]')).toBeVisible();
 	await expect(permissionPicker.locator('[data-picker-value="workspace-write"]')).toBeVisible();
@@ -63,7 +64,7 @@ test("DSH 权限预设切换、plan 模式与配置页分区", async ({ window }
 		}
 	});
 	expect(draftRecord?.permissionPreset).toBe("read-only");
-	await expect(securityBtn).toContainText("Read Only", { timeout: 10_000 });
+	await expect(securityBtn).toHaveAttribute("title", /Read Only/, { timeout: 10_000 });
 
 	// 发送激活：applyPreferences 把草稿期预选的 read-only 套到 host 会话
 	await composer.click();
@@ -100,7 +101,7 @@ test("DSH 权限预设切换、plan 模式与配置页分区", async ({ window }
 
 	// ── 3. 权限预设：激活后底栏盾牌按钮 → host 命令切换 workspace-write ──────
 	// 激活时 applyPreferences 已把草稿期预选的 read-only 套到 host
-	await expect(securityBtn).toContainText("Read Only", { timeout: 10_000 });
+	await expect(securityBtn).toHaveAttribute("title", /Read Only/, { timeout: 10_000 });
 
 	await securityBtn.click();
 	await expect(permissionPicker).toBeVisible();
@@ -113,7 +114,7 @@ test("DSH 权限预设切换、plan 模式与配置页分区", async ({ window }
 	// host /permission 命令执行：permission/preset 事件折叠进 runtime state
 	const readWrite = await waitForState((state) => state.permissionPreset === "workspace-write", 20);
 	expect(readWrite?.permissionPreset).toBe("workspace-write");
-	await expect(securityBtn).toContainText("Workspace Write", { timeout: 10_000 });
+	await expect(securityBtn).toHaveAttribute("title", /Workspace Write/, { timeout: 10_000 });
 
 	// ── 4. plan 模式：模式选择器「计划」→ 下一条消息生效 ─────────────────────
 	await window.locator(".composer-bar-btn.mode").first().click();

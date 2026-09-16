@@ -162,9 +162,13 @@ function createSendHarness(initial = {}) {
     // DSH 发送拦截：真实纯函数 + 提示替身（记录调用，不真弹 sonner toast）。
     "../../../shared/types/dshRuntime": { dshSendBlockReason },
     "../utils/dshRuntimeHint": {
+      // useSessionSend 顶部还解构了 DSH_INSTALL_SETTINGS_TARGET / maybeHintMissingDshRunnerNode
+      // （后者在 DSH 会话放行后调用，探测本机 Node）；测试环境 desktopApi 不存在，桩为 no-op。
+      DSH_INSTALL_SETTINGS_TARGET: { tab: "common", pane: "config", backendPane: "dsh" },
       showDshRuntimeBlockHint: (_openSettings, state, reason) => {
         hints.push({ state, reason });
       },
+      maybeHintMissingDshRunnerNode: () => {},
     },
   });
   return {

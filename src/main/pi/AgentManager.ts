@@ -43,8 +43,11 @@ import { createPiProcessPromptResolvers } from "../prompts/piProcessPromptResolv
 import {
 	describeExtensionFallbackSkip,
 	formatExtensionFallbackDebug,
+	resolveDisabledExtensionsCopy,
+	resolveDisabledExtensionsReason,
 	shouldRetryWithoutExtensions,
 } from "./extensionStartupFallback";
+import type { DisabledExtensionsReason } from "./extensionStartupFallback";
 import { formatExtensionErrorReason } from "./extensionError";
 import type { RpcResponse } from "./PiRpcClient";
 import { formatBashToolMessage } from "./bashResult";
@@ -75,6 +78,10 @@ import {
 	loadCheckpointFromRef,
 	MIN_CHECKPOINT_INTERVAL_MS,
 	MUTATING_TOOLS,
+	pruneCheckpoints,
+	pruneOldSessions,
+	PRUNE_CURRENT_MIN_INTERVAL_MS,
+	PRUNE_OLD_SESSIONS_MIN_INTERVAL_MS,
 	restoreCheckpoint as applyCheckpointRestore,
 	toCheckpointSummary,
 } from "../rewind/index.ts";
@@ -380,6 +387,12 @@ export class AgentManager {
 			timer: NodeJS.Timeout | null;
 		}
 	>();
+	/**
+	 * checkpoint 裁剪节流（key = `${cwd}:${kind}`，kind = current | old）。
+	 * 2026-09-15 发现：pruneCheckpoints/pruneOldSessions 一直是死代码，本仓库
+	 * refs/pi-checkpoints 积累到 5627 条，`git log --all` 被 73% 的快照噪声占据。
+	 */
+	private readonly rewindPruneAt = new Map<string, number>();
 	/**
 	 * 自动打点健康状态（per 工作目录）：失败态上屏用。
 	 * 此前失败只写日志，用户以为有快照、真要回滚才发现全是空的。
@@ -816,16 +829,41 @@ export class AgentManager {
 		}
 	}
 
-	/** 回退成功后的系统说明：已禁用扩展，附上可粘贴给 AI 的 stderr。
-	 *  不立即写时间线，等首个 run（用户消息之后）落盘，避免插进历史轮次中间。 */
-	private notifyExtensionFallback(agentId: string, debugDetails?: string): void {
+	/** 回退成功或设置开关生效时的统一说明：已禁用扩展，附上可粘贴给 AI 的 stderr。
+	 *  不立即写时间线，等首个 run（用户消息之后）落盘，避免插进历史轮次中间。
+	 *  设置开关（piRpcNoExtensions）是持续成因：只弹一次 toast，避免每个新会话连发；
+	 *  用户反馈过「设置里一直是禁用扩展启动但没人提示」，能力静默缺失比报错更难发现。 */
+	private notifyExtensionsDisabled(
+		agentId: string,
+		input: { fallbackFromExtensions: boolean; debugDetails?: string },
+	): void {
+		const reason = resolveDisabledExtensionsReason({
+			settingDisabled: Boolean(this.settingsStore.get().piRpcNoExtensions),
+			fallbackFromExtensions: input.fallbackFromExtensions,
+		});
+		if (!reason) return;
+		const copy = resolveDisabledExtensionsCopy(reason);
 		this.queueStartupDiagnostic(agentId, {
 			role: "system",
-			i18nKey: "diagnostic.extensionsDisabledFallback",
-			fallbackText: "扩展加载失败，已禁用扩展运行。可在本会话把下面的错误信息发给 AI，协助排查扩展问题。",
-			options: { debugDetails },
+			i18nKey: copy.diagnosticKey,
+			fallbackText: copy.diagnosticFallback,
+			...(input.debugDetails ? { options: { debugDetails: input.debugDetails } } : {}),
+		});
+		// toast 每个成因每次运行只弹一次：进程自动重连/连续新建会话都会走到这里，重复弹会刷屏。
+		if (this.disabledExtensionsNoticesSent.has(reason)) return;
+		this.disabledExtensionsNoticesSent.add(reason);
+		this.emit(ipcChannels.agentsNotice, {
+			agentId,
+			message: copy.noticeFallback,
+			i18nKey: copy.noticeKey,
+			kind: "warning",
+			duration: copy.noticeDurationMs,
+			...(copy.noticeAction ? { action: copy.noticeAction } : {}),
 		});
 	}
+
+	/** 已弹过的「扩展被禁用」成因（本次运行内）：见 notifyExtensionsDisabled。 */
+	private readonly disabledExtensionsNoticesSent = new Set<DisabledExtensionsReason>();
 
 	/**
 	 * 技能白名单因超出启动参数预算被跳过：告知用户本次「禁用技能」不生效。
@@ -1675,9 +1713,10 @@ export class AgentManager {
 			// Agent 可用只依赖 get_state；历史后台加载，加载期间新消息由 preserveMessagesAfter 保护。
 			const historyLoadDecision = this.getHistoryAutoLoadDecision(tab.sessionPath);
 			const preserveMessagesAfter = Date.now();
-			if (fallbackFromExtensions) {
-				this.notifyExtensionFallback(id, handshake.fallbackDebug);
-			}
+			this.notifyExtensionsDisabled(id, {
+				fallbackFromExtensions,
+				debugDetails: handshake.fallbackDebug,
+			});
 			if (tab.sessionPath) {
 				void this.loadMessages(
 					id,
@@ -2377,9 +2416,10 @@ export class AgentManager {
 
 			// 重连期间用户可能已发送消息（乐观上屏）：必须保护，否则替换投影时未落盘消息丢失
 			await this.loadMessages(agentId, false, undefined, { preserveMessagesAfter: Date.now() }).catch(() => undefined);
-			if (handshake.fallbackFromExtensions) {
-				this.notifyExtensionFallback(agentId, handshake.fallbackDebug);
-			}
+			this.notifyExtensionsDisabled(agentId, {
+				fallbackFromExtensions: handshake.fallbackFromExtensions,
+				debugDetails: handshake.fallbackDebug,
+			});
 
 			void this.appLogger?.info("agent", "Process reattached successfully", {
 				agentId,
@@ -3720,6 +3760,78 @@ export class AgentManager {
 		}
 	}
 
+	/**
+	 * 打点成功后裁剪当前会话 checkpoint（保留 DEFAULT_MAX_CHECKPOINTS 个）。
+	 * 节流：每仓库至少间隔 PRUNE_CURRENT_MIN_INTERVAL_MS——prune 要全量扫 refs，
+	 * 不必跟着每次打点跑；60s 一次足够把超限部分削掉。
+	 */
+	private maybePruneCurrentSessionCheckpoints(root: string, sessionId: string): void {
+		const now = Date.now();
+		const key = `${root}\u0000current`;
+		const last = this.rewindPruneAt.get(key) ?? 0;
+		if (now - last < PRUNE_CURRENT_MIN_INTERVAL_MS) return;
+		this.rewindPruneAt.set(key, now);
+		void pruneCheckpoints(root, sessionId)
+			.then((deleted) => {
+				if (deleted > 0) {
+					void this.appLogger?.info("rewind", "pruned checkpoints for session", {
+						root,
+						sessionId,
+						deleted,
+					});
+				}
+			})
+			.catch((error: unknown) => {
+				this.appLogger?.warn("rewind", "checkpoint prune failed", {
+					root,
+					sessionId,
+					error: error instanceof Error ? error.message : String(error),
+				});
+			});
+	}
+
+	/**
+	 * 会话首轮 run 时清理非活跃会话的 checkpoint（keepPerOldSession=0，设计默认）。
+	 * keep 集合 = 同仓库当前所有活跃 agent 的 sessionId，并发会话互不误删；
+	 * 首次触发会顺带消化历史积压（本仓库实测 5627 条 ref）。
+	 * 节流：每仓库至少间隔 PRUNE_OLD_SESSIONS_MIN_INTERVAL_MS。
+	 */
+	private maybePruneOldSessionCheckpoints(root: string, sessionId: string): void {
+		const now = Date.now();
+		const key = `${root}\u0000old`;
+		const last = this.rewindPruneAt.get(key) ?? 0;
+		if (now - last < PRUNE_OLD_SESSIONS_MIN_INTERVAL_MS) return;
+		this.rewindPruneAt.set(key, now);
+		const keep = this.activeSessionIdsForRoot(root);
+		void pruneOldSessions(root, keep)
+			.then((deleted) => {
+				if (deleted > 0) {
+					void this.appLogger?.info("rewind", "pruned checkpoints of inactive sessions", {
+						root,
+						kept: keep.length,
+						deleted,
+					});
+				}
+			})
+			.catch((error: unknown) => {
+				this.appLogger?.warn("rewind", "old session checkpoint prune failed", {
+					root,
+					error: error instanceof Error ? error.message : String(error),
+				});
+			});
+	}
+
+	/** 同仓库当前所有活跃 agent 的 sessionId（pruneOldSessions 的 keep 集合）。 */
+	private activeSessionIdsForRoot(root: string): string[] {
+		const ids = new Set<string>();
+		for (const runtime of this.agents.values()) {
+			if (runtime?.tab.cwd === root && runtime.tab.sessionId) {
+				ids.add(runtime.tab.sessionId);
+			}
+		}
+		return [...ids];
+	}
+
 	/** 更新工作目录的打点健康状态（成功清零；失败累计并保留最近原因）。 */
 	private recordRewindHealth(root: string, error: unknown): void {
 		const health =
@@ -4423,6 +4535,11 @@ export class AgentManager {
 			this.setAgentTurnActive(agentId, true);
 			// rewind 回合计数：每轮 run 递增一次，供文件自动打点标记 turnIndex。
 			this.bumpRewindTurn(agentId);
+			// 首轮 run 顺带清理非活跃会话的 checkpoint（fire-and-forget，
+			// keep 集合含当前会话，并发会话不误删；节流见方法内注释）。
+			if (runtime.tab.cwd && runtime.tab.sessionId) {
+				this.maybePruneOldSessionCheckpoints(runtime.tab.cwd, runtime.tab.sessionId);
+			}
 			runtime.tab.status = "running";
 			this.activeAssistantMessageIds.delete(agentId);
 			this.toolMessageIds.delete(agentId);

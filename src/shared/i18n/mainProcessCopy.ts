@@ -4,7 +4,11 @@ export const mainProcessZhCN = {
 	"diagnostic.processReconnectFailed": "Agent 进程意外退出，自动重连失败",
 	"diagnostic.runtimeError": "Agent 运行时发生错误。",
 	"diagnostic.agentStartFailed": "Pi RPC 启动失败。",
-	"diagnostic.extensionsDisabledFallback": "扩展加载失败，已禁用扩展运行。可在本会话把下面的错误信息发给 AI，协助排查扩展问题。",
+	// 两种成因：回退只作用于本次运行（不写入设置），设置开关则是每个新会话都会复现的持续成因。
+	"diagnostic.extensionsDisabledFallback":
+		"扩展加载失败，本次运行已临时禁用扩展（不写入设置，「禁用扩展启动」开关保持原样），下次启动会重新尝试加载扩展。可在本会话把下面的错误信息发给 AI，协助排查扩展问题。",
+	"diagnostic.extensionsDisabledBySetting":
+		"本次启动未加载任何扩展：设置 → 开发设置 的「禁用扩展启动」处于开启状态，todo/plan/ask 等扩展能力不可用。如非排查扩展问题需要，请关闭该开关后重启会话。",
 	"diagnostic.skillWhitelistSkipped":
 		"技能数量过多（{count} 个），已跳过「禁用技能」设置：本次启动由 pi 自动加载全部技能（禁用技能仍可被模型自动调用）。减少技能后重启会话即可恢复。",
 	"diagnostic.modelPreferenceIgnored":
@@ -237,7 +241,10 @@ export const mainProcessEnUS: Record<MainProcessTranslationKey, string> = {
 	"diagnostic.processReconnectFailed": "The Agent process exited unexpectedly and could not reconnect",
 	"diagnostic.runtimeError": "The Agent runtime encountered an error.",
 	"diagnostic.agentStartFailed": "Pi RPC failed to start.",
-	"diagnostic.extensionsDisabledFallback": "Extensions failed to load, so the Agent is running with extensions disabled. Paste the error details below into this chat and ask the AI to help diagnose them.",
+	"diagnostic.extensionsDisabledFallback":
+		"Extensions failed to load, so extensions are disabled for this run only (nothing was written to settings — the “Disable extensions on start” switch stays as it is). Extensions will load again on the next start. Paste the error details below into this chat and ask the AI to help diagnose them.",
+	"diagnostic.extensionsDisabledBySetting":
+		"No extension was loaded this run: “Disable extensions on start” is still enabled in Settings → Developer settings, so todo/plan/ask and other extension capabilities are unavailable. Turn that switch off and restart the session unless you are debugging extensions.",
 	"diagnostic.skillWhitelistSkipped":
 		"Too many skills ({count}). The disabled-skill list was skipped for this launch, so pi loaded every skill (disabled ones can still be invoked by the model). Reduce the number of skills and restart the session to restore it.",
 	"diagnostic.modelPreferenceIgnored":

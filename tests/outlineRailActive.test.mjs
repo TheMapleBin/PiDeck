@@ -114,7 +114,9 @@ test("outline hook caches content positions and rate-limits remeasurement", () =
 
 test("rail wheel input uses the stick-to-bottom wheel bridge", () => {
   assert.match(stickSource, /const scrollByWheel = useCallback<ScrollByWheel>/);
-  assert.match(stickSource, /applyWheelEscape\(scroll, deltaY\);[\s\S]*?scroll\.scrollBy\(\{ top: deltaY \}\)/);
+  // rail 输入没有嵌套滚动 target，直接走 applyWheelOnScroll（escape 解析在
+  // applyWheelEscape 内，仅处理带 target 的事件路径）
+  assert.match(stickSource, /const scrollByWheel = useCallback<ScrollByWheel>\(\(deltaY\) => \{[\s\S]*?applyWheelOnScroll\(scroll, deltaY\);[\s\S]*?scroll\.scrollBy\(\{ top: deltaY \}\)/);
   assert.match(scrollerSource, /scrollByWheel: engineScrollByWheel/);
   assert.match(controllerSource, /api\.scrollByWheel\(deltaY\)/);
 });

@@ -468,7 +468,8 @@ export const DevTab = memo(function DevTab(props: DevTabProps) {
             updateDraft({ electronChromiumSandbox: checked })
           }
         />
-        <div className="px-0.5 pb-1 pt-3">
+        {/* id 用于深链：扩展被禁用启动的提示可直达本组启动参数（见 useSettingsFocus） */}
+        <div id="settings-section-dev-pi-rpc" className="px-0.5 pb-1 pt-3">
           <span className="text-caption font-semibold tracking-[0.06em] text-muted-foreground">{t("settings.piRpcStartup")}</span>
           <p className="mt-0.5 text-caption text-muted-foreground">{t("settings.piRpcStartupDesc")}</p>
         </div>

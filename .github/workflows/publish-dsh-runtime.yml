@@ -79,7 +79,19 @@ jobs:
             exit 1
           fi
 
+      # windows-11-arm runner 上 npm ci 解包 1.5k+ 包要 10+ 分钟（x64 约 1 分钟，
+      # 缓存命中也一样——瓶颈是 reify 的海量小文件写，不是下载）。
+      # 依赖只在 lockfile 变化时才有意义，这里直接缓存 node_modules，命中即跳过安装。
+      # 无 restore-keys：部分命中时 cache-hit 仍为 false，npm ci 会先清 node_modules 再装，安全。
+      - name: Cache node_modules
+        id: nm-cache
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: dsh-pack-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
+
       - name: Install dependencies
+        if: steps.nm-cache.outputs.cache-hit != 'true'
         run: npm ci
         env:
           # 只要 @deepseek-ai 闭包和原生 prebuild；不必拉 Electron / Playwright 浏览器。

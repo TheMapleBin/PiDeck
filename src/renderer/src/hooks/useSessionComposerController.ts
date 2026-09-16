@@ -118,6 +118,11 @@ import {
 } from "../utils/composerImages";
 import { PASTE_TO_FILE_MIN_CHARS } from "../rendererUtils";
 import { resolveBackendSwitchDefaults } from "../utils/backendSwitchDefaults";
+import {
+  GUIDE_BOOTSTRAP_SESSION_ID,
+  readWelcomeBackendPreference,
+  WELCOME_BACKEND_KEY,
+} from "../utils/chatSessionBootstrap";
 import { showNotice } from "../utils/notice";
 import {
   requireSessionCommand,
@@ -343,7 +348,18 @@ export function useSessionComposerController(
   const pasteFiles = pasteFilesBySession[sessionId] ?? [];
   // DSH：plan 由 host 持有；goal 由本地选择或进行中/阻塞的目标驱动（切回普通会 pause）。
   // 生图为独立供应商配置，不属于 pi/dsh 任一后端，两种后端均可用。
-  const isDshBackend = record?.backend === "dsh" || runtime?.backend === "dsh";
+  // 引导页虚拟会话的后端显式选择：无 record、不落 catalog，后端切换走
+  // localStorage 偏好（与 pickModel/pickThinking 的引导页分支同构），首次发送
+  // 由 App.ensureSessionForSend 读取同一份偏好创建真实会话。仅在引导页初始化，
+  // 真实会话（record 短暂未就绪）不受 localStorage 残留影响。
+  const isGuideBootstrapSession = sessionId === GUIDE_BOOTSTRAP_SESSION_ID;
+  const [guideBackendOverride, setGuideBackendOverride] = useState<AgentBackend | undefined>(
+    () => (isGuideBootstrapSession ? readWelcomeBackendPreference() : undefined),
+  );
+  const isDshBackend =
+    record?.backend === "dsh" ||
+    runtime?.backend === "dsh" ||
+    (isGuideBootstrapSession && guideBackendOverride === "dsh");
   const hasImageGenHistory = (messageCache[sessionId]?.messages ?? []).some(
     (message) => Boolean(message.meta?.imageGen),
   );
@@ -1756,6 +1772,20 @@ export function useSessionComposerController(
   const backendLocked = Boolean(runtime?.agentId) || record?.status === "active" || record?.backend === "imagegen";
   const changeBackend = useCallback(async (next: AgentBackend) => {
     if (backendLocked) return;
+    // 引导页虚拟会话（无 catalog record）：与 pickModel/pickThinking 的引导页
+    // 分支同构——显式选择写 localStorage 偏好并本地即时回显，不走 IPC。
+    // 直接 updateRecord("renderer:guide-bootstrap") 在主进程必然查不到会话，
+    // 报「会话不存在，请刷新会话列表后重试」（2026-09 用户反馈的新建页切 DSH 报错）。
+    // 首次发送时 App.ensureSessionForSend 读取同一份偏好创建真实会话，选择不丢失。
+    if (isGuideBootstrapSession) {
+      setGuideBackendOverride(next);
+      try {
+        localStorage.setItem(WELCOME_BACKEND_KEY, next);
+      } catch {
+        // localStorage 不可用时静默；本次页面内仍由 guideBackendOverride 即时生效
+      }
+      return;
+    }
     try {
       // 切回 pi 时按 pi 配置重新解析默认模型/思考档位（与 createDraft 缺省填充
       // 同一解析器 launchDefaults），而不是直接清空——否则用户 pi 配置里的
@@ -1774,7 +1804,7 @@ export function useSessionComposerController(
     } catch (error) {
       showNotice(error instanceof Error ? error.message : String(error), 4000);
     }
-  }, [backendLocked, sessionId, upsertSession]);
+  }, [backendLocked, isGuideBootstrapSession, record, sessionId, upsertSession]);
 
   const compact = useCallback(async () => {
     const target = toSessionRuntimeTarget(sessionId, runtime);
@@ -1841,7 +1871,9 @@ export function useSessionComposerController(
     sessionId,
     record,
     runtime,
-    backend: record?.backend ?? "pi",
+    // 引导页优先回显显式切换（guideBackendOverride），否则退回上次偏好/默认 pi；
+    // 真实会话以 record 为准。
+    backend: record?.backend ?? (isGuideBootstrapSession ? guideBackendOverride : undefined) ?? "pi",
     /** 草稿期可切换后端；激活后锁定（undefined → UI 隐藏切换器）。 */
     changeBackend: backendLocked ? undefined : changeBackend,
     /** DSH 部署默认模型（settings.yaml agent-default-model）；仅 dsh 后端时展示，

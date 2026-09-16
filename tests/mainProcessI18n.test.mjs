@@ -167,7 +167,6 @@ test("AgentManager user-visible runtime diagnostics carry i18n descriptors", () 
     "diagnostic.processReconnectFailed",
     "diagnostic.runtimeError",
     "diagnostic.agentStartFailed",
-    "diagnostic.extensionsDisabledFallback",
     "diagnostic.skillWhitelistSkipped",
     "diagnostic.agentStopped",
     "diagnostic.promptRejected",

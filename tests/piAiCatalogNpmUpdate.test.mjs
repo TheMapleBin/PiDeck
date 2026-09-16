@@ -225,14 +225,14 @@ test("catalog:checkRemote 走仓库分支 manifest（主源）", async () => {
 	}
 });
 
-test("catalog: 镜像源（ghfast）生成代理 URL 并生效", async () => {
+test("catalog: 镜像源（atomgit）优先走 AtomGit raw 并生效", async () => {
 	const dir = tempDir();
 	try {
 		const { catalogText, manifestText } = generateArtifact("9.9.9");
 		const seen = [];
 		const updater = new PiAiCatalogUpdater({
 			userDataDir: dir,
-			source: () => "ghfast",
+			source: () => "atomgit",
 			fetchImpl: async (url) => {
 				seen.push(url);
 				if (url.endsWith("pi-ai-catalog.manifest.json")) return okResponse(manifestText);
@@ -244,9 +244,11 @@ test("catalog: 镜像源（ghfast）生成代理 URL 并生效", async () => {
 		const result = await updater.update("main");
 		assert.equal(result.ok, true);
 		assert.equal(result.updated, true);
+		// 268e620f 起镜像清单收敛为 AtomGit（ghfast 等前缀代理退役）：
+		// 分支请求应优先经 AtomGit raw 路径（<host>/<owner>/<repo>/raw/<branch>/resources）
 		assert.ok(
-			seen.some((u) => u.startsWith("https://ghfast.top/https://raw.githubusercontent.com/")),
-			`分支请求应经 ghfast 代理前缀，实际: ${JSON.stringify(seen)}`,
+			seen.some((u) => u.startsWith("https://atomgit.com/ayuayue/PiDeck/raw/main/resources/")),
+			`分支请求应优先走 AtomGit raw，实际: ${JSON.stringify(seen)}`,
 		);
 		assert.equal(updater.getStatus().overlay?.packageVersion, "9.9.9");
 	} finally {
@@ -254,13 +256,15 @@ test("catalog: 镜像源（ghfast）生成代理 URL 并生效", async () => {
 	}
 });
 
-test("catalog: 自定义镜像前缀（custom）生效", async () => {
+test("catalog: 非镜像源 id 回退 GitHub raw 直连", async () => {
 	const dir = tempDir();
 	try {
 		const { catalogText, manifestText } = generateArtifact("9.9.9");
 		const seen = [];
 		const updater = new PiAiCatalogUpdater({
 			userDataDir: dir,
+			// "custom"/前缀代理镜像已随 268e620f 退役；未知 id 不在 UPDATE_SOURCE_MIRRORS
+			// 中，mirrorHost() 返回 null → 回退 GitHub raw 直连（customHost 不再参与目录下载）
 			source: () => "custom",
 			customHost: () => "https://ghproxy.example.com",
 			fetchImpl: async (url) => {
@@ -273,8 +277,12 @@ test("catalog: 自定义镜像前缀（custom）生效", async () => {
 		});
 		await updater.update("main");
 		assert.ok(
-			seen.some((u) => u.startsWith("https://ghproxy.example.com/https://raw.githubusercontent.com/")),
-			`自定义镜像前缀应生效，实际: ${JSON.stringify(seen)}`,
+			seen.some((u) => u.startsWith("https://raw.githubusercontent.com/ayuayue/PiDeck/")),
+			`非镜像源应回退 GitHub raw 直连，实际: ${JSON.stringify(seen)}`,
+		);
+		assert.ok(
+			seen.every((u) => !u.startsWith("https://ghproxy.example.com")),
+			`customHost 不应参与目录下载，实际: ${JSON.stringify(seen)}`,
 		);
 	} finally {
 		cleanup(dir);

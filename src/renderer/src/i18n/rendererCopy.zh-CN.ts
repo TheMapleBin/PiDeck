@@ -921,6 +921,10 @@ export const zhCN = {
   "common.copyVisible": "复制可见",
   "notice.viewDetails": "查看详情",
   "notice.detailsTitle": "通知详情",
+  // 扩展被禁用启动的 toast：设置开关是持久成因（每个新会话都会复现），回退只作用于本次运行。
+  "notice.extensionsDisabledBySetting": "「禁用扩展启动」已开启：本次会话未加载任何扩展，todo/plan/ask 等能力不可用。不需要排查扩展时请去设置关闭该开关。",
+  "notice.extensionsDisabledFallback": "扩展加载失败，本次运行已临时禁用扩展（不会写入设置）。可把本会话的错误详情发给 AI 排查扩展问题。",
+  "notice.openDevExtensionsSettings": "去设置关闭",
   "common.delete": "删除",
   "common.paste": "粘贴",
   "common.deleteConfirm": "确认删除",
@@ -1445,6 +1449,7 @@ export const zhCN = {
   "dshPermission.switchNotice": "已切换权限预设：{name}",
   "dshPermission.switchFailed": "DSH 主机未确认请求的权限预设已生效。",
   "dshPermission.presetPendingNotice": "权限预设 {name} 已保存，将在会话启动后生效（发送消息即启动）。",
+  "dshPermission.presetNeedsSession": "引导页还没有真实会话：请先发送消息创建会话，再设置权限预设。",
   "dshPermission.fullAccessConfirmTitle": "切换到完全访问？",
   "dshPermission.fullAccessConfirmBody": "完全访问（danger-full-access）下工具调用无需逐次批准，可以执行任意命令并写入任意文件。确认切换到该预设？",
   "dshPermission.fullAccessConfirmLabel": "确认切换",

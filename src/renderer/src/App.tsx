@@ -78,6 +78,7 @@ import {
 } from "./utils/sessionCommands";
 import {
   GUIDE_BOOTSTRAP_SESSION_ID,
+  readWelcomeBackendPreference,
   readWelcomeModelPreference,
   readWelcomeThinkingPreference,
   resolveChatSessionBootstrap,
@@ -1649,6 +1650,14 @@ export function App() {
         // 避免出现「菜单看似切换，首次发送后又回到默认档位」。
         const welcomeModel = readWelcomeModelPreference()?.model;
         const welcomeThinking = readWelcomeThinkingPreference()?.thinkingLevel;
+        // 引导页底栏显式切换的后端（localStorage 偏好）优先于设置项默认；
+        // 选了 dsh 但 DSH runtime 不可用时按 effectiveAgentBackendAtom 同一条
+        // 钳制规则回落 pi，避免首次发送才在 createDraft 门控上抛错。
+        const welcomeBackend = readWelcomeBackendPreference();
+        const draftBackend =
+          welcomeBackend === "dsh" && effectiveAgentBackend !== "dsh"
+            ? "pi"
+            : (welcomeBackend ?? effectiveAgentBackend);
         // 统一创建 draft 会话（Chat 项目也走普通会话、可保存）：创建不拉 pi，
         // selectSessionCommand 同步切页、立即进入会话页；匿名会话仅保留给侧栏
         // 「新建临时对话」入口（createAnonymousSessionWithTab）。
@@ -1656,8 +1665,8 @@ export function App() {
         // 且经 DSH runtime 安装态钳制——runtime 不可用时不会尝试建 dsh 会话。
         const session = await api.sessions.createDraft({
           projectId: project.id,
-          title: effectiveAgentBackend === "dsh" ? `${project.name} DSH` : `${project.name} agent`,
-          backend: effectiveAgentBackend,
+          title: draftBackend === "dsh" ? `${project.name} DSH` : `${project.name} agent`,
+          backend: draftBackend,
           ...(welcomeModel ? { welcomeModel } : {}),
           ...(welcomeThinking ? { thinkingLevel: welcomeThinking } : {}),
         });

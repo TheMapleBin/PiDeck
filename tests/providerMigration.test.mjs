@@ -40,6 +40,16 @@ test("pi custom gateway maps into llm-pi-ai with catalog fields only", () => {
     ],
   });
   assert.equal(dsh.namespace, "llm-pi-ai");
+  assert.equal(dsh.profile.baseURL, "https://api.weishiair.de/v1");
+  assert.equal(dsh.profile.apiKeyEnv, "WEISHIAIR_API_KEY");
+  assert.equal(dsh.profile.models?.length, 1);
+  assert.equal(dsh.profile.models?.[0]?.id, "grok-4.6");
+  assert.equal(dsh.profile.models?.[0]?.name, "grok-4.6");
+  assert.equal(dsh.profile.models?.[0]?.contextWindow, 128000);
+  assert.deepEqual(dsh.profile.models?.[0]?.input, ["text", "image"]);
+  assert.deepEqual(JSON.parse(JSON.stringify(dsh.profile.models?.[0]?.reasoningEfforts)), { xhigh: "xhigh", max: "max" });
+  assert.equal(dsh.profile.models?.[0]?.cost, undefined);
+});
 
 test("dsh custom model round-trips input and reasoningEfforts into Pi metadata", () => {
   const pi = mapping.dshToPiSnapshot({
@@ -108,17 +118,6 @@ test("off null stays null; off-only map becomes false (DSH rejects off-only effo
   // 否则 settings.update 报 settings-rejected("reasoningEfforts offers no level beyond off")。
   assert.equal(dsh.profile.models?.[1]?.reasoningEfforts, false);
   assert.equal(dsh.profile.models?.[2]?.reasoningEfforts, false);
-});
-
-  assert.equal(dsh.profile.baseURL, "https://api.weishiair.de/v1");
-  assert.equal(dsh.profile.apiKeyEnv, "WEISHIAIR_API_KEY");
-  assert.equal(dsh.profile.models?.length, 1);
-  assert.equal(dsh.profile.models?.[0]?.id, "grok-4.6");
-  assert.equal(dsh.profile.models?.[0]?.name, "grok-4.6");
-  assert.equal(dsh.profile.models?.[0]?.contextWindow, 128000);
-  assert.deepEqual(dsh.profile.models?.[0]?.input, ["text", "image"]);
-  assert.deepEqual(JSON.parse(JSON.stringify(dsh.profile.models?.[0]?.reasoningEfforts)), { xhigh: "xhigh", max: "max" });
-  assert.equal(dsh.profile.models?.[0]?.cost, undefined);
 });
 
 test("official DeepSeek keeps the composition defaults when Pi only supplies its built-in catalog", () => {

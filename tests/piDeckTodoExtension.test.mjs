@@ -100,7 +100,12 @@ function createHarness(entries = []) {
       }];
     },
     appendEntry(customType, data) {
-      snapshots.push({ customType, data: clone(data) });
+      const entry = { type: "custom", customType, data: clone(data) };
+      snapshots.push(entry);
+      // 模拟 pi 真实行为：appendEntry 的条目进入会话分支历史
+      // （压缩后补注简报的幂等判定扫描的就是分支条目）
+      sessionEntries.push(entry);
+      allEntries.push(entry);
     },
     on(event, handler) {
       handlers.set(event, handler);
@@ -271,11 +276,14 @@ test("isOwnTodo treats normalized self paths (backslash, case) as owned", async 
   const harness = createHarness();
   await start(harness);
   await harness.execute({ action: "replace", items: [{ text: "任务" }] });
-  // 规范化后与自身路径相等：Windows 反斜杠 + 大小写变体仍属本扩展
+  // 规范化后与自身路径相等：Windows 反斜杠 + 大小写变体仍属本扩展。
+  // 新契约（零失效）下 context 不再注入提醒，归属判定由 widget 发布状态体现：
+  // 若被误判为第三方，context 处理器会清空 widget（yielded 让位流程）。
   harness.setTodoSourcePath("c:\\pideck\\resources\\extensions\\PI-DECK-TODO.ts");
-  const result = await reminder(harness);
-  assert.ok(result?.message, "normalized self path must be treated as owned");
-  assert.match(result.message.content, /任务/);
+  const contextResult = await harness.handlers.get("context")({
+    messages: [{ role: "user", content: "request" }],
+  }, harness.context);
+  assert.equal(contextResult, undefined, "owned tool must not yield on context");
   assert.deepEqual(harness.widgets.get("pi-deck-todo"), [
     "[[pid:todo-plan:branch-root:1]]",
     "☐ #1 任务",
@@ -551,7 +559,7 @@ test("delete does not touch previousPlan; restore after delete brings back the p
   ]);
 });
 
-test("delete guidance is present in schema, description, snippet, guidelines and reminder", async () => {
+test("delete guidance is present in schema, description, guidelines and model brief", async () => {
   const ext = readFileSync(extensionPath, "utf8");
   // schema / description / snippet 统一含 delete
   assert.match(ext, /action: StringEnum\(VALID_TODO_ACTIONS\)/);
@@ -566,12 +574,8 @@ test("delete guidance is present in schema, description, snippet, guidelines and
   // 旧 toggle/done 契约不得回归
   assert.doesNotMatch(ext, /toggle/);
   assert.doesNotMatch(ext, /\.done/);
-  // 提醒文本同口径引导 delete
-  const harness = createHarness([v3TodoEntry()]);
-  await start(harness);
-  const result = await reminder(harness);
-  assert.match(result.message.content, /action=delete/);
-  assert.match(result.message.content, /action=list first/);
+  // 新契约（零失效）：提醒不再每轮注入，delete 指引由压缩补注简报携带（同口径）
+  assert.match(ext, /Remove one obsolete item with action=delete/);
 });
 
 test("add defaulting to pending, explicit statuses, and count suffix", async () => {
@@ -714,31 +718,29 @@ test("v3 snapshots roundtrip through persistence and restore without rewrite", a
   assert.equal(harness.snapshots.at(-1).data.nextPlanId, 6);
 });
 
-test("context keeps one fresh ephemeral reminder aligned with memory", async () => {
+test("context injects nothing per-turn and strips legacy reminder copies", async () => {
   const harness = createHarness([v3TodoEntry()]);
   await start(harness);
 
-  const result = await reminder(harness, [{ role: "user", content: "request" }]);
-  assert.ok(result?.message, "active plan must produce a reminder");
-  assert.equal(result.messages.length, 2);
-  assert.deepEqual(result.messages[0], { role: "user", content: "request" });
-  assert.match(result.message.content, /action=replace/);
-  assert.match(result.message.content, /\[pending\] #1: 默认任务/);
-  assert.equal(result.message.display, false);
+  // 有活跃计划时 context 也不注入任何提醒（零失效设计：计划视图由最近一次
+  // 变更的 toolResult 携带，见扩展文件头）
+  const result = await harness.handlers.get("context")({
+    messages: [{ role: "user", content: "request" }],
+  }, harness.context);
+  assert.equal(result, undefined, "context must not inject per-turn reminders");
 
-  // 状态变更后，历史里的旧副本全部移除，只临时追加一份最新提醒。
+  // 状态变更后，历史里的旧提醒副本被防御性剥离（防降级混入），不追加新提醒
   await harness.execute({ action: "replace", items: [{ text: "新计划" }] });
   const refreshed = await harness.handlers.get("context")({
     messages: [
-      { role: "custom", customType: "pi-deck-todo-context", content: result.message.content },
+      { role: "custom", customType: "pi-deck-todo-context", content: "旧提醒 A" },
       { role: "user", content: "request" },
-      { role: "custom", customType: "pi-deck-todo-context", content: "重复旧提醒" },
+      { role: "custom", customType: "pi-deck-todo-context", content: "旧提醒 B" },
     ],
   }, harness.context);
-  assert.equal(refreshed.messages.length, 2);
-  assert.equal(refreshed.messages[0].role, "user");
-  assert.match(refreshed.messages[1].content, /新计划/);
-  assert.doesNotMatch(refreshed.messages[1].content, /默认任务/);
+  assert.ok(refreshed, "legacy reminder copies must be stripped from context");
+  assert.equal(refreshed.messages.length, 1);
+  assert.deepEqual(refreshed.messages[0], { role: "user", content: "request" });
 });
 
 test("session_tree restores the selected branch and third-party ownership clears the built-in widget", async () => {
@@ -784,34 +786,34 @@ test("session_tree restores the selected branch and third-party ownership clears
 // 有限修正回归：上下文压缩恢复（P1）+ 模型可见正文截断（P3）
 // ---------------------------------------------------------------------------
 
-test("context injects a fresh reminder without dropping existing messages", async () => {
-  const harness = createHarness();
+test("before_agent_start appends a persistent plan brief after compaction, idempotently", async () => {
+  // 分支：v3 快照（计划可见标记）之后发生压缩 → 标记被摘要冲掉，需要补注
+  const harness = createHarness([
+    v3TodoEntry(),
+    { type: "compaction" },
+  ]);
   await start(harness);
 
-  // 无计划时：零本扩展提醒的 context 什么都不注入
-  const emptyResult = await harness.handlers.get("context")({
-    messages: [{ role: "user", content: "request" }],
-  }, harness.context);
-  assert.equal(emptyResult, undefined);
+  const brief = await harness.handlers.get("before_agent_start")({}, harness.context);
+  assert.ok(brief?.message, "post-compaction turn must append a persistent plan brief");
+  assert.equal(brief.message.customType, "pi-deck-todo-brief");
+  assert.equal(brief.message.display, false);
+  assert.match(brief.message.content, /\[CURRENT TODO PLAN #1\]/);
+  assert.match(brief.message.content, /\[pending\] #1: 默认任务/);
 
-  // 上下文中没有旧提醒时，也从内存追加一份 fresh 提醒。
-  await harness.execute({ action: "replace", items: [{ text: "压缩后的计划", status: "in_progress" }] });
-  const reminderResult = await reminder(harness);
-  const compressedResult = await harness.handlers.get("context")({
-    messages: [{ role: "user", content: "request" }],
-  }, harness.context);
-  assert.ok(compressedResult?.messages, "zero-own context with an active plan must restore the reminder");
-  assert.deepEqual(compressedResult.messages[0], { role: "user", content: "request" });
-  assert.equal(compressedResult.messages.length, 2);
-  const fresh = compressedResult.messages[1];
-  assert.equal(fresh.role, "custom");
-  assert.equal(fresh.customType, "pi-deck-todo-context");
-  assert.equal(fresh.display, false);
-  assert.equal(fresh.content, reminderResult.message.content);
-  assert.equal(typeof fresh.timestamp, "number");
+  // 补注自身写入新的可见性标记（appendEntry 进分支历史）→ 下轮判定幂等不重复
+  const again = await harness.handlers.get("before_agent_start")({}, harness.context);
+  assert.equal(again, undefined, "brief must be idempotent until the next compaction");
+  const briefSnapshots = harness.snapshots.filter(
+    (snapshot) => snapshot.customType === "pi-deck-todo-brief",
+  );
+  assert.equal(briefSnapshots.length, 1);
 
-  // clear 后回到无计划：零提醒 context 不再注入
+  // 无活跃计划时零注入
   await harness.execute({ action: "clear" });
+  const noPlan = await harness.handlers.get("before_agent_start")({}, harness.context);
+  assert.equal(noPlan, undefined, "no active plan must not append a brief");
+  // clear 后回到无计划：context 同样零注入
   const clearedResult = await harness.handlers.get("context")({
     messages: [{ role: "user", content: "request" }],
   }, harness.context);
