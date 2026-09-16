@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Button } from "../components/ui-shadcn/button";
 import { Input } from "../components/ui-shadcn/input";
 import { Label } from "../components/ui-shadcn/label";
@@ -58,7 +58,10 @@ export function AddProviderDialog(props: {
 	existingNames: string[];
 	/** 返回模型列表（页面左上角返回按钮）。 */
 	onBack: () => void;
+	/** 提交当前页草稿；页面状态由宿主在成功后切换回列表。 */
 	onConfirm: (draft: AddProviderDraft) => void;
+	/** 设置窗口标题栏保存时触发当前页提交；由父级注入稳定的外部保存入口。 */
+	onRequestSave?: (save: (() => void) | undefined) => void;
 }) {
 	const [name, setName] = useState("");
 	const [baseUrl, setBaseUrl] = useState("");
@@ -299,7 +302,8 @@ export function AddProviderDialog(props: {
 		}
 	};
 
-	const submit = () => {
+	/** 统一组装当前页草稿，供页内按钮与宿主标题栏保存共用，避免两条保存路径状态不一致。 */
+	const submit = useCallback(() => {
 		if (!canConfirm) return;
 		props.onConfirm({
 			name: trimmedName,
@@ -310,7 +314,14 @@ export function AddProviderDialog(props: {
 			compat,
 			models,
 		});
-	};
+	}, [api, apiKey, baseUrl, canConfirm, compat, models, props.onConfirm, trimmedName, userAgent]);
+
+	// 保存按钮在 SettingsModal 标题栏，表单页自身不可直接接收点击；
+	// 通过父级注入的入口复用同一份草稿，确保标题栏保存不会绕过页内 state。
+	useEffect(() => {
+		props.onRequestSave?.(submit);
+		return () => props.onRequestSave?.(undefined);
+	}, [props.onRequestSave, submit]);
 
 	return (
 		<div className="flex h-full min-h-0 flex-col">

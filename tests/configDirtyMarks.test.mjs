@@ -80,6 +80,28 @@ test("嵌套数组按结构比较：内容相同无差异，顺序变化算差�
 
 // ── 装配契约：ConfigModal 已接入核算规则 ──
 
+test("嵌入配置管理的顶部保存仍复用 models 保存入口", () => {
+	const source = readFileSync("src/renderer/src/ConfigModal.tsx", "utf8");
+	// 新增/编辑 provider 是 models 页内子页面，不能因为内容切换而丢失顶部保存路由。
+	assert.match(source, /const currentTabKey = backendPane === "dsh" \? "dsh" : sectionTabValue\(section, tab\);/);
+	assert.match(source, /await saveByKey\(currentTabKey\);/);
+	assert.match(source, /模型页的新增\/编辑供应商是一个页内子页面/);
+});
+
+test("provider 页向外暴露当前草稿，标题栏保存会先提交再触发落盘", () => {
+	const modal = readFileSync("src/renderer/src/ConfigModal.tsx", "utf8");
+	const modelsTab = readFileSync("src/renderer/src/config/ModelsTab.tsx", "utf8");
+	const dialog = readFileSync("src/renderer/src/config/AddProviderDialog.tsx", "utf8");
+	// 表单 state 只存在 AddProviderDialog；卸载前清理入口，避免下一次打开误提交旧草稿。
+	assert.match(dialog, /onRequestSave\?: \(save: \(\(\) => void\) \| undefined\) => void/);
+	assert.match(dialog, /props\.onRequestSave\?\.\(submit\)/);
+	assert.match(dialog, /return \(\) => props\.onRequestSave\?\.\(undefined\)/);
+	assert.match(modelsTab, /onRequestSave=\{\(save\) => \{/);
+	assert.match(modelsTab, /props\.providerPageSaveRef\.current = save/);
+	assert.match(modal, /providerPageSaveRef\.current\?\.\(\)/);
+	assert.match(modal, /下一轮 state 更新会重新进入 models 保存路径/);
+});
+
 test("ConfigModal 的 loadConfig 与 handleImport 使用统一核算规则", () => {
 	const source = readFileSync("src/renderer/src/ConfigModal.tsx", "utf8");
 	// 脏草稿保留：被重载覆盖的 key 若仍是脏的（preserved）则跳过 setState + clearDirty，

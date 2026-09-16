@@ -29,6 +29,7 @@ import type { ProviderDialogInitial } from "./AddProviderDialog";
 import type { AddProviderDraft } from "./addProviderDraft";
 import { splitVisibleAndHiddenProviders } from "./providerVisibility";
 import { ModelsTable } from "./ModelsTable";
+import type { MutableRefObject } from "react";
 
 /** 把现有 provider 配置转成编辑弹窗的预填值（名字/字段/模型列表）。 */
 function providerDialogInitial(
@@ -68,6 +69,8 @@ export function ModelsTab(props: {
 	onOpenUsageProbeDialog: (providerName: string) => void;
 	/** 新增供应商弹窗开关（由父级持有，确认/取消回调走 props）。 */
 	addingProvider: boolean;
+	/** 新增/编辑供应商页向设置窗口标题栏暴露的保存入口。 */
+	providerPageSaveRef: MutableRefObject<(() => void) | undefined>;
 	/** 编辑弹窗目标 provider key（修改名称按钮打开；null = 无编辑弹窗）。 */
 	editingProvider: string | null;
 	/** 用户隐藏的供应商 key 列表（模型页主列表过滤 + 底部已隐藏区展示）。 */
@@ -771,6 +774,9 @@ export function ModelsTab(props: {
 							? (draft) => props.onConfirmEditProvider(props.editingProvider!, draft)
 							: props.onConfirmAddProvider
 					}
+					onRequestSave={(save) => {
+						props.providerPageSaveRef.current = save;
+					}}
 				/>
 			)}
 		</div>
