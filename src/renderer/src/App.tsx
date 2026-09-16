@@ -669,8 +669,8 @@ export function App() {
     /** 提示词模板禁用列表：与 SettingsStore 默认一致，空数组 = 不启用模板白名单 */
     disabledPrompts: [],
     sessionTabOpenMode: "preview",
-    // 与 main SettingsStore 默认一致：首轮完成后由内置扩展异步生成标题
-    autoSessionTitle: true,
+    // 与 main SettingsStore 默认一致：标题生成默认关闭，避免首轮结束后无感知消耗 token
+    autoSessionTitle: false,
     // 与 main SettingsStore 默认一致：忙碌时发送默认「插入当前回合」
     busySendDelivery: "steer",
     enableGitManagement: true,

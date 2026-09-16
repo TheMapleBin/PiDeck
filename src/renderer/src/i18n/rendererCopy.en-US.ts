@@ -3335,7 +3335,7 @@ export const enUS: Record<TranslationKey, string> = {
   "settings.languageEn": "English",
   "settings.sessionTabOpenMode": "Session tab open mode",
   "settings.autoSessionTitle": "Generate session titles automatically",
-  "settings.autoSessionTitleDesc": "After the first Agent run succeeds, use the current pi model to generate a title asynchronously without changing the main prompt or messages. Restart or create an Agent after changing this setting.",
+  "settings.autoSessionTitleDesc": "After the first Agent run succeeds, use the current pi model to generate a title asynchronously. This makes one extra model call and consumes a small amount of tokens, without changing the main prompt or messages. Restart or create an Agent after changing this setting.",
   "settings.sessionTabOpenModePreview": "Preview (auto-pin after sending)",
   "settings.sessionTabOpenModePermanent": "Permanent (pin on open)",
   "settings.languagePseudo": "Pseudo",

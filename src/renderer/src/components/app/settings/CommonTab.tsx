@@ -168,7 +168,7 @@ export const CommonTab = memo(function CommonTab(props: CommonTabProps) {
           anchor="common-auto-session-title"
           title={t("settings.autoSessionTitle")}
           description={t("settings.autoSessionTitleDesc")}
-          checked={draft.autoSessionTitle ?? true}
+          checked={draft.autoSessionTitle ?? false}
           dirty={isDirty("autoSessionTitle")}
           onChange={(checked) => updateDraft({ autoSessionTitle: checked })}
         />
