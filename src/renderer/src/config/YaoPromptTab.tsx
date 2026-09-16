@@ -32,6 +32,8 @@ export function YaoPromptTab(props: {
 	const [data, setData] = useState<YaoPromptListResult | null>(null);
 	const [activeCategory, setActiveCategory] = useState<string | null>(null);
 	const [searchQuery, setSearchQuery] = useState("");
+	/** 已提交的搜索词：只有回车/搜索按钮触发才更新，避免每敲一个字符就打一次接口 */
+	const [appliedSearch, setAppliedSearch] = useState("");
 	const [page, setPage] = useState(1);
 	const [installedNames, setInstalledNames] = useState<Set<string>>(new Set());
 	const [previewItem, setPreviewItem] = useState<YaoPromptItem | null>(null);
@@ -47,7 +49,8 @@ export function YaoPromptTab(props: {
 
 	useEffect(() => {
 		if (!initialLoading) void loadPrompts();
-	}, [activeCategory, initialLoading, page, searchQuery]);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [activeCategory, initialLoading, page, appliedSearch]);
 
 	const loadCategories = async () => {
 		setInitialLoading(true);
@@ -78,12 +81,12 @@ export function YaoPromptTab(props: {
 		setLoading(true);
 		setError(null);
 		try {
-			const result = await desktopApi.yaoPrompts.list({
-				category: activeCategory ?? undefined,
-				search: searchQuery.trim() || undefined,
-				page,
-				pageSize: PAGE_SIZE,
-			});
+		const result = await desktopApi.yaoPrompts.list({
+			category: activeCategory ?? undefined,
+			search: appliedSearch.trim() || undefined,
+			page,
+			pageSize: PAGE_SIZE,
+		});
 			setData((previous) => previous ? { ...previous, ...result, categories: previous.categories } : result);
 		} catch (err) {
 			console.error("[YaoPrompts] Search failed", err);
@@ -98,8 +101,14 @@ export function YaoPromptTab(props: {
 		setPage(1);
 	};
 
+	/** 仅更新输入框内容，不触发请求 */
 	const handleSearchChange = (value: string) => {
 		setSearchQuery(value);
+	};
+
+	/** 手动提交搜索（回车 / 搜索按钮）：空词视为清除过滤 */
+	const handleSearchSubmit = () => {
+		setAppliedSearch(searchQuery);
 		setPage(1);
 	};
 
@@ -204,11 +213,16 @@ export function YaoPromptTab(props: {
 				}}
 				onApplied={handleStoreApplied}
 			/>
-			{/* 工具栏：搜索（输入即搜，无独立搜索按钮，统一 StoreSearchBar 胶囊外观） */}
+			{/* 工具栏：搜索（回车 / 搜索按钮手动触发，统一 StoreSearchBar 胶囊外观） */}
 			<StoreSearchBar
 				value={searchQuery}
 				onChange={handleSearchChange}
+				onKeyDown={(e) => {
+					if (e.key === "Enter") handleSearchSubmit();
+				}}
 				placeholder={t("config.yaoSearchPlaceholder")}
+				onSearch={handleSearchSubmit}
+				searchDisabled={!searchQuery.trim() && !appliedSearch}
 			/>
 
 			{error && <div className="mb-3.5 rounded-sm border border-danger/20 bg-danger-soft px-3.5 py-2.5 text-control leading-relaxed text-danger whitespace-pre-line">{error}</div>}

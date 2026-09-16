@@ -9,6 +9,14 @@ import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
  */
 
 const {
+	COMPACT_CANCELLED_BY_OWNER,
+	COMPACT_CANCELLED_BY_USER_ABORT,
+	COMPACT_HOOK_REJECT_MAX_MS,
+	COMPACT_OBSERVATION_MAX_AGE_MS,
+	COMPACT_ROUTED_TO_OWNER,
+	COMPACT_USER_ABORT_WINDOW_MS,
+	compactOwnerReason,
+	compactRoutedCommand,
 	compactUiState,
 	resolveCompactUsagePercent,
 	classifyCompactError,
@@ -76,10 +84,93 @@ test("classifyCompactError maps pi/DSH strings to one notice kind", () => {
 	assert.equal(classifyCompactError("too small"), "tooSmall");
 	assert.equal(classifyCompactError("already compacting"), "inProgress");
 	assert.equal(classifyCompactError("compaction in progress"), "inProgress");
-	assert.equal(classifyCompactError("Compaction cancelled"), "silent");
-	assert.equal(classifyCompactError("cancelled"), "silent");
 	assert.equal(classifyCompactError("boom"), "failed");
 	assert.equal(classifyCompactError(""), "failed");
+});
+
+test("cancelled compaction is never silent and carries its source", () => {
+	// pi 原文两头同形（扩展钩子拒绝 / abort 打断），归到中性的 cancelled
+	assert.equal(classifyCompactError("Compaction cancelled"), "cancelled");
+	assert.equal(classifyCompactError("cancelled"), "cancelled");
+	// 主进程判明来源后抛稳定标记，渲染层据此给出可操作文案
+	assert.equal(
+		classifyCompactError(COMPACT_CANCELLED_BY_OWNER),
+		"cancelledByOwner",
+	);
+	assert.equal(
+		classifyCompactError(`Error invoking remote method 'x': Error: ${COMPACT_CANCELLED_BY_OWNER}`),
+		"cancelledByOwner",
+	);
+	assert.equal(
+		classifyCompactError(COMPACT_CANCELLED_BY_USER_ABORT),
+		"interrupted",
+	);
+	// 任何分类都必须有文案：静默会让「压缩被扩展接管」变成「点了没反应」
+	const kinds = [
+		"done",
+		"nothingToDo",
+		"tooSmall",
+		"inProgress",
+		"failed",
+		"cancelled",
+		"cancelledByOwner",
+		"interrupted",
+	];
+	for (const raw of [
+		"Compaction cancelled",
+		COMPACT_CANCELLED_BY_OWNER,
+		COMPACT_CANCELLED_BY_USER_ABORT,
+	]) {
+		assert.ok(kinds.includes(classifyCompactError(raw)));
+	}
+});
+
+test("hook-reject threshold is short enough to separate hook cancel from real compaction", () => {
+	// 扩展钩子在生成摘要前 return，几乎无耗时；真实压缩（含 LLM 调用）必然秒级起步
+	assert.ok(COMPACT_HOOK_REJECT_MAX_MS <= 3000);
+	assert.ok(COMPACT_USER_ABORT_WINDOW_MS >= 1000);
+	assert.ok(COMPACT_OBSERVATION_MAX_AGE_MS >= COMPACT_USER_ABORT_WINDOW_MS);
+});
+
+test("owner takeover is classified as routed / owned-with-reason, never silent", () => {
+	// 接管者有自己的入口：主进程已改写动作，渲染层要按「已改用 X」提示
+	assert.equal(
+		classifyCompactError(`${COMPACT_ROUTED_TO_OWNER}: /ctx-wrapup`),
+		"routedToOwner",
+	);
+	assert.equal(compactRoutedCommand(`${COMPACT_ROUTED_TO_OWNER}: /ctx-wrapup`), "/ctx-wrapup");
+	// 接管者没有可用入口：标记后带原因，提示要说清为什么压不了
+	const blocked = `${COMPACT_CANCELLED_BY_OWNER}: Magic Context 接管了上下文窗口，但没有配置 historian 模型`;
+	assert.equal(classifyCompactError(blocked), "cancelledByOwner");
+	assert.equal(
+		compactOwnerReason(blocked),
+		"Magic Context 接管了上下文窗口，但没有配置 historian 模型",
+	);
+	// 改写类不能被 cancel 规则抢走（文案里同样含 extension / cancelled 等词）
+	assert.equal(classifyCompactError("compaction routed to extension command: /ctx-wrapup"), "routedToOwner");
+});
+
+test("pi compact path consults the context owner before sending the RPC", () => {
+	const pi = readFileSync("src/main/pi/AgentManager.ts", "utf8");
+	const owner = readFileSync("src/main/pi/compactionOwner.ts", "utf8");
+	// 探测 + 改写/拒绝必须在发 compact RPC 之前
+	assert.match(pi, /private async resolveSessionCompactionOwnership\(/);
+	assert.match(pi, /await this\.resolveSessionCompactionOwnership\(runtime\)/);
+	assert.match(pi, /private async routeCompactToOwner\(/);
+	const routeIndex = pi.indexOf("await this.resolveSessionCompactionOwnership(runtime)");
+	const rpcIndex = pi.indexOf("createCompactRpcRequest(trimmedPrompt)");
+	assert.ok(routeIndex > 0 && rpcIndex > routeIndex, "owner probe must run before the compact RPC");
+	// 会话内事实（get_commands）而不是只读磁盘
+	assert.match(pi, /private async listRegisteredCommandNames\(/);
+	assert.match(pi, /type: "get_commands"/);
+	// 改写时用扩展命令 prompt，且用用户配置的 RPC 超时（wrapup 跑 historian 可能很久）
+	assert.match(pi, /type: "prompt", message: command/);
+	assert.match(pi, /this\.settingsStore\.get\(\)\.rpcTimeout/);
+	// 探测失败不得阻断原生压缩
+	assert.match(pi, /Compaction ownership probe failed/);
+	// 判定只认用户级配置（MC 自己忽略项目级 compaction.enabled）
+	assert.match(owner, /magic-context\.jsonc/);
+	assert.match(owner, /MAGIC_CONTEXT_WRAPUP_COMMAND = "\/ctx-wrapup"/);
 });
 
 test("meter compact button uses shared ui state and e2e testid", () => {
@@ -105,6 +196,10 @@ test("composer compact path toasts done and maps inProgress", () => {
 	assert.match(composer, /app\.compactDone/);
 	assert.match(composer, /app\.compactInProgress/);
 	assert.match(composer, /app\.compactSessionTooSmall/);
+	// 取消类必须可见：不再有 silent 分支
+	assert.match(composer, /app\.compactCancelledByOwner/);
+	assert.match(composer, /app\.compactInterrupted/);
+	assert.doesNotMatch(composer, /case "silent"/);
 	assert.match(composer, /const runManualCompact = useCallback/);
 	assert.match(composer, /await runManualCompact\(target, prompt\)/);
 	assert.equal(
@@ -112,6 +207,23 @@ test("composer compact path toasts done and maps inProgress", () => {
 		1,
 		"error mapping lives in the shared runManualCompact helper",
 	);
+});
+
+test("pi compact failure resolves the cancel source instead of swallowing it", () => {
+	const pi = readFileSync("src/main/pi/AgentManager.ts", "utf8");
+	// 来源判定必须用真实证据：compaction_start→end 耗时 + 我们自己的 abort 时间
+	assert.match(pi, /COMPACT_CANCELLED_BY_OWNER/);
+	assert.match(pi, /COMPACT_CANCELLED_BY_USER_ABORT/);
+	assert.match(pi, /private resolveCompactCancelMessage\(/);
+	assert.match(pi, /private compactionCancelEvidence\(/);
+	assert.match(pi, /this\.compactionStartedAt\.set\(agentId, Date\.now\(\)\)/);
+	assert.match(pi, /this\.lastCompactionObservation\.set\(agentId, \{/);
+	assert.match(pi, /this\.lastUserAbortAt\.set\(agentId, Date\.now\(\)\)/);
+	// 观测字段要进日志，否则下次仍然只能看到「取消了」
+	assert.match(pi, /"Compaction ended"[\s\S]{0,260}elapsedMs,/);
+	assert.match(pi, /"Compact failed"[\s\S]{0,400}compactionCancelEvidence\(agentId\)/);
+	// 判明来源时抛稳定标记（渲染层才分类得出「扩展接管」）
+	assert.match(pi, /throw new Error\(cancelSource\)/);
 });
 
 test("pi and dsh compact throw already compacting instead of returning success", () => {
@@ -133,6 +245,11 @@ test("locales keep compact feedback keys in sync", () => {
 		assert.match(locale, /"app\.compactInProgress":/);
 		assert.match(locale, /"app\.compactNothingToDo":/);
 		assert.match(locale, /"app\.compactSessionTooSmall":/);
+		assert.match(locale, /"app\.compactCancelled":/);
+		assert.match(locale, /"app\.compactCancelledByOwner":/);
+		assert.match(locale, /"app\.compactCancelledByOwnerWithReason":/);
+		assert.match(locale, /"app\.compactRoutedToOwner":/);
+		assert.match(locale, /"app\.compactInterrupted":/);
 		assert.match(locale, /"sessionContext\.compactNotReady":/);
 		assert.match(locale, /"sessionContext\.compactNotReadyHint":/);
 	}

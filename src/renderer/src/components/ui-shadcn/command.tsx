@@ -3,6 +3,13 @@ import { Command as CommandPrimitive } from "cmdk";
 import { Search } from "lucide-react";
 
 import { cn } from "../../lib/utils";
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogHeader,
+	DialogTitle,
+} from "./dialog";
 
 /**
  * shadcn/command（#115 U5 收尾）：cmdk 标准封装。
@@ -120,8 +127,62 @@ function CommandItem({
 	);
 }
 
+/**
+ * cmdk 命令面板外壳：把 Command 装进 Radix Dialog。
+ *
+ * shadcn 标准里本就有这个组合，项目封装此前只导出了裸 Command（各 picker 自己套
+ * Popover/HoverCard）。全局命令面板（Ctrl+P）需要「悬浮面板 + 焦点陷阱 + Esc /
+ * 点遮罩关闭 + 关闭后焦点归还」，这些正是 Radix Dialog 已经解决的，不必再手写一遍。
+ *
+ * 定位与宽度刻意留给调用方（className 透传到 DialogContent）：命令面板要贴在视口
+ * 上方（top-14vh）而不是垂直居中，各调用点的观感诉求不同，不该在这里定死。
+ */
+type CommandDialogProps = React.ComponentProps<typeof Dialog> & {
+	/** 无障碍标题（视觉隐藏）：Radix Dialog 要求内容有可访问名 */
+	title: string;
+	description?: string;
+	/** 透传到 DialogContent，用于覆盖定位/宽度 */
+	className?: string;
+	/**
+	 * 透传给内层 cmdk Command（filter / loop / shouldFilter 等）。
+	 * 刻意收在一个子对象里而不是平铺：平铺后用 `{...props}` 会把这些 cmdk 专属属性
+	 * 一并塞给 Radix Dialog，React 会为未知 DOM 属性报警。
+	 */
+	commandProps?: React.ComponentProps<typeof CommandPrimitive>;
+};
+
+function CommandDialog({
+	title,
+	description,
+	children,
+	className,
+	commandProps,
+	...dialogProps
+}: CommandDialogProps) {
+	return (
+		<Dialog {...dialogProps}>
+			<DialogContent
+				showCloseButton={false}
+				className={cn("gap-0 overflow-hidden p-0", className)}
+			>
+				<DialogHeader className="sr-only">
+					<DialogTitle>{title}</DialogTitle>
+					<DialogDescription>{description ?? title}</DialogDescription>
+				</DialogHeader>
+				<Command
+					{...commandProps}
+					className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group]]:px-1"
+				>
+					{children}
+				</Command>
+			</DialogContent>
+		</Dialog>
+	);
+}
+
 export {
 	Command,
+	CommandDialog,
 	CommandInput,
 	CommandList,
 	CommandEmpty,

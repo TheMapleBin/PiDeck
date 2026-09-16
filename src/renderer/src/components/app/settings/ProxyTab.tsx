@@ -228,6 +228,7 @@ export const ProxyTab = memo(function ProxyTab(props: ProxyTabProps) {
         description={t("settings.piProxyDesc")}
       >
         <SettingSwitchRow
+          anchor="proxy-enable-pi"
           title={t("settings.enablePiProxy")}
           description={t("settings.enablePiProxyDesc")}
           checked={draft.piProxyEnabled}
@@ -480,6 +481,7 @@ export const ProxyTab = memo(function ProxyTab(props: ProxyTabProps) {
         description={t("settings.desktopProxyDesc")}
       >
         <SettingSwitchRow
+          anchor="proxy-enable-desktop"
           title={t("settings.enableDesktopProxy")}
           description={t("settings.desktopProxyDesc")}
           checked={draft.desktopProxyEnabled}

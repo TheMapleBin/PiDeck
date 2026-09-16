@@ -12,6 +12,21 @@ import vm from "node:vm";
 
 const nodeRequire = createRequire(import.meta.url);
 
+/**
+ * AgentManager 的「上下文接管探测」桩：本测试与压缩归属无关，按「没有接管者」透传，
+ * 让 compact 走原生 RPC 分支（真模块会读磁盘配置，沙箱里不该发生 IO）。
+ */
+const noCompactionOwner = {
+  MAGIC_CONTEXT_WRAPUP_COMMAND: "/ctx-wrapup",
+  readPiCompactionOwnership: () => ({
+    owners: [],
+    conflicted: false,
+    piAutoCompactionEnabled: true,
+    ownerReady: true,
+    notes: [],
+  }),
+};
+
 function loadAgentManager() {
   const filePath = "src/main/pi/AgentManager.ts";
   const output = ts.transpileModule(readFileSync(filePath, "utf8"), {
@@ -134,6 +149,8 @@ function loadAgentManager() {
             : { type: "compact" },
         };
       }
+      // 上下文接管探测：本测试不涉及压缩归属，按「没有接管者」透传（退回原生 compact RPC）
+      if (specifier === "./compactionOwner") return noCompactionOwner;
       if (specifier === "./streamGate") return streamGateModule.exports;
       if (specifier === "./cacheHitStats") return cacheHitStatsModule.exports;
       if (specifier === "../../shared/toolRuntimeState") return { updateActiveToolCalls: () => undefined };

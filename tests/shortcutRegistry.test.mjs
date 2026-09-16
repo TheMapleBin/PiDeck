@@ -189,6 +189,7 @@ test("resolveShortcutBindings：覆盖 ∪ 默认；非法覆盖回退默认；�
 		openSettings: "Ctrl+K",
 		openNewSession: "Ctrl+N",
 		openSearch: "Ctrl+F",
+		openCommandPalette: "Ctrl+P",
 		toggleDevTools: "F12", // 非法裸键回退默认
 	});
 });
@@ -224,6 +225,7 @@ test("平台默认键列表完整（覆盖表之外不丢键）", () => {
 		openSettings: "Ctrl+Alt+S",
 		openNewSession: "Ctrl+N",
 		openSearch: "Ctrl+F",
+		openCommandPalette: "Ctrl+P",
 		toggleDevTools: "F12",
 	});
 	const mac = loadShortcuts({ platform: "darwin" });
@@ -231,6 +233,7 @@ test("平台默认键列表完整（覆盖表之外不丢键）", () => {
 		openSettings: "Cmd+,",
 		openNewSession: "Cmd+N",
 		openSearch: "Cmd+F",
+		openCommandPalette: "Cmd+P",
 		toggleDevTools: "F12",
 	});
 });

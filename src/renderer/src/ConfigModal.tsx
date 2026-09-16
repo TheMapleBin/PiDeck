@@ -456,7 +456,12 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 	// 弹窗每次打开都会重新挂载（Radix Dialog 关闭即卸载内容），
 	// 用 lazy initializer 在挂载时读一次 localStorage，恢复到上次所在 tab。
 	const [lastTab] = useState(loadLastConfigTab);
-	const [section, setSection] = useState<ConfigSection>(resourceOnly ? "skills" : lastTab?.section ?? "config");
+	// 深链优先于「上次记住的区域」：models/auth/settings/trust/mcp/raw 这些分页只属于
+	// config 区域，若上次停在 skills/prompts/extensions，只按 lastTab 恢复区域会出现
+	// 「分页跳对了、区域没切」——用户看到的是上一次停留的地方（首次挂载就错，必须在这里兜）。
+	const [section, setSection] = useState<ConfigSection>(
+		resourceOnly ? "skills" : focusConfigTab || focusProvider ? "config" : lastTab?.section ?? "config",
+	);
 	// 深链（如圆球面板「去配置用量」）优先于上次记住的配置分页。
 	const [tab, setTab] = useState<ConfigTab>(focusConfigTab ?? lastTab?.tab ?? "models");
 	// 深链 provider：models 页展开该供应商卡片并滚动高亮（ModelsTab 消费）。
@@ -475,8 +480,14 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 	);
 	useEffect(() => {
 		if (!open) return;
-		if (!resourceOnly && focusConfigTab) setTab(focusConfigTab);
+		// 顶层区域必须一并切回 config：这些分页（models/auth/...）只属于 config 区域，
+		// 只 setTab 的话，上次停在 skills/prompts/extensions 时会「切了分页却看不见」。
+		if (!resourceOnly && focusConfigTab) {
+			setSection("config");
+			setTab(focusConfigTab);
+		}
 		if (!resourceOnly && focusProvider) {
+			setSection("config");
 			setFocusedProvider(focusProvider);
 			setTab("models");
 			setExpandedProvider(focusProvider);

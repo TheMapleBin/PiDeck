@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useMemo, type ReactNode } from "react";
-import { Archive, Boxes, Check, CircleAlert, CircleDot, CircleStop, Clock, Code2, Copy, Download, FileDown, FileText, Filter, Folder, FolderSearch, GitBranch, Link2, List, LoaderCircle, MessageCircle, Pencil, Pin, PinOff, Play, Plus, Power, Radio, RefreshCw, RotateCw, ScrollText, Settings2, SquarePen, Trash2, UserPlus, XCircle } from "lucide-react";
+import { Archive, Boxes, Check, CircleAlert, CircleDot, CircleStop, Clock, Code2, Copy, Download, FileDown, FileText, Filter, Fingerprint, Folder, FolderSearch, GitBranch, Link2, List, LoaderCircle, MessageCircle, Pencil, Pin, PinOff, Play, Plus, Power, Radio, RefreshCw, RotateCw, ScrollText, Settings2, SquarePen, Trash2, UserPlus, XCircle } from "lucide-react";
 import { t } from "../../i18n";
+import { copyTextWithCopiedNotice } from "../../utils/clipboardNotice";
 import {
 	canRunSessionAction,
 	type SessionRunAction,
@@ -773,8 +774,20 @@ export type SidebarRunControl = {
 	isStopping?: boolean;
 	isRestarting?: boolean;
 	isReloading?: boolean;
+	/**
+	 * 当前绑定运行实例的 agentId（pi 每次 spawn 随机生成）。
+	 * 只服务于「复制 Agent ID」：排查问题时要把它贴进日志/工单，而它与会话记录 id
+	 * 不是一回事（SessionRecord.id 跨重启稳定，agentId 每次启动都换）。
+	 * 无绑定（从未启动/已解绑）时为 undefined，菜单项随之隐藏。
+	 */
+	agentId?: string;
 	onAction: (action: SessionRunAction) => void;
 };
+
+/** 复制 Agent ID 并提示：主进程剪贴板优先，避免窗口失焦时 Web API 抛异常。 */
+async function copyAgentIdToClipboard(agentId: string) {
+	await copyTextWithCopiedNotice(agentId);
+}
 
 /**
  * 运行控制菜单组（侧栏通用）：任意状态都渲染，按策略置灰。
@@ -794,6 +807,9 @@ function SidebarRunControlItems(props: { runControl: SidebarRunControl }) {
 		: capabilities.primaryAction === "start"
 			? t("menu.startAgent")
 			: t("menu.restartSession");
+
+	// 先取成局部常量：直接在 onSelect 闭包里读 runControl.agentId 会丢掉窄化
+	const agentId = runControl.agentId;
 
 	return (
 		<>
@@ -833,6 +849,16 @@ function SidebarRunControlItems(props: { runControl: SidebarRunControl }) {
 					{t("menu.reloadSession")}
 				</span>
 			</DropdownMenuItem>
+			{/* 复制 Agent ID：与运行控制同组——它标识的就是「当前绑定的那个进程实例」，
+			    没有绑定（从未启动/已解绑）时不渲染，避免复制一个不存在的 id。 */}
+			{agentId ? (
+				<DropdownMenuItem onSelect={() => void copyAgentIdToClipboard(agentId)}>
+					<span className="inline-flex items-center gap-2">
+						<Fingerprint className="size-3.5" aria-hidden="true" />
+						{t("menu.copyAgentId")}
+					</span>
+				</DropdownMenuItem>
+			) : null}
 		</>
 	);
 }

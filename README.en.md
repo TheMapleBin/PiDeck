@@ -83,10 +83,12 @@
 
 ### v0.7.6-beta Release Highlights
 - 🚀 **Customizable global shortcuts**
+- 🚀 **Ctrl/Cmd+P command palette**
 - 🚀 **Hot updates for official prompt templates and built-in skills**
 - 🚀 **WB enhancement prompt templates in the store**
 - 🚀 **Project-scoped scheduled tasks, management as a modal**
 - 🚀 **Session tab “current session actions”**
+- 🚀 **Copy the agent ID from sidebar and tab menus**
 - 🚀 **Ask cards submit on Enter**
 - 🚀 **Import Cursor Agent sessions**
 - 🚀 **Official installer no longer ships DSH runtime**

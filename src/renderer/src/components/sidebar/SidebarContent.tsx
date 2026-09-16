@@ -270,6 +270,8 @@ export function SidebarContent(props: SidebarContentProps) {
         state: resolveSessionRunState(runtime, hasBinding),
         hasBinding,
       }),
+      // 快照里有 agentId 就带上：菜单「复制 Agent ID」依赖它，且与 hasBinding 同源判定
+      agentId: runtime?.agentId,
       onAction: (action) => void actions.sessions.runControl(sessionId, action),
     };
   };

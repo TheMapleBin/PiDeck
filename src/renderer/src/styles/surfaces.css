@@ -996,6 +996,33 @@
     transform: scale(1) translateY(0);
   }
 }
+
+/*
+ * 设置锚点跳转高亮：命令面板（Ctrl+P）能搜到「某个具体设置项」并跳过去，
+ * 但在长 tab 里滚过去后用户需要一眼看到落在哪一行——否则只会觉得「页面动了一下」。
+ * 用内描边而非背景色：描边不会盖住输入框/开关的自身底色，也不参与文字可读性。
+ * class 由 useSettingsFocus 在滚动后加、约 1.6s 后摘掉。
+ */
+@keyframes settings-anchor-flash {
+  from {
+    box-shadow: inset 0 0 0 2px var(--color-accent);
+  }
+  to {
+    box-shadow: inset 0 0 0 2px transparent;
+  }
+}
+.settings-anchor-flash {
+  animation: settings-anchor-flash 1.6s ease-out 1;
+  border-radius: 8px;
+}
+@media (prefers-reduced-motion: reduce) {
+  /* 减少动效：不做渐隐，静止描边 1.6s（同样由 JS 摘掉 class） */
+  .settings-anchor-flash {
+    animation: none;
+    box-shadow: inset 0 0 0 2px var(--color-accent);
+  }
+}
+
 .settings-panel {
   min-height: 0;
   overflow-y: auto;

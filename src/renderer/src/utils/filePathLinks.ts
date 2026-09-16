@@ -217,6 +217,23 @@ export function isFilePathInsideRoot(target: string, root: string): boolean {
 }
 
 /**
+ * 把 root 内的绝对路径转成相对路径显示（「复制相对路径」右键项用）。
+ * 渲染层无 node:path：词法剥离 root 前缀，Windows 大小写不敏感按小写比较；
+ * target 不在 root 内（含 WSL 跨发行版）返回 null，调用方应禁用该项。
+ */
+export function relativeFilePathWithinRoot(target: string, root: string): string | null {
+	if (!target || !root || !isFilePathInsideRoot(target, root)) return null;
+	const normalize = (value: string) => value.replace(/[\\/]+$/, "").replace(/\//g, "\\");
+	const normalizedTarget = normalize(target);
+	const normalizedRoot = normalize(root);
+	if (normalizedTarget === normalizedRoot) return "";
+	const rootWithSep = `${normalizedRoot}\\`;
+	const lowerTarget = normalizedTarget.toLowerCase();
+	const lowerRoot = rootWithSep.toLowerCase();
+	return lowerTarget.startsWith(lowerRoot) ? normalizedTarget.slice(rootWithSep.length) : null;
+}
+
+/**
  * 相对路径按 basePath 解析，并可选收敛到 projectRoot。
  *
  * - `.`/`..` 在渲染层先做词法规范化，避免同一文件产生多个缓存键；

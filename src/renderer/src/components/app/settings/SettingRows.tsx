@@ -46,11 +46,21 @@ export function SettingRow(props: {
 	alignEnd?: boolean;
 	/** 1=一级标题行（单行分区合并，加粗加大）；2=普通行（默认） */
 	level?: 1 | 2;
+	/**
+	 * 深链锚点 slug：渲染成 `id="settings-section-<anchor>"`。
+	 *
+	 * 用途是让命令面板（Ctrl+P）能**精确跳到某一行设置**，而不只是跳到 tab。
+	 * 命名统一 `<tab>-<field>`（如 `dev-rpc-timeout`）；全部锚点集中登记在
+	 * `utils/settingsFieldAnchors.ts`，并有一条测试断言「索引里的锚点在源码里真的存在」，
+	 * 防止改了字段名却忘了同步索引（那样命令面板会跳到一个不存在的 id）。
+	 */
+	anchor?: string;
 	children: ReactNode;
 }) {
 	const level = props.level ?? 2;
 	return (
 		<div
+			id={props.anchor ? `settings-section-${props.anchor}` : undefined}
 			className={cn(
 				"grid gap-6 border-t border-border-subtle/60 py-1.5 first:border-t-0",
 				level === 1 ? "px-0.5" : "px-1",
@@ -98,12 +108,15 @@ export function SettingSwitchRow(props: {
 	dirty?: boolean;
 	/** 黄点无障碍标签，缺省用字符串 title。 */
 	dirtyLabel?: string;
+	/** 深链锚点 slug，见 SettingRow.anchor */
+	anchor?: string;
 	onChange: (checked: boolean) => void;
 }) {
 	const dirtyLabel =
 		props.dirtyLabel ?? (typeof props.title === "string" ? props.title : "");
 	return (
 		<SettingRow
+			anchor={props.anchor}
 			title={
 				<>
 					<span>{props.title}</span>
@@ -129,11 +142,14 @@ export function SettingTextarea(props: {
 	onChange: (value: string) => void;
 	dirty?: boolean;
 	dirtyLabel?: string;
+	/** 深链锚点 slug，见 SettingRow.anchor */
+	anchor?: string;
 }) {
 	const dirtyLabel =
 		props.dirtyLabel ?? (typeof props.title === "string" ? props.title : "");
 	return (
 		<SettingRow
+			anchor={props.anchor}
 			title={
 				<>
 					<span>{props.title}</span>

@@ -435,6 +435,8 @@ export function createPreviewApi(): PiDesktopApi {
 			readContent: async () => "",
 			// 预览模式无法 stat 真实磁盘：返回空数组，校验方按「未知」处理维持链接现状
 			pathsExist: async () => [],
+			// 预览模式无主进程：按「不存在」处理，链接点击走「路径不存在」提示
+			stat: async () => ({ exists: false, isDirectory: false }),
 			readBase64: async () => "",
 			create: async () => "/mock/created",
 			writeContent: async () => undefined,

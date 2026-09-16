@@ -223,6 +223,27 @@ export function registerFilesIpc({
 	);
 
 	ipcMain.handle(
+		ipcChannels.filesStat,
+		async (
+			_event,
+			path: unknown,
+			scope?: unknown,
+		): Promise<{ exists: boolean; isDirectory: boolean }> => {
+			// 会话内文件链接点击路由用：verdict store 只回答「存在与否」，区分不了目录，
+			// 而编辑器 readContent 对目录会抛 EISDIR（用户看到的 "illegal operation on a
+			// directory" 就是目录链接被当文件读）。这里补一次带边界的 stat 给渲染层分流。
+			const boundary = await resolveProjectReadBoundary(scope);
+			const readablePath = await resolveReadablePath(path, boundary);
+			try {
+				const fileStat = await stat(readablePath);
+				return { exists: true, isDirectory: fileStat.isDirectory() };
+			} catch {
+				return { exists: false, isDirectory: false };
+			}
+		},
+	);
+
+	ipcMain.handle(
 		ipcChannels.filesWriteContent,
 		async (_event, path: unknown, content: unknown, scope?: unknown) => {
 			if (typeof content !== "string") throw new Error("Invalid file content");

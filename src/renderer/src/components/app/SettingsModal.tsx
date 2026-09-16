@@ -57,7 +57,7 @@ import { buttonVariants } from "../ui-shadcn/button";
 import { useVisionBridgeDraft } from "./settings/visionDraft.ts";
 import { dirtySettingsTabIds, type SettingsUnsavedTabId } from "./settings/unsavedChangesSummary";
 import { computeDirtyFields } from "./settings/settingsDirtyFields.ts";
-import { SETTINGS_TAB_IDS, SETTINGS_TAB_LAYOUT } from "./settings/settingsTabLayout";
+import { SETTINGS_TAB_IDS, SETTINGS_TAB_LABEL_KEYS, SETTINGS_TAB_LAYOUT } from "./settings/settingsTabLayout";
 import { useGitModels } from "./settings/gitModels.ts";
 import { formatSettingsUnsavedMessage, summarizeSettingsUnsavedChanges } from "./settings/unsavedChangesSummary.ts";
 import { UpdateInstallUnsavedDialog } from "./settings/UpdateInstallUnsavedDialog.tsx";
@@ -241,27 +241,29 @@ export const SettingsModal = memo(function SettingsModal(props: SettingsModalPro
 });
 
 /**
- * 各 tab 的图标与文案 key 元数据：label 渲染时经 t() 取当前语言文案（不能模块级求值，
- * 否则语言切换后不生效）；展示顺序与分割线由 SETTINGS_TAB_LAYOUT 决定（settingsTabLayout.ts）。
+ * 各 tab 的图标元数据：label 渲染时经 t() 取当前语言文案（不能模块级求值，
+ * 否则语言切换后不生效）；展示顺序与分割线由 SETTINGS_TAB_LAYOUT 决定，
+ * 标题 i18n key 由 SETTINGS_TAB_LABEL_KEYS 提供（命令面板 Ctrl+P 搜设置项时
+ * 复用同一份 key，见 settingsTabLayout.ts）。
  */
 const TAB_META: Record<SettingsTabId, { labelKey: TranslationKey; icon: ReactNode }> = {
-	common: { labelKey: "settings.tabs.common", icon: <Settings2 size={16} /> },
-	shortcuts: { labelKey: "settings.tabs.shortcuts", icon: <Keyboard size={16} /> },
-	appearance: { labelKey: "settings.tabs.appearance", icon: <Brush size={16} /> },
-	proxy: { labelKey: "settings.tabs.proxy", icon: <Network size={16} /> },
-	web: { labelKey: "settings.tabs.web", icon: <Globe size={16} /> },
-	editors: { labelKey: "settings.tabs.editors", icon: <FileCode2 size={16} /> },
-	git: { labelKey: "settings.tabs.git", icon: <GitBranch size={16} /> },
-	dev: { labelKey: "settings.tabs.dev", icon: <Wrench size={16} /> },
-	im: { labelKey: "settings.tabs.im", icon: <MessageSquare size={16} /> },
-	pet: { labelKey: "settings.tabs.pet", icon: <PawPrint size={16} /> },
-	notification: { labelKey: "settings.tabs.notification", icon: <Bell size={16} /> },
-	storage: { labelKey: "settings.tabs.storage", icon: <Trash2 size={16} /> },
-	backup: { labelKey: "settings.tabs.backup", icon: <DatabaseBackup size={16} /> },
-	usage: { labelKey: "settings.tabs.usage", icon: <ChartColumnBig size={16} /> },
-	process: { labelKey: "settings.tabs.process", icon: <Activity size={16} /> },
-	vision: { labelKey: "settings.tabs.vision", icon: <Eye size={16} /> },
-	imagegen: { labelKey: "settings.tabs.imagegen", icon: <ImageIcon size={16} /> },
+	common: { labelKey: SETTINGS_TAB_LABEL_KEYS.common, icon: <Settings2 size={16} /> },
+	shortcuts: { labelKey: SETTINGS_TAB_LABEL_KEYS.shortcuts, icon: <Keyboard size={16} /> },
+	appearance: { labelKey: SETTINGS_TAB_LABEL_KEYS.appearance, icon: <Brush size={16} /> },
+	proxy: { labelKey: SETTINGS_TAB_LABEL_KEYS.proxy, icon: <Network size={16} /> },
+	web: { labelKey: SETTINGS_TAB_LABEL_KEYS.web, icon: <Globe size={16} /> },
+	editors: { labelKey: SETTINGS_TAB_LABEL_KEYS.editors, icon: <FileCode2 size={16} /> },
+	git: { labelKey: SETTINGS_TAB_LABEL_KEYS.git, icon: <GitBranch size={16} /> },
+	dev: { labelKey: SETTINGS_TAB_LABEL_KEYS.dev, icon: <Wrench size={16} /> },
+	im: { labelKey: SETTINGS_TAB_LABEL_KEYS.im, icon: <MessageSquare size={16} /> },
+	pet: { labelKey: SETTINGS_TAB_LABEL_KEYS.pet, icon: <PawPrint size={16} /> },
+	notification: { labelKey: SETTINGS_TAB_LABEL_KEYS.notification, icon: <Bell size={16} /> },
+	storage: { labelKey: SETTINGS_TAB_LABEL_KEYS.storage, icon: <Trash2 size={16} /> },
+	backup: { labelKey: SETTINGS_TAB_LABEL_KEYS.backup, icon: <DatabaseBackup size={16} /> },
+	usage: { labelKey: SETTINGS_TAB_LABEL_KEYS.usage, icon: <ChartColumnBig size={16} /> },
+	process: { labelKey: SETTINGS_TAB_LABEL_KEYS.process, icon: <Activity size={16} /> },
+	vision: { labelKey: SETTINGS_TAB_LABEL_KEYS.vision, icon: <Eye size={16} /> },
+	imagegen: { labelKey: SETTINGS_TAB_LABEL_KEYS.imagegen, icon: <ImageIcon size={16} /> },
 };
 
 /**
