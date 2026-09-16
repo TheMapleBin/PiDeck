@@ -18,7 +18,7 @@ import { FetchedModelCombobox } from "./FetchedModelCombobox";
 import { Checkbox } from "../components/ui-shadcn/checkbox";
 import { Label } from "../components/ui-shadcn/label";
 import { showNotice } from "../utils/notice";
-import { applyModelPatches, computeModelSpecPatches } from "../utils/modelSpecAutoFill";
+import { applyModelPatches, computeModelSpecPatches, looksDeepSeekBacked } from "../utils/modelSpecAutoFill";
 import type { FetchedModel, ConfigProxyMode } from "../../../shared/types/fetchedModel";
 import { ProviderMigrationButton } from "./ProviderMigrationButton";
 import { ProviderUsageInline } from "../components/app/ProviderUsageInline";
@@ -219,11 +219,22 @@ export function ModelsTab(props: {
 			window.clearTimeout(timer);
 		};
 	}, [props.focusProvider]);
-	const getCompat = (providerName: string) => ({
-		supportsDeveloperRole: false,
-		supportsReasoningEffort: false,
-		...(data.providers[providerName].compat as Record<string, unknown> | undefined),
-	});
+	const getCompat = (providerName: string) => {
+		const provider = data.providers[providerName];
+		const saved = provider.compat ?? {};
+		const savedReasoningContent = saved.requiresReasoningContentOnAssistantMessages;
+		// 未落盘（undefined）= 用户未表态：与编辑页/保存时归一化同一判定预置勾选，
+		// 否则卡片上看着没勾、保存后文件里却是 true。已落盘的值（含 false）原样回显。
+		return {
+			supportsDeveloperRole: false,
+			supportsReasoningEffort: false,
+			requiresReasoningContentOnAssistantMessages:
+				savedReasoningContent !== undefined
+					? savedReasoningContent === true
+					: looksDeepSeekBacked(provider, providerName),
+			...saved,
+		};
+	};
 
 
 	return (
@@ -326,6 +337,10 @@ export function ModelsTab(props: {
 								<tr>
 									<td className="w-[180px] border-b border-border-subtle px-2.5 py-1.5 align-top"><code className="rounded-[4px] bg-[color:color-mix(in_srgb,var(--color-accent)_5%,transparent)] px-1.5 py-px font-mono text-[11px] text-[color:var(--color-accent)]">supportsReasoningEffort</code></td>
 									<td className="border-b border-border-subtle px-2.5 py-1.5 align-top">{t("config.providerGuideCompatReasoning")}</td>
+								</tr>
+								<tr>
+									<td className="w-[180px] border-b border-border-subtle px-2.5 py-1.5 align-top"><code className="break-all rounded-[4px] bg-[color:color-mix(in_srgb,var(--color-accent)_5%,transparent)] px-1.5 py-px font-mono text-[11px] text-[color:var(--color-accent)]">requiresReasoningContentOnAssistantMessages</code></td>
+									<td className="border-b border-border-subtle px-2.5 py-1.5 align-top">{t("config.providerGuideCompatReasoningContent")}</td>
 								</tr>
 							</tbody>
 						</table>

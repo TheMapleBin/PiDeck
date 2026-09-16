@@ -13,7 +13,7 @@ import type { FetchedModel, ConfigProxyMode } from "../../../shared/types/fetche
 import type { ModelItem, ProviderCompat } from "./configTypes";
 import { ModelsTable } from "./ModelsTable";
 import { ProviderConnectionForm, type ProviderTestResult } from "./ProviderConnectionForm";
-import { buildProviderConfigFromDraft } from "./addProviderDraft";
+import { buildProviderConfigFromDraft, resolveInitialReasoningContentReplay, type AddProviderDraft } from "./addProviderDraft";
 import {
 	applyModelPatches,
 	applyAdaptiveTemplateReset,
@@ -33,19 +33,8 @@ import {
  * - 编辑：卡片「修改名称」按钮进入，预填现有配置（名字可改，走 rename 语义），
  *   同时可重新拉取 /models 勾选保存模型。
  * 以整页形式呈现（非弹窗），左上角返回按钮回到模型列表；获取模型与配置在同一页内完成。
+ * 草稿类型与草稿 → models.json 转换共用 config/addProviderDraft（单一来源，避免两处结构漂移）。
  */
-export type AddProviderDraft = {
-	name: string;
-	baseUrl: string;
-	api: string;
-	apiKey: string;
-	userAgent: string;
-	compat: {
-		supportsDeveloperRole: boolean;
-		supportsReasoningEffort: boolean;
-	};
-	models: ModelItem[];
-};
 
 /** 页面模式：add=新增空草稿；edit=预填现有 provider（含改名）。 */
 export type ProviderDialogMode = "add" | "edit";
@@ -76,7 +65,7 @@ export function AddProviderDialog(props: {
 	const [api, setApi] = useState("");
 	const [apiKey, setApiKey] = useState("");
 	const [userAgent, setUserAgent] = useState("");
-	const [compat, setCompat] = useState({
+	const [compat, setCompat] = useState<AddProviderDraft["compat"]>({
 		supportsDeveloperRole: false,
 		supportsReasoningEffort: false,
 	});
@@ -111,6 +100,8 @@ export function AddProviderDialog(props: {
 		setCompat({
 			supportsDeveloperRole: initial?.compat?.supportsDeveloperRole ?? false,
 			supportsReasoningEffort: initial?.compat?.supportsReasoningEffort ?? false,
+			// 三态默认值统一由草稿域判定（见 resolveInitialReasoningContentReplay 注释）
+			requiresReasoningContentOnAssistantMessages: resolveInitialReasoningContentReplay(initial),
 		});
 		setModels(initial?.models ? initial.models.map((model) => ({ ...model })) : []);
 		setFetchedModels(null);

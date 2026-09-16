@@ -39,10 +39,16 @@ export function ProviderConnectionForm(props: {
 	onChangeUserAgent: (value: string) => void;
 
 	/** ── 兼容性勾选（两端共用：卡片的已保存 provider 与草稿页同构） ── */
-	compat: { supportsDeveloperRole: boolean; supportsReasoningEffort: boolean };
+	compat: {
+		supportsDeveloperRole: boolean;
+		supportsReasoningEffort: boolean;
+		/** 未赋值 = 未表态（保存时按 DeepSeek 特征自动判定）；true/false = 用户显式表态。 */
+		requiresReasoningContentOnAssistantMessages?: boolean;
+	};
 	onChangeCompat: (next: {
 		supportsDeveloperRole: boolean;
 		supportsReasoningEffort: boolean;
+		requiresReasoningContentOnAssistantMessages?: boolean;
 	}) => void;
 
 	/** ── 快速测试连接 ── */
@@ -266,6 +272,26 @@ export function ProviderConnectionForm(props: {
 							<span>{t("config.reasoningEffort")}</span>
 						</Label>
 						<small className="config-compat-item-desc">{t("config.reasoningEffortDesc")}</small>
+					</div>
+					<div className="config-compat-item">
+						<Label className="config-checkbox-label">
+							<Checkbox
+								checked={props.compat.requiresReasoningContentOnAssistantMessages === true}
+								onCheckedChange={(checked) =>
+									props.onChangeCompat({
+										// 展开保留未知 compat 子键（如手写的 openRouterRouting），只覆盖面板拥有的三项
+										...props.compat,
+										supportsDeveloperRole: props.compat.supportsDeveloperRole || false,
+										supportsReasoningEffort: props.compat.supportsReasoningEffort || false,
+										// 取消勾选也要显式写 false：它是「否决自动判定」的表态，
+										// 省略会被保存时的 DeepSeek 特征判定重新打开。
+										requiresReasoningContentOnAssistantMessages: checked === true,
+									})
+								}
+							/>
+							<span>{t("config.reasoningContentReplay")}</span>
+						</Label>
+						<small className="config-compat-item-desc">{t("config.reasoningContentReplayDesc")}</small>
 					</div>
 				</div>
 			</div>

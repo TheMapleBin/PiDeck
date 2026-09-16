@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
-const { buildProviderConfigFromDraft, mergeProviderDraft } = loadTsCommonJs(
+const { buildProviderConfigFromDraft, mergeProviderDraft, resolveInitialReasoningContentReplay } = loadTsCommonJs(
   "src/renderer/src/config/addProviderDraft.ts",
 );
 
@@ -34,6 +34,36 @@ function sampleModels() {
     { id: "deepseek-reasoner" },
   ];
 }
+
+test("resolveInitialReasoningContentReplay：显式值回显、未表态且是 DeepSeek 系才预置 true", () => {
+  // 文件里已有显式值 → 原样回显（false 是用户否决自动判定的表态，不能重新打开）
+  assert.equal(
+    resolveInitialReasoningContentReplay({
+      name: "relay",
+      compat: { requiresReasoningContentOnAssistantMessages: false },
+    }),
+    false,
+  );
+  assert.equal(
+    resolveInitialReasoningContentReplay({
+      name: "relay",
+      compat: { requiresReasoningContentOnAssistantMessages: true },
+    }),
+    true,
+  );
+  // 未表态 + DeepSeek 系后端（模型 ID 命中）→ 预置勾选，与保存时 derive 的判定一致
+  assert.equal(
+    resolveInitialReasoningContentReplay({
+      name: "ai88",
+      models: [{ id: "deepseek-v4.1-flash" }],
+    }),
+    true,
+  );
+  // 未表态 + 非 DeepSeek 后端 → 保持未表态（不写噪声键）
+  assert.equal(resolveInitialReasoningContentReplay({ name: "openai", models: [{ id: "gpt-5.6" }] }), undefined);
+  // add 模式（无 initial）→ 未表态
+  assert.equal(resolveInitialReasoningContentReplay(undefined), undefined);
+});
 
 test("空草稿：只写 models: []，不写入任何空字段（与手写 models.json 一致）", () => {
   const provider = buildProviderConfigFromDraft(emptyDraft());
@@ -83,6 +113,48 @@ test("compat 勾选任一项即写入两个布尔字段", () => {
   assert.equal(
     json(reasoning.compat),
     json({ supportsDeveloperRole: false, supportsReasoningEffort: true }),
+  );
+});
+
+test("compat 回传 reasoning_content：三态写入（未表态不写、true/false 都落盘）", () => {
+  // 未表态（undefined）：不写该键，留给保存时的 DeepSeek 特征判定
+  const unset = buildProviderConfigFromDraft(emptyDraft());
+  assert.equal(unset.compat, undefined);
+
+  // 勾选：即使另两项都是 false 也要写 compat
+  const enabled = buildProviderConfigFromDraft({
+    ...emptyDraft(),
+    compat: {
+      supportsDeveloperRole: false,
+      supportsReasoningEffort: false,
+      requiresReasoningContentOnAssistantMessages: true,
+    },
+  });
+  assert.equal(
+    json(enabled.compat),
+    json({
+      supportsDeveloperRole: false,
+      supportsReasoningEffort: false,
+      requiresReasoningContentOnAssistantMessages: true,
+    }),
+  );
+
+  // 显式 false：必须落盘（它是用户否决自动判定的表态，省略=未表态会被重新打开）
+  const disabled = buildProviderConfigFromDraft({
+    ...emptyDraft(),
+    compat: {
+      supportsDeveloperRole: false,
+      supportsReasoningEffort: false,
+      requiresReasoningContentOnAssistantMessages: false,
+    },
+  });
+  assert.equal(
+    json(disabled.compat),
+    json({
+      supportsDeveloperRole: false,
+      supportsReasoningEffort: false,
+      requiresReasoningContentOnAssistantMessages: false,
+    }),
   );
 });
 
@@ -188,6 +260,31 @@ test("mergeProviderDraft: compat 合并保留未知子键；原无 compat 且全
   );
   const noCompat = mergeProviderDraft({ models: [] }, emptyDraft());
   assert.ok(!("compat" in noCompat));
+});
+
+test("mergeProviderDraft: reasoning_content 回传的显式值覆盖，未表态则保留文件里的值", () => {
+  const withFlag = {
+    models: [],
+    compat: { supportsDeveloperRole: false, requiresReasoningContentOnAssistantMessages: true },
+  };
+  // 未表态（undefined）→ 保留文件里的 true，不能被一次无关编辑抹成空
+  const kept = mergeProviderDraft(withFlag, { ...emptyDraft(), baseUrl: "https://x.dev/v1" });
+  assert.equal(kept.compat.requiresReasoningContentOnAssistantMessages, true);
+  // 用户取消勾选 → 落盘 false（表态否决自动判定）
+  const optedOut = mergeProviderDraft(withFlag, {
+    ...emptyDraft(),
+    compat: { supportsDeveloperRole: false, supportsReasoningEffort: false, requiresReasoningContentOnAssistantMessages: false },
+  });
+  assert.equal(optedOut.compat.requiresReasoningContentOnAssistantMessages, false);
+  // 原无 compat，只勾了这项 → 创建 compat 且另两项显式为 false
+  const created = mergeProviderDraft({ models: [] }, {
+    ...emptyDraft(),
+    compat: { supportsDeveloperRole: false, supportsReasoningEffort: false, requiresReasoningContentOnAssistantMessages: true },
+  });
+  assert.equal(
+    json(created.compat),
+    json({ supportsDeveloperRole: false, supportsReasoningEffort: false, requiresReasoningContentOnAssistantMessages: true }),
+  );
 });
 
 test("mergeProviderDraft: 改名场景（调用方迁移 key）内容不丢", () => {

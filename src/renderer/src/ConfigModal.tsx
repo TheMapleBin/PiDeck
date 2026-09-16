@@ -1516,7 +1516,8 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 		);
 		const base = filledCount > 0 ? { ...modelsData, providers: filledProviders } : modelsData;
 		// 保存前规范化所有供应商的 compat 字段，确保布尔值显式写入而不依赖后端默认值；
-		// supportsReasoningEffort 联动档位映射（见 deriveProviderCompat）。
+		// supportsReasoningEffort 联动档位映射、requiresReasoningContentOnAssistantMessages
+		// 按 DeepSeek 特征判定（均见 deriveProviderCompat，传名字以便按 provider 名识别）。
 		const normalizedData = {
 			...base,
 			providers: Object.fromEntries(
@@ -1524,7 +1525,7 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 					name,
 					{
 						...provider,
-						compat: deriveProviderCompat(provider),
+						compat: deriveProviderCompat(provider, name),
 					},
 				]),
 			),

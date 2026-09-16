@@ -24,6 +24,16 @@ export type ModelCost = {
 export type ProviderCompat = {
 	supportsDeveloperRole?: boolean;
 	supportsReasoningEffort?: boolean;
+	/**
+	 * 思考模式需回传 reasoning_content。
+	 *
+	 * DeepSeek 系网关要求：带 tool_calls 的 assistant 回合必须在后续请求里回放
+	 * reasoning_content，缺字段直接 400（"The `reasoning_content` in the thinking
+	 * mode must be passed back to the API."）；pi 在该键为 true 且当轮没有思考内容时
+	 * 补一个空串。缺省（undefined）= 用户未表态，保存时按 DeepSeek 特征自动判定
+	 * （见 deriveProviderCompat）；显式 false = 用户否决自动判定，不再被覆盖。
+	 */
+	requiresReasoningContentOnAssistantMessages?: boolean;
 	[key: string]: unknown;
 };
 

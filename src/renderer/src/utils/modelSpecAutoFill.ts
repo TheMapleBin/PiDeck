@@ -40,6 +40,22 @@ export function isVisionModelId(modelId: string): boolean {
 }
 
 /**
+ * DeepSeek 系后端启发式：provider 名 / baseUrl / 任一模型 ID 命中 deepseek 即视为直连或中转 DeepSeek。
+ *
+ * 为什么不能只靠 pi 自己判：pi 的 detectCompat 只认 `provider === "deepseek"` 或
+ * baseUrl 含 "deepseek.com"，经中转站（88api/b.ai/tokendance/tokenrhythm 等自定义域名）
+ * 访问时判不出来，requiresReasoningContentOnAssistantMessages 误落为 false，
+ * 凡是「带 tool_calls 但本轮没有思考内容」的历史回合都会被上游 400 拒掉。
+ */
+export function looksDeepSeekBacked(provider: ProviderConfig, providerName?: string): boolean {
+	if (providerName && /deepseek/i.test(providerName)) return true;
+	if (typeof provider.baseUrl === "string" && /deepseek/i.test(provider.baseUrl)) return true;
+	return (provider.models ?? []).some(
+		(model) => typeof model.id === "string" && /deepseek/i.test(model.id),
+	);
+}
+
+/**
  * 保存时的 provider compat 归一化：布尔值显式落盘（不依赖后端默认）。
  *
  * supportsReasoningEffort 联动：该 provider 任一模型存在非空档位映射且未显式
@@ -47,8 +63,13 @@ export function isVisionModelId(modelId: string): boolean {
  * 不会真正发送 reasoning_effort 参数（pi 用 provider 级 compat 覆盖模型定义）。
  * 旧版本保存会无条件写 false，配置里已存的 false 是 PiDeck 自己写的陈旧值而非
  * 用户意图，因此自动判定优先于已存在的 false；用户显式写的 true 始终保留。
+ *
+ * requiresReasoningContentOnAssistantMessages 联动：仅当该键缺省（用户未表态）且
+ * provider 看着是 DeepSeek 系后端时写 true（见 looksDeepSeekBacked）。显式 true/false
+ * 一律尊重——false 是用户「我知道不需要」的表态，不能被自动判定反复打开。
+ * providerName 不传时只按 baseUrl/模型 ID 判定（旧调用点的兼容路径）。
  */
-export function deriveProviderCompat(provider: ProviderConfig): ProviderCompat {
+export function deriveProviderCompat(provider: ProviderConfig, providerName?: string): ProviderCompat {
 	const anyThinking = (provider.models ?? []).some(
 		(model) =>
 			model.thinkingLevelMap != null &&
@@ -58,6 +79,12 @@ export function deriveProviderCompat(provider: ProviderConfig): ProviderCompat {
 	const compat: ProviderCompat = { ...(provider.compat ?? {}) };
 	if (compat.supportsDeveloperRole !== true) compat.supportsDeveloperRole = false;
 	compat.supportsReasoningEffort = compat.supportsReasoningEffort === true || anyThinking;
+	if (
+		compat.requiresReasoningContentOnAssistantMessages === undefined &&
+		looksDeepSeekBacked(provider, providerName)
+	) {
+		compat.requiresReasoningContentOnAssistantMessages = true;
+	}
 	return compat;
 }
 

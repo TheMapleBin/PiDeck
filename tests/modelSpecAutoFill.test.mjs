@@ -30,7 +30,7 @@ function compileModule(filePath) {
 }
 
 const mod = compileModule("src/renderer/src/utils/modelSpecAutoFill.ts");
-const { computeModelSpecPatches, collectModelSpecPatches, deriveProviderCompat } = mod;
+const { computeModelSpecPatches, collectModelSpecPatches, deriveProviderCompat, looksDeepSeekBacked } = mod;
 
 function assertUpdates(updates, expected) {
 	assert.equal(updates.length, expected.length);
@@ -257,6 +257,55 @@ test("deriveProviderCompat: 旧保存写入的陈旧 false 被联动覆盖，显
 		compat: { customFlag: "keep", supportsReasoningEffort: false },
 	});
 	assert.equal(compat.customFlag, "keep");
+});
+
+test("deriveProviderCompat: DeepSeek 系 provider 自动开启 reasoning_content 回传（未表态时才写）", () => {
+	// 中转站域名不含 deepseek.com，pi 自带的 detectCompat 判不出来，靠模型 ID 认出来
+	const byModelId = deriveProviderCompat(
+		{ baseUrl: "https://88api.ai/v1", models: [{ id: "deepseek-v4.1-flash" }] },
+		"ai88",
+	);
+	assert.equal(byModelId.requiresReasoningContentOnAssistantMessages, true);
+	// 按 provider 名 / baseUrl 也能认出来
+	assert.equal(
+		deriveProviderCompat({ models: [] }, "deepseek").requiresReasoningContentOnAssistantMessages,
+		true,
+	);
+	assert.equal(
+		deriveProviderCompat({ baseUrl: "https://api.deepseek.com/v1", models: [] })
+			.requiresReasoningContentOnAssistantMessages,
+		true,
+	);
+	// 非 DeepSeek 后端不写该键（不往 models.json 甩无意义的 false）
+	const unrelated = deriveProviderCompat({ baseUrl: "https://api.openai.com/v1", models: [{ id: "gpt-5.6" }] });
+	assert.equal(unrelated.requiresReasoningContentOnAssistantMessages, undefined);
+	assert.ok(!("requiresReasoningContentOnAssistantMessages" in unrelated));
+});
+
+test("deriveProviderCompat: reasoning_content 回传的显式表态优先于自动判定", () => {
+	// 显式 false = 用户否决，即使看着是 DeepSeek 后端也不能重新打开
+	const optedOut = deriveProviderCompat({
+		models: [{ id: "deepseek-v4.1-flash" }],
+		compat: { requiresReasoningContentOnAssistantMessages: false },
+	});
+	assert.equal(optedOut.requiresReasoningContentOnAssistantMessages, false);
+	// 显式 true 在非 DeepSeek 后端也保留（用户可能知道中转站背后的真实上游）
+	const optedIn = deriveProviderCompat({
+		models: [{ id: "gpt-5.6" }],
+		compat: { requiresReasoningContentOnAssistantMessages: true },
+	});
+	assert.equal(optedIn.requiresReasoningContentOnAssistantMessages, true);
+});
+
+test("looksDeepSeekBacked: 名/地址/模型 ID 任一命中即视为 DeepSeek 系后端", () => {
+	assert.equal(looksDeepSeekBacked({ models: [] }, "my-deepseek-relay"), true);
+	assert.equal(looksDeepSeekBacked({ baseUrl: "https://x.dev/deepseek/v1", models: [] }), true);
+	assert.equal(looksDeepSeekBacked({ models: [{ id: "DeepSeek-V3.2" }] }), true);
+	assert.equal(looksDeepSeekBacked({ models: [{ id: "deepseek-r1" }], baseUrl: "https://a.dev/v1" }, "relay"), true);
+	assert.equal(looksDeepSeekBacked({ models: [{ id: "gpt-5.6" }, { id: "claude-opus-4" }] }, "relay"), false);
+	assert.equal(looksDeepSeekBacked({ models: [] }), false);
+	// 不含 ID 的行（空列表/手填遗漏）不应抛错
+	assert.equal(looksDeepSeekBacked({ models: [{}] }), false);
 });
 
 function deduceSupportsReasoningEffort(compat) {
