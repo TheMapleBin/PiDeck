@@ -9,7 +9,7 @@
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
 ![Electron](https://img.shields.io/badge/Electron-38-47848f)
 ![React](https://img.shields.io/badge/React-19-61dafb)
-![Version](https://img.shields.io/badge/version-0.7.5--beta-blue)
+![Version](https://img.shields.io/badge/version-0.7.6-blue)
 
 国内 AtomGit 托管：https://atomgit.com/ayuayue/PiDeck
 <!-- 预留 AtomGit G-Star 徽章位（替换占位链接后启用）
@@ -98,19 +98,21 @@
 
 ## 📋 更新日志
 
-> **最新版本 v0.7.6-beta**（2026-09-15）
+> **最新版本 v0.7.6**（2026-09-17）
 
-### v0.7.6-beta 更新亮点
+### v0.7.6 更新亮点
 - 🚀 **全局快捷键自定义**
+- 🚀 **Ctrl/Cmd+P 命令面板**
 - 🚀 **提示词商店官方模板与内置技能热更新**
 - 🚀 **提示词商店新增 WB 增强提示词模板**
 - 🚀 **项目级定时任务，管理改模态弹框**
 - 🚀 **会话 Tab 栏「当前会话操作」**
+- 🚀 **会话内文件路径链接右键菜单**
+- 🚀 **侧栏与 Tab 菜单可直接复制 Agent ID**
+- 🚀 **DSH 权限按钮与 pi 安全等级菜单统一（#214）**
 - 🚀 **提问卡支持直接回车提交**
 - 🚀 **导入 Cursor Agent 会话**
 - 🚀 **官方安装包不再随 DSH runtime**
-- 🚀 **手动补发 DSH runtime**
-- 🚀 **三平台手动构建与协作模板**
 - ✨ **生图会话不再因 base64 落盘撑爆渲染进程**
 - ✨ **渲染进程 OOM 分层治理**
 - ✨ **常驻缓存补字节预算**

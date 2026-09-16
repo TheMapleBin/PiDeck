@@ -40,6 +40,16 @@ test("pi custom gateway maps into llm-pi-ai with catalog fields only", () => {
     ],
   });
   assert.equal(dsh.namespace, "llm-pi-ai");
+  assert.equal(dsh.profile.baseURL, "https://api.weishiair.de/v1");
+  assert.equal(dsh.profile.apiKeyEnv, "WEISHIAIR_API_KEY");
+  assert.equal(dsh.profile.models?.length, 1);
+  assert.equal(dsh.profile.models?.[0]?.id, "grok-4.6");
+  assert.equal(dsh.profile.models?.[0]?.name, "grok-4.6");
+  assert.equal(dsh.profile.models?.[0]?.contextWindow, 128000);
+  assert.deepEqual(dsh.profile.models?.[0]?.input, ["text", "image"]);
+  assert.deepEqual(JSON.parse(JSON.stringify(dsh.profile.models?.[0]?.reasoningEfforts)), { xhigh: "xhigh", max: "max" });
+  assert.equal(dsh.profile.models?.[0]?.cost, undefined);
+});
 
 test("dsh custom model round-trips input and reasoningEfforts into Pi metadata", () => {
   const pi = mapping.dshToPiSnapshot({
@@ -108,17 +118,6 @@ test("off null stays null; off-only map becomes false (DSH rejects off-only effo
   // 否则 settings.update 报 settings-rejected("reasoningEfforts offers no level beyond off")。
   assert.equal(dsh.profile.models?.[1]?.reasoningEfforts, false);
   assert.equal(dsh.profile.models?.[2]?.reasoningEfforts, false);
-});
-
-  assert.equal(dsh.profile.baseURL, "https://api.weishiair.de/v1");
-  assert.equal(dsh.profile.apiKeyEnv, "WEISHIAIR_API_KEY");
-  assert.equal(dsh.profile.models?.length, 1);
-  assert.equal(dsh.profile.models?.[0]?.id, "grok-4.6");
-  assert.equal(dsh.profile.models?.[0]?.name, "grok-4.6");
-  assert.equal(dsh.profile.models?.[0]?.contextWindow, 128000);
-  assert.deepEqual(dsh.profile.models?.[0]?.input, ["text", "image"]);
-  assert.deepEqual(JSON.parse(JSON.stringify(dsh.profile.models?.[0]?.reasoningEfforts)), { xhigh: "xhigh", max: "max" });
-  assert.equal(dsh.profile.models?.[0]?.cost, undefined);
 });
 
 test("official DeepSeek keeps the composition defaults when Pi only supplies its built-in catalog", () => {
@@ -216,6 +215,123 @@ test("unsafe provider names are rejected", () => {
   assert.equal(mapping.isSafeProviderName("weishiair"), true);
 });
 
+test("pi→DSH 迁移携带 compat 白名单（DeepSeek 中转站的 400 修复项）", () => {
+  const dsh = mapping.piToDshSnapshot({
+    name: "ai88",
+    baseUrl: "https://88api.ai/v1",
+    api: "openai-completions",
+    compat: {
+      supportsDeveloperRole: false,
+      requiresReasoningContentOnAssistantMessages: true,
+      // 下面两个键不在 dsh-llm-pi-ai 的 compat 提供清单里：写进 settings.yaml 会被
+      // dsh 的 COMPLETIONS_COMPAT_GATE 判为 "not offered" → 整条 settings.update 被拒
+      thinkingFormat: "deepseek",
+      openRouterRouting: { only: ["x"] },
+    },
+    models: [{ id: "deepseek-v4.1-flash" }],
+  });
+  assert.equal(dsh.namespace, "llm-pi-ai");
+  assert.deepEqual(JSON.parse(JSON.stringify(dsh.profile.compat)), {
+    supportsDeveloperRole: false,
+    requiresReasoningContentOnAssistantMessages: true,
+  });
+});
+
+test("pi→DSH 迁移：anthropic 协议与非法值不写 compat", () => {
+  // anthropic-messages 的 compat 由 dsh 各适配器自己决定，pi 侧的取值不能直接搬
+  const anthropic = mapping.piToDshSnapshot({
+    name: "claude-relay",
+    api: "anthropic-messages",
+    compat: { supportsDeveloperRole: false, requiresReasoningContentOnAssistantMessages: true },
+    models: [],
+  });
+  assert.equal(anthropic.profile.compat, undefined);
+  // 手改坏的类型（字符串/数字）不收窄，宁可不写也不把非法值甩给 dsh schema
+  const garbage = mapping.piToDshSnapshot({
+    name: "g",
+    api: "openai-completions",
+    compat: { supportsDeveloperRole: "false", requiresReasoningContentOnAssistantMessages: 1 },
+    models: [],
+  });
+  assert.equal(garbage.profile.compat, undefined);
+});
+
+test("DSH→pi 迁移：llm-pi-ai 的 compat 回填，官方直连适配器不搬", () => {
+  const pi = mapping.dshToPiSnapshot({
+    name: "ai88",
+    namespace: "llm-pi-ai",
+    profile: {
+      compat: {
+        supportsDeveloperRole: false,
+        requiresReasoningContentOnAssistantMessages: true,
+        chatTemplateKwargs: { x: 1 },
+      },
+    },
+  });
+  assert.deepEqual(JSON.parse(JSON.stringify(pi.compat)), {
+    supportsDeveloperRole: false,
+    requiresReasoningContentOnAssistantMessages: true,
+  });
+  // llm-deepseek 是 schema 严格的直连适配器，compat 不进 pi 侧
+  const official = mapping.dshToPiSnapshot({
+    name: "deepseek",
+    namespace: "llm-deepseek",
+    profile: { compat: { supportsDeveloperRole: false } },
+  });
+  assert.equal(official.compat, undefined);
+});
+
+test("mergePiProvider compat：只覆盖白名单键，保留 pi 侧其它 compat；未携带时保留原值", () => {
+  const base = {
+    providers: {
+      ai88: { models: [{ id: "m" }], compat: { thinkingFormat: "deepseek", supportsDeveloperRole: true } },
+    },
+  };
+  const merged = mapping.mergePiProvider(base, {}, {
+    name: "ai88",
+    baseUrl: "https://88api.ai/v1",
+    api: "openai-completions",
+    compat: { supportsDeveloperRole: false, requiresReasoningContentOnAssistantMessages: true },
+    models: [{ id: "m" }],
+  });
+  assert.deepEqual(JSON.parse(JSON.stringify(merged.models.providers.ai88.compat)), {
+    thinkingFormat: "deepseek",
+    supportsDeveloperRole: false,
+    requiresReasoningContentOnAssistantMessages: true,
+  });
+  // 对方未携带 compat（如 llm-deepseek 源）时不能把已有 compat 抹掉
+  const untouched = mapping.mergePiProvider(base, {}, {
+    name: "ai88",
+    api: "openai-completions",
+    models: [{ id: "m" }],
+  });
+  assert.deepEqual(JSON.parse(JSON.stringify(untouched.models.providers.ai88.compat)), {
+    thinkingFormat: "deepseek",
+    supportsDeveloperRole: true,
+  });
+});
+
+test("parseDshSettingsDocument 保留 compat，且丢弃未收窄字段", () => {
+  const parsed = mapping.parseDshSettingsDocument({
+    "llm-pi-ai": {
+      providers: {
+        ai88: {
+          baseURL: "https://88api.ai/v1",
+          compat: {
+            supportsDeveloperRole: false,
+            requiresReasoningContentOnAssistantMessages: true,
+            openRouterRouting: { only: ["x"] },
+          },
+        },
+      },
+    },
+  });
+  assert.deepEqual(JSON.parse(JSON.stringify(parsed.piAi.ai88.compat)), {
+    supportsDeveloperRole: false,
+    requiresReasoningContentOnAssistantMessages: true,
+  });
+});
+
 test("apply pi-to-dsh writes settings.yaml and credentials without starting host", async () => {
   const home = await mkdtemp(join(tmpdir(), "pideck-migrate-"));
   await writeFile(join(home, "settings.yaml"), "ui-onboarding:\n  welcomeNoticeVersion: keep-me\n", "utf8");
@@ -228,6 +344,11 @@ test("apply pi-to-dsh writes settings.yaml and credentials without starting host
               baseUrl: "https://api.weishiair.de/v1",
               api: "openai-completions",
               apiKey: "sk-from-pi",
+              compat: {
+                supportsDeveloperRole: false,
+                requiresReasoningContentOnAssistantMessages: true,
+                thinkingFormat: "deepseek",
+              },
               models: [{ id: "grok-4.6", name: "grok-4.6" }],
             },
           },
@@ -258,6 +379,11 @@ test("apply pi-to-dsh writes settings.yaml and credentials without starting host
   assert.match(yaml, /welcomeNoticeVersion: keep-me/);
   assert.match(yaml, /weishiair:/);
   assert.match(yaml, /baseURL: https:\/\/api\.weishiair\.de\/v1/);
+  // compat 随迁移落盘（否则用户本地已修好的两个键在 DSH 侧会丢，照旧 400），
+  // 同时不带 DSH 未提供清单里的 thinkingFormat。
+  assert.match(yaml, /supportsDeveloperRole: false/);
+  assert.match(yaml, /requiresReasoningContentOnAssistantMessages: true/);
+  assert.ok(!yaml.includes("thinkingFormat"));
   const creds = await readFile(join(home, ".credentials.yaml"), "utf8");
   assert.match(creds, /WEISHIAIR_API_KEY:/);
   assert.match(creds, /sk-from-pi/);

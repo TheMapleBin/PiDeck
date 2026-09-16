@@ -1,4 +1,4 @@
-import type { AvailableModel } from "../../../shared/types";
+import type { AgentBackend, AvailableModel } from "../../../shared/types";
 
 export type ChatSessionBootstrapAction =
   | { kind: "none" }
@@ -17,6 +17,20 @@ export const GUIDE_BOOTSTRAP_SESSION_ID = "renderer:guide-bootstrap";
 export const WELCOME_MODEL_KEY = "pideck:welcome-model";
 /** 欢迎页（未启动 Agent）显式选择的思考级别存储 key；首次发送时提升到真实会话。 */
 export const WELCOME_THINKING_KEY = "pideck:welcome-thinking";
+/** 欢迎页（未启动 Agent）显式切换的后端存储 key；首次发送时提升到真实会话。 */
+export const WELCOME_BACKEND_KEY = "pideck:welcome-backend";
+
+/** 读取欢迎页最后显式切换的后端（仅认 pi/dsh；无则 undefined）。 */
+export function readWelcomeBackendPreference(): AgentBackend | undefined {
+  try {
+    const raw = localStorage.getItem(WELCOME_BACKEND_KEY);
+    // imagegen 是模式不是后端切换器的取值，历史脏数据一律忽略。
+    if (raw === "pi" || raw === "dsh") return raw;
+  } catch {
+    // localStorage 不可用时视为无偏好
+  }
+  return undefined;
+}
 
 /** 读取欢迎页最后选择的模型偏好（无则 undefined）。 */
 export function readWelcomeModelPreference(): {

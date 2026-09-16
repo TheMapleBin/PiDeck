@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createRequire } from "node:module";
@@ -294,6 +294,18 @@ describe("GitService committed-file diff integration", () => {
         symlinkSync(externalPath, linkPath, "file");
       } catch {
         context.skip("File symlinks are unavailable on this Windows environment");
+        return;
+      }
+      // 部分 Windows 环境 symlink 会静默成功但不创建链接（lstat ENOENT）：
+      // 链接不存在时 git status 不会列出资源，后续断言必然落空，必须 skip
+      let created = false;
+      try {
+        created = lstatSync(linkPath).isSymbolicLink();
+      } catch {
+        created = false;
+      }
+      if (!created) {
+        context.skip("File symlinks are silently unavailable on this Windows environment");
         return;
       }
       const diff = await service.getWorkspaceFileDiff(repositoryDir, "untracked", linkPath, 4096);

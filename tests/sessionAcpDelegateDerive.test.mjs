@@ -209,7 +209,7 @@ test("merge: record 携带 result/error 时不被推导覆盖", () => {
   assert.equal(merged[0].result, "real result text");
 });
 
-test("downgrade: 仅 toolcall 来源的 running/queued 降级为 stopped", () => {
+test("downgrade: 全部来源的 running/queued 降级为 stopped（含 record 残留）", () => {
   const entries = [
     { id: "a", type: "worker", description: "", status: "running", source: "toolcall", via: "acp-delegate" },
     { id: "b", type: "worker", description: "", status: "queued", source: "toolcall", via: "acp-delegate" },
@@ -219,8 +219,10 @@ test("downgrade: 仅 toolcall 来源的 running/queued 降级为 stopped", () =>
   const downgraded = downgradeStaleRunning(entries);
   assert.equal(downgraded[0].status, "stopped");
   assert.equal(downgraded[1].status, "stopped");
-  // record 来源保持原状（插件自己管理生命周期）；终态不动
-  assert.equal(downgraded[2].status, "running");
+  // record 源不再豁免：无活 runtime 时不存在「插件自己在管」的子代理，
+  // 残留 running 若不降级会在历史视图里永久亮着「运行中」（用户实测）
+  assert.equal(downgraded[2].status, "stopped");
+  // 终态不动
   assert.equal(downgraded[3].status, "completed");
 });
 

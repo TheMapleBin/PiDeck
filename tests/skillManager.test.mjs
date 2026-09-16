@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { lstatSync, readFileSync } from "node:fs";
 import {
 	mkdtemp,
 	mkdir,
@@ -64,6 +64,20 @@ async function createSkillRoot(home) {
 	return globalSkills;
 }
 
+/**
+ * 部分 Windows 环境（进程无 SeCreateSymbolicLinkPrivilege 且开发者模式关闭）
+ * `symlink` 会**静默成功但不创建链接**（lstat ENOENT）——只 catch 抛错挡不住。
+ * 创建后必须验证链接真实存在，否则按「软连接不可用」处理（测试 skip）。
+ */
+function assertLinkCreated(linkPath) {
+	try {
+		if (lstatSync(linkPath).isSymbolicLink()) return;
+	} catch {
+		// lstat 失败 = 链接不存在
+	}
+	throw new SymlinkUnavailableError("symlink was silently not created on this environment");
+}
+
 async function createDirectoryLink(target, linkPath) {
 	try {
 		await symlink(target, linkPath, process.platform === "win32" ? "junction" : "dir");
@@ -73,6 +87,7 @@ async function createDirectoryLink(target, linkPath) {
 		}
 		throw error;
 	}
+	assertLinkCreated(linkPath);
 }
 
 async function createFileLink(target, linkPath) {
@@ -84,6 +99,7 @@ async function createFileLink(target, linkPath) {
 		}
 		throw error;
 	}
+	assertLinkCreated(linkPath);
 }
 
 async function withTemporaryHome(run) {

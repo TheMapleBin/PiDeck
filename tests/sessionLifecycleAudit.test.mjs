@@ -31,7 +31,8 @@ test("SessionRuntimeCoordinator exposes a full lifecycle logger interface", () =
 
 test("session runtime lifecycle events are logged", () => {
   assert.match(coordinator, /"Runtime activated", \{\s*sessionId,\s*agentId: tab\.id,\s*status: tab\.status,/);
-  assert.match(coordinator, /"Runtime stopped", \{\s*sessionId: target\.sessionId,\s*agentId: target\.agentId,\s*runtimeGeneration: target\.runtimeGeneration,/);
+  // stopTarget：stopTarget 与日志解耦重命名（原始渲染层目标单独入日志），覆盖语义不变
+  assert.match(coordinator, /"Runtime stopped", \{\s*sessionId: stopTarget\.sessionId,\s*agentId: stopTarget\.agentId,\s*runtimeGeneration: stopTarget\.runtimeGeneration,/);
   assert.match(coordinator, /"Runtime restarted"/);
   assert.match(coordinator, /"Runtime renamed"/);
   assert.match(coordinator, /"Runtime model changed", \{\s*sessionId: target\.sessionId,\s*agentId,\s*provider,\s*modelId,/);

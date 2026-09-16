@@ -11,7 +11,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, RotateCcw, Shield, ShieldAlert, ShieldCheck, ShieldOff } from "lucide-react";
+import { Check, RotateCcw } from "lucide-react";
 import type { SecurityConfig, SecurityLevelConfig } from "../../../../shared/types";
 import { Button } from "../ui-shadcn/button";
 import {
@@ -22,18 +22,19 @@ import {
 	DropdownMenuTrigger,
 } from "../ui-shadcn/dropdown-menu";
 import { t } from "../../i18n";
+import { permissionStrengthIcon } from "../../utils/permissionLevelIcon";
 
 const api = (window as unknown as { piDesktop: { security: {
 	getConfig: () => Promise<SecurityConfig>;
 	setSessionLevel: (sessionId: string, levelId: string | null) => Promise<{ ok: true; config: SecurityConfig } | { ok: false; error: string }>;
 } } }).piDesktop;
 
-/** 等级图标：内置三档各用专属盾牌语义，自定义等级用通用盾牌 */
+/** 等级图标：按统一保护强度语义取（utils/permissionLevelIcon，#214 与 DSH 权限预设同源） */
 function levelIcon(level: SecurityLevelConfig) {
-	if (level.id === "off") return ShieldOff;
-	if (level.id === "strict") return ShieldAlert;
-	if (level.id === "standard") return ShieldCheck;
-	return Shield;
+	if (level.id === "off") return permissionStrengthIcon("relaxed");
+	if (level.id === "strict") return permissionStrengthIcon("strict");
+	if (level.id === "standard") return permissionStrengthIcon("standard");
+	return permissionStrengthIcon("unknown");
 }
 
 export function SecurityLevelMenu(props: { sessionId: string; disabled?: boolean }) {
@@ -92,7 +93,7 @@ export function SecurityLevelMenu(props: { sessionId: string; disabled?: boolean
 		effectiveLevelId != null && effectiveLevelId !== config.defaultLevelId;
 
 	// 触发器图标反映当前安全状态：停用显示关闭盾，启用时按等级换专属盾
-	const Icon = !enabled ? ShieldOff : levelIcon(effectiveLevel ?? config.levels[0]);
+	const Icon = !enabled ? permissionStrengthIcon("relaxed") : levelIcon(effectiveLevel ?? config.levels[0]);
 
 	return (
 		<DropdownMenu>

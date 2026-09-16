@@ -192,6 +192,7 @@ export const NotificationTab = memo(function NotificationTab(props: Notification
 			{/* 系统通知（原常用设置「通知」区）：会话完成/Ask 提问/Agent 数量提醒三个独立开关 */}
 			<SettingsSection title={t("settings.notificationSection")}>
 				<SettingSwitchRow
+					anchor="notification-enable"
 					title={t("settings.enableNotifications")}
 					checked={draft.enableNotifications}
 					onChange={(checked) =>
@@ -199,6 +200,7 @@ export const NotificationTab = memo(function NotificationTab(props: Notification
 					}
 				/>
 				<SettingSwitchRow
+					anchor="notification-ask"
 					title={t("settings.askNotification")}
 					description={t("settings.askNotificationDesc")}
 					checked={draft.askNotificationEnabled}
@@ -207,6 +209,7 @@ export const NotificationTab = memo(function NotificationTab(props: Notification
 					}
 				/>
 				<SettingSwitchRow
+					anchor="notification-agent-count"
 					title={t("settings.agentCountReminder")}
 					description={t("settings.agentCountReminderDesc")}
 					checked={draft.agentCountReminderEnabled}
@@ -215,6 +218,7 @@ export const NotificationTab = memo(function NotificationTab(props: Notification
 					}
 				/>
 				<SettingSwitchRow
+					anchor="notification-announcement"
 					title={t("settings.announcementNotification")}
 					description={t("settings.announcementNotificationDesc")}
 					checked={draft.announcementNotificationEnabled}

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+	lstatSync,
 	mkdtempSync,
 	mkdirSync,
 	rmSync,
@@ -61,6 +62,18 @@ test("project writes reject a dangling file symlink", async (t) => {
 				return;
 			}
 			throw error;
+		}
+		// 部分 Windows 环境 symlink 会静默成功但不创建链接（lstat ENOENT）：
+		// 链接不存在时写入语义完全不同，必须 skip 而不是误报「缺少拒绝」
+		let created = false;
+		try {
+			created = lstatSync(link).isSymbolicLink();
+		} catch {
+			created = false;
+		}
+		if (!created) {
+			t.skip("The current filesystem silently skips file symlink creation");
+			return;
 		}
 		const boundary = await createProjectFileReadBoundary(root);
 		await assert.rejects(

@@ -61,13 +61,22 @@ test("downgradeRunningStartedBefore 无变化时返回原数组（引用相等�
 	assert.equal(downgradeRunningStartedBefore(entries, 1_000), entries);
 });
 
-test("downgradeStaleRunning 保持原语义：仅 toolcall 源全量降级", () => {
+test("downgradeStaleRunning 对全部来源生效：无 runtime 时不可能还有活着的子代理", () => {
 	const result = downgradeStaleRunning([
 		entry({ id: "t1" }),
 		entry({ id: "r1", source: "record" }),
+		entry({ id: "b1", source: "bridge" }),
+		entry({ id: "done", status: "completed" }),
 	]);
+	// 历史遗留的 running/queued 不可能还在跑（不是本代 runtime 派发的），一律 stopped；
+	// 终态保持原样。这是「几千分钟僵尸时长」的主要止血点。
 	assert.deepEqual(
 		result.map((e) => [e.id, e.status]),
-		[["t1", "stopped"], ["r1", "running"]],
+		[["t1", "stopped"], ["r1", "stopped"], ["b1", "stopped"], ["done", "completed"]],
 	);
+});
+
+test("downgradeStaleRunning 无变化时返回原数组（引用相等）", () => {
+	const entries = [entry({ status: "completed" })];
+	assert.equal(downgradeStaleRunning(entries), entries);
 });

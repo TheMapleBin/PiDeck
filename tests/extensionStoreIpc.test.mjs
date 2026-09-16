@@ -49,8 +49,13 @@ test("渲染层 ExtensionStoreTab 使用 catalog 查询并复用 extensions.inst
 	assert.match(tab, /api\.extensions\.catalog/);
 	assert.match(tab, /api\.extensions\.install/);
 	assert.match(tab, /installSource/);
-	// 搜索防抖：查询变化后 300ms 回到第一页
-	assert.match(tab, /setTimeout/);
+	// 搜索触发改为显式提交（回车 / 搜索按钮）：appliedQuery 才是查询参数，
+	// 敲字不再触发 pi.dev 目录请求（27839bc7 移除了旧版 300ms 防抖）
+	assert.match(tab, /appliedQuery/);
+	assert.match(tab, /query: appliedQuery\.trim\(\)/);
+	assert.match(tab, /submitSearch/);
+	// 防回退：原始输入框 state 不得直接当查询参数（否则每敲一个字就打一次目录）
+	assert.doesNotMatch(tab, /query: query\.trim\(\)/);
 });
 
 test("ExtensionsTab 挂载商店 Tab（已安装/商店两级）", () => {

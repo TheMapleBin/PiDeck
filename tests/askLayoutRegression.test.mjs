@@ -73,6 +73,13 @@ test("Ask cards keep long content readable in every render path", () => {
   assert.match(timelineStyles, /\.tool-card \{[\s\S]*?overflow: visible;/);
 });
 
+test("Batch input questions keep the input flexible and submit button compact", () => {
+  // Button 默认带 shrink-0；纯输入题若再叠加 w-full，会优先占满整行宽度，把输入框压成截图中的窄条。
+  // 输入框负责吸收剩余空间，提交按钮只保留自身文案宽度。
+  assert.match(overlay, /<div className="flex w-full items-center gap-2">[\s\S]*?className="h-9 flex-1[\s\S]*?className="shrink-0"\n\s*variant="default"/);
+  assert.doesNotMatch(overlay, /className="w-full"\n\s*variant="default"\n\s*disabled=\{props\.responding \|\| !props\.inputValue\.trim\(\)\}/);
+});
+
 test("Batch ask selected options carry a check mark for low-contrast themes", () => {
   // 2026-12 用户反馈：部分主题色 accent 对比度低，选框只靠边框/背景变色难分辨已选项。
   // select 选项与 confirm 按钮在选中态都要渲染 Check 图标；图标色走 success token 而非 accent。

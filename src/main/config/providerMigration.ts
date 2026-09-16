@@ -34,6 +34,7 @@ export type DshProviderProfile = {
 	api?: string;
 	apiKeyEnv?: string;
 	headers?: Record<string, string>;
+	compat?: ProviderCompatFlags;
 	models?: Array<{
 		id: string;
 		name?: string;
@@ -48,12 +49,65 @@ export type DshProviderProfile = {
 	}>;
 };
 
+/**
+ * pi ↔ DSH 双向迁移的 compat 白名单（两边都认、且由 PiDeck 配置弹窗拥有的字段）。
+ *
+ * - supportsDeveloperRole：上游不认 OpenAI 新增的 developer 角色（DeepSeek 官方网关就是）
+ *   时置 false，客户端改发 system 角色，否则 400 unknown variant `developer`；
+ * - requiresReasoningContentOnAssistantMessages：DeepSeek 系网关要求带 tool_calls 的
+ *   历史回合回放 reasoning_content，缺字段直接 400；true 时 pi 会补空串。
+ *
+ * 为什么用白名单而不是整体透传：DSH 的 dsh-llm-pi-ai 会校验 compat 字段是否被协议提供
+ * （openRouterRouting / vercelGatewayRouting 等必须由环境变量显式开启），写进 settings.yaml
+ * 一个未经提供的键就会 "compat field ... is not offered" → 整条 settings.update 被拒；
+ * pi 侧的 thinkingFormat 等值 DSH 也不一定认。
+ */
+export type ProviderCompatFlags = {
+	supportsDeveloperRole?: boolean;
+	requiresReasoningContentOnAssistantMessages?: boolean;
+};
+
+/** compat 只对 openai-completions 协议族生效；anthropic-messages 等适配器的 compat 由 DSH 自己决定。 */
+function carriesCompatFlags(api: string | undefined): boolean {
+	const apiType = api?.trim();
+	return !apiType || apiType === "openai-completions";
+}
+
+/**
+ * compat 对象原样取出（保留 pi 侧自定义键，如 thinkingFormat）；非法值退化为空对象。
+ * 与 asProviderCompatFlags 的区别：那个是「收窄出可迁移的两个键」，这个是「合并时要保留的底」。
+ */
+function asCompatRecord(value: unknown): Record<string, unknown> {
+	if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+	return { ...(value as Record<string, unknown>) };
+}
+
+/**
+ * 从任意来源（models.json / settings.yaml 的 compat 对象）收窄出 PiDeck 管理的两个布尔；
+ * 无有效键时返回 undefined（= 不携带，调用方保留原有值）。
+ */
+export function asProviderCompatFlags(value: unknown): ProviderCompatFlags | undefined {
+	if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+	const rec = value as Record<string, unknown>;
+	const flags: ProviderCompatFlags = {};
+	if (typeof rec.supportsDeveloperRole === "boolean") {
+		flags.supportsDeveloperRole = rec.supportsDeveloperRole;
+	}
+	if (typeof rec.requiresReasoningContentOnAssistantMessages === "boolean") {
+		flags.requiresReasoningContentOnAssistantMessages =
+			rec.requiresReasoningContentOnAssistantMessages;
+	}
+	return Object.keys(flags).length > 0 ? flags : undefined;
+}
+
 export type PiProviderSnapshot = {
 	name: string;
 	baseUrl?: string;
 	api?: string;
 	apiKey?: string;
 	headers?: Record<string, string>;
+	/** models.json 里该 provider 的 compat（已收窄为两边都认的白名单子集）。 */
+	compat?: ProviderCompatFlags;
 	models: PiModelItem[];
 	/**
 	 * Snapshot was synthesized from pi-ai's built-in catalog because Pi only had
@@ -321,6 +375,10 @@ export function piToDshSnapshot(source: PiProviderSnapshot): DshProviderSnapshot
 	if (source.baseUrl?.trim()) profile.baseURL = source.baseUrl.trim();
 	if (source.api?.trim()) profile.api = source.api.trim();
 	if (source.headers) profile.headers = source.headers;
+	// compat：只在 openai-completions 协议下搬。不搬 thinkingFormat 等 DSH 未提供/
+	// 由 DSH 自行推断的字段，避免 settings.update 被整条拒绝（见 ProviderCompatFlags）。
+	const compat = carriesCompatFlags(source.api) ? asProviderCompatFlags(source.compat) : undefined;
+	if (compat) profile.compat = compat;
 	const models = dshModelsFromPi(source.models);
 	if (models) profile.models = models;
 	profile.displayName = name;
@@ -338,12 +396,17 @@ export function dshToPiSnapshot(source: DshProviderSnapshot): PiProviderSnapshot
 	const baseUrl = source.namespace === "llm-deepseek"
 		? (profile.baseURL?.trim() || DEEPSEEK_DEFAULT_BASE)
 		: profile.baseURL?.trim();
+	// 官方 llm-deepseek 是直连适配器：compat 由适配器自己的 schema 决定，不往 pi 侧搬。
+	const compat = source.namespace === "llm-pi-ai"
+		? asProviderCompatFlags(profile.compat)
+		: undefined;
 	return {
 		name: source.name.trim(),
 		baseUrl,
 		api: profile.api?.trim() || "openai-completions",
 		apiKey: source.apiKey?.trim() || undefined,
 		headers: profile.headers,
+		compat,
 		models: piModelsFromDsh(profile.models),
 	};
 }
@@ -414,6 +477,8 @@ function normalizeDshProfile(value: unknown): DshProviderProfile {
 	if (typeof rec.apiKeyEnv === "string" && rec.apiKeyEnv.trim()) profile.apiKeyEnv = rec.apiKeyEnv.trim();
 	const headers = asStringRecord(rec.headers);
 	if (headers) profile.headers = headers;
+	const compat = asProviderCompatFlags(rec.compat);
+	if (compat) profile.compat = compat;
 	const models = normalizeDshModels(rec.models);
 	if (models) profile.models = models;
 	return profile;
@@ -526,15 +591,23 @@ export function mergePiProvider(
 	models: { providers: Record<string, PiProviderConfig> };
 	auth: Record<string, PiAuthItem>;
 } {
+	const existing = models.providers[snapshot.name];
+	// compat 逐键合并：迁移只覆盖白名单里的两个键，保留 pi 侧手写的其它 compat
+	// （thinkingFormat / openRouterRouting 等 DSH 表达不了的字段不该被一次迁移抹掉）；
+	// 对方没给 compat 时整套保留原值。
+	const mergedCompat = snapshot.compat
+		? { ...asCompatRecord(existing?.compat), ...snapshot.compat }
+		: undefined;
 	const nextModels = {
 		providers: {
 			...models.providers,
 			[snapshot.name]: {
-				...(models.providers[snapshot.name] ?? { models: [] }),
+				...(existing ?? { models: [] }),
 				baseUrl: snapshot.baseUrl,
 				api: snapshot.api,
 				models: snapshot.models,
 				...(snapshot.headers ? { headers: snapshot.headers } : {}),
+				...(mergedCompat ? { compat: mergedCompat } : {}),
 			},
 		},
 	};

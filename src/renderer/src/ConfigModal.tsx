@@ -456,7 +456,12 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 	// 弹窗每次打开都会重新挂载（Radix Dialog 关闭即卸载内容），
 	// 用 lazy initializer 在挂载时读一次 localStorage，恢复到上次所在 tab。
 	const [lastTab] = useState(loadLastConfigTab);
-	const [section, setSection] = useState<ConfigSection>(resourceOnly ? "skills" : lastTab?.section ?? "config");
+	// 深链优先于「上次记住的区域」：models/auth/settings/trust/mcp/raw 这些分页只属于
+	// config 区域，若上次停在 skills/prompts/extensions，只按 lastTab 恢复区域会出现
+	// 「分页跳对了、区域没切」——用户看到的是上一次停留的地方（首次挂载就错，必须在这里兜）。
+	const [section, setSection] = useState<ConfigSection>(
+		resourceOnly ? "skills" : focusConfigTab || focusProvider ? "config" : lastTab?.section ?? "config",
+	);
 	// 深链（如圆球面板「去配置用量」）优先于上次记住的配置分页。
 	const [tab, setTab] = useState<ConfigTab>(focusConfigTab ?? lastTab?.tab ?? "models");
 	// 深链 provider：models 页展开该供应商卡片并滚动高亮（ModelsTab 消费）。
@@ -475,8 +480,14 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 	);
 	useEffect(() => {
 		if (!open) return;
-		if (!resourceOnly && focusConfigTab) setTab(focusConfigTab);
+		// 顶层区域必须一并切回 config：这些分页（models/auth/...）只属于 config 区域，
+		// 只 setTab 的话，上次停在 skills/prompts/extensions 时会「切了分页却看不见」。
+		if (!resourceOnly && focusConfigTab) {
+			setSection("config");
+			setTab(focusConfigTab);
+		}
 		if (!resourceOnly && focusProvider) {
+			setSection("config");
 			setFocusedProvider(focusProvider);
 			setTab("models");
 			setExpandedProvider(focusProvider);
@@ -675,6 +686,10 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 	const [addingProvider, setAddingProvider] = useState(false);
 	/** 正在编辑的 provider key（编辑弹窗目标）；null = 无编辑弹窗。 */
 	const [editingProvider, setEditingProvider] = useState<string | null>(null);
+	/** 新增/编辑供应商页的当前草稿保存入口，由设置窗口标题栏按钮调用。 */
+	const providerPageSaveRef = useRef<(() => void) | undefined>(undefined);
+	/** 标题栏保存触发页内提交后，等待下一轮 state 更新再执行 models.json 落盘。 */
+	const providerPageSavePendingRef = useRef(false);
 	/** 用户隐藏的供应商 key 列表（模型页眼睛开关持久化到 AppSettings.hiddenProviders）。 */
 	const [hiddenProviders, setHiddenProviders] = useState<string[]>([]);
 	/** 切换供应商隐藏状态：本地立即生效 + 持久化到 AppSettings（不影响 models.json 配置本身）。 */
@@ -1505,7 +1520,8 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 		);
 		const base = filledCount > 0 ? { ...modelsData, providers: filledProviders } : modelsData;
 		// 保存前规范化所有供应商的 compat 字段，确保布尔值显式写入而不依赖后端默认值；
-		// supportsReasoningEffort 联动档位映射（见 deriveProviderCompat）。
+		// supportsReasoningEffort 联动档位映射、requiresReasoningContentOnAssistantMessages
+		// 按 DeepSeek 特征判定（均见 deriveProviderCompat，传名字以便按 provider 名识别）。
 		const normalizedData = {
 			...base,
 			providers: Object.fromEntries(
@@ -1513,7 +1529,7 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 					name,
 					{
 						...provider,
-						compat: deriveProviderCompat(provider),
+						compat: deriveProviderCompat(provider, name),
 					},
 				]),
 			),
@@ -2307,6 +2323,13 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 				return ok;
 			}
 			case "config:models":
+				// 新增/编辑页把字段保存在页内 state，先提交完整草稿；
+				// 提交回调会回写 modelsData 并回到列表，不能在同一次调用里读取尚未刷新的父级 state。
+				if (addingProvider || editingProvider) {
+					providerPageSavePendingRef.current = true;
+					providerPageSaveRef.current?.();
+					return true;
+				}
 				return handleSaveModels();
 			case "config:auth":
 				return handleSaveAuth();
@@ -2340,9 +2363,20 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 	/** 当前后端分页下的 tab 编码（DSH 页固定 "dsh"，Pi 页按 section:tab）。 */
 	const currentTabKey = backendPane === "dsh" ? "dsh" : sectionTabValue(section, tab);
 
-	/** 顶部统一保存按钮：保存当前 tab（无修改也允许再次保存，重新写盘当前 tab；不关闭弹框）。 */
+	/**
+	 * 顶部统一保存按钮：模型页的新增/编辑供应商是一个页内子页面，
+	 * 但它仍然属于 models 草稿；当前 tab 保持 models 时始终保存整个 models 草稿。
+	 * 这样用户在供应商表单页点击窗口顶部保存时，不会因为子页面没有独立 tab 而漏掉变更。
+	 */
 	const handleSaveCurrent = async () => {
 		if (saving) return;
+		// 新增/编辑页的第一次点击只把页内草稿提交到 modelsData；
+		// React state 更新后下一轮 effect 会自动继续落盘，用户无需再点一次保存。
+		if (backendPane === "pi" && section === "config" && tab === "models" && (addingProvider || editingProvider)) {
+			providerPageSavePendingRef.current = true;
+			providerPageSaveRef.current?.();
+			return;
+		}
 		// 无修改也放开再次保存；skills/prompts/extensions 等无保存语义的页
 		// 由各自 save 方法（如 saveGlobalSkillEditor 的 !editingGlobalSkill 守卫）返回 false，不产生副作用。
 		await saveByKey(currentTabKey);
@@ -2382,6 +2416,20 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 		}),
 		[handleSaveCurrent, handleExport, handleImport, saveByKey, dirtyTabs],
 	);
+	// 标题栏保存触发页内提交后，下一轮 state 更新会重新进入 models 保存路径；
+	// 这样用户一次点击即可完成「页内草稿 → models.json」两步提交。
+	useEffect(() => {
+		if (!providerPageSavePendingRef.current) return;
+		if (addingProvider || editingProvider) return;
+		if (!dirtyTabs.has("config:models")) {
+			// 表单校验未通过时没有 models 草稿可保存，避免 pending 标记污染下一次进入页面。
+			providerPageSavePendingRef.current = false;
+			return;
+		}
+		providerPageSavePendingRef.current = false;
+		void handleSaveModels();
+	}, [addingProvider, editingProvider, dirtyTabs, handleSaveModels]);
+
 	useEffect(() => {
 		props.onPaneStateChange?.({
 			saving,
@@ -2584,6 +2632,7 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 							focusProvider={focusedProvider}
 							onOpenUsageProbeDialog={(provider) => openUsageProbeDialogFor(provider, "pi")}
 							addingProvider={addingProvider}
+							providerPageSaveRef={providerPageSaveRef}
 							hiddenProviders={hiddenProviders}
 							onToggleHiddenProvider={handleToggleHiddenProvider}
 							fetchingProvider={fetchingProvider}

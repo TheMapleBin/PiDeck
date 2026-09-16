@@ -225,7 +225,7 @@ export const DevTab = memo(function DevTab(props: DevTabProps) {
 
         {/* Pi 来源：Windows 原生 / WSL（仅 Windows 可见） */}
         {props.appInfo.platform === "win32" && (
-          <div className="setting-pi-source-block">
+          <div id="settings-section-dev-pi-source" className="setting-pi-source-block">
             <div className="setting-pi-source-row">
               <span>{t("settings.piSource.label")}</span>
               <div className="grid gap-1.5">
@@ -245,7 +245,7 @@ export const DevTab = memo(function DevTab(props: DevTabProps) {
               </div>
             </div>
             {draft.wslEnabled && (
-              <div className="setting-pi-wsl-config">
+              <div id="settings-section-dev-wsl-config" className="setting-pi-wsl-config">
                 <div className="setting-wsl-fields">
                   {wslDistros.length > 0 ? (
                     <div className="grid min-w-[160px] flex-1 gap-1.5">
@@ -335,7 +335,7 @@ export const DevTab = memo(function DevTab(props: DevTabProps) {
         <div className="my-3 border-0 border-t border-border-subtle" />
 
         {/* 自定义 Pi 路径 */}
-        <div className="setting-pi-path-panel">
+        <div id="settings-section-dev-custom-pi-path" className="setting-pi-path-panel">
           <SettingRow
             title={<span>{t("settings.customPiPath")}</span>}
             description={t("settings.customPiPathHint")}
@@ -403,6 +403,7 @@ export const DevTab = memo(function DevTab(props: DevTabProps) {
           </p>
         ) : (
           <SettingSwitchRow
+            anchor="dev-auto-download-updates"
             title={t("settings.autoDownloadUpdates")}
             description={t("settings.autoDownloadUpdatesDesc")}
             checked={draft.autoDownloadUpdates !== false}
@@ -421,6 +422,7 @@ export const DevTab = memo(function DevTab(props: DevTabProps) {
       {/* 运行 */}
       <SettingsSection title={t("settings.sectionRuntime")}>
         <SettingRow
+          anchor="dev-rpc-timeout"
           title={
             <>
               <span>{t("settings.rpcTimeout")}</span>
@@ -441,6 +443,7 @@ export const DevTab = memo(function DevTab(props: DevTabProps) {
           />
         </SettingRow>
         <SettingRow
+          anchor="dev-max-editor-file-size"
           title={
             <>
               <span>{t("settings.maxEditorFileSize")}</span>
@@ -461,6 +464,7 @@ export const DevTab = memo(function DevTab(props: DevTabProps) {
           />
         </SettingRow>
         <SettingSwitchRow
+          anchor="dev-electron-sandbox"
           title={t("settings.electronSandbox")}
           description={t("settings.electronSandboxDesc")}
           checked={draft.electronChromiumSandbox}
@@ -468,23 +472,27 @@ export const DevTab = memo(function DevTab(props: DevTabProps) {
             updateDraft({ electronChromiumSandbox: checked })
           }
         />
-        <div className="px-0.5 pb-1 pt-3">
+        {/* id 用于深链：扩展被禁用启动的提示可直达本组启动参数（见 useSettingsFocus） */}
+        <div id="settings-section-dev-pi-rpc" className="px-0.5 pb-1 pt-3">
           <span className="text-caption font-semibold tracking-[0.06em] text-muted-foreground">{t("settings.piRpcStartup")}</span>
           <p className="mt-0.5 text-caption text-muted-foreground">{t("settings.piRpcStartupDesc")}</p>
         </div>
         <SettingSwitchRow
+          anchor="dev-pi-rpc-offline"
           title={t("settings.piRpcOffline")}
           description={t("settings.piRpcOfflineDesc")}
           checked={draft.piRpcOffline}
           onChange={(checked) => updateDraft({ piRpcOffline: checked })}
         />
         <SettingSwitchRow
+          anchor="dev-pi-rpc-no-extensions"
           title={t("settings.piRpcNoExtensions")}
           description={t("settings.piRpcNoExtensionsDesc")}
           checked={draft.piRpcNoExtensions}
           onChange={(checked) => updateDraft({ piRpcNoExtensions: checked })}
         />
         <SettingSwitchRow
+          anchor="dev-pi-rpc-no-skills"
           title={t("settings.piRpcNoSkills")}
           description={t("settings.piRpcNoSkillsDesc")}
           checked={draft.piRpcNoSkills}
@@ -495,6 +503,7 @@ export const DevTab = memo(function DevTab(props: DevTabProps) {
       {/* 调试 */}
       <SettingsSection title={t("settings.debug")}>
         <SettingRow
+          anchor="dev-restart-app"
           title={<span>{t("settings.restartApp")}</span>}
           description={t("settings.restartAppDesc")}
         >
@@ -503,6 +512,7 @@ export const DevTab = memo(function DevTab(props: DevTabProps) {
           </Button>
         </SettingRow>
         <SettingRow
+          anchor="dev-devtools"
           title={<span>{t("settings.devTools")}</span>}
           description={t("settings.devToolsDesc")}
         >
@@ -511,6 +521,7 @@ export const DevTab = memo(function DevTab(props: DevTabProps) {
           </Button>
         </SettingRow>
         <SettingRow
+          anchor="dev-open-data-dir"
           title={<span>{t("settings.openDataDir")}</span>}
           description={
             props.appInfo.userDataDir ? (
@@ -537,6 +548,7 @@ export const DevTab = memo(function DevTab(props: DevTabProps) {
       {/* 隐私 */}
       <SettingsSection title={t("settings.privacy")}>
         <SettingSwitchRow
+          anchor="dev-telemetry"
           title={t("settings.telemetry")}
           description={t("settings.telemetryDesc")}
           checked={draft.telemetryEnabled}

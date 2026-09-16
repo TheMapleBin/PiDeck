@@ -145,6 +145,7 @@ export const CommonTab = memo(function CommonTab(props: CommonTabProps) {
       {/* 会话 */}
       <SettingsSection title={t("settings.sectionSession")}>
         <SettingRow
+          anchor="common-session-tab-open-mode"
           title={
             <>
               <span>{t("settings.sessionTabOpenMode")}</span>
@@ -164,13 +165,15 @@ export const CommonTab = memo(function CommonTab(props: CommonTabProps) {
           </Select>
         </SettingRow>
         <SettingSwitchRow
+          anchor="common-auto-session-title"
           title={t("settings.autoSessionTitle")}
           description={t("settings.autoSessionTitleDesc")}
-          checked={draft.autoSessionTitle ?? true}
+          checked={draft.autoSessionTitle ?? false}
           dirty={isDirty("autoSessionTitle")}
           onChange={(checked) => updateDraft({ autoSessionTitle: checked })}
         />
         <SettingRow
+          anchor="common-send-shortcut"
           title={
             <>
               <span>{t("settings.inputShortcut")}</span>
@@ -193,6 +196,7 @@ export const CommonTab = memo(function CommonTab(props: CommonTabProps) {
           </Select>
         </SettingRow>
         <SettingRow
+          anchor="common-default-agent-backend"
           title={
             <>
               <span>{t("settings.defaultAgentBackend")}</span>
@@ -300,12 +304,14 @@ export const CommonTab = memo(function CommonTab(props: CommonTabProps) {
         </SettingRow>
         {/* 流式对话设置：中间过程与本轮修改文件的默认展示行为。 */}
         <SettingSwitchRow
+          anchor="common-expand-interim-during-stream"
           title={t("settings.expandInterimDuringStream")}
           description={t("settings.expandInterimDuringStreamDesc")}
           checked={draft.expandInterimDuringStream}
           onChange={(checked) => updateDraft({ expandInterimDuringStream: checked })}
         />
         <SettingSwitchRow
+          anchor="common-collapse-prev-runs"
           title={t("settings.collapsePrevRunsOnNewTurn")}
           description={t("settings.collapsePrevRunsOnNewTurnDesc")}
           checked={draft.collapsePrevRunsOnNewTurn}
@@ -319,6 +325,7 @@ export const CommonTab = memo(function CommonTab(props: CommonTabProps) {
         description={t("settings.idleAgentSectionDesc")}
       >
         <SettingSwitchRow
+          anchor="common-idle-agent-auto-release"
           title={t("settings.idleAgentAutoRelease")}
           description={t("settings.idleAgentAutoReleaseDesc")}
           checked={draft.idleAgentAutoRelease ?? true}
@@ -326,6 +333,7 @@ export const CommonTab = memo(function CommonTab(props: CommonTabProps) {
           onChange={(checked) => updateDraft({ idleAgentAutoRelease: checked })}
         />
         <SettingRow
+          anchor="common-idle-agent-keep-count"
           title={
             <span className="inline-flex items-center gap-1.5">
               <DirtyMarker dirty={isDirty("idleAgentKeepCount")} label={t("settings.idleAgentKeepCount")} />
@@ -354,6 +362,7 @@ export const CommonTab = memo(function CommonTab(props: CommonTabProps) {
           </div>
         </SettingRow>
         <SettingRow
+          anchor="common-idle-agent-timeout"
           title={
             <span className="inline-flex items-center gap-1.5">
               <DirtyMarker dirty={isDirty("idleAgentTimeoutMin")} label={t("settings.idleAgentTimeoutMin")} />
@@ -390,6 +399,7 @@ export const CommonTab = memo(function CommonTab(props: CommonTabProps) {
         description={t("settings.shellContextMenuSectionDesc")}
       >
         <SettingSwitchRow
+          anchor="common-shell-context-menu"
           title={t("settings.shellContextMenu")}
           description={t("settings.shellContextMenuDesc")}
           checked={shellMenuState?.registered ?? false}
@@ -437,6 +447,7 @@ export const CommonTab = memo(function CommonTab(props: CommonTabProps) {
           </Select>
         </SettingRow>
         <SettingSwitchRow
+          anchor="common-close-to-tray"
           title={t("settings.closeToTray")}
           checked={draft.closeToTray}
           onChange={(checked) =>
@@ -444,6 +455,7 @@ export const CommonTab = memo(function CommonTab(props: CommonTabProps) {
           }
         />
         <SettingSwitchRow
+          anchor="common-single-instance"
           title={t("settings.singleInstance")}
           description={t("settings.singleInstanceDesc")}
           checked={draft.singleInstance}

@@ -336,6 +336,12 @@ const api = {
 		/** 批量校验路径是否存在（返回与入参等长的 boolean[]；单路径失败按 false 计） */
 		pathsExist: (paths: string[], scope?: ProjectFileAccessScope) =>
 			ipcRenderer.invoke(ipcChannels.filesPathsExist, paths, scope) as Promise<boolean[]>,
+		/** 单路径 stat（存在性 + 是否目录）：会话内文件链接点击路由用（目录 → 资源管理器打开） */
+		stat: (path: string, scope?: ProjectFileAccessScope) =>
+			ipcRenderer.invoke(ipcChannels.filesStat, path, scope) as Promise<{
+				exists: boolean;
+				isDirectory: boolean;
+			}>,
 		/** 读取二进制文件为 base64；scope 存在时主进程限制到对应 ProjectStore 根目录。 */
 		readBase64: (path: string, maxBytes?: number, scope?: ProjectFileAccessScope) =>
 			ipcRenderer.invoke(ipcChannels.filesReadBase64, path, maxBytes, scope) as Promise<string>,

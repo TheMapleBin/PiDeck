@@ -29,6 +29,8 @@ import { resolveBusySendDelivery } from "../../../shared/busySendDelivery";
 import { FILE_TREE_ABSOLUTE_MAX_DEPTH } from "../../../shared/fileTree";
 import {
   classifyCompactError,
+  compactOwnerReason,
+  compactRoutedCommand,
   type CompactNoticeKind,
 } from "../../../shared/compactFeedback";
 import { findImageGenProvider } from "../../../shared/imageGenConfig";
@@ -118,6 +120,11 @@ import {
 } from "../utils/composerImages";
 import { PASTE_TO_FILE_MIN_CHARS } from "../rendererUtils";
 import { resolveBackendSwitchDefaults } from "../utils/backendSwitchDefaults";
+import {
+  GUIDE_BOOTSTRAP_SESSION_ID,
+  readWelcomeBackendPreference,
+  WELCOME_BACKEND_KEY,
+} from "../utils/chatSessionBootstrap";
 import { showNotice } from "../utils/notice";
 import {
   requireSessionCommand,
@@ -132,7 +139,7 @@ import {
   type VoiceTranscriptionTarget,
 } from "../utils/voiceTranscriptionInsert";
 
-/** 统一压缩结果 → 用户可见文案；silent 不弹 toast。 */
+/** 统一压缩结果 → 用户可见文案；所有分支都给文案（取消也要可见，见 classifyCompactError）。 */
 function compactNotice(kind: CompactNoticeKind, detail?: string): string | null {
   switch (kind) {
     case "done":
@@ -143,8 +150,23 @@ function compactNotice(kind: CompactNoticeKind, detail?: string): string | null 
       return t("app.compactSessionTooSmall");
     case "inProgress":
       return t("app.compactInProgress");
-    case "silent":
-      return null;
+    case "routedToOwner": {
+      // 接管者有自己的入口：主进程已把请求改写成它的扩展命令（标记后跟命令名）。
+      const command = compactRoutedCommand(detail ?? "");
+      return command
+        ? t("app.compactRoutedToOwner", { command })
+        : t("app.compactDone");
+    }
+    case "cancelledByOwner": {
+      const reason = compactOwnerReason(detail ?? "");
+      return reason
+        ? t("app.compactCancelledByOwnerWithReason", { reason })
+        : t("app.compactCancelledByOwner");
+    }
+    case "interrupted":
+      return t("app.compactInterrupted");
+    case "cancelled":
+      return t("app.compactCancelled");
     case "failed":
       return detail
         ? t("app.compactFailedWithReason", { error: detail })
@@ -155,10 +177,14 @@ function compactNotice(kind: CompactNoticeKind, detail?: string): string | null 
 /**
  * compact 错误友好文案：requireSessionCommand 的 message 是 i18n 通用失败，
  * pi 原错在 debugDetails。分类走 shared/compactFeedback（按钮 / /compact 共用）。
- * silent：压缩被取消（自动压缩撞车 / 新消息打断）不弹 toast——取消响应可能
- * 延迟到正常对话后返回（RPC 最长 120s），表现为「没点压缩却弹提示」。
+ *
+ * 取消类（cancelled / cancelledByOwner / interrupted）必须弹提示：手动压缩是用户
+ * 主动点的，静默会让「压缩被扩展接管」表现为「点了没反应」。延迟到达的取消响应
+ * 也不会误导——文案本身就是「已取消」，不再依赖「不提示」掩盖。
  */
-function friendlyCompactError(error: unknown): string | null {
+function friendlyCompactError(
+  error: unknown,
+): { text: string; durationMs: number } | null {
   const debugDetails =
     error && typeof error === "object" && "debugDetails" in error
       ? String((error as { debugDetails?: unknown }).debugDetails ?? "").trim()
@@ -169,7 +195,16 @@ function friendlyCompactError(error: unknown): string | null {
     .replace(/^Error invoking remote method ['"][^'"]+['"]:\s*/i, "")
     .replace(/^Error:\s*/i, "")
     .trim();
-  return compactNotice(classifyCompactError(detail), detail);
+  const kind = classifyCompactError(detail);
+  const text = compactNotice(kind, detail);
+  if (!text) return null;
+  // 取消 / 改写类提示要用户看见「压缩为什么换了个方式」，停留时间长于普通完成提示。
+  const durationMs = kind === "done"
+    ? 4000
+    : kind === "cancelledByOwner" || kind === "routedToOwner"
+      ? 10000
+      : 7000;
+  return { text, durationMs };
 }
 
 export type ComposerPickerKind = "model" | "thinking" | "template" | "skill";
@@ -343,7 +378,18 @@ export function useSessionComposerController(
   const pasteFiles = pasteFilesBySession[sessionId] ?? [];
   // DSH：plan 由 host 持有；goal 由本地选择或进行中/阻塞的目标驱动（切回普通会 pause）。
   // 生图为独立供应商配置，不属于 pi/dsh 任一后端，两种后端均可用。
-  const isDshBackend = record?.backend === "dsh" || runtime?.backend === "dsh";
+  // 引导页虚拟会话的后端显式选择：无 record、不落 catalog，后端切换走
+  // localStorage 偏好（与 pickModel/pickThinking 的引导页分支同构），首次发送
+  // 由 App.ensureSessionForSend 读取同一份偏好创建真实会话。仅在引导页初始化，
+  // 真实会话（record 短暂未就绪）不受 localStorage 残留影响。
+  const isGuideBootstrapSession = sessionId === GUIDE_BOOTSTRAP_SESSION_ID;
+  const [guideBackendOverride, setGuideBackendOverride] = useState<AgentBackend | undefined>(
+    () => (isGuideBootstrapSession ? readWelcomeBackendPreference() : undefined),
+  );
+  const isDshBackend =
+    record?.backend === "dsh" ||
+    runtime?.backend === "dsh" ||
+    (isGuideBootstrapSession && guideBackendOverride === "dsh");
   const hasImageGenHistory = (messageCache[sessionId]?.messages ?? []).some(
     (message) => Boolean(message.meta?.imageGen),
   );
@@ -1002,8 +1048,8 @@ export function useSessionComposerController(
       requireSessionCommand(await desktopApi.sessions.compactRuntime(target, prompt));
       showNotice(t("app.compactDone"), 4000);
     } catch (error) {
-      const message = friendlyCompactError(error);
-      if (message) showNotice(message, 6000);
+      const notice = friendlyCompactError(error);
+      if (notice) showNotice(notice.text, notice.durationMs);
     }
   }, [sessionId, store]);
 
@@ -1756,6 +1802,20 @@ export function useSessionComposerController(
   const backendLocked = Boolean(runtime?.agentId) || record?.status === "active" || record?.backend === "imagegen";
   const changeBackend = useCallback(async (next: AgentBackend) => {
     if (backendLocked) return;
+    // 引导页虚拟会话（无 catalog record）：与 pickModel/pickThinking 的引导页
+    // 分支同构——显式选择写 localStorage 偏好并本地即时回显，不走 IPC。
+    // 直接 updateRecord("renderer:guide-bootstrap") 在主进程必然查不到会话，
+    // 报「会话不存在，请刷新会话列表后重试」（2026-09 用户反馈的新建页切 DSH 报错）。
+    // 首次发送时 App.ensureSessionForSend 读取同一份偏好创建真实会话，选择不丢失。
+    if (isGuideBootstrapSession) {
+      setGuideBackendOverride(next);
+      try {
+        localStorage.setItem(WELCOME_BACKEND_KEY, next);
+      } catch {
+        // localStorage 不可用时静默；本次页面内仍由 guideBackendOverride 即时生效
+      }
+      return;
+    }
     try {
       // 切回 pi 时按 pi 配置重新解析默认模型/思考档位（与 createDraft 缺省填充
       // 同一解析器 launchDefaults），而不是直接清空——否则用户 pi 配置里的
@@ -1774,7 +1834,7 @@ export function useSessionComposerController(
     } catch (error) {
       showNotice(error instanceof Error ? error.message : String(error), 4000);
     }
-  }, [backendLocked, sessionId, upsertSession]);
+  }, [backendLocked, isGuideBootstrapSession, record, sessionId, upsertSession]);
 
   const compact = useCallback(async () => {
     const target = toSessionRuntimeTarget(sessionId, runtime);
@@ -1841,7 +1901,9 @@ export function useSessionComposerController(
     sessionId,
     record,
     runtime,
-    backend: record?.backend ?? "pi",
+    // 引导页优先回显显式切换（guideBackendOverride），否则退回上次偏好/默认 pi；
+    // 真实会话以 record 为准。
+    backend: record?.backend ?? (isGuideBootstrapSession ? guideBackendOverride : undefined) ?? "pi",
     /** 草稿期可切换后端；激活后锁定（undefined → UI 隐藏切换器）。 */
     changeBackend: backendLocked ? undefined : changeBackend,
     /** DSH 部署默认模型（settings.yaml agent-default-model）；仅 dsh 后端时展示，

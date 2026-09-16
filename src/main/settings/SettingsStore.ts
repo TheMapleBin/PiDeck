@@ -108,8 +108,8 @@ const defaultSettings: AppSettings = {
   startupWindowMode: "last",
   piEnvironmentChecked: false,
   sessionTabOpenMode: "preview",
-  // 默认开启：标题请求由内置扩展在首轮结束后独立异步执行，不进入主 agent 上下文。
-  autoSessionTitle: true,
+  // 默认关闭：标题请求会额外调用当前 pi 模型并消耗 token，避免用户无感知地产生用量。
+  autoSessionTitle: false,
   // 忙碌时发送默认「插入当前回合」（对齐 pi 历史行为）；dsh 会话此前默认排队，
   // 统一后由本设置项决定，用户可在常用设置→会话中改回。
   busySendDelivery: "steer",

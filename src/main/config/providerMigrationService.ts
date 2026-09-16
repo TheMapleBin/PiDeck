@@ -16,6 +16,7 @@ import type { DshHost } from "../dsh/DshHost";
 import { credentialValueFromDocument, isValidCredentialRef } from "../dsh/dshCredentials";
 import { getPiAiCatalogIndex } from "../pi/piAiBuiltinCatalog";
 import {
+	asProviderCompatFlags,
 	credentialRefFor,
 	dshToPiSnapshot,
 	dumpYamlObject,
@@ -222,6 +223,9 @@ async function readPiSnapshot(deps: ProviderMigrationDeps, name: string): Promis
 		api: typeof provider.api === "string" ? provider.api : undefined,
 		apiKey: resolvePiApiKey(provider, auth.parsed[name]),
 		headers: asStringHeaders(provider.headers),
+		// compat 从 models.json 原样取（白名单收窄），随迁移带到 DSH 的 profile.compat：
+		// 否则「本地已修好的那两个键」在迁移后会丢，DSH 侧照旧 400。
+		compat: asProviderCompatFlags(provider.compat),
 		models: Array.isArray(provider.models) ? provider.models : [],
 	};
 }

@@ -4,6 +4,7 @@ import type { BusySendDelivery } from "../../../shared/busySendDelivery";
 import type { AgentBackend } from "../../../shared/types";
 import { resolveEffectiveAgentBackend } from "../../../shared/types/dshRuntime";
 import { dshRuntimeStatusAtom } from "./dsh-atoms";
+import type { SettingsFieldAnchorSlug } from "../utils/settingsFieldAnchors";
 import {
   defaultExpandedSidebarProjects,
   readExpandedSidebarProjects,
@@ -37,8 +38,23 @@ export type SettingsTabId =
 	| "vision"
 	| "imagegen";
 
-/** 常用设置内部可滚动分区；目前只有 Git 摘要需要从面板直达。 */
-export type SettingsSectionId = "git" | "dsh-runner-node";
+/**
+ * 设置页内可直达的锚点 slug（对应 DOM 上的 `id="settings-section-<slug>"`）。
+ *
+ * 两类来源：
+ * - 固定分区 git / dsh-runner-node / dev-pi-rpc：历史深链在用，显式列出；
+ * - 细粒度设置项：由 `utils/settingsFieldAnchors.ts` 的清单推导（`SettingsFieldAnchorSlug`），
+ *   命令面板（Ctrl+P）搜到「某个具体设置项」时用它精确跳过去。
+ *
+ * 刻意**不**写成 `string`：锚点拼错时运行时只会「滚到空气」（useSettingsFocus 2s 后
+ * 静默放弃，不报错不提示），编译期联合是能在提交前拦住它的唯一关口。
+ * 这里只 `import type`，atoms ↔ utils 的类型循环会被完全擦除，没有运行时依赖。
+ */
+export type SettingsSectionId =
+	| "git"
+	| "dsh-runner-node"
+	| "dev-pi-rpc"
+	| SettingsFieldAnchorSlug;
 
 /** 设置窗口顶层分区：系统设置 / 配置管理（顶部 tab，样式同配置页 Pi/DSH 分页）。 */
 export type SettingsPaneId = "settings" | "config";

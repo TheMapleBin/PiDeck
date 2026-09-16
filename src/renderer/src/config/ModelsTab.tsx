@@ -18,7 +18,7 @@ import { FetchedModelCombobox } from "./FetchedModelCombobox";
 import { Checkbox } from "../components/ui-shadcn/checkbox";
 import { Label } from "../components/ui-shadcn/label";
 import { showNotice } from "../utils/notice";
-import { applyModelPatches, computeModelSpecPatches } from "../utils/modelSpecAutoFill";
+import { applyModelPatches, computeModelSpecPatches, looksDeepSeekBacked } from "../utils/modelSpecAutoFill";
 import type { FetchedModel, ConfigProxyMode } from "../../../shared/types/fetchedModel";
 import { ProviderMigrationButton } from "./ProviderMigrationButton";
 import { ProviderUsageInline } from "../components/app/ProviderUsageInline";
@@ -29,6 +29,7 @@ import type { ProviderDialogInitial } from "./AddProviderDialog";
 import type { AddProviderDraft } from "./addProviderDraft";
 import { splitVisibleAndHiddenProviders } from "./providerVisibility";
 import { ModelsTable } from "./ModelsTable";
+import type { MutableRefObject } from "react";
 
 /** 把现有 provider 配置转成编辑弹窗的预填值（名字/字段/模型列表）。 */
 function providerDialogInitial(
@@ -68,6 +69,8 @@ export function ModelsTab(props: {
 	onOpenUsageProbeDialog: (providerName: string) => void;
 	/** 新增供应商弹窗开关（由父级持有，确认/取消回调走 props）。 */
 	addingProvider: boolean;
+	/** 新增/编辑供应商页向设置窗口标题栏暴露的保存入口。 */
+	providerPageSaveRef: MutableRefObject<(() => void) | undefined>;
 	/** 编辑弹窗目标 provider key（修改名称按钮打开；null = 无编辑弹窗）。 */
 	editingProvider: string | null;
 	/** 用户隐藏的供应商 key 列表（模型页主列表过滤 + 底部已隐藏区展示）。 */
@@ -219,11 +222,22 @@ export function ModelsTab(props: {
 			window.clearTimeout(timer);
 		};
 	}, [props.focusProvider]);
-	const getCompat = (providerName: string) => ({
-		supportsDeveloperRole: false,
-		supportsReasoningEffort: false,
-		...(data.providers[providerName].compat as Record<string, unknown> | undefined),
-	});
+	const getCompat = (providerName: string) => {
+		const provider = data.providers[providerName];
+		const saved = provider.compat ?? {};
+		const savedReasoningContent = saved.requiresReasoningContentOnAssistantMessages;
+		// 未落盘（undefined）= 用户未表态：与编辑页/保存时归一化同一判定预置勾选，
+		// 否则卡片上看着没勾、保存后文件里却是 true。已落盘的值（含 false）原样回显。
+		return {
+			supportsDeveloperRole: false,
+			supportsReasoningEffort: false,
+			requiresReasoningContentOnAssistantMessages:
+				savedReasoningContent !== undefined
+					? savedReasoningContent === true
+					: looksDeepSeekBacked(provider, providerName),
+			...saved,
+		};
+	};
 
 
 	return (
@@ -326,6 +340,10 @@ export function ModelsTab(props: {
 								<tr>
 									<td className="w-[180px] border-b border-border-subtle px-2.5 py-1.5 align-top"><code className="rounded-[4px] bg-[color:color-mix(in_srgb,var(--color-accent)_5%,transparent)] px-1.5 py-px font-mono text-[11px] text-[color:var(--color-accent)]">supportsReasoningEffort</code></td>
 									<td className="border-b border-border-subtle px-2.5 py-1.5 align-top">{t("config.providerGuideCompatReasoning")}</td>
+								</tr>
+								<tr>
+									<td className="w-[180px] border-b border-border-subtle px-2.5 py-1.5 align-top"><code className="break-all rounded-[4px] bg-[color:color-mix(in_srgb,var(--color-accent)_5%,transparent)] px-1.5 py-px font-mono text-[11px] text-[color:var(--color-accent)]">requiresReasoningContentOnAssistantMessages</code></td>
+									<td className="border-b border-border-subtle px-2.5 py-1.5 align-top">{t("config.providerGuideCompatReasoningContent")}</td>
 								</tr>
 							</tbody>
 						</table>
@@ -756,6 +774,9 @@ export function ModelsTab(props: {
 							? (draft) => props.onConfirmEditProvider(props.editingProvider!, draft)
 							: props.onConfirmAddProvider
 					}
+					onRequestSave={(save) => {
+						props.providerPageSaveRef.current = save;
+					}}
 				/>
 			)}
 		</div>

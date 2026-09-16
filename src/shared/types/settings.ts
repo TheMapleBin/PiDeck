@@ -122,7 +122,7 @@ export type AppSettings = {
 	sessionTabOpenMode: SessionTabOpenMode;
 	/**
 	 * 是否在首轮 agent 成功结束后，用当前 pi 模型异步生成会话标题。
-	 * 默认开启；设置只在新建或重启 Agent 进程时注入，关闭不影响已有会话的主 agent。
+	 * 默认关闭以避免用户无感知地产生额外模型调用和 token 消耗；设置只在新建或重启 Agent 进程时注入，关闭不影响已有会话的主 agent。
 	 */
 	autoSessionTitle: boolean;
 	/**

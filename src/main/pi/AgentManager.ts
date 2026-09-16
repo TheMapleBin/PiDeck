@@ -32,8 +32,21 @@ import type {
 } from "../../shared/types";
 import { ipcChannels } from "../../shared/ipc";
 import { collectSessionFileChanges } from "../../shared/fileChanges";
-import { PiProcess } from "./PiProcess";
+import {
+	COMPACT_CANCELLED_BY_OWNER,
+	COMPACT_CANCELLED_BY_USER_ABORT,
+	COMPACT_HOOK_REJECT_MAX_MS,
+	COMPACT_OBSERVATION_MAX_AGE_MS,
+	COMPACT_ROUTED_TO_OWNER,
+	COMPACT_USER_ABORT_WINDOW_MS,
+} from "../../shared/compactFeedback";
+import { PiProcess, type WhitelistSkip } from "./PiProcess";
 import { createCompactRpcRequest } from "./compactRpc";
+import { resolveWhitelistSkipCopy, WHITELIST_SKIP_KIND_COPY } from "./whitelistSkipNotice";
+import {
+	readPiCompactionOwnership,
+	type PiCompactionOwnership,
+} from "./compactionOwner";
 import { mergeSubagentSources } from "./derivedSubagents";
 import { parseAvailableThinkingLevelsResponse } from "./thinkingLevels";
 import { listActiveBuiltInExtensionPaths } from "../extensions/builtInExtensions";
@@ -43,8 +56,11 @@ import { createPiProcessPromptResolvers } from "../prompts/piProcessPromptResolv
 import {
 	describeExtensionFallbackSkip,
 	formatExtensionFallbackDebug,
+	resolveDisabledExtensionsCopy,
+	resolveDisabledExtensionsReason,
 	shouldRetryWithoutExtensions,
 } from "./extensionStartupFallback";
+import type { DisabledExtensionsReason } from "./extensionStartupFallback";
 import { formatExtensionErrorReason } from "./extensionError";
 import type { RpcResponse } from "./PiRpcClient";
 import { formatBashToolMessage } from "./bashResult";
@@ -75,6 +91,10 @@ import {
 	loadCheckpointFromRef,
 	MIN_CHECKPOINT_INTERVAL_MS,
 	MUTATING_TOOLS,
+	pruneCheckpoints,
+	pruneOldSessions,
+	PRUNE_CURRENT_MIN_INTERVAL_MS,
+	PRUNE_OLD_SESSIONS_MIN_INTERVAL_MS,
 	restoreCheckpoint as applyCheckpointRestore,
 	toCheckpointSummary,
 } from "../rewind/index.ts";
@@ -354,6 +374,28 @@ export class AgentManager {
 	 */
 	private readonly rpcCompactingAgents = new Set<string>();
 	/**
+	 * 用户最近一次主动 abort 的时间戳（abort() 里写入）。
+	 *
+	 * `recentlyAborted` 会在 agent_start/settled 时被清掉，而压缩的取消结果要等
+	 * RPC 返回才到；只靠那个集合会把「自己按停止打断的压缩」误判成扩展接管。
+	 * 这里用时间戳 + 窗口判定（COMPACT_USER_ABORT_WINDOW_MS），不受事件清标影响。
+	 */
+	private readonly lastUserAbortAt = new Map<string, number>();
+	/**
+	 * 每个 agent 最近一次 compaction 的观测（start/end 事件之间的耗时与结果）。
+	 *
+	 * 用途只有一个：手动压缩失败时判定取消来源。pi 的
+	 * 「Compaction cancelled」在「扩展钩子拒绝」与「abort 打断」两条路径上是同一个
+	 * 字符串，唯一的客观差别是——钩子拒绝发生在总结开始前（compaction_start→end
+	 * 几乎无耗时、没有 LLM 调用）。没有这份观测就只能对用户说「取消了」而说不出谁。
+	 */
+	private readonly lastCompactionObservation = new Map<
+		string,
+		{ aborted: boolean; reason?: string; elapsedMs?: number; at: number }
+	>();
+	/** compaction_start 的到达时间（end 到达时算耗时，随即删除）。 */
+	private readonly compactionStartedAt = new Map<string, number>();
+	/**
 	 * pi 的逻辑模型回合边界（agent_start → true，agent_end → false）。
 	 * 与 tab.status 分离：压缩/重试收尾时 runtime 仍 busy，但上一轮回答已经完成。
 	 */
@@ -380,6 +422,12 @@ export class AgentManager {
 			timer: NodeJS.Timeout | null;
 		}
 	>();
+	/**
+	 * checkpoint 裁剪节流（key = `${cwd}:${kind}`，kind = current | old）。
+	 * 2026-09-15 发现：pruneCheckpoints/pruneOldSessions 一直是死代码，本仓库
+	 * refs/pi-checkpoints 积累到 5627 条，`git log --all` 被 73% 的快照噪声占据。
+	 */
+	private readonly rewindPruneAt = new Map<string, number>();
 	/**
 	 * 自动打点健康状态（per 工作目录）：失败态上屏用。
 	 * 此前失败只写日志，用户以为有快照、真要回滚才发现全是空的。
@@ -436,6 +484,24 @@ export class AgentManager {
 	private static readonly ABORT_SETTLED_FALLBACK_MS = 1500;
 	/** abort 升级验证窗口：abort_bash + 二次 abort 后仍 running 则提示用户。 */
 	private static readonly ABORT_ESCALATION_VERIFY_MS = 4000;
+	/**
+	 * 最近一次用户 abort 的时刻（毫秒）。退出处理器用它识别「终止窗口内的进程退出」：
+	 * pi 在处理 abort 时可能自行崩溃（上游 #2716 族：abort 期间 unhandled rejection
+	 * 直接杀 Node 进程，WSL 慢链路下尤甚），此时应按会话文件重连一次保住会话，
+	 * 而不是把会话打成 closed 终态。窗口覆盖 abort settled 之后的收尾期。
+	 */
+	private readonly lastAbortAtByAgent = new Map<string, number>();
+	/** 终止窗口判定时长：覆盖 abort RPC ack（pi 等 idle 才响应）+ settled + 收尾清理。 */
+	private static readonly ABORT_EXIT_REATTACH_WINDOW_MS = 15_000;
+	/**
+	 * 进行中的 abort 升级上下文。pi 的 abort RPC 语义是「中止并等 idle 才响应」，
+	 * ack 迟到是正常路径；升级（补 abort_bash / 二次 abort）必须感知 ack 状态，
+	 * 否则 WSL 慢链路下 1.5s 兜底会对正在收尾的 pi 补刀（老版本 pi 有崩溃史）。
+	 */
+	private readonly pendingAbortEscalations = new Map<
+		string,
+		{ hadActiveTool: boolean; acked: boolean; failed: boolean }
+	>();
 
 	/**
 	 * 待处理的 Extension UI 请求。key 为 agentId，value 为 Map<requestId, { method, title, raisedAt }>。
@@ -816,40 +882,66 @@ export class AgentManager {
 		}
 	}
 
-	/** 回退成功后的系统说明：已禁用扩展，附上可粘贴给 AI 的 stderr。
-	 *  不立即写时间线，等首个 run（用户消息之后）落盘，避免插进历史轮次中间。 */
-	private notifyExtensionFallback(agentId: string, debugDetails?: string): void {
+	/** 回退成功或设置开关生效时的统一说明：已禁用扩展，附上可粘贴给 AI 的 stderr。
+	 *  不立即写时间线，等首个 run（用户消息之后）落盘，避免插进历史轮次中间。
+	 *  设置开关（piRpcNoExtensions）是持续成因：只弹一次 toast，避免每个新会话连发；
+	 *  用户反馈过「设置里一直是禁用扩展启动但没人提示」，能力静默缺失比报错更难发现。 */
+	private notifyExtensionsDisabled(
+		agentId: string,
+		input: { fallbackFromExtensions: boolean; debugDetails?: string },
+	): void {
+		const reason = resolveDisabledExtensionsReason({
+			settingDisabled: Boolean(this.settingsStore.get().piRpcNoExtensions),
+			fallbackFromExtensions: input.fallbackFromExtensions,
+		});
+		if (!reason) return;
+		const copy = resolveDisabledExtensionsCopy(reason);
 		this.queueStartupDiagnostic(agentId, {
 			role: "system",
-			i18nKey: "diagnostic.extensionsDisabledFallback",
-			fallbackText: "扩展加载失败，已禁用扩展运行。可在本会话把下面的错误信息发给 AI，协助排查扩展问题。",
-			options: { debugDetails },
+			i18nKey: copy.diagnosticKey,
+			fallbackText: copy.diagnosticFallback,
+			...(input.debugDetails ? { options: { debugDetails: input.debugDetails } } : {}),
+		});
+		// toast 每个成因每次运行只弹一次：进程自动重连/连续新建会话都会走到这里，重复弹会刷屏。
+		if (this.disabledExtensionsNoticesSent.has(reason)) return;
+		this.disabledExtensionsNoticesSent.add(reason);
+		this.emit(ipcChannels.agentsNotice, {
+			agentId,
+			message: copy.noticeFallback,
+			i18nKey: copy.noticeKey,
+			kind: "warning",
+			duration: copy.noticeDurationMs,
+			...(copy.noticeAction ? { action: copy.noticeAction } : {}),
 		});
 	}
 
+	/** 已弹过的「扩展被禁用」成因（本次运行内）：见 notifyExtensionsDisabled。 */
+	private readonly disabledExtensionsNoticesSent = new Set<DisabledExtensionsReason>();
+
 	/**
-	 * 技能白名单因超出启动参数预算被跳过：告知用户本次「禁用技能」不生效。
-	 * 跳过本身不影响启动，但用户看到「禁用的技能又被加载了」会当成 bug，必须显式说明。
+	 * 某类白名单（扩展/技能/提示词）因超出启动参数预算被跳过：告知用户本次「禁用」不生效。
+	 * 跳过本身不影响启动，但用户看到「禁用的东西又被加载了」会当成 bug，必须显式说明。
+	 * 三类共用同一条命令行预算（见 PiProcess.evaluateWhitelistBudget），可能同时被跳过，
+	 * 因此按条逐条提示，而不是把两种资源揉成一句话。
 	 * 与扩展回退同一条启动期诊断链路（首个 run 时落到时间线），理由见 queueStartupDiagnostic。
 	 */
-	private notifySkillWhitelistSkipped(
-		agentId: string,
-		info: { skills: number; chars: number; budget: number },
-	): void {
-		void this.appLogger?.warn("agent", "Skill whitelist skipped: too many skills for launch args", {
-			agentId,
-			skills: info.skills,
-			estimatedChars: info.chars,
-			budget: info.budget,
-		});
-		this.queueStartupDiagnostic(agentId, {
-			role: "system",
-			i18nKey: "diagnostic.skillWhitelistSkipped",
-			fallbackText:
-				`技能数量过多（${info.skills} 个，约 ${info.chars} 字符，超出启动参数预算 ${info.budget}），` +
-				"已跳过「禁用技能」设置：本次启动由 pi 自动加载全部技能。",
-			options: { params: { count: info.skills, budget: info.budget } },
-		});
+	private notifyWhitelistSkipped(agentId: string, entries: readonly WhitelistSkip[]): void {
+		for (const entry of entries) {
+			const copy = resolveWhitelistSkipCopy(entry);
+			void this.appLogger?.warn("agent", "Whitelist skipped: too many entries for launch args", {
+				agentId,
+				kind: entry.kind,
+				count: entry.count,
+				estimatedChars: entry.chars,
+				budget: entry.budget,
+			});
+			this.queueStartupDiagnostic(agentId, {
+				role: "system",
+				i18nKey: copy.i18nKey,
+				fallbackText: copy.fallbackText,
+				options: { params: { count: entry.count, budget: entry.budget } },
+			});
+		}
 	}
 
 	/** Windows 主进程文件操作必须使用可由 host 访问的路径。 */
@@ -1629,9 +1721,10 @@ export class AgentManager {
 			cwd: diag?.cwd,
 			fallbackFromExtensions,
 		});
-		// 技能白名单因技能太多被跳过：本次 pi 会加载全部技能（禁用不生效），需显式告知用户。
-		if (diag?.skillWhitelistSkipped) {
-			this.notifySkillWhitelistSkipped(id, diag.skillWhitelistSkipped);
+		// 白名单因条数过多被跳过：本次 pi 按默认发现加载全部扩展/技能/提示词（禁用不生效），
+		// 需显式告知用户。
+		if (diag?.whitelistSkipped && diag.whitelistSkipped.length > 0) {
+			this.notifyWhitelistSkipped(id, diag.whitelistSkipped);
 		}
 
 		try {
@@ -1675,9 +1768,10 @@ export class AgentManager {
 			// Agent 可用只依赖 get_state；历史后台加载，加载期间新消息由 preserveMessagesAfter 保护。
 			const historyLoadDecision = this.getHistoryAutoLoadDecision(tab.sessionPath);
 			const preserveMessagesAfter = Date.now();
-			if (fallbackFromExtensions) {
-				this.notifyExtensionFallback(id, handshake.fallbackDebug);
-			}
+			this.notifyExtensionsDisabled(id, {
+				fallbackFromExtensions,
+				debugDetails: handshake.fallbackDebug,
+			});
 			if (tab.sessionPath) {
 				void this.loadMessages(
 					id,
@@ -2147,15 +2241,35 @@ export class AgentManager {
 		// 必须在发送 abort RPC 之前加入集合，避免事件处理函数在 RPC 发出后、
 		// handlePiEvent 返回前收到管道中的旧事件并重建 assistant 消息。
 		this.recentlyAborted.add(agentId);
+		// 两个时间戳语义不同、都要记：
+		// - lastAbortAtByAgent：退出处理器识别「终止窗口内的进程退出」，按会话文件重连而非打成 closed
+		// - lastUserAbortAt：压缩取消时区分「自己打断」与「扩展接管」（resolveCompactCancelMessage）
+		this.lastAbortAtByAgent.set(agentId, Date.now());
+		// pi 的 abort() 内部会 abortCompaction()，故用户打断与压缩取消共用这个时刻。
+		this.lastUserAbortAt.set(agentId, Date.now());
 		this.setAgentTurnActive(agentId, false);
 		// 封印当前 stream generation：比 recentlyAborted 更硬，不依赖 activeAssistantMessageIds 例外条件，
 		// 残留 thinking/text/tool 事件在 abort settled 前一律丢弃。
 		this.sealAgentStream(agentId);
 		this.scheduleAbortSettledFallback(agentId);
 
+		// abort 升级上下文：记录 abort 时是否有工具在执行 + RPC ack 状态。
+		// pi 的 abort RPC 要等会话 idle 才响应，ack 迟到 ≠ 卡死；升级逻辑据此避免补刀。
+		const hadActiveTool = Boolean(
+			this.toolExecutingByAgent.get(agentId) ||
+			(this.activeToolCallsByAgent.get(agentId)?.size ?? 0) > 0,
+		);
+		this.pendingAbortEscalations.set(agentId, { hadActiveTool, acked: false, failed: false });
+
 		runtime.process.client
 			.request({ type: "abort" }, 10_000)
+			.then(() => {
+				const escalation = this.pendingAbortEscalations.get(agentId);
+				if (escalation) escalation.acked = true;
+			})
 			.catch((error) => {
+				const escalation = this.pendingAbortEscalations.get(agentId);
+				if (escalation) escalation.failed = true;
 				// abort 超时或失败不影响前端状态切换，但必须留痕：abort 失败后
 				// pi 可能仍在流式输出而 UI 已显示停止，是排查状态错位的关键线索。
 				void this.appLogger?.warn("agent", "Abort RPC failed", {
@@ -2178,10 +2292,6 @@ export class AgentManager {
 		this.streamingText.delete(agentId);
 		this.lastSentTextByAgent.delete(agentId);
 		this.textPushCountByAgent.delete(agentId);
-		const hadActiveTool = Boolean(
-			this.toolExecutingByAgent.get(agentId) ||
-			(this.activeToolCallsByAgent.get(agentId)?.size ?? 0) > 0,
-		);
 		this.toolMessageIds.delete(agentId);
 		this.activeToolCallsByAgent.delete(agentId);
 		this.toolExecutingByAgent.set(agentId, null);
@@ -2235,6 +2345,14 @@ export class AgentManager {
 			throw new Error("already compacting");
 		}
 
+		// 接管者改写：会话的上下文窗口可能已被扩展独占（它用 session_before_compact
+		// 钩子取消 pi 的压缩）。这时发 compact RPC 注定拿到 Compaction cancelled，
+		// 必须改成它自己的入口（如 Magic Context 的 /ctx-wrapup），否则用户只看到「没反应」。
+		const ownership = await this.resolveSessionCompactionOwnership(runtime);
+		if (ownership && ownership.owners.length > 0) {
+			return await this.routeCompactToOwner(runtime, ownership);
+		}
+
 		// 标记压缩中，退出处理器据此区分压缩重启与异常崩溃
 		this.compactingAgents.add(agentId);
 		// 立即推送 isCompacting=true（getRuntimeState 合并 compactingAgents 集合）：
@@ -2276,12 +2394,19 @@ export class AgentManager {
 		} catch (error) {
 			const errorMsg = error instanceof Error ? error.message : String(error);
 			const processAlive = runtime.process.isRunning();
+			// 取消来源判定必须在这里做（compact 完成后观测就会被下一次压缩覆盖）：
+			// 只有它能让「点了压缩没反应」变成可解释的提示 + 可排查的日志。
+			const cancelSource = processAlive
+				? this.resolveCompactCancelMessage(agentId, errorMsg)
+				: undefined;
 			void this.appLogger?.error("agent", "Compact failed", {
 				agentId,
 				elapsedMs: Date.now() - startTime,
 				error: errorMsg,
 				processAlive,
 				hasSessionPath: !!runtime.tab.sessionPath,
+				...(cancelSource ? { cancelSource } : {}),
+				...this.compactionCancelEvidence(agentId),
 			});
 
 			this.compactingAgents.delete(agentId);
@@ -2307,6 +2432,16 @@ export class AgentManager {
 					agentId,
 					totalElapsedMs: Date.now() - startTime,
 				});
+			} else if (cancelSource) {
+				// 抛带来源的稳定文案：渲染层据此给出「扩展接管 / 被自己打断」的可操作
+				// 提示，而不是原来那条被归成静默的 pi 原文（用户只看到「没反应」）。
+				void this.appLogger?.warn("agent", "Compact cancelled", {
+					agentId,
+					cancelSource,
+					piError: errorMsg,
+					sessionId: runtime.tab.deckSessionId,
+				});
+				throw new Error(cancelSource);
 			} else {
 				// 非退出相关的 RPC 错误，正常抛出
 				throw error;
@@ -2314,6 +2449,168 @@ export class AgentManager {
 		}
 
 		return this.getRuntimeState(agentId);
+	}
+
+	/**
+	 * 判定「手动压缩被取消」的来源，返回 shared/compactFeedback 里的稳定标记文案；
+	 * 判不出来时返回 undefined（原样抛 pi 错误，渲染层归到 cancelled 仍会提示）。
+	 *
+	 * pi 侧同一个 `Compaction cancelled` 有两个来源（agent-session.js）：扩展钩子
+	 * `session_before_compact` 返回 `{cancel:true}`（1507 行）、以及压缩期间被
+	 * `session.abort()` 打断（1537 行）。可用的客观差别只有两个：
+	 *
+	 * 1. 我们自己发过 abort（PiDeck 的停止按钮）→ 是用户自己打断的；
+	 * 2. 钩子拒绝发生在生成摘要**之前**：compaction_start → compaction_end 几乎无耗时
+	 *    （扩展在钩子里直接 return，不会走 LLM 调用）。真正的压缩必然是秒级起步。
+	 *
+	 * 判不出的情况（例如 compaction_end 事件丢了、或别的路径 abort）不硬猜，
+	 * 让渲染层给中性提示，日志里仍有 compactionCancelEvidence 供排查。
+	 */
+	private resolveCompactCancelMessage(
+		agentId: string,
+		errorMessage: string,
+	): string | undefined {
+		if (!/cancel/i.test(errorMessage)) return undefined;
+		const observation = this.lastCompactionObservation.get(agentId);
+		// 观测过期（上次压缩是很久以前）不能用来解释这次取消。
+		const fresh =
+			observation && Date.now() - observation.at <= COMPACT_OBSERVATION_MAX_AGE_MS
+				? observation
+				: undefined;
+		const abortedAt = this.lastUserAbortAt.get(agentId) ?? 0;
+		const referenceAt = fresh?.at ?? Date.now();
+		if (abortedAt > 0 && referenceAt - abortedAt <= COMPACT_USER_ABORT_WINDOW_MS) {
+			return COMPACT_CANCELLED_BY_USER_ABORT;
+		}
+		if (
+			fresh?.aborted === true &&
+			typeof fresh.elapsedMs === "number" &&
+			fresh.elapsedMs <= COMPACT_HOOK_REJECT_MAX_MS
+		) {
+			return COMPACT_CANCELLED_BY_OWNER;
+		}
+		return undefined;
+	}
+
+	/** 压缩取消的排查证据（写进 applog；不改任何状态）。 */
+	private compactionCancelEvidence(agentId: string): Record<string, unknown> {
+		const observation = this.lastCompactionObservation.get(agentId);
+		const abortedAt = this.lastUserAbortAt.get(agentId);
+		return {
+			lastCompactionReason: observation?.reason,
+			lastCompactionAborted: observation?.aborted,
+			lastCompactionElapsedMs: observation?.elapsedMs,
+			userAbortAgoMs: abortedAt ? Date.now() - abortedAt : undefined,
+		};
+	}
+
+	/**
+	 * 探测「这个会话的上下文窗口由谁管」（见 pi/compactionOwner.ts 的背景说明）。
+	 *
+	 * 两层证据：
+	 * 1. 「装了且启用」：用与 spawn 同源的扩展白名单解析（`resolveEnabledExtensionPaths`）——
+	 *    PiDeck 扩展管理里禁用的扩展不会出现在路径集合里，不能按磁盘 packages 判接管；
+	 * 2. 「命令本次可用」：`get_commands` 确认 /ctx-wrapup 已注册（compaction-off 模式 /
+	 *    子会话下 MC 不注册它）。
+	 * 接管开关只能读磁盘配置（pi 没有「列出已加载扩展钩子」的 RPC）。
+	 * 探测本身绝不抛：探测失败按「没有接管者」处理，退回原来的 compact RPC，
+	 * 失败时由 cancel 来源判定兜底提示。
+	 */
+	private async resolveSessionCompactionOwnership(
+		runtime: AgentRuntime,
+	): Promise<PiCompactionOwnership | undefined> {
+		try {
+			const project = runtime.tab.projectId ? this.getProject(runtime.tab.projectId) : undefined;
+			const projectCwd = project?.path;
+			const sessionCommandNames = await this.listRegisteredCommandNames(runtime);
+			// 与 spawn 同源的白名单解析；拿不到项目 cwd 时传 undefined（退回磁盘 packages 推导）
+			const loadedExtensionPaths = projectCwd
+				? createPiProcessExtensionResolvers(projectCwd, this.settingsStore.get())
+					.resolveEnabledExtensionPaths()
+				: undefined;
+			return readPiCompactionOwnership({
+				projectCwd,
+				sessionCommandNames,
+				loadedExtensionPaths,
+			});
+		} catch (error) {
+			void this.appLogger?.warn("agent", "Compaction ownership probe failed", {
+				agentId: runtime.tab.id,
+				error: error instanceof Error ? error.message : String(error),
+			});
+			return undefined;
+		}
+	}
+
+	/**
+	 * 列出 pi 已注册的命令名；探测失败返回 undefined（=「不确定」，不是「没有」）。
+	 * 不区分 extension/prompt/skill 来源：`/ctx-wrapup` 这类接管者命令只可能来自扩展。
+	 */
+	private async listRegisteredCommandNames(runtime: AgentRuntime): Promise<string[] | undefined> {
+		const response = await runtime.process.client
+			.request({ type: "get_commands" }, 10_000)
+			.catch(() => undefined);
+		const commands = (response?.data as { commands?: unknown[] } | undefined)?.commands;
+		if (!Array.isArray(commands)) return undefined;
+		return commands
+			.map((command) =>
+				command && typeof command === "object"
+					? (command as { name?: unknown }).name
+					: undefined,
+			)
+			.filter((name): name is string => typeof name === "string" && name.length > 0);
+	}
+
+	/**
+	 * 上下文窗口被扩展独占时的压缩改写 / 拒绝。
+	 *
+	 * 为什么用 throw 表达「已改写」：compact() 的返回契约是 runtime state，没有
+	 * 「我改用了别的命令」这种位；渲染层本来就把错误文案当分类通道（见
+	 * shared/compactFeedback 的稳定标记），所以这里抛标记而不是伪造成功状态——
+	 * 渲染层因此不会误报「压缩完成」（真正的结果由接管者自己的状态提示给出）。
+	 */
+	private async routeCompactToOwner(
+		runtime: AgentRuntime,
+		ownership: PiCompactionOwnership,
+	): Promise<AgentRuntimeState> {
+		const agentId = runtime.tab.id;
+		const command = ownership.manualCommand;
+		void this.appLogger?.warn("agent", "Compact handled by context owner", {
+			agentId,
+			owners: ownership.owners,
+			conflicted: ownership.conflicted,
+			manualCommand: command,
+			ownerReady: ownership.ownerReady,
+			piAutoCompactionEnabled: ownership.piAutoCompactionEnabled,
+			notes: ownership.notes,
+		});
+
+		if (!command || !ownership.ownerReady) {
+			// 接管者没有自己的手动入口（billion-context）或还没配好（MC 未配 historian 模型）：
+			// 说清原因比静默失败重要——这正是「pi 压不了、它自己也压不了」的状态。
+			throw new Error(
+				`${COMPACT_CANCELLED_BY_OWNER}: ${ownership.notes.join("；") || "该扩展取消了 pi 的压缩"}`,
+			);
+		}
+
+		const startedAt = Date.now();
+		const response = await runtime.process.client
+			.request({ type: "prompt", message: command }, this.settingsStore.get().rpcTimeout)
+			.catch((error) => ({
+				success: false,
+				error: error instanceof Error ? error.message : String(error),
+			}));
+		void this.appLogger?.info("agent", "Compact owner command dispatched", {
+			agentId,
+			command,
+			elapsedMs: Date.now() - startedAt,
+			success: response.success,
+			error: response.success ? undefined : response.error,
+		});
+		if (!response.success) {
+			throw new Error(`${COMPACT_CANCELLED_BY_OWNER}: ${response.error ?? command}`);
+		}
+		throw new Error(`${COMPACT_ROUTED_TO_OWNER}: ${command}`);
 	}
 
 	/**
@@ -2377,9 +2674,10 @@ export class AgentManager {
 
 			// 重连期间用户可能已发送消息（乐观上屏）：必须保护，否则替换投影时未落盘消息丢失
 			await this.loadMessages(agentId, false, undefined, { preserveMessagesAfter: Date.now() }).catch(() => undefined);
-			if (handshake.fallbackFromExtensions) {
-				this.notifyExtensionFallback(agentId, handshake.fallbackDebug);
-			}
+			this.notifyExtensionsDisabled(agentId, {
+				fallbackFromExtensions: handshake.fallbackFromExtensions,
+				debugDetails: handshake.fallbackDebug,
+			});
 
 			void this.appLogger?.info("agent", "Process reattached successfully", {
 				agentId,
@@ -3259,12 +3557,18 @@ export class AgentManager {
 		this.lastSentThinkingByAgent.delete(agentId);
 		this.thinkingPushCountByAgent.delete(agentId);
 		this.rpcCompactingAgents.delete(agentId);
+		// 取消来源判定用的运行期观测随生命周期清理（agentId 每次 spawn 都是新 UUID）
+		this.lastUserAbortAt.delete(agentId);
+		this.lastCompactionObservation.delete(agentId);
+		this.compactionStartedAt.delete(agentId);
 		this.agentTurnActiveById.delete(agentId);
 		this.autoRestartAttempted.delete(agentId);
 		this.messagePerfByAgent.delete(agentId);
 		this.lastPerfByAgent.delete(agentId);
 		this.notifiedAskAgents.delete(agentId);
 		this.abortedDuringAsk.delete(agentId);
+		this.pendingAbortEscalations.delete(agentId);
+		this.lastAbortAtByAgent.delete(agentId);
 		this.pendingUIRequests.delete(agentId);
 		this.startupHandshakeAgents.delete(agentId);
 		// 启动期诊断与首 run 标记随生命周期清理：重启/关闭后新 runtime 重新队列
@@ -3720,6 +4024,78 @@ export class AgentManager {
 		}
 	}
 
+	/**
+	 * 打点成功后裁剪当前会话 checkpoint（保留 DEFAULT_MAX_CHECKPOINTS 个）。
+	 * 节流：每仓库至少间隔 PRUNE_CURRENT_MIN_INTERVAL_MS——prune 要全量扫 refs，
+	 * 不必跟着每次打点跑；60s 一次足够把超限部分削掉。
+	 */
+	private maybePruneCurrentSessionCheckpoints(root: string, sessionId: string): void {
+		const now = Date.now();
+		const key = `${root}\u0000current`;
+		const last = this.rewindPruneAt.get(key) ?? 0;
+		if (now - last < PRUNE_CURRENT_MIN_INTERVAL_MS) return;
+		this.rewindPruneAt.set(key, now);
+		void pruneCheckpoints(root, sessionId)
+			.then((deleted) => {
+				if (deleted > 0) {
+					void this.appLogger?.info("rewind", "pruned checkpoints for session", {
+						root,
+						sessionId,
+						deleted,
+					});
+				}
+			})
+			.catch((error: unknown) => {
+				this.appLogger?.warn("rewind", "checkpoint prune failed", {
+					root,
+					sessionId,
+					error: error instanceof Error ? error.message : String(error),
+				});
+			});
+	}
+
+	/**
+	 * 会话首轮 run 时清理非活跃会话的 checkpoint（keepPerOldSession=0，设计默认）。
+	 * keep 集合 = 同仓库当前所有活跃 agent 的 sessionId，并发会话互不误删；
+	 * 首次触发会顺带消化历史积压（本仓库实测 5627 条 ref）。
+	 * 节流：每仓库至少间隔 PRUNE_OLD_SESSIONS_MIN_INTERVAL_MS。
+	 */
+	private maybePruneOldSessionCheckpoints(root: string, sessionId: string): void {
+		const now = Date.now();
+		const key = `${root}\u0000old`;
+		const last = this.rewindPruneAt.get(key) ?? 0;
+		if (now - last < PRUNE_OLD_SESSIONS_MIN_INTERVAL_MS) return;
+		this.rewindPruneAt.set(key, now);
+		const keep = this.activeSessionIdsForRoot(root);
+		void pruneOldSessions(root, keep)
+			.then((deleted) => {
+				if (deleted > 0) {
+					void this.appLogger?.info("rewind", "pruned checkpoints of inactive sessions", {
+						root,
+						kept: keep.length,
+						deleted,
+					});
+				}
+			})
+			.catch((error: unknown) => {
+				this.appLogger?.warn("rewind", "old session checkpoint prune failed", {
+					root,
+					error: error instanceof Error ? error.message : String(error),
+				});
+			});
+	}
+
+	/** 同仓库当前所有活跃 agent 的 sessionId（pruneOldSessions 的 keep 集合）。 */
+	private activeSessionIdsForRoot(root: string): string[] {
+		const ids = new Set<string>();
+		for (const runtime of this.agents.values()) {
+			if (runtime?.tab.cwd === root && runtime.tab.sessionId) {
+				ids.add(runtime.tab.sessionId);
+			}
+		}
+		return [...ids];
+	}
+
 	/** 更新工作目录的打点健康状态（成功清零；失败累计并保留最近原因）。 */
 	private recordRewindHealth(root: string, error: unknown): void {
 		const health =
@@ -3815,6 +4191,27 @@ export class AgentManager {
 	/** 查询某 agent 是否开启了 RPC 日志记录 */
 	isRpcLogging(agentId: string): boolean {
 		return this.rpcLoggingAgents.has(agentId);
+	}
+
+	/**
+	 * error 终态但 pi 进程仍存活时的原进程复活（Issue #218）。
+	 * 回复级错误（API 400/模型报错/prompt 投递未知）只结束本轮回复，进程本身没死；
+	 * 此前被标成终态 error 后，下次激活要么抛「启动失败」、要么停掉活进程重建——
+	 * 重建在扩展有问题时还会触发无插件回退，用户体感是「出错后会话被自动关闭」。
+	 * 复活只翻状态（error → idle），错误卡片保留在时间线里，进程与内存消息原样复用。
+	 */
+	reviveIfProcessAlive(agentId: string): boolean {
+		const runtime = this.agents.get(agentId);
+		if (!runtime) return false;
+		if (runtime.tab.status !== "error") return false;
+		if (!runtime.process.isRunning()) return false;
+		runtime.tab.status = "idle";
+		this.emitState();
+		void this.appLogger?.info("agent", "Error-state agent revived with live process", {
+			agentId,
+			sessionPath: runtime.tab.sessionPath,
+		});
+		return true;
 	}
 
 	async stop(agentId: string) {
@@ -4113,6 +4510,53 @@ export class AgentManager {
 			});
 			return;
 		}
+		// 终止窗口内的意外退出（Issue #218 WSL）：pi 在处理 abort 时可能自行崩溃
+		// （上游 #2716 族：abort 期间 unhandled rejection 直接杀 Node 进程），且任何
+		// 退出码都可能。此时不把会话打成 closed 终态，而是按会话文件重连一次，
+		// 保住会话可用性——用户只是终止了一条回复，不该丢掉整个会话。
+		const lastAbortAt = this.lastAbortAtByAgent.get(agentId);
+		const withinAbortWindow =
+			lastAbortAt !== undefined &&
+			Date.now() - lastAbortAt < AgentManager.ABORT_EXIT_REATTACH_WINDOW_MS;
+		if (withinAbortWindow && !this.autoRestartAttempted.has(agentId) && tab.sessionPath) {
+			this.autoRestartAttempted.add(agentId);
+			tab.status = "starting";
+			this.emitState();
+			void this.appLogger?.warn("agent", "Agent exited during abort window; reattaching session", {
+				agentId,
+				code: payload.code,
+				signal: payload.signal,
+				sessionPath: tab.sessionPath,
+			});
+			this.reattachProcess(agentId, tab.sessionPath)
+				.then(() => {
+					tab.status = "idle";
+					this.addLocalizedMessage(
+						agentId,
+						"system",
+						"diagnostic.abortReconnected",
+						"终止后进程异常退出，会话已自动恢复",
+					);
+					this.emitState();
+				})
+				.catch(() => {
+					tab.status = "closed";
+					void this.appLogger?.error("agent", "Agent reattach after abort-window exit failed", {
+						agentId,
+						code: payload.code,
+						sessionPath: tab.sessionPath,
+					});
+					this.addLocalizedMessage(
+						agentId,
+						"error",
+						"diagnostic.processReconnectFailed",
+						"Agent 进程意外退出，自动重连失败",
+					);
+					this.clearAgentState(agentId);
+					this.emitState();
+				});
+			return;
+		}
 		// 自动压缩 / 进程干净退出（exit code 0）且有会话路径 → 尝试一次自动重连
 		if (!this.autoRestartAttempted.has(agentId) && tab.sessionPath && payload.code === 0) {
 			this.autoRestartAttempted.add(agentId);
@@ -4188,6 +4632,52 @@ export class AgentManager {
 				code: payload.code,
 				signal: payload.signal,
 			});
+			return;
+		}
+		// 终止窗口内的意外退出（Issue #218 WSL）：与 create 路径同款处理，
+		// pi 在 abort 处理中崩溃时按会话文件重连一次，而不是把会话打成 closed。
+		const lastAbortAt = this.lastAbortAtByAgent.get(agentId);
+		const withinAbortWindow =
+			lastAbortAt !== undefined &&
+			Date.now() - lastAbortAt < AgentManager.ABORT_EXIT_REATTACH_WINDOW_MS;
+		if (withinAbortWindow && !this.autoRestartAttempted.has(agentId) && runtime.tab.sessionPath) {
+			this.autoRestartAttempted.add(agentId);
+			runtime.tab.status = "starting";
+			this.emitState();
+			void this.appLogger?.warn("agent", "Agent exited during abort window; reattaching session (reattach path)", {
+				agentId,
+				code: payload.code,
+				signal: payload.signal,
+				sessionPath: runtime.tab.sessionPath,
+			});
+			this.reattachProcess(agentId, runtime.tab.sessionPath)
+				.then(() => {
+					runtime.tab.status = "idle";
+					this.addLocalizedMessage(
+						agentId,
+						"system",
+						"diagnostic.abortReconnected",
+						"终止后进程异常退出，会话已自动恢复",
+					);
+					this.emitState();
+				})
+				.catch(() => {
+					runtime.tab.status = "closed";
+					this.addLocalizedMessage(
+						agentId,
+						"error",
+						"diagnostic.processReconnectFailed",
+						"Agent 进程意外退出，自动重连失败",
+					);
+					void this.appLogger?.error("agent", "Agent reattach after abort-window exit failed (reattach path)", {
+						agentId,
+						code: payload.code,
+						signal: payload.signal,
+						sessionPath: runtime.tab.sessionPath,
+					});
+					this.clearAgentState(agentId);
+					this.emitState();
+				});
 			return;
 		}
 		// 自动压缩也可能发生在重连后的进程中；继续复用同一会话文件重附加，
@@ -4304,13 +4794,17 @@ export class AgentManager {
 			// 桌面端已自动隔离的扩展（如 codeisland），方便用户对照「为何 RPC 没加载该扩展」。
 			lines.push(`已自动隔离扩展: ${diag.blockedExtensions.join(", ")}`);
 		}
-		if (diag.skillWhitelistSkipped) {
-			// 技能数超命令行预算 → 本次未注入 --no-skills/--skill，pi 加载了全部技能。
-			// 排查「禁用技能为何无效」时这条是关键上下文。
-			lines.push(
-				`技能白名单: 已跳过（${diag.skillWhitelistSkipped.skills} 个技能 ≈ ${diag.skillWhitelistSkipped.chars} 字符，` +
-					`超出预算 ${diag.skillWhitelistSkipped.budget}）→ 本次「禁用技能」不生效`,
-			);
+		if (diag.whitelistSkipped && diag.whitelistSkipped.length > 0) {
+			// 白名单条数超命令行预算 → 本次未注入 --no-extensions/--no-skills/--no-prompt-templates，
+			// pi 按默认发现加载了全部资源，对应「禁用」在本会话不生效。
+			// 排查「禁用为何无效」时这条是关键上下文。
+			const skipped = diag.whitelistSkipped
+				.map((entry) => {
+					const meta = WHITELIST_SKIP_KIND_COPY[entry.kind];
+					return `${meta.label} ${entry.count} 个（≈ ${entry.chars} 字符 / 预算 ${entry.budget}）`;
+				})
+				.join("、");
+			lines.push(`白名单注入: 已跳过 ${skipped} → 本次「禁用」不生效`);
 		}
 		lines.push("");
 		lines.push("━━━ 排查步骤 ━━━");
@@ -4418,11 +4912,18 @@ export class AgentManager {
 			// 1) 清理 recentlyAborted，允许状态机恢复 running
 			// 2) 推进 stream generation，解封流式闸门（唯一合法解封点）
 			this.recentlyAborted.delete(agentId);
+			// 上一轮的 abort 升级上下文随之作废（新一轮 run 与上次终止无关）
+			this.pendingAbortEscalations.delete(agentId);
 			this.notifiedAskAgents.delete(agentId);
 			this.openAgentStream(agentId);
 			this.setAgentTurnActive(agentId, true);
 			// rewind 回合计数：每轮 run 递增一次，供文件自动打点标记 turnIndex。
 			this.bumpRewindTurn(agentId);
+			// 首轮 run 顺带清理非活跃会话的 checkpoint（fire-and-forget，
+			// keep 集合含当前会话，并发会话不误删；节流见方法内注释）。
+			if (runtime.tab.cwd && runtime.tab.sessionId) {
+				this.maybePruneOldSessionCheckpoints(runtime.tab.cwd, runtime.tab.sessionId);
+			}
 			runtime.tab.status = "running";
 			this.activeAssistantMessageIds.delete(agentId);
 			this.toolMessageIds.delete(agentId);
@@ -4493,6 +4994,10 @@ export class AgentManager {
 		// 用于记录压缩耗时和结果，便于排查压缩性能问题。
 		if (typed.type === "compaction_start") {
 			this.rpcCompactingAgents.add(agentId);
+			// 记开始时间：结束后算耗时，用于判定「钩子在总结前拒绝」（见
+			// resolveCompactCancelMessage）。start 可能连发（自动重试多段压缩），
+			// 以最后一次为准。
+			this.compactionStartedAt.set(agentId, Date.now());
 			// 用户已主动中止或出错时不重新激活 running 状态
 			if (runtime && !this.recentlyAborted.has(agentId) && runtime.tab.status !== "error") {
 				// 自动压缩在 agent_end 之后触发：Pi 仍在改写上下文，但不会再发 agent_start。
@@ -4508,6 +5013,17 @@ export class AgentManager {
 		}
 		if (typed.type === "compaction_end") {
 			this.rpcCompactingAgents.delete(agentId);
+			// 观测留给 compact() 的失败分支做来源判定：同一个 "Compaction cancelled"
+			// 到底是「扩展钩子拒绝」还是「abort 打断」，唯一客观线索就是这段耗时。
+			const startedAt = this.compactionStartedAt.get(agentId);
+			this.compactionStartedAt.delete(agentId);
+			const elapsedMs = startedAt ? Date.now() - startedAt : undefined;
+			this.lastCompactionObservation.set(agentId, {
+				aborted: typed.aborted === true,
+				reason: typeof typed.reason === "string" ? typed.reason : undefined,
+				elapsedMs,
+				at: Date.now(),
+			});
 			if (runtime) {
 				// compaction 成功时才会向 session JSONL 写入新的边界记录；只有此时才需要重载，
 				// 否则前端仍展示压缩前分支，下一轮继续对话时看起来像“断在旧会话”。
@@ -4541,6 +5057,8 @@ export class AgentManager {
 				aborted: typed.aborted,
 				willRetry: typed.willRetry,
 				errorMessage: typed.errorMessage,
+				// 耗时是区分「扩展钩子拒绝」（毫秒级）与「真实压缩」的关键字段。
+				elapsedMs,
 			});
 		}
 
@@ -4587,6 +5105,12 @@ export class AgentManager {
 				(typeof contentError?.message === "string"
 					? contentError.message
 					: undefined);
+			// 用户主动 abort 的回合偶发携带错误文本（工具被 abort_bash 杀掉、abort 与
+			// 工具事件交错等）：终止不应该把仍存活的进程标成终态 error，否则下次激活
+			// 会被当成启动失败或杀掉重建（Issue #218「终止恢复有些特殊情况进程被杀掉」）。
+			// 错误卡片照常保留，状态交给 agent_settled 收敛回 idle。
+			const abortedTurn =
+				typed.stopReason === "aborted" || this.recentlyAborted.has(agentId);
 			if (typed.willRetry === true) {
 				// agent_end.willRetry 表示 pi 已判定本次错误会进入自动重试；
 				// 此时不写入最终错误，避免用户误以为会话已经失败。
@@ -4607,8 +5131,9 @@ export class AgentManager {
 			} else if (errorMsg) {
 				this.addDetailedErrorMessage(agentId, String(errorMsg));
 				// 有错误且不会重试 → Agent 进入 error 态，宠物聚合为 failed（行5），
-				// 否则会被误置为 idle 触发"所有任务完成"通知
-				if (runtime) runtime.tab.status = "error";
+				// 否则会被误置为 idle 触发"所有任务完成"通知。
+				// 例外：用户主动 abort 的回合不置终态（进程还活着，见上方 abortedTurn 注释）。
+				if (runtime && !abortedTurn) runtime.tab.status = "error";
 				// agent_end 携带错误且不重试：错误原文（API 400/模型报错等）必须进 applog，
 				// 会话气泡只面向用户，排查时依赖这里的结构化记录。
 				void this.appLogger?.error("agent", "Agent run ended with error", {
@@ -4621,7 +5146,8 @@ export class AgentManager {
 				errorMessages.length > 0
 			) {
 				this.addDetailedErrorMessage(agentId);
-				if (runtime) runtime.tab.status = "error";
+				// 与上一分支同款 abort 例外：终止回合不把活进程标成终态。
+				if (runtime && !abortedTurn) runtime.tab.status = "error";
 				// 与上一分支同款留痕：无显式错误文本时也记下 stopReason 与最后一条
 				// error 消息的 errorMessage，避免「会话失败但原因未知」完全不可追溯。
 				void this.appLogger?.error("agent", "Agent run ended with error", {
@@ -6299,10 +6825,17 @@ export class AgentManager {
 	}
 
 	/**
-	 * abort 升级：兜底窗口已过但 pi 仍在流式/执行，补发专用命令并验证。
-	 * - abort_bash：pi 提供的杀 bash 进程树命令（RPC abort 不覆盖 bash 阻塞场景）
-	 * - 二次 abort：覆盖 abort 事件与工具事件交错时被丢弃的竞态
-	 * - 仍未停止则通过 notice 明确告知用户（stop 慢是可见问题，不能只写日志）
+	 * abort 升级：兜底窗口已过但 pi 仍在流式/执行，按 ack 状态决定是否补命令。
+	 * pi 的 abort RPC 语义是「中止当前操作并等到会话空闲才响应」（上游 rpc.md），
+	 * 因此 ack 迟到是正常路径，不代表卡死；对正在收尾 abort 的 pi 补二次中止，
+	 * 在老版本 pi 上有 unhandled rejection 直接杀进程的崩溃史（上游 #2716），
+	 * WSL 慢链路下 1.5s 兜底几乎必误触发（Issue #218 WSL 终止必挂）。
+	 *
+	 * 策略：
+	 * - bash 工具确实在执行 → 补 abort_bash（升级的本意：解卡被 bash 阻塞的 abort）；
+	 * - abort RPC 已失败/超时（pi 可能没收到）→ 补二次 abort；
+	 * - 其余（ack pending / acked 且无工具）→ 不补刀，等 pi 自然 settle。
+	 * - 仍卡死则通过 notice 明确告知用户（stop 慢是可见问题，不能只写日志）
 	 */
 	private async escalateAbortIfStillRunning(agentId: string) {
 		const runtime = this.agents.get(agentId);
@@ -6315,15 +6848,32 @@ export class AgentManager {
 				response?.success &&
 				Boolean((response.data as { isStreaming?: boolean } | undefined)?.isStreaming);
 			if (!isStreaming) return; // pi 已停，无需升级
+			const escalation = this.pendingAbortEscalations.get(agentId);
+			const shouldSendAbortBash = escalation?.hadActiveTool === true;
+			const shouldResendAbort = !escalation || escalation.failed;
+			if (!shouldSendAbortBash && !shouldResendAbort) {
+				// ack pending / acked 且无工具在跑：pi 正在按语义收敛到 idle，不补刀。
+				void this.appLogger?.info("agent", "Abort escalation skipped: abort RPC ack pending/acked, waiting for idle", {
+					agentId,
+					acked: escalation?.acked === true,
+				});
+				return;
+			}
 			void this.appLogger?.warn("agent", "Abort escalation: pi still streaming after abort", {
 				agentId,
+				abortBash: shouldSendAbortBash,
+				resendAbort: shouldResendAbort,
 			});
-			await runtime.process.client
-				.request({ type: "abort_bash" }, 5_000)
-				.catch(() => undefined);
-			await runtime.process.client
-				.request({ type: "abort" }, 5_000)
-				.catch(() => undefined);
+			if (shouldSendAbortBash) {
+				await runtime.process.client
+					.request({ type: "abort_bash" }, 5_000)
+					.catch(() => undefined);
+			}
+			if (shouldResendAbort) {
+				await runtime.process.client
+					.request({ type: "abort" }, 5_000)
+					.catch(() => undefined);
+			}
 			// 第二轮验证：仍未停则通知用户，提示可重启会话。
 			const verifyTimer = setTimeout(() => {
 				void this.appLogger?.warn("agent", "Abort escalation: still running after second attempt", {

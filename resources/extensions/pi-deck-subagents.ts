@@ -497,6 +497,49 @@ export default function piDeckSubagentsBridge(pi: any): void {
 		if (savedCtx) schedulePush(savedCtx);
 	});
 
+	/**
+	 * 会话关闭（pi 在 /new、resume、fork、quit 时触发 session_shutdown）：
+	 * 给仍在 running/queued 的条目补一条终态 record。
+	 *
+	 * 为什么需要：子代理 runner 是 pi 的子进程，会话关闭后旧会话文件里永远停在
+	 * running——后续终态通知属于新会话文件，旧文件再也等不到写入，面板就一直显示
+	 * 「运行中」、时长无限增长（用户实测几千分钟）。这里按关闭时刻补 stopped；
+	 * 读取侧按 offset「后写覆盖先写」，若 runner 事后真的完成了，插件的终态 record
+	 * 会盖过这条近似值。
+	 *
+	 * appendEntry 必须容错：teardown 阶段会话已在收尾，落盘失败只是少一条审计
+	 * 记录，不能让异常冒泡打断 pi 的会话切换。
+	 */
+	pi.on("session_shutdown", (_event: unknown, ctx?: any) => {
+		if (ctx) savedCtx = ctx;
+		if (debounceTimer !== null) {
+			clearTimeout(debounceTimer);
+			debounceTimer = null;
+		}
+		const closedAt = Date.now();
+		// 先收集再改写：同一进程内切回该会话（resume）时快照也必须是终态，
+		// 否则面板会凭内存快照把已关闭的条目重新报成 running。
+		const inflight = Array.from(snapshot.values()).filter(
+			(entry) => entry.status === "running" || entry.status === "queued",
+		);
+		for (const entry of inflight) {
+			try {
+				pi.appendEntry(RECORD_ENTRY_TYPE, {
+					id: entry.id,
+					type: entry.type,
+					description: entry.description,
+					status: "stopped",
+					startedAt: entry.startedAt,
+					completedAt: closedAt,
+					via: entry.via,
+				});
+			} catch {
+				// 落盘失败仅损失审计记录，不影响 pi 的会话切换
+			}
+			snapshot.set(entry.id, { ...entry, status: "stopped", completedAt: closedAt });
+		}
+	});
+
 	pi.on("session_start", (_event: unknown, ctx: any) => {
 		// 重置快照（新会话开始，无存活后台代理）。
 		// pluginActive 不重置：一个 pi 进程对应一个会话，插件加载状态进程级不变；

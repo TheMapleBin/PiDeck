@@ -129,8 +129,8 @@ let previewSettings: AppSettings = {
 	closeToTray: true,
 	singleInstance: true,
 	enableNotifications: true,
-	// 与主进程 SettingsStore 默认一致：首轮完成后由内置扩展异步生成标题
-	autoSessionTitle: true,
+	// 与主进程 SettingsStore 默认一致：标题生成默认关闭，避免预览壳与真实设置产生分歧
+	autoSessionTitle: false,
 	// Ask 提问系统通知默认关闭：与主进程 SettingsStore 默认一致
 	askNotificationEnabled: false,
 	// 人文关怀提醒开关：与主进程 SettingsStore 默认值保持一致（预览 mock 需覆盖 AppSettings 全部必填字段）
@@ -435,6 +435,8 @@ export function createPreviewApi(): PiDesktopApi {
 			readContent: async () => "",
 			// 预览模式无法 stat 真实磁盘：返回空数组，校验方按「未知」处理维持链接现状
 			pathsExist: async () => [],
+			// 预览模式无主进程：按「不存在」处理，链接点击走「路径不存在」提示
+			stat: async () => ({ exists: false, isDirectory: false }),
 			readBase64: async () => "",
 			create: async () => "/mock/created",
 			writeContent: async () => undefined,

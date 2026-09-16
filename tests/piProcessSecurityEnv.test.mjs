@@ -266,7 +266,7 @@ test("存在禁用技能时注入 --no-skills + 逐条 --skill 白名单", async
 	assert.equal(captured.args[idx + 3], "--skill");
 	assert.equal(captured.args[idx + 4], "/mnt/c/Users/tester/skills/b/SKILL.md");
 	// 预算内的少量注入不记录跳过信息（UI 不该打扰用户）
-	assert.equal(proc.getDiagnostics()?.skillWhitelistSkipped, undefined);
+	assert.equal(proc.getDiagnostics()?.whitelistSkipped, undefined);
 });
 
 test("技能数量超出启动通道的命令行预算时整体跳过白名单注入，并在诊断中记录", async () => {
@@ -293,9 +293,9 @@ test("技能数量超出启动通道的命令行预算时整体跳过白名单�
 	assert.ok(!captured.args.includes("--no-skills"), "超预算时不应注入 --no-skills");
 	assert.ok(!captured.args.includes("--skill"), "超预算时不应注入 --skill");
 
-	const skipped = proc.getDiagnostics()?.skillWhitelistSkipped;
-	assert.ok(skipped, "应记录 skillWhitelistSkipped 供启动诊断提示用户");
-	assert.equal(skipped.skills, 500);
+	const skipped = proc.getDiagnostics()?.whitelistSkipped?.find((entry) => entry.kind === "skills");
+	assert.ok(skipped, "应记录 whitelistSkipped(skills) 供启动诊断提示用户");
+	assert.equal(skipped.count, 500);
 	assert.equal(skipped.budget, 26000, "诊断应带上本次通道的实际预算");
 	assert.ok(skipped.chars > skipped.budget, "估算字符数应超过预算");
 });
@@ -327,10 +327,74 @@ test("数百个技能在 node 直启通道下不再被误拦（旧的一刀切 5
 		"300 个技能应逐条注入（禁用功能保持生效）",
 	);
 	assert.equal(
-		proc.getDiagnostics()?.skillWhitelistSkipped,
+		proc.getDiagnostics()?.whitelistSkipped,
 		undefined,
 		"预算内不得记录跳过信息（否则会误报给用户）",
 	);
+});
+
+test("扩展数量超出命令行预算时同样整体跳过白名单注入", async () => {
+	// 回归：预算守卫最初只覆盖技能，扩展/提示词漏在外面——逐条 --extension 的注入量与
+	// 技能同阶（命令行长度 O(条数)），漏守卫就会撑爆 Windows 命令行导致启动失败。
+	const { PiProcess, mockLocator, getCaptured } = loadPiProcess();
+	const manyExtensions = Array.from({ length: 600 }, (_, i) =>
+		`C:\\Users\\tester\\.pi\\agent\\extensions\\extension-${String(i).padStart(3, "0")}.ts`);
+
+	const proc = new PiProcess(
+		"C:\\proj",
+		{ wslEnabled: true, wslDistro: "Ubuntu-24.04", wslUser: "root" },
+		mockLocator,
+		{
+			resolveEnabledExtensionPaths: () => manyExtensions,
+			resolveBuiltInExtensionPaths: () => ["C:\\app\\resources\\extensions\\pi-deck-todo.ts"],
+			securitySnapshotPath: "C:\\Users\\tester\\AppData\\Roaming\\PiDeck-dev\\security-policy.json",
+		},
+	);
+	await proc.start(undefined, undefined, true);
+	const captured = getCaptured();
+	assert.ok(captured?.args, "spawn 应被调用");
+	assert.ok(!captured.args.includes("--no-extensions"), "超预算时不应注入 --no-extensions");
+	assert.ok(!captured.args.includes("--extension"), "超预算时不应注入 --extension");
+
+	const skipped = proc.getDiagnostics()?.whitelistSkipped?.find((entry) => entry.kind === "extensions");
+	assert.ok(skipped, "应记录 extensions 的跳过信息（不清空禁用，但必须可追溯）");
+	assert.equal(skipped.count, 600);
+	assert.equal(skipped.budget, 26000);
+	assert.ok(skipped.chars > skipped.budget);
+});
+
+test("提示词模板数量超出命令行预算时同样整体跳过白名单注入，且与技能跳过分开记录", async () => {
+	// 三类白名单共用同一条命令行预算，可同时被跳过；诊断必须逐类记录，
+	// 否则用户只能看到「技能被跳过」而不知提示词也没生效。
+	const { PiProcess, mockLocator, getCaptured } = loadPiProcess();
+	const manyPrompts = Array.from({ length: 400 }, (_, i) =>
+		`C:\\Users\\tester\\.pi\\agent\\prompts\\prompt-${String(i).padStart(3, "0")}.md`);
+	const manySkills = Array.from({ length: 900 }, (_, i) =>
+		`C:\\Users\\tester\\.pi\\agent\\skills\\skill-${String(i).padStart(3, "0")}\\SKILL.md`);
+
+	const proc = new PiProcess(
+		"C:\\proj",
+		{ wslEnabled: true, wslDistro: "Ubuntu-24.04", wslUser: "root" },
+		mockLocator,
+		{
+			resolveEnabledSkillPaths: () => manySkills,
+			resolveEnabledPromptPaths: () => manyPrompts,
+			securitySnapshotPath: "C:\\Users\\tester\\AppData\\Roaming\\PiDeck-dev\\security-policy.json",
+		},
+	);
+	await proc.start(undefined, undefined, true);
+	const captured = getCaptured();
+	assert.ok(captured?.args, "spawn 应被调用");
+	assert.ok(!captured.args.includes("--no-prompt-templates"), "超预算时不应注入 --no-prompt-templates");
+	assert.ok(!captured.args.includes("--prompt-template"), "超预算时不应注入 --prompt-template");
+
+	// 用本 realm 的 Array.from 重建：whitelistSkipped 是 vm 沙箱数组，跨 realm 直接
+	// deepEqual 会因原型不同而失败（内容一样也报错）。
+	const kinds = Array.from(
+		proc.getDiagnostics()?.whitelistSkipped ?? [],
+		(entry) => entry.kind,
+	).sort();
+	assert.deepEqual(kinds, ["prompts", "skills"], "两类超预算应各记一条，不互相遮蔽");
 });
 
 test("WSL 家目录的 --skill 白名单路径（UNC）转换为 distro 内 Linux 路径", async () => {

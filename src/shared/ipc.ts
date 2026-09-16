@@ -39,6 +39,8 @@ export const ipcChannels = {
 	filesReadContent: "files:read-content",
 	/** 批量校验路径是否存在（fs.stat）：AI 回复内文件链接的存在性判定用 */
 	filesPathsExist: "files:paths-exist",
+	/** 单路径 stat（存在性 + 是否目录）：会话内文件链接点击路由用（目录 → 资源管理器打开） */
+	filesStat: "files:stat",
 	filesWriteContent: "files:write-content",
 	filesCreate: "files:create",
 	filesDelete: "files:delete",

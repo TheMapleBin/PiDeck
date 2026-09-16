@@ -289,14 +289,19 @@ export function mergeSubagentSources(
 }
 
 /**
- * 无活 runtime 时清理推导条目残留的 running：终态通知没写进文件（进程被杀/崩溃）
- * 的委托在会话文件里永远是 running，历史会话里会误导为仍在运行。降级为 stopped，
- * 与 start 锚点残留合成 stopped 同语义；活会话保持 running（后续通知/桥接会覆盖）。
+ * 无活 runtime 时清理残留的 running/queued：子代理是 pi 的子进程，没有活 runtime
+ * 就没有可以被协调的子代理——终态通知没写进文件（进程被杀/崩溃）的委托在会话文件里
+ * 永远是 running，历史会话里会误导为仍在运行。降级为 stopped，与 start 锚点残留
+ * 合成 stopped 同语义；活会话保持 running（后续通知/桥接会覆盖）。
+ *
+ * 覆盖面必须包含全部三源（record / bridge / toolcall）：只处理 toolcall 时，会话文件
+ * 里 record 残留的 running 会在历史视图里永久亮着「运行中」（用户实测：父会话早已
+ * 结束，面板仍显示子代理在跑）。
  */
 export function downgradeStaleRunning(entries: PiSubagentEntry[]): PiSubagentEntry[] {
 	let changed = false;
 	const next = entries.map((entry) => {
-		if (entry.source === "toolcall" && (entry.status === "running" || entry.status === "queued")) {
+		if (entry.status === "running" || entry.status === "queued") {
 			changed = true;
 			return { ...entry, status: "stopped" as const };
 		}

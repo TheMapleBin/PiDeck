@@ -183,12 +183,23 @@ function BatchAskInlineBar(props: {
 				notifyAskExpanded(props.onExpandedChange, next);
 			}}
 			title={formatAskTitle(props.request.title || t("ask.batchTitle", { count: total }))}
-			description={t("ask.batchProgress", { done: answeredCount, total })}
+			status={t("ask.batchProgress", { done: answeredCount, total })}
+			statusTone={allAnswered ? "success" : "active"}
 			onCancel={props.onCancel}
 			cancelDisabled={props.responding}
 			cancelLabel={t("common.close")}
 			className="ask-inline-bar ask-inline-bar--active w-full"
 		>
+			<div className="mb-2 flex min-w-0 items-center gap-2" aria-label={t("ask.batchProgress", { done: answeredCount, total })}>
+				<div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-bg-muted" role="progressbar" aria-valuemin={0} aria-valuemax={total} aria-valuenow={answeredCount}>
+					<div
+						className="h-full rounded-full bg-[var(--color-success)] transition-[width] duration-200"
+						style={{ width: `${total > 0 ? (answeredCount / total) * 100 : 0}%` }}
+					/>
+				</div>
+				<span className="shrink-0 text-micro font-medium text-text-secondary">{t("ask.batchProgress", { done: answeredCount, total })}</span>
+			</div>
+
 			<div className="mb-1 flex min-w-0 gap-1 overflow-x-auto border-b border-border-subtle pb-1" role="tablist">
 				{questions.map((question, index) => {
 					const answered = isBatchAnswered(answers[question.id]);
@@ -253,7 +264,8 @@ function BatchAskInlineBar(props: {
 							<div className="rounded-sm bg-[color:color-mix(in_srgb,var(--color-warning)_10%,transparent)] p-2 text-caption text-[var(--color-warning)]">{t("ask.batchIncomplete")}</div>
 						) : null}
 						<Button
-														variant="default"
+							className="w-full"
+							variant="default"
 							disabled={!allAnswered || props.responding}
 							onClick={submitAnswers}
 						>
@@ -509,8 +521,10 @@ function BatchQuestion(props: {
 								}
 							}}
 						/>
+						{/* 纯输入题的按钮与输入框并排；不能使用 w-full，否则 Button 的 shrink-0 会把输入框压成窄条。 */}
 						<Button
-														variant="default"
+							className="shrink-0"
+							variant="default"
 							disabled={props.responding || !props.inputValue.trim()}
 							onClick={props.onSubmitInput}
 						>

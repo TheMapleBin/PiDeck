@@ -136,6 +136,13 @@ export class CompositeAgentGateway implements SessionAgentGateway {
 		return this.owner(agentId).getRuntimeState(agentId);
 	}
 
+	/** 可选能力转发：error 终态但进程仍存活时的原进程复活（pi 实现；dsh 未实现返回 false）。 */
+	reviveIfProcessAlive(agentId: string): boolean {
+		const gateway = this.owner(agentId);
+		if (typeof gateway.reviveIfProcessAlive !== "function") return false;
+		return gateway.reviveIfProcessAlive(agentId);
+	}
+
 	async getCommands(agentId: string): Promise<unknown[]> {
 		const gateway = this.owner(agentId);
 		this.requireCapability(gateway, "getCommands");

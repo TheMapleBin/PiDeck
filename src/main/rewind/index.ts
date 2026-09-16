@@ -15,6 +15,7 @@ export {
 	listCheckpointRefs,
 	loadAllCheckpoints,
 	deleteCheckpoint,
+	deleteCheckpoints,
 	pruneCheckpoints,
 	pruneOldSessions,
 	diffCheckpoints,
@@ -30,6 +31,8 @@ export {
 	MAX_UNTRACKED_DIR_FILES,
 	MIN_CHECKPOINT_INTERVAL_MS,
 	DEFAULT_MAX_CHECKPOINTS,
+	PRUNE_CURRENT_MIN_INTERVAL_MS,
+	PRUNE_OLD_SESSIONS_MIN_INTERVAL_MS,
 	IGNORED_DIR_NAMES,
 	MUTATING_TOOLS,
 } from "./checkpointConstants.ts";

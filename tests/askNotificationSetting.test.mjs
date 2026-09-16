@@ -20,6 +20,23 @@ test("askNotificationEnabled 三处默认值一致且默认关闭", () => {
 	assert.match(preview, /askNotificationEnabled: false/);
 });
 
+test("autoSessionTitle 四处默认关闭且设置说明提示额外 token 消耗", () => {
+	const settingsType = readFileSync("src/shared/types/settings.ts", "utf8");
+	const store = readFileSync("src/main/settings/SettingsStore.ts", "utf8");
+	const app = readFileSync("src/renderer/src/App.tsx", "utf8");
+	const preview = readFileSync("src/renderer/src/previewApi.ts", "utf8");
+	const commonTab = readFileSync("src/renderer/src/components/app/settings/CommonTab.tsx", "utf8");
+	const zh = readFileSync("src/renderer/src/i18n/rendererCopy.zh-CN.ts", "utf8");
+	const en = readFileSync("src/renderer/src/i18n/rendererCopy.en-US.ts", "utf8");
+	assert.match(settingsType, /autoSessionTitle: boolean/);
+	assert.match(store, /autoSessionTitle: false/);
+	assert.match(app, /autoSessionTitle: false/);
+	assert.match(preview, /autoSessionTitle: false/);
+	assert.match(commonTab, /checked=\{draft\.autoSessionTitle \?\? false\}/);
+	assert.match(zh, /settings\.autoSessionTitleDesc[\s\S]{0,220}token/);
+	assert.match(en, /settings\.autoSessionTitleDesc[\s\S]{0,260}tokens/);
+});
+
 test("AgentManager 的 Ask 通知改由独立开关门控，与通用通知解耦", () => {
 	const source = readFileSync("src/main/pi/AgentManager.ts", "utf8");
 	// 门控条件必须读新开关，而不是 enableNotifications

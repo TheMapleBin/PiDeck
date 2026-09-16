@@ -38,9 +38,11 @@ import { usePendingModelApply } from "../../hooks/usePendingModelApply";
 import { useBackendModelCatalog } from "../../hooks/useBackendModelCatalog";
 import type { ComposerPickerKind } from "../../hooks/useSessionComposerController";
 import {
+  GUIDE_BOOTSTRAP_SESSION_ID,
   WELCOME_MODEL_KEY,
   WELCOME_THINKING_KEY,
   isWelcomeModelLost,
+  readWelcomeBackendPreference,
   readWelcomeModelPreference,
   readWelcomeThinkingPreference,
   shouldClearWelcomePreference,
@@ -117,7 +119,12 @@ export function ComposerPickerHost(props: ComposerPickerHostProps) {
   // 使用启动 capability snapshot 的精确 thinkingLevels；DSH 的 catalog 提供默认档位与
   // 当前模型信息（思考档位按当前模型 reasoningEfforts 裁剪，模型未知/未声明时回退全量，
   // host 负责最终能力校验）。
-  const isDshSession = record?.backend === "dsh" || runtime?.backend === "dsh";
+  // 引导页虚拟会话没有 record，后端以前端显式切换偏好为准（与 changeBackend 的
+  // 引导页分支同源），切到 dsh 后模型/思考选择器展示 DSH 目录而非 pi 目录。
+  const isDshSession =
+    record?.backend === "dsh" ||
+    runtime?.backend === "dsh" ||
+    (sessionId === GUIDE_BOOTSTRAP_SESSION_ID && readWelcomeBackendPreference() === "dsh");
   const pickerNeedsModels = props.picker === "model" || props.picker === "thinking";
   // 模型目录数据源统一走 capability cache。思考选择器同样加载它，运行中也能直接
   // 复用已水合的模型档位，不必等待 Agent RPC。
@@ -361,14 +368,18 @@ export function ComposerPickerHost(props: ComposerPickerHostProps) {
 
   async function pickModel(model: AvailableModel) {
     // 欢迎页/未启动 Agent（无 record）：把选择存本地偏好，点「启动 Agent」创建会话时应用。
+    // 引导页 dsh 态例外：DSH 模型由部署默认决定（applyPreferences 对 dsh 草稿的
+    // 模型偏好会优雅降级），不把 DSH 目录里的选择写进 pi 侧 welcome 偏好。
     if (!record) {
-      try {
-        localStorage.setItem(WELCOME_MODEL_KEY, JSON.stringify({
-          provider: model.provider,
-          modelId: model.id,
-        }));
-      } catch {
-        // localStorage 不可用时静默；创建会话回退到 pi 默认模型
+      if (!isDshSession) {
+        try {
+          localStorage.setItem(WELCOME_MODEL_KEY, JSON.stringify({
+            provider: model.provider,
+            modelId: model.id,
+          }));
+        } catch {
+          // localStorage 不可用时静默；创建会话回退到 pi 默认模型
+        }
       }
       props.onClose();
       return;

@@ -18,6 +18,11 @@ const controller = readFileSync("src/renderer/src/hooks/useSessionComposerContro
 const composerPanels = readFileSync("src/renderer/src/components/session/ComposerPanels.tsx", "utf8");
 const zh = readFileSync("src/renderer/src/i18n/rendererCopy.zh-CN.ts", "utf8");
 const en = readFileSync("src/renderer/src/i18n/rendererCopy.en-US.ts", "utf8");
+// 设置页 tab 的标题 i18n key 已收敛到这份布局模块（命令面板 Ctrl+P 搜设置项复用同一份）
+const settingsTabLayout = readFileSync(
+	"src/renderer/src/components/app/settings/settingsTabLayout.ts",
+	"utf8",
+);
 
 test("IPC 通道三处同步：generate / get-config / save-config", () => {
 	assert.match(ipc, /imagegenGenerate: "imagegen:generate"/);
@@ -123,7 +128,9 @@ test("composer 生图底栏用独立配置，不读会话 LLM", () => {
 	assert.doesNotMatch(controller, /provider: model\.provider/);
 	assert.doesNotMatch(controller, /imageGenArkFieldsSupported/);
 	assert.match(settingsModal, /value="imagegen"/);
-	assert.match(settingsModal, /settings\.tabs\.imagegen/);
+	// TAB_META 只留 icon，labelKey 取 SETTINGS_TAB_LABEL_KEYS（值仍指向 settings.tabs.imagegen）
+	assert.match(settingsModal, /labelKey: SETTINGS_TAB_LABEL_KEYS\.imagegen/);
+	assert.match(settingsTabLayout, /imagegen: "settings\.tabs\.imagegen"/);
 	assert.match(configUi, /config\.imagegen\.extraParams/);
 	assert.doesNotMatch(configUi, /kindOpenai|kindArk|IMAGE_GEN_KINDS/);
 });

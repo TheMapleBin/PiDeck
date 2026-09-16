@@ -34,15 +34,18 @@ test("composer maps compact errors via debugDetails-first friendly helper", () =
   assert.match(composer, /app\.compactNothingToDo/);
   assert.match(composer, /app\.compactSessionTooSmall/);
   assert.match(composer, /app\.compactInProgress/);
-  // 压缩被取消：静默（compactNotice silent → null）——取消响应可能延迟到正常对话后
-  // 返回，表现为「没点压缩却弹提示」（2026-08 用户反馈）
-  assert.match(composer, /case "silent":/);
-  assert.match(composer, /if \(message\) showNotice\(message, 6000\)/);
-  assert.doesNotMatch(composer, /app\.compactCancelled/);
+  // 压缩被取消：不再静默。2026-08 的静默是「取消响应可能延迟到正常对话后返回，
+  // 表现为没点压缩却弹提示」；现在主进程会判明来源（扩展接管 / 自己打断），
+  // 文案本身就是「压缩已取消/被扩展接管」，延迟到达也不误导，且「点压缩没反应」
+  // 这类真实故障才有出口（2026-09 billion-context 取消 pi 压缩的排查）。
+  assert.doesNotMatch(composer, /case "silent":/);
+  assert.match(composer, /app\.compactCancelledByOwner/);
+  assert.match(composer, /app\.compactCancelled/);
+  assert.match(composer, /if \(notice\) showNotice\(notice\.text, notice\.durationMs\)/);
   // 圆环按钮与 /compact 共用 runManualCompact：错误映射只出现一次
-  assert.match(composer, /const message = friendlyCompactError\(error\)/);
+  assert.match(composer, /const notice = friendlyCompactError\(error\)/);
   assert.equal(
-    (composer.match(/const message = friendlyCompactError\(error\)/g) || []).length,
+    (composer.match(/friendlyCompactError\(error\)/g) || []).length,
     1,
   );
 });

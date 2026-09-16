@@ -23,8 +23,22 @@ import {
   Pencil,
   Terminal,
   GitBranch,
+  // 命令面板（Ctrl/Cmd+P）操作项图标
+  SquarePen,
+  Settings2,
+  RotateCw,
+  CircleStop,
+  RefreshCw,
+  Fingerprint,
 } from "lucide-react";
 import { showNotice } from "./utils/notice";
+import { copyTextWithCopiedNotice } from "./utils/clipboardNotice";
+import { buildSettingsCommands, type PaletteCommand } from "./utils/commandPaletteCommands";
+import { CommandPalette } from "./components/overlays/CommandPalette";
+import {
+  CommandPaletteOnboarding,
+  markCommandPaletteOnboardingSeen,
+} from "./components/overlays/CommandPaletteOnboarding";
 import {
   desktopApi as api,
   isLanWeb,
@@ -78,6 +92,7 @@ import {
 } from "./utils/sessionCommands";
 import {
   GUIDE_BOOTSTRAP_SESSION_ID,
+  readWelcomeBackendPreference,
   readWelcomeModelPreference,
   readWelcomeThinkingPreference,
   resolveChatSessionBootstrap,
@@ -654,8 +669,8 @@ export function App() {
     /** 提示词模板禁用列表：与 SettingsStore 默认一致，空数组 = 不启用模板白名单 */
     disabledPrompts: [],
     sessionTabOpenMode: "preview",
-    // 与 main SettingsStore 默认一致：首轮完成后由内置扩展异步生成标题
-    autoSessionTitle: true,
+    // 与 main SettingsStore 默认一致：标题生成默认关闭，避免首轮结束后无感知消耗 token
+    autoSessionTitle: false,
     // 与 main SettingsStore 默认一致：忙碌时发送默认「插入当前回合」
     busySendDelivery: "steer",
     enableGitManagement: true,
@@ -1428,7 +1443,7 @@ export function App() {
   // 替代原先的"系统默认应用打开"（.md 会被浏览器接管、体验割裂）
   // line 为可选 `path:line` 位置标记：编辑器打开后滚动定位到该行。
   const handleOpenLinkedFile = useCallback(
-    (path: string, line?: number, context?: SessionFileOpenContext) => {
+    async (path: string, line?: number, context?: SessionFileOpenContext) => {
       // 有栏级上下文时绝不回退 App 当前焦点：分屏左栏的点击不能借用右栏 cwd/project。
       const baseDir = context
         ? context.baseDir
@@ -1448,6 +1463,28 @@ export function App() {
         return;
       }
       const fileAccessScope = projectId ? { projectId } : undefined;
+      // 点击时 stat 一次定路由：渲染期 verdict 只回答「存在与否」，区分不了目录，
+      // 目录链接进编辑器 readContent 会抛 EISDIR（"illegal operation on a directory"）。
+      // 目录 → 资源管理器直接打开；不存在（校验后被移动/删除，或 verdict 未返回时点击）
+      // → 友好提示，不再把原始 ENOENT/EISDIR 甩给用户。
+      let stat = { exists: false, isDirectory: false };
+      try {
+        stat = await api.files.stat(resolved, fileAccessScope);
+      } catch {
+        // stat 通道异常按不存在处理，走统一提示
+      }
+      if (!stat.exists) {
+        showToast(t("app.fileLinkNotFound", { path: resolved }));
+        return;
+      }
+      if (stat.isDirectory) {
+        void api.files.open(resolved, fileAccessScope).catch((error) =>
+          showToast(t("app.openFileFailed", {
+            error: error instanceof Error ? error.message : String(error),
+          })),
+        );
+        return;
+      }
       const ext = resolved.split(".").pop()?.toLowerCase() ?? "";
       if (IMAGE_EXTENSIONS.has(ext)) {
         // readBase64 返回原始 base64，不是 data URL；直接构造 ImageContent 供预览弹层使用。
@@ -1649,6 +1686,14 @@ export function App() {
         // 避免出现「菜单看似切换，首次发送后又回到默认档位」。
         const welcomeModel = readWelcomeModelPreference()?.model;
         const welcomeThinking = readWelcomeThinkingPreference()?.thinkingLevel;
+        // 引导页底栏显式切换的后端（localStorage 偏好）优先于设置项默认；
+        // 选了 dsh 但 DSH runtime 不可用时按 effectiveAgentBackendAtom 同一条
+        // 钳制规则回落 pi，避免首次发送才在 createDraft 门控上抛错。
+        const welcomeBackend = readWelcomeBackendPreference();
+        const draftBackend =
+          welcomeBackend === "dsh" && effectiveAgentBackend !== "dsh"
+            ? "pi"
+            : (welcomeBackend ?? effectiveAgentBackend);
         // 统一创建 draft 会话（Chat 项目也走普通会话、可保存）：创建不拉 pi，
         // selectSessionCommand 同步切页、立即进入会话页；匿名会话仅保留给侧栏
         // 「新建临时对话」入口（createAnonymousSessionWithTab）。
@@ -1656,8 +1701,8 @@ export function App() {
         // 且经 DSH runtime 安装态钳制——runtime 不可用时不会尝试建 dsh 会话。
         const session = await api.sessions.createDraft({
           projectId: project.id,
-          title: effectiveAgentBackend === "dsh" ? `${project.name} DSH` : `${project.name} agent`,
-          backend: effectiveAgentBackend,
+          title: draftBackend === "dsh" ? `${project.name} DSH` : `${project.name} agent`,
+          backend: draftBackend,
           ...(welcomeModel ? { welcomeModel } : {}),
           ...(welcomeThinking ? { thinkingLevel: welcomeThinking } : {}),
         });
@@ -3545,6 +3590,8 @@ export function App() {
           isRestarting:
             restartingAgentId === activeAgentId || activatingSessionId === currentSessionId,
           isReloading: reloadingSessionId === currentSessionId,
+          // 「复制 Agent ID」用：与上面的 isStopping 同源判定（activeAgentId 即当前会话绑定的进程实例）
+          agentId: activeAgentId,
           onAction: (action: SessionRunAction) => void runSessionControl(currentSessionId, action),
         }
       : undefined,
@@ -3862,6 +3909,122 @@ export function App() {
       },
     },
   ];
+
+  // ── 命令面板（Ctrl/Cmd+P）────────────────────────────────────────────
+  //
+  // 与会话搜索（Ctrl+F / MorphingSearch）刻意分成两条链路：那边搜「项目/会话」实体
+  // 并跳转，这边搜「设置项 + 操作」。「重启当前 Agent」「复制 Agent ID」这类命令
+  // 此前只能钻进侧栏/Tab 的右键菜单里翻，命令面板给它们一条可搜索的直达路径。
+  //
+  // 唤起由主进程 before-input-event 广播（键位可在设置页改），输入框聚焦时跳过——
+  // 与新建会话/会话搜索同一套判定，避免打字时误开面板。
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+
+  // 打开命令面板的唯一入口：顺手记下「用户已经知道这个功能了」，
+  // 这样自己摸到快捷键的人不会再被启动引导打扰（引导只在完全没接触过时才有价值）。
+  const openCommandPalette = useCallback(() => {
+    markCommandPaletteOnboardingSeen();
+    setCommandPaletteOpen(true);
+  }, []);
+
+  useEffect(() => {
+    return api.app.onShortcutTriggered((id) => {
+      if (id !== "openCommandPalette") return;
+      const target = document.activeElement;
+      if (
+        target instanceof HTMLElement &&
+        (target.isContentEditable ||
+          target instanceof HTMLInputElement ||
+          target instanceof HTMLTextAreaElement ||
+          target instanceof HTMLSelectElement)
+      ) {
+        return;
+      }
+      openCommandPalette();
+    });
+  }, [openCommandPalette]);
+
+  // 列表刻意不 memo：条目数在百级以内，构建成本远低于一次 React 渲染；而 t() 是
+  // 模块级函数，memo 依赖里没法可靠表达「语言变了」，漏掉就会出现
+  // 「切完语言，面板里还是旧文案」。
+  const commandPaletteCommands: PaletteCommand[] = (() => {
+    const commands: PaletteCommand[] = [];
+    const actionGroup = t("command.groupActions");
+
+    commands.push({
+      id: "action:new-session",
+      group: actionGroup,
+      title: t("command.actionNewSession"),
+      keywords: ["new", "新建", "会话", "session", "chat", "创建"],
+      icon: SquarePen,
+      run: () => {
+        if (activeProjectId) selectProjectCommand(activeProjectId);
+      },
+    });
+
+    commands.push({
+      id: "action:open-settings",
+      group: actionGroup,
+      title: t("command.actionOpenSettings"),
+      keywords: ["settings", "设置", "偏好", "preferences", "配置"],
+      icon: Settings2,
+      run: () => store.set(openSettingsAtom, { tab: "common" }),
+    });
+
+    // 运行控制类命令只在有当前会话时才出现——没有目标时列出来只会点了没反应。
+    //
+    // 副标题刻意写「命令说明」而不是会话标题：会话标题是用户内容（自动命名出来的
+    // 中文短语），摆在命令名下面会被直接读成这条命令的用途——曾把会话标题
+    // 「检查 Git 更新与冲突情况」显示在「重启当前 Agent」下面，看起来像 Git 功能。
+    // 命令名里的「当前」已经指明了作用对象。
+    if (currentSessionId) {
+      commands.push({
+        id: "action:restart-agent",
+        group: actionGroup,
+        title: t("command.actionRestartAgent"),
+        subtitle: t("command.actionRestartAgentDesc"),
+        keywords: ["restart", "重启", "重开", "agent", "进程", "重新启动"],
+        icon: RotateCw,
+        run: () => void restartActiveAgent(activeAgentId),
+      });
+      commands.push({
+        id: "action:stop-agent",
+        group: actionGroup,
+        title: t("command.actionStopAgent"),
+        subtitle: t("command.actionStopAgentDesc"),
+        keywords: ["stop", "停止", "关闭", "agent", "进程", "结束"],
+        icon: CircleStop,
+        run: () => {
+          if (activeAgentId) void closeAgent(activeAgentId);
+        },
+      });
+      commands.push({
+        id: "action:reload-session",
+        group: actionGroup,
+        title: t("command.actionReloadSession"),
+        subtitle: t("command.actionReloadSessionDesc"),
+        keywords: ["reload", "重载", "重新加载", "刷新", "session"],
+        icon: RefreshCw,
+        run: () => void runSessionControl(currentSessionId, "reload"),
+      });
+    }
+
+    // 复制 Agent ID：无绑定（从未启动/已解绑）时没有可复制的值，不列出来
+    if (activeAgentId) {
+      commands.push({
+        id: "action:copy-agent-id",
+        group: actionGroup,
+        title: t("command.actionCopyAgentId"),
+        subtitle: activeAgentId,
+        keywords: ["copy", "复制", "agent", "id", "标识"],
+        icon: Fingerprint,
+        run: () => void copyTextWithCopiedNotice(activeAgentId),
+      });
+    }
+
+    commands.push(...buildSettingsCommands((target) => store.set(openSettingsAtom, target)));
+    return commands;
+  })();
 
   const sessionTabsBarNode = (
     <SessionTabsBar
@@ -4372,6 +4535,23 @@ export function App() {
     />
 
     </AppShell>
+
+    {/* 命令面板（Ctrl/Cmd+P）：模糊搜索设置项并跳转 + 执行操作，根级渲染 */}
+    <CommandPalette
+      open={commandPaletteOpen}
+      onOpenChange={setCommandPaletteOpen}
+      commands={commandPaletteCommands}
+      placeholder={t("command.placeholder")}
+      emptyMessage={t("command.empty")}
+    />
+
+    {/* 命令面板首次引导：它是纯键盘入口，没有任何可点的 affordance，
+        不主动提示就等于不存在。看完即写 localStorage，只弹一次。
+        空状态（没项目）不弹——那时面板本身也没什么可搜的。 */}
+    <CommandPaletteOnboarding
+      enabled={Boolean(activeProjectId) && !commandPaletteOpen}
+      onTryNow={openCommandPalette}
+    />
     </>
     </FileLinkBaseProvider>
   );

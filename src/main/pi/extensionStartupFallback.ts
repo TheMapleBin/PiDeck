@@ -75,6 +75,78 @@ export function decideExtensionFallback(
 	return { retry: false, skipReason: null };
 }
 
+/**
+ * 本次运行「扩展被禁用」的成因：
+ * - setting：设置 → 开发设置 的「禁用扩展启动」开关为开（每个新会话都会复现，能力长期缺失的根源）；
+ * - fallback：本次启动失败后自动回退（只作用于本次运行时，不写入设置）。
+ */
+export type DisabledExtensionsReason = "setting" | "fallback";
+
+/**
+ * 判定本次启动为何没有加载扩展；扩展正常加载时返回 null。
+ * 设置开关优先：它是会被后续所有会话继承的持久成因，用户最需要被提醒的就是它；
+ * 两者理论上互斥（设置已开时 decideExtensionFallback 不会再回退），同时为真时按设置归属更贴近用户可操作项。
+ */
+export function resolveDisabledExtensionsReason(input: {
+	settingDisabled: boolean;
+	fallbackFromExtensions: boolean;
+}): DisabledExtensionsReason | null {
+	if (input.settingDisabled) return "setting";
+	if (input.fallbackFromExtensions) return "fallback";
+	return null;
+}
+
+/**
+ * 禁用扩展时给用户的文案与可执行动作。
+ * 诊断卡（会话时间线，mainProcessCopy 的 diagnostic.*）与 toast（rendererCopy 的 notice.*）
+ * 共用同一份成因判定，避免「卡片说没持久化、提示说去设置关掉」这类口径漂移。
+ */
+export type DisabledExtensionsCopy = {
+	/** 时间线诊断卡的 i18n key 与兜底文案（zh；渲染层按当前语言取译）。 */
+	diagnosticKey: string;
+	diagnosticFallback: string;
+	/** toast 的 i18n key 与兜底文案（zh）。 */
+	noticeKey: string;
+	noticeFallback: string;
+	/**
+	 * toast 停留时长：需要用户读完并决定要不要去设置，比普通瞬时反馈（2.5s）长；
+	 * 仍不设常驻，避免每次启动都留一条关不掉的提示。
+	 */
+	noticeDurationMs: number;
+	/**
+	 * 需要引导用户去「设置 → 开发设置」时的动作 id（渲染层解析成导航，主进程不持有 UI 路径）。
+	 * 仅设置成因带动作：回退是本次运行的临时状态，去设置并不能解决坏扩展。
+	 */
+	noticeAction?: "openDevExtensionsSettings";
+};
+
+/** 成因 → 文案/动作映射（纯查表，便于单测与后续新增成因）。 */
+export function resolveDisabledExtensionsCopy(reason: DisabledExtensionsReason): DisabledExtensionsCopy {
+	if (reason === "fallback") {
+		return {
+			diagnosticKey: "diagnostic.extensionsDisabledFallback",
+			diagnosticFallback:
+				"扩展加载失败，本次运行已临时禁用扩展（不写入设置，「禁用扩展启动」开关保持原样），下次启动会重新尝试加载扩展。" +
+				"可在本会话把下面的错误信息发给 AI，协助排查扩展问题。",
+			noticeKey: "notice.extensionsDisabledFallback",
+			noticeFallback:
+				"扩展加载失败，本次运行已临时禁用扩展（不会写入设置）。可把本会话的错误详情发给 AI 排查扩展问题。",
+			noticeDurationMs: 10_000,
+		};
+	}
+	return {
+		diagnosticKey: "diagnostic.extensionsDisabledBySetting",
+		diagnosticFallback:
+			"本次启动未加载任何扩展：设置 → 开发设置 的「禁用扩展启动」处于开启状态，todo/plan/ask 等扩展能力不可用。" +
+			"如非排查扩展问题需要，请关闭该开关后重启会话。",
+		noticeKey: "notice.extensionsDisabledBySetting",
+		noticeFallback:
+			"「禁用扩展启动」已开启：本次会话未加载任何扩展，todo/plan/ask 等能力不可用。不需要排查扩展时请去设置关闭该开关。",
+		noticeDurationMs: 12_000,
+		noticeAction: "openDevExtensionsSettings",
+	};
+}
+
 /** 是否值得用 --no-extensions 再启动一次（decideExtensionFallback 的布尔视图）。 */
 export function shouldRetryWithoutExtensions(input: ExtensionFallbackDecisionInput): boolean {
 	return decideExtensionFallback(input).retry;

@@ -52,6 +52,7 @@ import {
   type FailureNoticePassState,
 } from "./timelineFailureNotice";
 import { SessionStartSurface } from "./SessionStartSurface";
+import { NotifyMessageCard, shouldRenderNotifyCard } from "./NotifyMessageCard";
 import { MessageScroller } from "../agents/message-scroller";
 import { resolveFreshTailIds } from "../../lib/pinTurnScroll";
 import { chatContentWidthStyle } from "./chatContentWidth";
@@ -1060,6 +1061,14 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
                   // Pending extension UI is rendered once in the timeline footer.
                   // Legacy in-memory messages may still contain this placeholder.
                   return null;
+                }
+                // 扩展 custom 消息（pi custom_message 条目）：只有面向用户的通知类白名单
+                // 才渲染成卡片（如子代理后台任务完成），其余（display:false 的内部上下文
+                // 注入）保持不可见——但它们仍是回合边界（见 AppUtils 的 customMessage 分支）。
+                if (meta?.type === "customMessage") {
+                  return shouldRenderNotifyCard(message) ? (
+                    <NotifyMessageCard key={message.id} message={message} />
+                  ) : null;
                 }
                 // 压缩摘要卡片已按产品决策下线（与 dsh 后端行为对齐）：
                 // 压缩进行态由 RespondingIndicator「正在压缩」承担，压缩完成后

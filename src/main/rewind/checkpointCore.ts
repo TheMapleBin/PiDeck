@@ -693,6 +693,36 @@ export async function deleteCheckpoint(root: string, id: string): Promise<void> 
 }
 
 /**
+ * 批量删除 checkpoint ref：`update-ref --stdin` 单进程消化整批。
+ * 裁剪积压时逐条 spawn 会非常慢（数千 ref 实测量级），--stdin 一次喂入；
+ * delete 不带 oldvalue 时缺失的 ref 容忍（实测 git exit 0，并发裁剪安全），
+ * 批次整体失败再降级逐条（deleteCheckpoint 自带 catch，不中断整批）。
+ */
+export async function deleteCheckpoints(
+	root: string,
+	ids: string[],
+): Promise<void> {
+	if (ids.length === 0) return;
+	const BATCH = 1000;
+	for (let i = 0; i < ids.length; i += BATCH) {
+		const batch = ids.slice(i, i + BATCH);
+		const input =
+			batch.map((id) => `delete ${REF_BASE}/${id}`).join("\n") + "\n";
+		try {
+			await runGit(
+				["update-ref", "--stdin"],
+				{ cwd: root, input },
+				currentGitExecutable(),
+			);
+		} catch {
+			for (const id of batch) {
+				await deleteCheckpoint(root, id);
+			}
+		}
+	}
+}
+
+/**
  * 按时间裁剪单会话 checkpoint，最多保留 max 个。
  * before-restore 安全网永不裁剪（它是「回退前兜底」，删了就无法撤销恢复）。
  */
@@ -708,25 +738,30 @@ export async function pruneCheckpoints(
 	if (prunable.length <= max) return 0;
 
 	const toDelete = prunable.slice(0, prunable.length - max);
-	for (const cp of toDelete) {
-		await deleteCheckpoint(root, cp.id);
-	}
+	await deleteCheckpoints(
+		root,
+		toDelete.map((cp) => cp.id),
+	);
 	return toDelete.length;
 }
 
 /**
- * 清理非当前会话的 checkpoint（每旧会话保留 keepPerOldSession 个，默认全清）。
- * 从 ref 名解析会话 id（ref 名格式 <trigger>-<sessionUuid>-<turn>-<ts>，UUID 本身
- * 含连字符，所以按「第 i 段起连续 5 段拼出合法 UUID」来定位），避免为每个 ref
- * 读 commit 元数据。
+ * 清理非当前活跃会话的 checkpoint（每旧会话保留 keepPerOldSession 个，默认全清）。
+ * keepSessionIds 传「同仓库仍活跃的会话 id 集合」（字符串或数组均可），并发会话
+ * 互不误删。从 ref 名解析会话 id（ref 名格式 <trigger>-<sessionUuid>-<turn>-<ts>，
+ * UUID 本身含连字符，所以按「第 i 段起连续 5 段拼出合法 UUID」来定位），避免为
+ * 每个 ref 读 commit 元数据。
  */
 export async function pruneOldSessions(
 	root: string,
-	currentSessionId: string,
+	keepSessionIds: string | readonly string[],
 	keepPerOldSession: number = 0,
 ): Promise<number> {
+	const keep = new Set(
+		Array.isArray(keepSessionIds) ? keepSessionIds : [keepSessionIds],
+	);
 	const refs = await listCheckpointRefs(root);
-	let deleted = 0;
+	const toDelete: string[] = [];
 
 	const bySession = new Map<string, string[]>();
 	for (const ref of refs) {
@@ -739,7 +774,7 @@ export async function pruneOldSessions(
 				break;
 			}
 		}
-		if (!sessionId || sessionId === currentSessionId) continue;
+		if (!sessionId || keep.has(sessionId)) continue;
 
 		if (!bySession.has(sessionId)) bySession.set(sessionId, []);
 		bySession.get(sessionId)!.push(ref);
@@ -748,17 +783,15 @@ export async function pruneOldSessions(
 	for (const sessionRefs of bySession.values()) {
 		// ref 名尾部含时间戳，字典序 ≈ 时间序（旧在前）。
 		sessionRefs.sort();
-		const toDelete =
+		const sessionToDelete =
 			keepPerOldSession > 0
 				? sessionRefs.slice(0, Math.max(0, sessionRefs.length - keepPerOldSession))
 				: sessionRefs;
-		for (const ref of toDelete) {
-			await deleteCheckpoint(root, ref).catch(() => {});
-			deleted++;
-		}
+		toDelete.push(...sessionToDelete);
 	}
 
-	return deleted;
+	await deleteCheckpoints(root, toDelete);
+	return toDelete.length;
 }
 
 /** 两个 checkpoint 树之间的变更摘要（diff-tree --stat）。 */

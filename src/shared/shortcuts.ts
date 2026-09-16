@@ -22,7 +22,8 @@ export type ShortcutId =
 	| "openSettings"
 	| "toggleDevTools"
 	| "openNewSession"
-	| "openSearch";
+	| "openSearch"
+	| "openCommandPalette";
 
 /** 设置页分组：general=通用（普通用户常用），dev=开发调试 */
 export type ShortcutGroupId = "general" | "dev";
@@ -65,6 +66,15 @@ export const SHORTCUT_DEFS: readonly ShortcutDef[] = [
 		descriptionKey: "settings.shortcuts.openSearchDesc",
 		// Cmd/Ctrl+F 打开会话搜索命令面板（输入框聚焦时不触发，见 SidebarContent）
 		defaultAccelerator: { darwin: "Cmd+F", other: "Ctrl+F" },
+	},
+	{
+		id: "openCommandPalette",
+		group: "general",
+		labelKey: "settings.shortcuts.openCommandPaletteLabel",
+		descriptionKey: "settings.shortcuts.openCommandPaletteDesc",
+		// 与 VSCode 惯例一致：Cmd/Ctrl+P 打开命令面板（模糊搜索设置项并跳转 + 执行操作），
+		// 与会话搜索（openSearch）分开入口：前者搜「配置与操作」，后者搜「项目/会话」。
+		defaultAccelerator: { darwin: "Cmd+P", other: "Ctrl+P" },
 	},
 	{
 		id: "toggleDevTools",
