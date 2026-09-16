@@ -1,4 +1,4 @@
-## v0.7.6-beta - 2026-09-15
+## v0.7.6 - 2026-09-17
 
 ### 🚀 新功能
 - **全局快捷键自定义** — 设置页新增「快捷键」管理：打开设置 / 新建会话 / 搜索 / 开发者工具均可改键；点「修改」录键，Esc 取消、Delete 恢复默认，冲突检测禁用保存。主进程统一匹配，保存与备份恢复后即时生效无需重启；侧栏 kbd 提示跟随真实键位，内置浏览器 webview 同样转发。
@@ -50,6 +50,12 @@
 - **供应商迁移覆盖确认改用应用内弹框** — 替换原生 `window.confirm`（不走应用主题还会同步阻塞渲染进程）为统一样式的 ConfirmDialog，流程改为预检 → 确认 → 执行。
 - **商店搜索回车提交** — 扩展商店与提示词商店的搜索不再每敲一个字符就打一次接口（原 300ms 防抖），回车 / 搜索按钮提交；词未变化时再按一次搜索按钮强制绕过目录缓存刷新。
 - **自定义提示音恢复可播** — 渲染层 CSP 没有 `media-src`，经 `pideck-sound://` 协议加载的自定义音效回落到 `default-src 'self'` 被静默拦截——不报错、只是没声音。现 CSP 显式声明 `media-src 'self' pideck-sound:`，并用回归测试把整条链路（media-src 来源、特权协议声明、协议 handler 的文件名白名单）一并把守，防止后续改 CSP 时再丢。
+- **DeepSeek 中转站的两个 400** — 上游报错枚举里的 `latest_reminder` 是 DeepSeek V4 自有角色，说明中转站转的就是官方接口：DeepSeek 的 OpenAI 兼容层不认 `developer` 角色，且要求带 tool_calls 的历史回合回传 `reasoning_content`。pi 的 compat 自动判定只认 provider 名 / baseUrl 含 `deepseek.com`，自定义中转站（88api / b.ai / tokendance 等）漏配这两个键时分别报 `unknown variant 'developer'` 与 `The reasoning_content in the thinking mode must be passed back to the API`。供应商表单新增「回传思考内容」三态勾选（未表态不写键 / 显式 true / 显式 false 否决自动判定），provider 名、baseUrl 或任一模型 ID 命中 deepseek 时自动写入；DSH 迁移带上这两个白名单键且只对 openai-completions 协议搬运，compat 合并改为逐键覆盖并保留 pi 侧自定义键（不再丢 `thinkingFormat`）。
+- **子代理残留状态、时长与唤醒回合** — 父会话结束后子代理仍显示「运行中」、时长累到几千分钟、被后台子代理唤醒后上一轮最终回答被折叠成「中间回答」：状态降级现在覆盖插件 record 来源（渲染层 fast 快照不再把主进程的降级结果覆盖回去），内置扩展补 `session_shutdown` 钩子（pi 在 /new、resume、fork、quit 时收掉 runner，旧会话文件不再永远停在 running），时长补 h / d 档并把超 2 小时仍 running / queued 的条目标成「已停止（失联）」，唤醒前落下的 `custom_message` 按文件偏移投影为可折叠通知卡并恢复回合边界（老数据另有 `stopReason === "stop"` 断回合兜底）。
+- **供应商表单页的窗口保存不再漏保存** — 新增 / 编辑供应商是 models 页内的子页面，字段只存在页内 state；窗口顶部保存过去直接走 `models.json` 落盘、绕过页内草稿，表现为「点了窗口保存、刷新后新供应商没保存」。现在该页经 `onRequestSave` 向标题栏暴露统一提交入口，第一次点击先提交页内草稿、下一轮 state 更新再自动落盘，页内按钮与标题栏共用同一份草稿；表单校验未过时清掉 pending 标记，不污染下一次进入。
+- **自动生成会话标题改为默认关闭** — 标题请求会在首轮结束后额外调用当前 pi 模型并消耗 token，过去默认开启、用户无感知；现默认关闭（主进程设置、渲染层默认值、预览壳与开关兜底值四处一致），设置说明也写明会额外消耗一次模型调用和少量 token。
+- **提问卡进度可见与纯输入题按钮宽度** — 批量提问卡顶部新增进度条（已答 n / 总数，答满转成功色），进度文案同时作为可访问名称；纯输入题的提交按钮此前带 `w-full`，与 Button 默认的 `shrink-0` 叠加会把输入框压成窄条，现改为按钮只占自身宽度、输入框吸收剩余空间。
+- **pi 启动命令行的注入预算守卫补齐三类资源** — 扩展 / 技能 / 提示词三类白名单共用同一条按启动通道核算的命令行预算（cmd.exe 8191 / CreateProcess 32767），超限时整体放弃注入并回退 pi 默认发现，在诊断卡与 toast 说明本次「禁用」不生效；此前只有技能做了兜底，扩展与提示词超限会撞上 Windows 命令行上限、把残缺参数交给 pi。
 
 ### 🙏 致谢
 
