@@ -323,7 +323,10 @@ test("publish-dsh-runtime.yml 提供手动上传入口，并要求同步到默�
 	const publish = readFileSync(".github/workflows/publish-dsh-runtime.yml", "utf8");
 	assert.match(publish, /workflow_dispatch/);
 	assert.match(publish, /tag:/);
-	assert.match(publish, /type: string/);
+	// 目标 tag 改为下拉（choice）+ tag_custom 手填：choice 不接受空选项，
+	// 故「留空 = latest」用哨兵值 auto 表达，脚本里再还原。
+	assert.match(publish, /type: choice/);
+	assert.match(publish, /tag_custom/);
 	assert.match(publish, /默认分支 main/);
 	assert.match(publish, /Actions 不会在页面注册\/显示/);
 });
@@ -331,8 +334,13 @@ test("publish-dsh-runtime.yml 提供手动上传入口，并要求同步到默�
 test("runtime 与 runner Node 补发都支持显式目标 Release tag", () => {
 	const publishRuntime = readFileSync(".github/workflows/publish-dsh-runtime.yml", "utf8");
 	const publishNode = readFileSync(".github/workflows/publish-dsh-runner-node.yml", "utf8");
-	assert.match(publishRuntime, /INPUT_TAG: \$\{\{ inputs\.tag \}\}/);
-	assert.match(publishNode, /INPUT_TAG: \$\{\{ inputs\.tag \}\}/);
+	// 两个 workflow 都用同一套归一表达式：tag_custom 非空优先，否则用下拉选择；
+	// 下游脚本负责把哨兵值 auto 还原成「未指定」。
+	const resolve = /INPUT_TAG: \$\{\{ inputs\.tag_custom != '' && inputs\.tag_custom \|\| inputs\.tag \}\}/;
+	assert.match(publishRuntime, resolve);
+	assert.match(publishNode, resolve);
+	assert.match(publishRuntime, /INPUT_TAG" = "auto"/);
+	assert.match(publishNode, /INPUT_TAG" = "auto"/);
 	assert.match(publishNode, /gh release upload/);
 	assert.match(publishNode, /--clobber/);
 });

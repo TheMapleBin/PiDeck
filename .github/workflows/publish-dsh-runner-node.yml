@@ -9,7 +9,27 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: '目标应用 Release tag（留空 = 当前 GitHub latest）'
+        # 下拉（choice）选项为静态列表，无法动态读取 Release；
+        # 列表外的历史版本用下面的 tag_custom 手填。
+        # choice 不接受空字符串选项，故「留空 = latest」用哨兵值 auto 表示。
+        description: "目标应用 Release tag：auto = 当前 GitHub latest；列表外的旧版本填下面的 tag_custom"
+        required: false
+        type: choice
+        default: auto
+        options:
+          - auto
+          - v0.7.6
+          - v0.7.5
+          - v0.7.4
+          - v0.7.3
+          - v0.7.2
+          - v0.7.1
+          - v0.7.0
+          - v0.6.7
+          - v0.6.6
+          - v0.6.5
+      tag_custom:
+        description: "自定义 tag（填了则覆盖上面的下拉选择；用于列表外的旧版本）"
         required: false
         type: string
         default: ""
@@ -36,8 +56,11 @@ jobs:
       - name: Upload onto target app Release
         env:
           GH_TOKEN: ${{ secrets.RELEASE_PAT }}
-          INPUT_TAG: ${{ inputs.tag }}
+          # tag_custom 非空则优先（下拉列表外的旧版本），否则用下拉选择。
+          INPUT_TAG: ${{ inputs.tag_custom != '' && inputs.tag_custom || inputs.tag }}
         run: |
+          # 还原哨兵值：auto 等价于未指定（走 latest）
+          if [ "$INPUT_TAG" = "auto" ]; then INPUT_TAG=""; fi
           if [ -n "$INPUT_TAG" ]; then
             TAG="$INPUT_TAG"
           else

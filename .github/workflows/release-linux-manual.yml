@@ -19,9 +19,29 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: '目标 Release tag（如 v0.7.5），产物追加到该 Release'
+        # 下拉（choice）选项为静态列表，无法动态读取 Release；列表外的旧版本
+        # （补发 v0.7.6 以前的历史版本）用下面的 tag_custom 手填。
+        # 本输入 required: true，不能用「auto = latest」兜底，必须真选一个。
+        description: '目标 Release tag（产物追加到该 Release；列表外的旧版本填下面的 tag_custom）'
         required: true
+        type: choice
+        default: v0.7.6
+        options:
+          - v0.7.6
+          - v0.7.5
+          - v0.7.4
+          - v0.7.3
+          - v0.7.2
+          - v0.7.1
+          - v0.7.0
+          - v0.6.7
+          - v0.6.6
+          - v0.6.5
+      tag_custom:
+        description: '自定义 tag（填了则覆盖上面的下拉选择；用于列表外的旧版本）'
+        required: false
         type: string
+        default: ''
       arch:
         description: '目标架构'
         required: true
@@ -37,13 +57,14 @@ on:
 
 jobs:
   build-and-attach:
-    name: Build Linux ${{ inputs.arch }} for ${{ inputs.tag }}
+    name: Build Linux ${{ inputs.arch }} for ${{ inputs.tag_custom || inputs.tag }}
     runs-on: ${{ inputs.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.ref || inputs.tag }}
+          # 同样优先 tag_custom：checkout 时需要用真实 tag 名，不能用下拉里的占位选择
+          ref: ${{ inputs.ref || inputs.tag_custom || inputs.tag }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -73,7 +94,7 @@ jobs:
           # 与 release.yml 保持一致用 PAT：权限足、事件语义统一；
           # 追加资产是 edited 事件，不会误触发 sync-atomgit。
           token: ${{ secrets.RELEASE_PAT }}
-          tag_name: ${{ inputs.tag }}
+          tag_name: ${{ inputs.tag_custom || inputs.tag }}
           # 只追加安装包与增量块，不动已存在的 latest*.yml（原因见文件头注释）
           files: |
             release/*.AppImage
