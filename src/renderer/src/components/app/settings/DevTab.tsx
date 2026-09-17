@@ -32,6 +32,10 @@ type DevTabProps = {
   draft: AppSettings;
   updateDraft: (patch: Partial<AppSettings>) => void;
   isDirty: (field: keyof AppSettings) => boolean;
+  /** 检测环境/校验自定义路径前把 WSL 草稿差异先落盘；主进程读的是持久化设置，
+   * 草稿未提交时会拿旧的 wslEnabled/distro/user 执行（Linux 路径被当 Windows 文件 → ENOENT）。
+   * 返回 false（持久化失败）时调用方应中止操作，避免用旧配置出误导性结果。 */
+  onEnsureWslSettingsSaved: () => Promise<boolean>;
   appInfo: AppInfo;
   piStatus: PiInstallStatus | null;
   piChecking: boolean;
@@ -141,6 +145,22 @@ export const DevTab = memo(function DevTab(props: DevTabProps) {
     { value: "wsl", label: t("settings.piSource.wsl") },
   ];
 
+  /** 检测环境：先把 WSL 草稿（来源/发行版/用户名）落盘，否则主进程拿旧配置检测。 */
+  const handleCheckEnvironment = () => {
+    void (async () => {
+      if (!(await props.onEnsureWslSettingsSaved())) return;
+      props.onCheckPi();
+    })();
+  };
+
+  /** 校验并使用：同上——先落盘 WSL 草稿，再让主进程按界面当前所见状态校验路径。 */
+  const handleValidateCustomPath = () => {
+    void (async () => {
+      if (!(await props.onEnsureWslSettingsSaved())) return;
+      props.onValidateCustomPath();
+    })();
+  };
+
   return (
     <>
       {/* 环境 */}
@@ -177,7 +197,7 @@ export const DevTab = memo(function DevTab(props: DevTabProps) {
             </div>
           </div>
           <div className="setting-inline-actions">
-            <Button variant="secondary" onClick={props.onCheckPi} disabled={props.piChecking}>
+            <Button variant="secondary" onClick={handleCheckEnvironment} disabled={props.piChecking}>
               {props.piChecking
                 ? t("settings.detecting")
                 : t("settings.detectEnvironment")}
@@ -348,7 +368,7 @@ export const DevTab = memo(function DevTab(props: DevTabProps) {
           </SettingRow>
           <div className="setting-pi-path-actions">
             <Button variant="secondary"
-              onClick={props.onValidateCustomPath}
+              onClick={handleValidateCustomPath}
               disabled={!props.customPiPath.trim() || props.customPathValidating}
             >
               {props.customPathValidating

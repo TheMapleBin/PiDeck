@@ -462,6 +462,11 @@ export function registerSystemIpc(deps: SystemIpcDeps): void {
 			version: status.version,
 			command: status.command,
 			error: status.error,
+			// 校验实际使用的 WSL 上下文：用户报告「校验失败」时先看这三个字段与
+			// 设置页展示是否一致（设置弹窗草稿未提交时主进程读到的仍是旧值）。
+			wslEnabled: settings.wslEnabled,
+			wslDistro: settings.wslDistro,
+			wslUser: settings.wslUser,
 		});
 		return status;
 	});

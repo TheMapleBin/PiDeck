@@ -542,6 +542,9 @@ export class PiLocator {
       // 设置页继续保存用户输入的 Linux 路径；下次启动由 resolveCommand 再转成 wsl:// 标记。
       return { ...status, command: normalized };
     }
+    if (this.isDrivelessLinuxPathOnWindows(command)) {
+      return this.linuxPathOutsideWslStatus(command, []);
+    }
     return this.runCheck(command, []);
   }
 
@@ -576,6 +579,10 @@ export class PiLocator {
         command: `wsl -d ${parsed.distro} -u ${parsed.user} ${parsed.piCommand}`,
         searchedDirs: [],
       };
+    }
+
+    if (this.isDrivelessLinuxPathOnWindows(command)) {
+      return this.linuxPathOutsideWslStatus(command, searchedDirs);
     }
 
     return this.runCheck(command, searchedDirs);
@@ -648,6 +655,25 @@ export class PiLocator {
 
   private isUnsupportedPowerShellShim(command: string) {
     return process.platform === "win32" && command.trim().toLowerCase().endsWith(".ps1");
+  }
+
+  /**
+   * win32 下无盘符的 Linux 绝对路径（/home/...）：不可能是 Windows 可执行文件，
+   * 直接跑只会 ENOENT + 笼统文案。典型成因是 WSL 模式没落盘（设置草稿未提交）
+   * 或用户在非 WSL 模式粘贴了 WSL 内路径（2026-09-17 用户反馈）。
+   * 给出可行动的提示，而不是让用户对着 ENOENT 猜。
+   */
+  private isDrivelessLinuxPathOnWindows(command: string) {
+    return process.platform === "win32" && command.startsWith("/");
+  }
+
+  private linuxPathOutsideWslStatus(command: string, searchedDirs: string[]): PiInstallStatus {
+    return {
+      installed: false,
+      command,
+      searchedDirs,
+      error: this.translate("mainPi.linuxPathOutsideWsl"),
+    };
   }
 
   /** 用户粘贴的 Linux 绝对路径在 WSL 模式下包装成内部 wsl:// 标记。双斜杠保留命令自身的首 `/`。 */
@@ -723,7 +749,7 @@ export class PiLocator {
               pathPrefix: invocation.pathPrefix,
             },
           });
-          resolve({ installed: false, command, searchedDirs, error: this.translate("mainPi.checkFailed") });
+          resolve({ installed: false, command, searchedDirs, error: this.composeCheckFailure(raw) });
           return;
         }
 
@@ -906,7 +932,7 @@ export class PiLocator {
         if (error) {
           const raw = decodeWslOutput(stderr).trim() || this.cleanExecError(error.message);
           console.error("[PiLocator] WSL pi CLI check failed", { piCommand, error: raw });
-          resolve({ installed: false, searchedDirs: [], error: this.translate("mainPi.checkFailed") });
+          resolve({ installed: false, searchedDirs: [], error: this.composeCheckFailure(raw) });
           return;
         }
         resolve({ installed: true, command: `wsl -d ${distro} -u ${user} ${piCommand}`, version: decodeWslOutput(stdout).trim(), searchedDirs: [] });
@@ -943,6 +969,24 @@ export class PiLocator {
       return cleaned.slice(0, 100) + '…';
     }
     return cleaned;
+  }
+
+  /**
+   * 校验/检测失败的对外文案：通用提示 + 真实失败原因首行。
+   * stderr 里的「No such file or directory / Permission denied / timed out」是用户
+   * 区分「路径写错 / 不可执行 / WSL 冷启动超时」的唯一线索，此前只进 dev console，
+   * 设置页只能看到笼统的「无法运行 pi CLI」，用户无从下手（2026-09-17 WSL 自定义路径排查）。
+   * 单行 + 去 ANSI/控制字符 + 截断，避免多行 stderr 破坏设置页布局。
+   */
+  private composeCheckFailure(raw: string): string {
+    const firstLine = raw
+      .replace(/\x1b\[[0-9;]*[A-Za-z]/g, "")
+      .split(/\r?\n/)
+      .map(line => line.replace(/[\x00-\x1f\x7f]/g, "").trim())
+      .find(line => line.length > 0);
+    if (!firstLine) return this.translate("mainPi.checkFailed");
+    const short = firstLine.length > 160 ? `${firstLine.slice(0, 160)}…` : firstLine;
+    return this.translate("mainPi.checkFailedReason", { reason: short });
   }
 
   /**

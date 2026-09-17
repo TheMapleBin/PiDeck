@@ -356,6 +356,31 @@ function SettingsModalContent(props: SettingsModalProps) {
 		setDraftSettings((prev) => ({ ...prev, ...patch }));
 	}, []);
 
+	/**
+	 * 把 WSL 相关字段的草稿差异先落盘（检测环境 / 校验自定义 pi 路径前必须调用）。
+	 * 主进程 piCheck/piCheckCustom 读的是持久化设置；用户刚在草稿里切了 WSL 来源/
+	 * 发行版/用户名还没点「保存」时，主进程会拿旧配置执行——wslEnabled=false 时
+	 * Linux 路径被当 Windows 文件启动必然 ENOENT，表现为「校验失败：无法运行 pi CLI」
+	 * （2026-09-17 用户反馈的根因：WSL 验证按钮只写草稿，命令链路读的是磁盘旧值）。
+	 * 只提交这几个字段并推进对应基准，其余草稿字段的脏标记保持原样。
+	 */
+	const commitWslDraftFields = useCallback(async (): Promise<boolean> => {
+		const wslKeys = ["wslEnabled", "wslDistro", "wslUser"] as const;
+		const patch: Partial<AppSettings> = {};
+		for (const key of wslKeys) {
+			if (dirtyFields.has(key)) {
+				(patch as Record<string, unknown>)[key] = draftSettings[key];
+			}
+		}
+		if (Object.keys(patch).length === 0) return true;
+		const ok = await props.onChange(patch).catch(() => false);
+		if (ok) {
+			baseSnapshotRef.current = { ...baseSnapshotRef.current, ...deepClone(patch) };
+			setBaselineToken((v) => v + 1);
+		}
+		return ok;
+	}, [draftSettings, dirtyFields, props.onChange]);
+
 	// 外观实时预览：草稿中明暗/外观主题/主色变化时立即写入 <html> 的 data-* 属性，
 	// 与 App.tsx 的持久化应用共用 applyAppearanceAttributes（见 themeAppearance.ts）。
 	// 保存后由 App 的 settings effect 接管；取消时在 cancelAll 里回滚回 baseSnapshot。
@@ -848,6 +873,7 @@ function SettingsModalContent(props: SettingsModalProps) {
 								draft={draftSettings}
 								updateDraft={updateDraft}
 								isDirty={isDirty}
+								onEnsureWslSettingsSaved={commitWslDraftFields}
 								appInfo={props.appInfo}
 								piStatus={props.piStatus}
 								piChecking={props.piChecking}
