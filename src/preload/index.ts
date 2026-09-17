@@ -105,6 +105,7 @@ import type {
 	FeishuConnectInput,
 	FeishuSessionBotResult,
 	FeishuTestResult,
+	FileSearchResult,
 	FileTreeNode,
 	GitBranchInfo,
 	GitDiscardResource,
@@ -320,6 +321,11 @@ const api = {
 		list: (projectId: string, options?: { maxDepth?: number; directory?: string }) =>
 			ipcRenderer.invoke(ipcChannels.filesList, projectId, options) as Promise<
 				FileTreeNode[]
+			>,
+		/** 工作区文件名搜索（issue #215）：主进程全盘扫描，忽略规则与文件树一致 */
+		search: (projectId: string, query: string) =>
+			ipcRenderer.invoke(ipcChannels.filesSearch, projectId, query) as Promise<
+				FileSearchResult[]
 			>,
 		open: (path: string, scope?: ProjectFileAccessScope) =>
 			ipcRenderer.invoke(ipcChannels.filesOpen, path, scope) as Promise<void>,

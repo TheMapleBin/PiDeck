@@ -30,6 +30,8 @@ export const ipcChannels = {
 	editorsChooseExecutable: "editors:choose-executable",
 	editorsOpenProject: "editors:open-project",
 	filesList: "files:list",
+	/** 工作区文件名搜索（issue #215）：主进程全盘扫描，不受抽屉懒加载深度限制 */
+	filesSearch: "files:search",
 	filesOpen: "files:open",
 	filesShowInFolder: "files:show-in-folder",
 	/** 检测系统可用的文件管理器（打开方式下拉补充入口） */

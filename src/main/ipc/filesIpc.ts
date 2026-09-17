@@ -4,6 +4,7 @@ import { cp, readFile, rename as fsRename, rm, stat, writeFile } from "node:fs/p
 import { basename, join } from "node:path";
 import { ipcChannels } from "../../shared/ipc";
 import type { FileManagerInfo, ProjectFileAccessScope } from "../../shared/types/project";
+import type { FileSearchResult } from "../../shared/types";
 import { detectFileManager, openFileManagerAt } from "../files/FileManager";
 import {
 	createProjectFileReadBoundary,
@@ -116,6 +117,24 @@ export function registerFilesIpc({
 			throw error;
 		}
 	});
+
+	// 渲染层不可信：查询词必须是有限长度的非空字符串；结果上限与共享常量对齐，防大包滥用。
+	const parseFileSearchQuery = (query: unknown): string => {
+		if (typeof query !== "string" || query.trim().length === 0 || query.length > 256) {
+			throw new Error("Invalid search query");
+		}
+		return query;
+	};
+
+	ipcMain.handle(
+		ipcChannels.filesSearch,
+		async (_event, projectId: string, query: string): Promise<FileSearchResult[]> => {
+			const project = projectStore.get(projectId);
+			if (!project) throw new Error(`Project not found: ${projectId}`);
+			const normalizedQuery = parseFileSearchQuery(query);
+			return fileSystemService.searchNames(toWindowsPath(project.path), normalizedQuery);
+		},
+	);
 
 	ipcMain.handle(ipcChannels.filesOpen, async (_event, path: unknown, scope?: unknown) => {
 		const boundary = await resolveProjectReadBoundary(scope);
