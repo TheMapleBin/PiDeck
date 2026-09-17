@@ -17,10 +17,31 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: >-
-          指定 tag（如 v0.6.7）则按该 tag 的代码打包。
-          留空则用当前分支最新 commit + package.json 版本号正式发布（自动 tag vX.Y.Z）。
+        # 下拉（choice）的选项只能是这里写死的静态列表，无法动态读取仓库 tag，
+        # 因此列表外的历史版本用下面的 tag_custom 手填；发版后把新 tag 插在 auto 之后，
+        # 列表保留最近 10 个即可（更旧的版本一律走 tag_custom）。
+        # 注意 choice 不接受空字符串选项，故「留空 = 按 package.json 发正式版」
+        # 用哨兵值 auto 表达，在 resolve 步骤里还原成空串，保持原有分支逻辑不变。
+        description: "目标 tag：auto = 用当前分支最新 commit + package.json 版本号正式发版；列表外的旧版本填下面的 tag_custom"
         required: false
+        type: choice
+        default: auto
+        options:
+          - auto
+          - v0.7.6
+          - v0.7.5
+          - v0.7.4
+          - v0.7.3
+          - v0.7.2
+          - v0.7.1
+          - v0.7.0
+          - v0.6.7
+          - v0.6.6
+          - v0.6.5
+      tag_custom:
+        description: "自定义 tag（填了则覆盖上面的下拉选择；用于列表外的旧版本，如 v0.5.2）"
+        required: false
+        type: string
         default: ""
 
 permissions:
@@ -42,11 +63,18 @@ jobs:
 
       - name: Resolve version and ref
         id: resolve
+        env:
+          # 手工输入一律走 env，避免自定义 tag 直接拼进 shell；
+          # 两个输入在此归一：tag_custom 非空则优先（供下拉列表外的旧版本使用），
+          # push 事件下两者均为空串，行为与原先的「未指定 tag」完全一致。
+          INPUT_TAG: ${{ github.event.inputs.tag_custom != '' && github.event.inputs.tag_custom || github.event.inputs.tag }}
         run: |
           TARGET_COMMITISH=""
-          if [ -n "${{ github.event.inputs.tag }}" ]; then
+          # 还原哨兵值：auto ≡ 旧的「留空」
+          if [ "$INPUT_TAG" = "auto" ]; then INPUT_TAG=""; fi
+          if [ -n "$INPUT_TAG" ]; then
             # 手动触发且指定了 tag → 用 tag 的代码（不要用分支 HEAD 覆盖 tag 指向）
-            TAG="${{ github.event.inputs.tag }}"
+            TAG="$INPUT_TAG"
             REF="refs/tags/${TAG}"
             VERSION="${TAG#v}"
             echo "Using provided tag: ${TAG}"
