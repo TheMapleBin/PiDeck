@@ -15,6 +15,7 @@ import {
 	type SessionImportCopy,
 } from "./SessionImportCopy";
 import { normalizeImportedToolArguments } from "./importToolArguments";
+import { readImportMetaHead } from "./importMetaHead";
 import {
 	IMPORTED_SKIP_PART_TYPES,
 	capImportedImage,
@@ -475,22 +476,9 @@ export class ZCodeSessionImporter {
 		};
 	}
 
+	/** 读取导入产物头部的 import 标记（有界读头部，不再整读会话文件——见 importMetaHead）。 */
 	private async readImportMeta(targetPath: string) {
-		try {
-			const raw = await readFile(targetPath, "utf8");
-			for (const line of raw.split(/\r?\n/).filter(Boolean).slice(0, 8)) {
-				const entry = JSON.parse(line) as Record<string, unknown>;
-				if (entry.type === "zcode_import") {
-					return {
-						sourceMtime: Number(entry.sourceMtime),
-						sourceSize: Number(entry.sourceSize),
-					};
-				}
-			}
-		} catch {
-			return undefined;
-		}
-		return undefined;
+		return readImportMetaHead(targetPath, "zcode_import");
 	}
 
 	private getTargetPath(projectPath: string, session: ParsedZCodeSession) {

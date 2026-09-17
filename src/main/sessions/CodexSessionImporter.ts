@@ -1,7 +1,7 @@
 import { app } from "electron";
 import { createHash, randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { mkdir, open, readFile, readdir, stat } from "node:fs/promises";
+import { mkdir, open, readdir, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { createInterface } from "node:readline";
 import type {
@@ -16,6 +16,7 @@ import {
 	type SessionImportCopy,
 } from "./SessionImportCopy";
 import { normalizeImportedToolArguments } from "./importToolArguments";
+import { readImportMetaHead } from "./importMetaHead";
 import { normalizeImportedStopReason, tryImportedImageBlock } from "./importNormalize";
 
 // 扫描阶段只读每个文件头部：session_meta / 首条用户消息 / preview 都在前部，
@@ -703,22 +704,9 @@ export class CodexSessionImporter {
 		}
 	}
 
+	/** 读取导入产物头部的 import 标记（有界读头部，不再整读会话文件——见 importMetaHead）。 */
 	private async readImportMeta(targetPath: string) {
-		try {
-			const raw = await readFile(targetPath, "utf8");
-			for (const line of raw.split(/\r?\n/).filter(Boolean).slice(0, 8)) {
-				const entry = JSON.parse(line) as any;
-				if (entry.type === "codex_import") {
-					return {
-						sourceMtime: Number(entry.sourceMtime),
-						sourceSize: Number(entry.sourceSize),
-					};
-				}
-			}
-		} catch {
-			return undefined;
-		}
-		return undefined;
+		return readImportMetaHead(targetPath, "codex_import");
 	}
 
 	private async collectJsonl(dir: string): Promise<string[]> {

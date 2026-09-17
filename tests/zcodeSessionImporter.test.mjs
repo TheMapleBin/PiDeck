@@ -9,6 +9,7 @@ import vm from "node:vm";
 import { DatabaseSync } from "node:sqlite";
 
 const require = createRequire(import.meta.url);
+import { tryRequireLocalTs } from "./helpers/requireLocalTs.mjs";
 
 /**
  * ZCodeSessionImporter 单测。
@@ -42,6 +43,10 @@ function loadImporter(homePath) {
 			if (id === "./SessionImportCopy") return importCopy;
 			if (id === "./importToolArguments") return toolArgs;
 			if (id === "./importNormalize") return normalize;
+			// 生产代码的相对 import 以源文件目录为基准解析；这里的 require 以 tests/ 为基准，
+			// 直接把 id 交回会得到 MODULE_NOT_FOUND（见 fix-vm-loader-module-not-found）。
+			const localFromSource = tryRequireLocalTs(id, "src/main/sessions");
+			if (localFromSource) return localFromSource;
 			return require(id);
 		},
 		process,
@@ -483,6 +488,10 @@ function loadZCodeSummaryCacheModule(homePath) {
 				return { app: { getPath: (name) => (name === "userData" ? join(homePath, "user-data") : homePath) } };
 			}
 			if (id === "../utils/fsRetry") return fsRetry;
+			// 生产代码的相对 import 以源文件目录为基准解析；这里的 require 以 tests/ 为基准，
+			// 直接把 id 交回会得到 MODULE_NOT_FOUND（见 fix-vm-loader-module-not-found）。
+			const localFromSource = tryRequireLocalTs(id, "src/main/sessions");
+			if (localFromSource) return localFromSource;
 			return require(id);
 		},
 		setTimeout: () => ({ unref: () => undefined }),
@@ -533,6 +542,10 @@ function loadZCodeScanner(homePath) {
 			if (id === "../../shared/expandedRefBlocks") return expandedRefBlocks;
 			if (id === "./jsonlLineStream") return jsonlLineStream;
 			if (id === "../logging/sharedLogger") return { getAppLogger: () => null };
+			// 生产代码的相对 import 以源文件目录为基准解析；这里的 require 以 tests/ 为基准，
+			// 直接把 id 交回会得到 MODULE_NOT_FOUND（见 fix-vm-loader-module-not-found）。
+			const localFromSource = tryRequireLocalTs(id, "src/main/sessions");
+			if (localFromSource) return localFromSource;
 			return require(id);
 		},
 		setTimeout,

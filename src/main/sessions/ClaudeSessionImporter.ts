@@ -13,6 +13,7 @@ import {
 	type SessionImportCopy,
 } from "./SessionImportCopy";
 import { normalizeImportedToolArguments } from "./importToolArguments";
+import { readImportMetaHead } from "./importMetaHead";
 import {
 	importedContentHasToolCall,
 	importedUnknownBlockAsText,
@@ -424,22 +425,9 @@ export class ClaudeSessionImporter {
 		}
 	}
 
+	/** 读取导入产物头部的 import 标记（有界读头部，不再整读会话文件——见 importMetaHead）。 */
 	private async readImportMeta(targetPath: string) {
-		try {
-			const raw = await readFile(targetPath, "utf8");
-			for (const line of raw.split(/\r?\n/).filter(Boolean).slice(0, 8)) {
-				const entry = JSON.parse(line) as any;
-				if (entry.type === "claude_import") {
-					return {
-						sourceMtime: Number(entry.sourceMtime),
-						sourceSize: Number(entry.sourceSize),
-					};
-				}
-			}
-		} catch {
-			return undefined;
-		}
-		return undefined;
+		return readImportMetaHead(targetPath, "claude_import");
 	}
 
 	private async collectJsonl(dir: string): Promise<string[]> {

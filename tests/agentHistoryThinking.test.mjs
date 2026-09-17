@@ -124,16 +124,9 @@ function loadAgentManagerModule() {
 		{ module: streamGateModule, exports: streamGateModule.exports },
 		{ filename: "streamGate.ts" },
 	);
-	// cacheHitStats：纯函数真实加载（getRuntimeState 读会话文件统计缓存命中率）
-	const cacheHitStatsModule = { exports: {} };
-	vm.runInNewContext(
-		ts.transpileModule(readFileSync("src/main/pi/cacheHitStats.ts", "utf8"), {
-			compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-			fileName: "cacheHitStats.ts",
-		}).outputText,
-		{ module: cacheHitStatsModule, exports: cacheHitStatsModule.exports },
-		{ filename: "cacheHitStats.ts" },
-	);
+	// cacheHitStats：用标准 loader 真实加载；该模块 import 了 node:fs/promises
+	// （增量续算要读前缀锚点），裸 vm 沙箱没有 require 会在顶层直接抛错。
+	const cacheHitStatsModule = loadTsCommonJs("src/main/pi/cacheHitStats.ts");
 	const messageProjectorModule = loadAgentMessageProjectorModule();
 	const historyReaderModule = { exports: {} };
 	const historyReaderOutput = ts.transpileModule(
@@ -269,7 +262,7 @@ function loadAgentManagerModule() {
       // 上下文接管探测：本测试不涉及压缩归属，按「没有接管者」透传（退回原生 compact RPC）
       if (specifier === "./compactionOwner") return noCompactionOwner;
       if (specifier === "./streamGate") return streamGateModule.exports;
-      if (specifier === "./cacheHitStats") return cacheHitStatsModule.exports;
+      if (specifier === "./cacheHitStats") return cacheHitStatsModule;
       if (specifier === "../../shared/toolRuntimeState") return { updateActiveToolCalls: () => undefined };
       if (specifier === "../wsl/WslPaths") {
         return { toWindowsHostPath: (path) => path, toWslLinuxPath: (path) => path };

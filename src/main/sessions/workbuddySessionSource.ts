@@ -1,6 +1,7 @@
 import { mkdir, readFile, readdir, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { normalizeImportedToolArguments } from "./importToolArguments";
+import { readImportMetaHead } from "./importMetaHead";
 
 /** WorkBuddy 的 JSONL 行结构不固定，统一按 unknown 读取后再逐字段收窄。 */
 export type WorkBuddyRecord = Record<string, unknown>;
@@ -178,24 +179,11 @@ export async function readWorkBuddySession(
 	};
 }
 
+/** 读取导入产物头部的 import 标记（有界读头部，不再整读会话文件——见 importMetaHead）。 */
 export async function readWorkBuddyImportMeta(
 	targetPath: string,
 ): Promise<WorkBuddyImportMeta | undefined> {
-	try {
-		const raw = await readFile(targetPath, "utf8");
-		for (const line of raw.split(/\r?\n/).filter(Boolean).slice(0, 8)) {
-			const entry = JSON.parse(line) as WorkBuddyRecord;
-			if (readString(entry.type) === "workbuddy_import") {
-				return {
-					sourceMtime: readNumber(entry.sourceMtime),
-					sourceSize: readNumber(entry.sourceSize),
-				};
-			}
-		}
-	} catch {
-		return undefined;
-	}
-	return undefined;
+	return readImportMetaHead(targetPath, "workbuddy_import");
 }
 
 export async function ensureProjectSessionDir(piRoot: string, projectPath: string) {

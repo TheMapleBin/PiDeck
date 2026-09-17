@@ -1,5 +1,6 @@
 import { mkdir, readFile, readdir, stat } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
+import { readImportMetaHead } from "./importMetaHead";
 
 /** Cursor JSONL 行结构不固定，统一按 unknown 读取后再逐字段收窄。 */
 export type CursorRecord = Record<string, unknown>;
@@ -237,24 +238,11 @@ export async function readCursorSession(
 	};
 }
 
+/** 读取导入产物头部的 import 标记（有界读头部，不再整读会话文件——见 importMetaHead）。 */
 export async function readCursorImportMeta(
 	targetPath: string,
 ): Promise<CursorImportMeta | undefined> {
-	try {
-		const raw = await readFile(targetPath, "utf8");
-		for (const line of raw.split(/\r?\n/).filter(Boolean).slice(0, 8)) {
-			const entry = JSON.parse(line) as CursorRecord;
-			if (readString(entry.type) === "cursor_import") {
-				return {
-					sourceMtime: readNumber(entry.sourceMtime),
-					sourceSize: readNumber(entry.sourceSize),
-				};
-			}
-		}
-	} catch {
-		return undefined;
-	}
-	return undefined;
+	return readImportMetaHead(targetPath, "cursor_import");
 }
 
 export async function ensureProjectSessionDir(piRoot: string, projectPath: string) {

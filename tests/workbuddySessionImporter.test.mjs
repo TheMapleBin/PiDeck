@@ -8,6 +8,7 @@ import ts from "typescript";
 import vm from "node:vm";
 
 const require = createRequire(import.meta.url);
+import { tryRequireLocalTs } from "./helpers/requireLocalTs.mjs";
 
 /**
  * WorkBuddySessionImporter 单测。
@@ -41,6 +42,10 @@ function loadImporter(homePath) {
 			if (id === "./importNormalize") return registry.normalize;
 			if (id === "./workbuddySessionSource") return registry.source;
 			if (id === "./workbuddySessionConvert") return registry.convert;
+			// 生产代码的相对 import 以源文件目录为基准解析；这里的 require 以 tests/ 为基准，
+			// 直接把 id 交回会得到 MODULE_NOT_FOUND（见 fix-vm-loader-module-not-found）。
+			const localFromSource = tryRequireLocalTs(id, "src/main/sessions");
+			if (localFromSource) return localFromSource;
 			return require(id);
 		},
 		process,

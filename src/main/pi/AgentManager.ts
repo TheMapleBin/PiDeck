@@ -1,6 +1,6 @@
 import { app, type BrowserWindow, Notification } from "electron";
 import { randomUUID } from "node:crypto";
-import { readFile, stat } from "node:fs/promises";
+import { stat, unlink, writeFile } from "node:fs/promises";
 import { existsSync, statSync } from "node:fs";
 import { join, dirname, basename } from "node:path";
 import { homedir } from "node:os";
@@ -81,6 +81,7 @@ import {
 	type SessionFileRef,
 } from "./SessionFileEditor";
 import { SessionHistoryReader, boundTurnWindowStart } from "./SessionHistoryReader";
+import { scanJsonlLines } from "../sessions/jsonlLineStream";
 import { estimateMessagesPayloadBytes } from "./messagePayloadSize";
 import { StoppedMessageIdentityCache } from "./stoppedMessageIdentity";
 import {
@@ -2692,11 +2693,19 @@ export class AgentManager {
 	}
 
 	/**
-	 * 会话缓存命中率读取器：按 (size, mtimeMs) 缓存文件解析结果，
-	 * 会话文件未变化时 O(1) 复用，避免高频 getRuntimeState 反复读文件+逐行 parse。
+	 * 会话缓存命中率读取器：按 (size, mtimeMs) 缓存，未变化时 O(1) 复用；
+	 * 会话只追加，变化时仅扫描尾部新增内容增量续算。
+	 *
+	 * 必须用**流式**扫描（scanJsonlLines）而不是 readFile：本读取器挂在
+	 * getRuntimeState 轮询路径上，Codex 导入的 1GB 级会话整读会撞主进程 384MB 堆上限，
+	 * V8 直接 abort 整个主进程（用户看到「大会话闪退」，连堆栈都记不下来）。
 	 */
 	private readonly cacheHitStatsReader: CacheHitStatsReader = createCacheHitStatsReader({
-		readFile: (path) => readFile(path, "utf8"),
+		// scanJsonlLines 的 visitor 是 (line, context) 两参，读取器需要一个投影函数：
+		// 只额外传递 offset/byteLength/complete（增量续算靠它确定行边界）。
+		scanLines: async (filePath, visitor) => {
+			await scanJsonlLines(filePath, visitor);
+		},
 		stat,
 	});
 
