@@ -6,8 +6,33 @@ on:
   workflow_dispatch:
     inputs:
       tags:
-        description: "要同步到 AtomGit 的 Release Tag，逗号分隔（如 v0.7.2,v0.7.3,v0.7.4；留空则只同步最新 Release）"
+        # 下拉，选项列表由 scripts/sync-workflow-choices.js 在发版时自动跟新
+        # （新 tag 插在 auto 之后，保留最近 10 个），不手改。
+        # auto = 同步 GitHub 最新 Release（与「留空」同义）；列表外的旧版本用下面的 tags_custom。
+        # 注意：GitHub 的 choice 不支持多选（multiple 不是合法键，actionlint 直接报错，
+        # 官方 feature request #2076 至今未实现），选多个只能走 tags_custom 逗号分隔。
+        description: "要同步的 Release Tag：auto = GitHub 最新 Release；列表外的旧版本 / 一次性补多个用下面的 tags_custom"
         required: false
+        type: choice
+        default: auto
+        options:
+          - auto
+          - v0.7.6
+          - v0.7.5
+          - v0.7.4
+          - v0.7.3
+          - v0.7.2
+          - v0.7.1
+          - v0.7.0
+          - v0.6.7
+          - v0.6.6
+          - v0.6.5
+      tags_custom:
+        # 与其它 workflow 的 tag_custom 同语义：非空则覆盖上面的选择。
+        # 多个 tag 用英文逗号分隔（如 v0.5.2,v0.5.3）——历史上本输入就是逗号分隔多值。
+        description: "自定义 tag（逗号分隔可多个，如 v0.5.2,v0.5.3；填了就覆盖上面的下拉选择）"
+        required: false
+        type: string
         default: ""
       force_resync:
         description: "强制全量重传：先删除 AtomGit 上已存在的同名 Release 再重建（同版本号重新构建产物重发版时使用）"
@@ -25,7 +50,7 @@ on:
         # 「只同步代码」专用：只跑分支/标签推送，跳过 Release 与附件相关的所有步骤
         # （tag 解析、资产等待、hosts 加速、附件上传）。
         # 与 push_refs 的区别：push_refs 是「顺带推代码」，本开关是「只推代码」。
-        description: "只同步代码（分支与标签）到 AtomGit，跳过 Release 与附件同步（此时 tags / force_resync 均被忽略）"
+        description: "只同步代码（分支与标签）到 AtomGit，跳过 Release 与附件同步（此时 tags / tags_custom / force_resync 均被忽略）"
         required: false
         type: boolean
         default: false
@@ -70,10 +95,20 @@ jobs:
         id: resolve-tags
         # refs_only 模式不涉及 Release：跳过解析，也避开「拿不到 tag 就 exit 1」的硬失败
         if: ${{ github.event.inputs.refs_only != 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 两个手工输入在此归一：tags_custom 非空则优先（列表外的旧版本 / 多 tag 手输入口），
+          # 否则用下拉选择；push/release 事件下两者均为空串。
+          # 走 env 而不是直接拼进 run：手输内容不可信，直接插值会被 $(...) / 引号注入。
+          INPUT_TAGS: ${{ github.event.inputs.tags_custom != '' && github.event.inputs.tags_custom || github.event.inputs.tags }}
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
-          TAGS="${{ github.event.inputs.tags }}"
-          if [ -z "$TAGS" ] && [ "${{ github.event_name }}" = "release" ]; then
-            TAGS="${{ github.event.release.tag_name }}"
+          TAGS="$INPUT_TAGS"
+          # 还原哨兵值：auto ≡ 旧的「留空」（取 GitHub 最新 Release）
+          if [ "$TAGS" = "auto" ]; then TAGS=""; fi
+          if [ -z "$TAGS" ] && [ "$EVENT_NAME" = "release" ]; then
+            TAGS="$RELEASE_TAG"
           fi
           if [ -z "$TAGS" ]; then
             # 留空时只同步 GitHub 仓库最新 Release（与旧行为一致）
@@ -94,8 +129,6 @@ jobs:
           echo "Target tags: ${TAGS}"
           echo "tags=${TAGS}"
           echo "tags=${TAGS}" >> $GITHUB_OUTPUT
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # git refs（分支 + 标签）同步：AtomGit 解除「镜像仓库」后，分支/标签不再由平台自动跟随，
       # 必须先把 tag 推过去 —— sync-release-to-atomgit.mjs 只处理 Release 与附件，不做 git 推送，
