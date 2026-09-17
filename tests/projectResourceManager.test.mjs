@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -7,6 +7,7 @@ import test from "node:test";
 import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
 const { ProjectResourceManager } = loadTsCommonJs("src/main/projects/ProjectResourceManager.ts");
+const projectFileAccess = loadTsCommonJs("src/main/files/projectFileAccess.ts");
 const { mainProcessT } = loadTsCommonJs("src/shared/i18n/mainProcessCopy.ts");
 
 const en = (key, params) => mainProcessT("en-US", key, params);
@@ -286,6 +287,115 @@ test("项目资源目录 junction 指向项目外时列表与写操作都拒绝�
 		const listed = await manager.list("p1");
 		assert.equal(listed.skills.length, 0);
 		assert.equal(readFileSync(join(outsideSkills, "secret", "SKILL.md"), "utf8").includes("outside"), true);
+	} finally {
+		rmSync(fixture, { recursive: true, force: true });
+	}
+});
+
+test("外部技能完整目录可写入两个项目级目标", async () => {
+	const fixture = mkdtempSync(join(tmpdir(), "pideck-prm-import-skill-"));
+	const root = join(fixture, "project");
+	const source = join(fixture, "external-skill");
+	try {
+		mkdirSync(root, { recursive: true });
+		mkdirSync(join(source, "templates"), { recursive: true });
+		writeFileSync(join(source, "SKILL.md"), "---\nname: external\ndescription: External skill\n---\n\n# External\n");
+		writeFileSync(join(source, "templates", "prompt.md"), "template attachment\n");
+		const manager = managerFor({ id: "p1", name: "P1", path: root, lastOpenedAt: 1 });
+
+		await manager.importSkillDirectory("p1", "project-pi", source, "external-pi");
+		await manager.importSkillDirectory("p1", "project-agents", source, "external-agents");
+
+		assert.equal(
+			readFileSync(join(root, ".pi", "skills", "external-pi", "SKILL.md"), "utf8"),
+			readFileSync(join(source, "SKILL.md"), "utf8"),
+		);
+		assert.equal(
+			readFileSync(join(root, ".agents", "skills", "external-agents", "templates", "prompt.md"), "utf8"),
+			"template attachment\n",
+		);
+	} finally {
+		rmSync(fixture, { recursive: true, force: true });
+	}
+});
+
+test("项目 MCP 导入层只读写 .pi/mcp.json，不会覆盖 Claude .mcp.json", async () => {
+	const root = mkdtempSync(join(tmpdir(), "pideck-prm-mcp-layer-"));
+	try {
+		const claudeConfig = join(root, ".mcp.json");
+		const originalClaudeConfig = JSON.stringify({ mcpServers: { claude: { command: "claude-server" } } });
+		writeFileSync(claudeConfig, originalClaudeConfig, "utf8");
+		const manager = managerFor({ id: "p1", name: "P1", path: root, lastOpenedAt: 1 });
+
+		assert.deepEqual(JSON.parse(JSON.stringify(await manager.readProjectMcpConfig("p1"))), {});
+		await manager.saveProjectMcpConfig("p1", { mcpServers: { imported: { command: "node", args: ["server.mjs"] } } });
+
+		assert.equal(readFileSync(claudeConfig, "utf8"), originalClaudeConfig);
+		const saved = JSON.parse(readFileSync(join(root, ".pi", "mcp.json"), "utf8"));
+		assert.equal(saved.mcpServers.imported.command, "node");
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("项目 MCP 写入在临时文件完成后重新校验最终目标边界", async () => {
+	const root = mkdtempSync(join(tmpdir(), "pideck-prm-mcp-reresolve-"));
+	try {
+		let writePathResolutions = 0;
+		const { ProjectResourceManager: BoundaryCheckingManager } = loadTsCommonJs(
+			"src/main/projects/ProjectResourceManager.ts",
+			{
+				stubs: {
+					"../files/projectFileAccess": {
+						...projectFileAccess,
+						resolveProjectFileWritePath: async (...args) => {
+							writePathResolutions += 1;
+							const resolved = await projectFileAccess.resolveProjectFileWritePath(...args);
+							// Model a junction/symlink swap after the staging path was accepted.
+							// The third resolution must be the final target immediately before rename.
+							return writePathResolutions === 3 ? join(root, "outside", "mcp.json") : resolved;
+						},
+					},
+				},
+			},
+		);
+		const project = { id: "p1", name: "P1", path: root, lastOpenedAt: 1 };
+		const manager = new BoundaryCheckingManager(
+			(projectId) => (projectId === project.id ? project : undefined),
+			en,
+		);
+
+		await assert.rejects(
+			manager.saveProjectMcpConfig("p1", { mcpServers: { imported: { command: "node" } } }),
+			/outside the project/i,
+		);
+		assert.equal(writePathResolutions, 3);
+		assert.equal(existsSync(join(root, ".pi", "mcp.json")), false);
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("缺失项目 MCP 文件仍会拒绝指向项目外的 .pi junction", async (t) => {
+	const fixture = mkdtempSync(join(tmpdir(), "pideck-prm-mcp-junction-"));
+	const root = join(fixture, "project");
+	const outside = join(fixture, "outside");
+	try {
+		mkdirSync(root, { recursive: true });
+		mkdirSync(outside, { recursive: true });
+		try {
+			symlinkSync(outside, join(root, ".pi"), process.platform === "win32" ? "junction" : "dir");
+		} catch (error) {
+			if (error instanceof Error && "code" in error && error.code === "EPERM") {
+				t.skip("The current filesystem does not permit junction creation");
+				return;
+			}
+			throw error;
+		}
+		const manager = managerFor({ id: "p1", name: "P1", path: root, lastOpenedAt: 1 });
+
+		await assert.rejects(manager.readProjectMcpConfig("p1"), /outside the project/i);
+		assert.equal(existsSync(join(outside, "mcp.json")), false);
 	} finally {
 		rmSync(fixture, { recursive: true, force: true });
 	}

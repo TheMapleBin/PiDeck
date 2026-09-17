@@ -4,30 +4,25 @@ import type {
 	ResourceImportSourceStatus,
 	StoredResourceImportCandidate,
 } from "../../shared/types/resourceImport";
-import { isRecord, addUnique, redactPreviewUrl, safeMessage, PROBE_CONCURRENCY, PROBE_TIMEOUT_MS } from "./common";
+import {
+	addUnique,
+	isRecord,
+	redactPreviewArgs,
+	redactPreviewUrl,
+	safeMessage,
+	PROBE_CONCURRENCY,
+	PROBE_TIMEOUT_MS,
+	redactPreviewCommand,
+	redactSensitiveList,
+	redactSensitiveText,
+	PREVIEW_TEXT_MAX,
+} from "./common";
 import {
 	isMcpServerName,
 	normalizeMcpServerDefinition,
 	validateMcpConfigFile,
 } from "../config/mcpConfig";
 import { parseCodexToml } from "./toml";
-
-const UNSUPPORTED_KEYS = new Set([
-	"type",
-	"command",
-	"args",
-	"env",
-	"cwd",
-	"url",
-	"headers",
-	"http_headers",
-	"socket",
-	"enabled",
-	"disabled",
-	"description",
-	"startup_timeout_sec",
-	"startup_timeout_ms",
-]);
 
 export type McpSourceParse = Record<string, unknown>;
 export type McpSourceEntry = { name: string; value: unknown };
@@ -70,8 +65,21 @@ export function parseMcpSource(
 
 /** Extract a server map from the two vendors' different top-level spellings. */
 export function extractMcpServers(parsed: McpSourceParse, codex: boolean): McpSourceEntry[] {
+	return extractMcpServersWithStatus(parsed, codex);
+}
+
+/** Extract servers and, when supplied, report a malformed vendor server map. */
+export function extractMcpServersWithStatus(
+	parsed: McpSourceParse,
+	codex: boolean,
+	status?: ResourceImportSourceStatus,
+): McpSourceEntry[] {
 	const value = parsed[codex ? "mcp_servers" : "mcpServers"];
 	if (isRecord(value)) return Object.entries(value).map(([name, item]) => ({ name, value: item }));
+	if (value !== undefined) {
+		if (status) status.error = codex ? "Codex MCP server map must be an object." : "MCP server map must be an object.";
+		return [];
+	}
 	if (!codex) {
 		// A few Claude exports are a bare map rather than { mcpServers: ... }.
 		const entries = Object.entries(parsed);
@@ -93,7 +101,27 @@ export function convertMcpDefinition(
 	warnings: string[],
 	blockers: string[],
 ): McpServerDefinition | null {
-	const type = typeof raw.type === "string" ? raw.type.trim().toLowerCase() : undefined;
+	// Claude calls this field `type`; a few Codex exporters use `transport`.  Treat
+	// either spelling as a declaration so an unsupported value gets a useful blocker
+	// instead of the less actionable "transport missing" message.
+	const declaredTransport = raw.type ?? raw.transport;
+	if (raw.type !== undefined && typeof raw.type !== "string") {
+		blockers.push("Transport type must be a string.");
+		return null;
+	}
+	if (raw.transport !== undefined && typeof raw.transport !== "string") {
+		blockers.push("Transport type must be a string.");
+		return null;
+	}
+	if (typeof raw.type === "string" && typeof raw.transport === "string" && raw.type.trim().toLowerCase() !== raw.transport.trim().toLowerCase()) {
+		blockers.push("Multiple transport declarations were found.");
+		return null;
+	}
+	const type = typeof declaredTransport === "string" ? declaredTransport.trim().toLowerCase() : undefined;
+	if (typeof declaredTransport === "string" && !type) {
+		blockers.push("Transport type is empty.");
+		return null;
+	}
 	if (type && type !== "http" && type !== "stdio" && type !== "socket") {
 		blockers.push(`Unsupported transport: ${type}`);
 		return null;
@@ -113,35 +141,72 @@ export function convertMcpDefinition(
 	}
 
 	const definition: McpServerDefinition = {};
+	// A source field is only treated as preserved when this specific transport
+	// writes it to the PiDeck definition, or when a dedicated warning already
+	// explains why a competing spelling was ignored. A static allow-list here
+	// would hide valid source fields (for example HTTP `env`) that PiDeck cannot
+	// represent on that transport.
+	const convertedOrReportedKeys = new Set<string>(["type", "transport"]);
 	if (command) {
 		definition.command = command;
-		if (Array.isArray(raw.args)) definition.args = raw.args.filter((item): item is string => typeof item === "string");
+		convertedOrReportedKeys.add("command");
+		if (Array.isArray(raw.args)) {
+			definition.args = raw.args.filter((item): item is string => typeof item === "string");
+			if (definition.args.length !== raw.args.length) addUnique(warnings, "Some command arguments were not strings and were omitted.");
+		} else if (raw.args !== undefined) {
+			addUnique(warnings, "Command arguments were not an array and were omitted.");
+		}
+		convertedOrReportedKeys.add("args");
 		if (isRecord(raw.env)) {
 			definition.env = stringRecord(raw.env);
 			if (Object.values(raw.env).some((value) => typeof value !== "string")) addUnique(warnings, "Some environment values were not strings and were omitted.");
 			if (Object.values(raw.env).some((value) => typeof value === "string" && looksUnresolved(value))) addUnique(warnings, "Environment variables may be missing at runtime.");
+		} else if (raw.env !== undefined) {
+			addUnique(warnings, "Environment variables were not an object and were omitted.");
 		}
-		if (typeof raw.cwd === "string" && raw.cwd.trim()) definition.cwd = raw.cwd;
+		convertedOrReportedKeys.add("env");
+		if (typeof raw.cwd === "string" && raw.cwd.trim()) {
+			definition.cwd = raw.cwd;
+		} else if (raw.cwd !== undefined) {
+			addUnique(warnings, "Working directory was not a non-empty string and was omitted.");
+		}
+		convertedOrReportedKeys.add("cwd");
 	}
 	if (url) {
 		definition.url = url;
+		convertedOrReportedKeys.add("url");
 		const headerValue = raw.headers ?? raw.http_headers;
 		if (isRecord(headerValue)) {
 			definition.headers = stringRecord(headerValue);
 			if (Object.values(headerValue).some((value) => typeof value !== "string")) addUnique(warnings, "Some header values were not strings and were omitted.");
 			if (Object.values(headerValue).some((value) => typeof value === "string" && looksUnresolved(value))) addUnique(warnings, "HTTP headers may be missing at runtime.");
+		} else if (headerValue !== undefined && headerValue !== null) {
+			addUnique(warnings, "HTTP headers were not an object and were omitted.");
 		}
-		if (isRecord(raw.headers) && isRecord(raw.http_headers)) addUnique(warnings, "Both headers fields were present; the standard headers field was used.");
+		if (raw.headers !== undefined && raw.headers !== null) convertedOrReportedKeys.add("headers");
+		else if (raw.http_headers !== undefined && raw.http_headers !== null) convertedOrReportedKeys.add("http_headers");
+		if (isRecord(raw.headers) && isRecord(raw.http_headers)) {
+			addUnique(warnings, "Both headers fields were present; the standard headers field was used.");
+			convertedOrReportedKeys.add("http_headers");
+		}
 	}
-	if (socket) definition.socket = socket;
-	if (codex && raw.enabled === false) definition.disabled = true;
-	if (!codex && typeof raw.disabled === "boolean") definition.disabled = raw.disabled;
+	if (socket) {
+		definition.socket = socket;
+		convertedOrReportedKeys.add("socket");
+	}
+	if (codex && typeof raw.enabled === "boolean") {
+		// PiDeck is enabled by default, so both Codex boolean states have a direct
+		// representation: only the non-default false value needs an explicit field.
+		if (raw.enabled === false) definition.disabled = true;
+		convertedOrReportedKeys.add("enabled");
+	}
+	if (!codex && typeof raw.disabled === "boolean") {
+		definition.disabled = raw.disabled;
+		convertedOrReportedKeys.add("disabled");
+	}
 
 	for (const key of Object.keys(raw)) {
-		if (!UNSUPPORTED_KEYS.has(key)) addUnique(warnings, `Field not preserved: ${key.replace(/[\r\n]/g, " ").slice(0, 80)}`);
-	}
-	for (const key of ["startup_timeout_sec", "startup_timeout_ms", "description"]) {
-		if (key in raw) addUnique(warnings, `Field not preserved: ${key}`);
+		if (!convertedOrReportedKeys.has(key)) addUnique(warnings, `Field not preserved: ${key.replace(/[\r\n]/g, " ").slice(0, 80)}`);
 	}
 	if ("token" in raw || "api_key" in raw || "apiKey" in raw || "bearer_token" in raw || "oauth" in raw) {
 		addUnique(warnings, "Authentication values require manual verification.");
@@ -217,15 +282,27 @@ export async function probeMcpCandidates(provider: ProbeProvider, candidates: St
 export function publicMcpCandidate(candidate: StoredResourceImportCandidate): ResourceImportCandidate {
 	const {
 		sourcePath: _sourcePath,
+		sourcePathLexical: _sourcePathLexical,
 		sourceFingerprint: _sourceFingerprint,
 		mcpDefinition: _mcpDefinition,
 		...publicCandidate
 	} = candidate;
 	return {
 		...publicCandidate,
-		preview: candidate.preview?.url
-			? { ...candidate.preview, url: redactPreviewUrl(candidate.preview.url) }
-			: candidate.preview,
+		name: redactSensitiveText(publicCandidate.name, PREVIEW_TEXT_MAX),
+		targetName: redactSensitiveText(publicCandidate.targetName, PREVIEW_TEXT_MAX),
+		sourcePathLabel: redactSensitiveText(publicCandidate.sourcePathLabel, PREVIEW_TEXT_MAX),
+		description: redactSensitiveText(publicCandidate.description, PREVIEW_TEXT_MAX),
+		warnings: redactSensitiveList(publicCandidate.warnings),
+		blockers: redactSensitiveList(publicCandidate.blockers),
+		preview: candidate.preview
+			? {
+				...candidate.preview,
+				...(candidate.preview.command ? { command: redactPreviewCommand(candidate.preview.command) } : {}),
+				...(candidate.preview.url ? { url: redactPreviewUrl(candidate.preview.url) } : {}),
+				...(candidate.preview.args ? { args: redactPreviewArgs(candidate.preview.args) } : {}),
+			}
+			: undefined,
 	};
 }
 

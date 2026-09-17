@@ -28,6 +28,7 @@ function loadSkillManagerModule() {
 	});
 	const sandbox = {
 		exports: {},
+		process,
 		require: (id) => {
 			if (id === "electron")
 				return {
@@ -248,6 +249,29 @@ test("installImageGenTemplate copies the bundled image-gen skill into the global
 		const again = await manager.installImageGenTemplate();
 		assert.equal(again.success, true);
 		assert.equal(readFileSync(target, "utf8"), written);
+	});
+});
+
+test("external skill directory import supports both managed global destinations", async () => {
+	await withTemporaryHome(async (home) => {
+		const source = join(home, "external", "source-skill");
+		await createSkillFile(join(source, "SKILL.md"), "external-skill", "External source skill");
+		await mkdir(join(source, "references"), { recursive: true });
+		await writeFile(join(source, "references", "guide.md"), "preserved attachment\n", "utf8");
+
+		const { SkillManager } = loadSkillManagerModule();
+		const manager = new SkillManager(home);
+		await manager.importSkillDirectory("pi-global", source, "external-pi");
+		await manager.importSkillDirectory("agents-global", source, "external-agents");
+
+		assert.equal(
+			readFileSync(join(home, ".pi", "agent", "skills", "external-pi", "SKILL.md"), "utf8"),
+			readFileSync(join(source, "SKILL.md"), "utf8"),
+		);
+		assert.equal(
+			readFileSync(join(home, ".agents", "skills", "external-agents", "references", "guide.md"), "utf8"),
+			"preserved attachment\n",
+		);
 	});
 });
 

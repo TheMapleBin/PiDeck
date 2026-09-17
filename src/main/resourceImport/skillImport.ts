@@ -2,19 +2,30 @@ import { createHash, randomUUID } from "node:crypto";
 import { cp, lstat, mkdir, readdir, readFile, rename, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { ResourceImportSourceKind, ResourceImportCandidate, StoredResourceImportCandidate } from "../../shared/types/resourceImport";
-import { fingerprint, hasErrorCode, MAX_FILE_BYTES, MAX_SKILL_DEPTH, MAX_SKILL_TREE_BYTES, safeMessage, sourceLabel } from "./common";
+import {
+	fingerprint,
+	hasErrorCode,
+	MAX_FILE_BYTES,
+	MAX_SKILL_DEPTH,
+	MAX_SKILL_TREE_BYTES,
+	PREVIEW_TEXT_MAX,
+	redactSensitiveList,
+	redactSensitiveText,
+	safeMessage,
+	sourceLabel,
+} from "./common";
 
 type SourcePath = { source: ResourceImportSourceKind; path: string };
 
 /** Normalize an imported skill name without changing the source SKILL.md. */
 export function normalizeSkillName(value: string): string {
-	return value
+	const normalized = value
 		.trim()
 		.toLowerCase()
 		.replace(/[^\p{L}\p{N}-]+/gu, "-")
 		.replace(/-+/g, "-")
-		.replace(/^-|-$/g, "")
-		.slice(0, 64);
+		.replace(/^-|-$/g, "");
+	return normalized.slice(0, 64).replace(/-+$/g, "");
 }
 
 /** Read the small YAML-like frontmatter subset used by pi skills. */
@@ -148,18 +159,37 @@ export async function buildSkillCandidate(item: SourcePath, dir: string): Promis
 export function publicSkillCandidate(candidate: StoredResourceImportCandidate): ResourceImportCandidate {
 	const {
 		sourcePath: _sourcePath,
+		sourcePathLexical: _sourcePathLexical,
 		sourceFingerprint: _sourceFingerprint,
 		mcpDefinition: _mcpDefinition,
 		...publicCandidate
 	} = candidate;
-	return publicCandidate;
+	return {
+		...publicCandidate,
+		name: redactSensitiveText(publicCandidate.name, PREVIEW_TEXT_MAX),
+		targetName: redactSensitiveText(publicCandidate.targetName, PREVIEW_TEXT_MAX),
+		sourcePathLabel: redactSensitiveText(publicCandidate.sourcePathLabel, PREVIEW_TEXT_MAX),
+		description: redactSensitiveText(publicCandidate.description, PREVIEW_TEXT_MAX),
+		warnings: redactSensitiveList(publicCandidate.warnings),
+		blockers: redactSensitiveList(publicCandidate.blockers),
+	};
 }
 
 /** Compatibility fallback for older test doubles; production managers expose this operation. */
 export async function copySkillDirectoryAtomic(targetRoot: string, sourceDirectory: string, targetName: string): Promise<void> {
+	// This helper is also used as a compatibility fallback by ResourceImportManager;
+	// validate the final path component here so a future caller cannot turn a failed
+	// scan into a directory traversal write.
+	if (!targetName || targetName !== targetName.trim() || targetName.toLowerCase() !== targetName || targetName.length > 64 || !/^[\p{L}\p{N}](?:[\p{L}\p{N}-]{0,63})$/u.test(targetName)) {
+		throw new Error("Skill name cannot be converted to a safe name.");
+	}
+	// Keep the compatibility path subject to the same complete-tree limits as the
+	// production managers.  This also rejects links/special files introduced between
+	// discovery and the copy operation before anything is placed in the destination.
+	await skillTreeFingerprint(sourceDirectory);
 	await mkdir(targetRoot, { recursive: true });
 	const occupied = (await readdir(targetRoot, { withFileTypes: true })).some(
-		(entry) => entry.name.toLowerCase() === targetName.toLowerCase(),
+		(entry) => entry.name.toLowerCase() === targetName.toLowerCase() || normalizeSkillName(entry.name) === targetName,
 	);
 	if (occupied) throw new Error("Target already contains this skill.");
 	const temporaryDirectory = join(targetRoot, `.${targetName}.${randomUUID()}.tmp`);
@@ -170,6 +200,7 @@ export async function copySkillDirectoryAtomic(targetRoot: string, sourceDirecto
 			force: false,
 			verbatimSymlinks: true,
 		});
+		await skillTreeFingerprint(temporaryDirectory);
 		await rename(temporaryDirectory, join(targetRoot, targetName));
 	} finally {
 		await rm(temporaryDirectory, { recursive: true, force: true }).catch(() => undefined);

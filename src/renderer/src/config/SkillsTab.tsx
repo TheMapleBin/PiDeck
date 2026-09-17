@@ -22,6 +22,8 @@ export function SkillsTab(props: {
 	projectId?: string;
 	/** Active project id used as an external scan source in both global and project scopes. */
 	sourceProjectId?: string;
+	/** Project resource pages keep imports inside their current project. */
+	fixedProjectId?: string;
 	projects?: Array<{ id: string; name: string; kind?: string }>;
 	scopeSelector?: ReactNode;
 	projectOverrides: ProjectResourceOverrides;
@@ -123,6 +125,7 @@ export function SkillsTab(props: {
 						kind="skill"
 						sourceProjectId={props.sourceProjectId ?? props.projectId}
 						projects={projects}
+						fixedProjectId={props.fixedProjectId}
 						triggerLabel={t("config.import.button")}
 						onImported={props.onRefresh}
 					/>

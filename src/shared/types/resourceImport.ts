@@ -50,6 +50,27 @@ export type ResourceImportScanResult = {
 	candidates: ResourceImportCandidate[];
 };
 
+/** Stable error codes returned by the resource-import IPC boundary. */
+export type ResourceImportErrorCode =
+	| "INVALID_INPUT"
+	| "PROJECT_UNAVAILABLE"
+	| "PROJECT_UNTRUSTED"
+	| "SCAN_EXPIRED"
+	| "TARGET_CHANGED"
+	| "SOURCE_CHANGED"
+	| "CONFLICT"
+	| "IMPORT_FAILED";
+
+/** User-safe, structured failure payload. Raw stacks and vendor secrets never cross IPC. */
+export type ResourceImportError = {
+	code: ResourceImportErrorCode;
+	message: string;
+};
+
+export type ResourceImportScanResponse =
+	| { ok: true; result: ResourceImportScanResult }
+	| { ok: false; error: ResourceImportError };
+
 export type ResourceImportApplyInput = {
 	scanId: string;
 	target: ResourceImportTarget;
@@ -73,9 +94,15 @@ export type ResourceImportReport = {
 	failed: number;
 };
 
+export type ResourceImportApplyResponse =
+	| { ok: true; result: ResourceImportReport }
+	| { ok: false; error: ResourceImportError };
+
 /** Internal-only payload kept in the main process scan cache. */
 export type StoredResourceImportCandidate = ResourceImportCandidate & {
 	sourcePath: string;
+	/** Lexical source path retained only in the main-process scan cache for stale checks. */
+	sourcePathLexical?: string;
 	sourceFingerprint: string;
 	mcpDefinition?: McpServerDefinition;
 };

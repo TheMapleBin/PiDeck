@@ -1,77 +1,67 @@
 import { randomUUID } from "node:crypto";
 import { lstat, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { dirname, join, relative, resolve, sep } from "node:path";
-import { homedir } from "node:os";
+import { dirname, join } from "node:path";
 import type { ConfigManager } from "../config/ConfigManager";
 import type { ProjectResourceManager } from "../projects/ProjectResourceManager";
 import type { SkillManager } from "../skills/SkillManager";
-import { homeFromPiAgentDir, isMcpServerName, parseMcpConfigFile, validateMcpConfigFile } from "../config/mcpConfig";
+import { parseMcpConfigFile, validateMcpConfigFile } from "../config/mcpConfig";
+import {
+	createProjectFileReadBoundary,
+	resolveProjectFileReadPath,
+	resolveProjectFileWritePath,
+} from "../files/projectFileAccess";
 import type { McpConfigFile } from "../../shared/types/mcp";
 import type {
 	ResourceImportApplyInput,
-	ResourceImportCandidate,
 	ResourceImportScanInput,
 	ResourceImportScanResult,
-	ResourceImportSourceKind,
-	ResourceImportSourceStatus,
 	ResourceImportTarget,
 	ResourceImportReport,
 	StoredResourceImportCandidate,
 } from "../../shared/types/resourceImport";
 import {
 	addUnique,
-	fingerprint,
 	hasErrorCode,
 	isConflictError,
 	isRecord,
-	pathInside,
 	ResourceImportConflictError,
 	SCAN_TTL_MS,
 	safeMessage,
-	sourceLabel,
 	targetKey,
+	MAX_FILE_BYTES,
+	redactSensitiveText,
 } from "./common";
 import {
-	convertMcpDefinition,
-	extractMcpServers,
-	mcpTransportOf,
-	parseMcpSource,
-	probeMcpCandidates,
-} from "./mcpImport";
-import {
-	buildSkillCandidate,
 	copySkillDirectoryAtomic,
 	findSkillDirs,
 	normalizeSkillName,
 	parseSkillFrontmatter,
-	publicSkillCandidate,
-	skillTreeFingerprint,
-	sourceDirectoryIsSafe,
 } from "./skillImport";
-
-type ProjectLike = { id: string; path: string; kind?: "chat"; environment?: "windows" | "wsl" };
-type SourcePath = { source: ResourceImportSourceKind; path: string };
-type ScanCandidates = {
-	sources: ResourceImportSourceStatus[];
-	stored: StoredResourceImportCandidate[];
-	publicCandidates: ResourceImportCandidate[];
-};
+import {
+	ResourceImportSourceScanner,
+	type McpSourceSnapshot,
+	type ResourceImportProject,
+	type SkillSourceSnapshot,
+} from "./ResourceImportSourceScanner";
 
 // Keep the helpers available to the existing focused tests and to other main-process callers.
 export { normalizeSkillName, parseSkillFrontmatter } from "./skillImport";
 
 /**
  * Coordinates external-resource scans and applies opaque, short-lived selections.
- * Conversion and filesystem traversal live in separate helpers so this class remains an
- * IPC/domain orchestration boundary rather than a second resource implementation.
+ * External source traversal lives in ResourceImportSourceScanner so this class remains
+ * an IPC/domain orchestration boundary rather than a second resource implementation.
  */
 export class ResourceImportManager {
+	private readonly sourceScanner: ResourceImportSourceScanner;
 	private readonly scans = new Map<
 		string,
 		{
 			expiresAt: number;
 			input: ResourceImportScanInput;
 			candidates: StoredResourceImportCandidate[];
+			mcpSourceSnapshots: McpSourceSnapshot[];
+			skillSourceSnapshots: SkillSourceSnapshot[];
 			result: ResourceImportScanResult;
 		}
 	>();
@@ -80,27 +70,39 @@ export class ResourceImportManager {
 		private readonly configManager: ConfigManager,
 		private readonly skillManager: SkillManager,
 		private readonly projectResourceManager: ProjectResourceManager,
-		private readonly getProject: (id: string) => ProjectLike | undefined,
+		private readonly getProject: (id: string) => ResourceImportProject | undefined,
 		private readonly isTrusted: (projectId: string, root: string) => Promise<boolean>,
 		private readonly onReport?: (report: Pick<ResourceImportReport, "kind" | "imported" | "skipped" | "failed">) => void,
-	) {}
+	) {
+		this.sourceScanner = new ResourceImportSourceScanner(
+			configManager,
+			projectResourceManager,
+			getProject,
+		);
+	}
 
 	async scan(input: ResourceImportScanInput): Promise<ResourceImportScanResult> {
 		this.validateInput(input);
 		this.pruneExpiredScans();
 		if (input.target.scope === "project") await this.assertProjectTarget(input.target);
-		const candidates = input.kind === "mcp" ? await this.scanMcp(input) : await this.scanSkills(input);
+		const candidates = await this.sourceScanner.scan(input);
+		const existing = input.kind === "mcp"
+			? await this.existingMcpNames(input.target)
+			: await this.existingSkillNames(input.target);
+		this.markConflicts(candidates.stored, existing);
 		const result: ResourceImportScanResult = {
 			scanId: randomUUID(),
 			kind: input.kind,
 			target: input.target,
-			sources: candidates.sources,
-			candidates: candidates.publicCandidates,
+			sources: this.sourceScanner.publicSourceStatuses(candidates.sources),
+			candidates: this.sourceScanner.publicCandidates(input.kind, candidates.stored),
 		};
 		this.scans.set(result.scanId, {
 			expiresAt: Date.now() + SCAN_TTL_MS,
 			input,
 			candidates: candidates.stored,
+			mcpSourceSnapshots: candidates.mcpSourceSnapshots,
+			skillSourceSnapshots: candidates.skillSourceSnapshots,
 			result,
 		});
 		return result;
@@ -114,7 +116,16 @@ export class ResourceImportManager {
 			throw new Error("Import scan expired. Please scan again.");
 		}
 		this.validateTarget(input.target, scan.input.kind);
-		if (targetKey(scan.input.target) !== targetKey(input.target)) throw new Error("Import target changed. Please scan again.");
+		if (targetKey(scan.input.target) !== targetKey(input.target)) {
+			// A scan is bound to the target that was shown in the dialog.  Discard it on a
+			// mismatch so a caller cannot retry the same candidate set against another path.
+			this.scans.delete(input.scanId);
+			throw new Error("Import target changed. Please scan again.");
+		}
+		// Trust can be revoked while the user reviews candidates. Re-authorize the
+		// selected project immediately before any freshness checks or writes so a
+		// previously valid scan never grants a stale project-write capability.
+		if (input.target.scope === "project") await this.assertProjectTarget(input.target);
 
 		const byId = new Map(scan.candidates.map((candidate) => [candidate.candidateId, candidate]));
 		const selected: StoredResourceImportCandidate[] = [];
@@ -123,7 +134,17 @@ export class ResourceImportManager {
 			if (!candidate || selected.some((item) => item.candidateId === candidateId)) throw new Error("Invalid import candidate.");
 			selected.push(candidate);
 		}
-		for (const candidate of selected) await this.assertCandidateFresh(candidate, scan.input.kind);
+		// A scan is a one-shot authorization token. Consume it before the first await so
+		// two concurrent/replayed apply calls cannot both pass validation and race their
+		// read-modify-write operations against the same target configuration.
+		this.scans.delete(input.scanId);
+		await this.sourceScanner.assertFresh(
+			scan.input.kind,
+			scan.candidates,
+			scan.input.sourceProjectId,
+			scan.mcpSourceSnapshots,
+			scan.skillSourceSnapshots,
+		);
 
 		const results: ResourceImportReport["results"] = [];
 		try {
@@ -131,26 +152,35 @@ export class ResourceImportManager {
 				if (!candidate.importable || candidate.conflict) {
 					results.push({
 						candidateId: candidate.candidateId,
-						name: candidate.name,
+						name: redactSensitiveText(candidate.name),
 						status: "skipped",
-						reason: candidate.conflict ? "Target already contains this resource." : candidate.blockers.join("; ") || "Resource cannot be imported.",
+						reason: candidate.conflict
+							? "Target already contains this resource."
+							: redactSensitiveText(candidate.blockers.join("; ") || "Resource cannot be imported."),
 					});
 					continue;
 				}
 				try {
 					if (scan.input.kind === "mcp") await this.applyMcp(candidate, input.target);
 					else await this.applySkill(candidate, input.target);
-					results.push({ candidateId: candidate.candidateId, name: candidate.name, status: "imported", warnings: candidate.warnings });
+					results.push({
+						candidateId: candidate.candidateId,
+						name: redactSensitiveText(candidate.name),
+						status: "imported",
+						warnings: candidate.warnings.map((warning) => redactSensitiveText(warning)),
+					});
 				} catch (error) {
 					results.push({
 						candidateId: candidate.candidateId,
-						name: candidate.name,
+						name: redactSensitiveText(candidate.name),
 						status: isConflictError(error) ? "skipped" : "failed",
-						reason: safeMessage(error, "Resource import failed."),
+						reason: redactSensitiveText(safeMessage(error, "Resource import failed.")),
 					});
 				}
 			}
 		} finally {
+			// The scan was consumed before freshness checks; keep this block explicit so
+			// future control-flow changes cannot accidentally make a scan reusable.
 			this.scans.delete(input.scanId);
 		}
 
@@ -212,122 +242,6 @@ export class ResourceImportManager {
 		return root;
 	}
 
-	private async sourcePaths(input: ResourceImportScanInput): Promise<SourcePath[]> {
-		const home = homeFromPiAgentDir(this.configManager.getConfigDir()) || homedir();
-		const paths: SourcePath[] = input.kind === "mcp"
-			? [
-				{ source: "claude-global", path: join(home, ".claude.json") },
-				{ source: "claude-global", path: join(home, ".claude", "mcp-configs", "mcp-servers.json") },
-				{ source: "codex-global", path: join(home, ".codex", "config.toml") },
-			]
-			: [
-				{ source: "claude-global", path: join(home, ".claude", "skills") },
-				{ source: "codex-global", path: join(home, ".codex", "skills") },
-			];
-		if (!input.sourceProjectId) return paths;
-		const project = this.getProject(input.sourceProjectId);
-		if (!project || project.kind === "chat") return paths;
-		const root = await this.projectResourceManager.resolveProjectRoot(input.sourceProjectId);
-		paths.push(
-			input.kind === "mcp" ? { source: "claude-project", path: join(root, ".mcp.json") } : { source: "claude-project", path: join(root, ".claude", "skills") },
-			input.kind === "mcp" ? { source: "codex-project", path: join(root, ".codex", "config.toml") } : { source: "codex-project", path: join(root, ".agents", "skills") },
-		);
-		return paths;
-	}
-
-	private async readTextSource(path: string): Promise<{ raw?: string; exists: boolean; error?: string }> {
-		try {
-			return { raw: await readFile(path, "utf8"), exists: true };
-		} catch (error) {
-			if (hasErrorCode(error, "ENOENT")) return { exists: false };
-			return { exists: true, error: "Source could not be read." };
-		}
-	}
-
-	private async scanMcp(input: ResourceImportScanInput): Promise<ScanCandidates> {
-		const sources: ResourceImportSourceStatus[] = [];
-		const stored: StoredResourceImportCandidate[] = [];
-		for (const item of await this.sourcePaths(input)) {
-			const status: ResourceImportSourceStatus = { source: item.source, pathLabel: item.path, exists: false };
-			sources.push(status);
-			const sourceFile = await this.readTextSource(item.path);
-			status.exists = sourceFile.exists;
-			if (!sourceFile.exists || sourceFile.error || sourceFile.raw === undefined) {
-				if (sourceFile.error) status.error = sourceFile.error;
-				continue;
-			}
-			if (Buffer.byteLength(sourceFile.raw, "utf8") > 10 * 1024 * 1024) {
-				status.error = "Source file is too large.";
-				continue;
-			}
-			const parsed = parseMcpSource(sourceFile.raw, item.path.endsWith(".toml"), status);
-			if (!parsed) continue;
-			for (const entry of extractMcpServers(parsed, item.path.endsWith(".toml"))) {
-				const sourceDef = isRecord(entry.value) ? entry.value : {};
-				const warnings: string[] = [];
-				const blockers: string[] = [];
-				if (!isRecord(entry.value)) blockers.push("MCP server definition must be an object.");
-				const definition = convertMcpDefinition(sourceDef, item.path.endsWith(".toml"), warnings, blockers);
-				if (!isMcpServerName(entry.name)) blockers.push("MCP name is invalid for PiDeck.");
-				stored.push({
-					candidateId: randomUUID(),
-					kind: "mcp",
-					source: item.source,
-					sourceLabel: sourceLabel(item.source),
-					sourcePathLabel: item.path,
-					name: entry.name,
-					targetName: entry.name,
-					description: typeof sourceDef.description === "string" ? sourceDef.description : "",
-					importable: blockers.length === 0 && Boolean(definition),
-					warnings,
-					blockers,
-					conflict: false,
-					transport: mcpTransportOf(definition),
-					preview: definition ? { command: definition.command, args: definition.args, url: definition.url } : undefined,
-					sourcePath: item.path,
-					sourceFingerprint: fingerprint(sourceFile.raw),
-					mcpDefinition: definition ?? undefined,
-				});
-			}
-		}
-		await probeMcpCandidates(this.configManager, stored);
-		const existing = await this.existingMcpNames(input.target);
-		this.markConflicts(stored, existing);
-		return this.publicCandidates(sources, stored);
-	}
-
-	private async scanSkills(input: ResourceImportScanInput): Promise<ScanCandidates> {
-		const sources: ResourceImportSourceStatus[] = [];
-		const stored: StoredResourceImportCandidate[] = [];
-		for (const item of await this.sourcePaths(input)) {
-			const status: ResourceImportSourceStatus = { source: item.source, pathLabel: item.path, exists: false };
-			sources.push(status);
-			const root = await sourceDirectoryIsSafe(item.path);
-			status.exists = root.exists;
-			if (!root.safe) {
-				status.error = root.error;
-				continue;
-			}
-			if (!root.exists) continue;
-			const discovery = await findSkillDirs(item.path);
-			if (discovery.error) status.error = discovery.error;
-			for (const dir of discovery.dirs) {
-				if (stored.length >= 500) {
-					status.error = "Too many skill candidates; remaining entries were omitted.";
-					break;
-				}
-				stored.push(await buildSkillCandidate(item, dir));
-			}
-		}
-		const existing = await this.existingSkillNames(input.target);
-		this.markConflicts(stored, existing);
-		return {
-			sources,
-			stored,
-			publicCandidates: stored.map(publicSkillCandidate),
-		};
-	}
-
 	private markConflicts(candidates: StoredResourceImportCandidate[], existing: Set<string>): void {
 		const groups = new Map<string, StoredResourceImportCandidate[]>();
 		for (const candidate of candidates) {
@@ -339,31 +253,32 @@ export class ResourceImportManager {
 			groups.set(key, group);
 		}
 		for (const group of groups.values()) {
+			if (group.length > 1) {
+				const sources = [...new Set(group.map((candidate) => candidate.sourceLabel))].join(", ");
+				const warning = sources
+					? `Duplicate name in this scan (${sources}); only one candidate can be imported.`
+					: "A duplicate name exists in this scan; only one candidate can be imported.";
+				// Keep the warning on the winner too, so the dialog explains why another
+				// source with the same normalized name is not selectable.
+				for (const candidate of group) addUnique(candidate.warnings, warning);
+			}
 			const winner = group.find((candidate) => candidate.importable) ?? group[0];
 			for (const candidate of group) {
 				if (candidate === winner) continue;
 				candidate.conflict = true;
-				addUnique(candidate.warnings, "A duplicate name exists in this scan; only one candidate can be imported.");
 			}
 		}
-	}
-
-	private publicCandidates(sources: ResourceImportSourceStatus[], stored: StoredResourceImportCandidate[]): ScanCandidates {
-		return {
-			sources,
-			stored,
-			publicCandidates: stored.map((candidate) => {
-				const { sourcePath: _sourcePath, sourceFingerprint: _sourceFingerprint, mcpDefinition: _mcpDefinition, ...publicCandidate } = candidate;
-				return publicCandidate;
-			}),
-		};
 	}
 
 	private async existingMcpNames(target: ResourceImportTarget): Promise<Set<string>> {
 		if (target.scope === "global") {
 			const snapshot = await this.configManager.getMcpConfig();
 			if (snapshot.writableError) throw new Error("PiDeck MCP configuration is invalid; repair it before importing.");
-			return new Set((snapshot.servers ?? []).map((item) => item.name.toLowerCase()));
+			// `servers` is the effective merged view and includes read-only Claude/Codex
+			// layers.  Conflict detection for a PiDeck target must inspect only the
+			// writable ~/.pi/agent/mcp.json layer; otherwise importing an external entry
+			// with the same name would be incorrectly disabled.
+			return new Set(Object.keys(snapshot.writableFile?.mcpServers ?? {}).map((name) => name.toLowerCase()));
 		}
 		const file = await this.readProjectMcpConfig(target.projectId);
 		return new Set(Object.keys(file.mcpServers ?? {}).map((name) => name.toLowerCase()));
@@ -372,13 +287,22 @@ export class ResourceImportManager {
 	private async readProjectMcpConfig(projectId: string): Promise<McpConfigFile> {
 		const reader = this.projectResourceManager.readProjectMcpConfig;
 		if (typeof reader === "function") return reader.call(this.projectResourceManager, projectId);
+		// Production always supplies ProjectResourceManager's reader.  Keep this branch
+		// only for narrow legacy/test doubles, but retain the same canonical project
+		// boundary guarantees: a missing file is empty, while a link/reparse point is
+		// never followed just because the full manager was not injected.
 		const root = await this.projectResourceManager.resolveProjectRoot(projectId);
-		const path = join(root, ".pi", "mcp.json");
-		if (!pathInside(root, path)) throw new Error("Project path is outside boundary.");
-		const raw = await readFile(path, "utf8").catch((error: unknown) => {
-			if (hasErrorCode(error, "ENOENT")) return "{}";
-			throw error;
-		});
+		const boundary = await createProjectFileReadBoundary(root);
+		const lexicalPath = join(root, ".pi", "mcp.json");
+		let raw = "{}";
+		try {
+			const safePath = await resolveProjectFileReadPath(boundary, lexicalPath);
+			raw = await readFile(safePath, "utf8");
+		} catch (error) {
+			if (!hasErrorCode(error, "ENOENT")) throw new Error("Project path is outside boundary.");
+			// Check every existing parent even when the optional file is absent.
+			await resolveProjectFileWritePath(boundary, lexicalPath);
+		}
 		const parsed = parseMcpConfigFile(raw);
 		if (parsed.error) throw new Error(parsed.error);
 		return parsed.file;
@@ -389,7 +313,7 @@ export class ResourceImportManager {
 		if (target.scope === "global") {
 			const snapshot = await this.configManager.getMcpConfig();
 			if (snapshot.writableError) throw new Error("PiDeck MCP configuration is invalid; repair it before importing.");
-			if ((snapshot.servers ?? []).some((item) => item.name.toLowerCase() === candidate.targetName.toLowerCase())) throw new ResourceImportConflictError("Target already contains this MCP server.");
+			if (Object.keys(snapshot.writableFile?.mcpServers ?? {}).some((name) => name.toLowerCase() === candidate.targetName.toLowerCase())) throw new ResourceImportConflictError("Target already contains this MCP server.");
 			const writableFile = snapshot.writableFile ?? { mcpServers: {} };
 			const file: McpConfigFile = {
 				...writableFile,
@@ -412,48 +336,90 @@ export class ResourceImportManager {
 			await writer.call(this.projectResourceManager, target.projectId, file);
 			return;
 		}
+		// Compatibility fallback for old test doubles.  It deliberately mirrors the
+		// project manager's boundary checks instead of writing through a lexical path.
 		const root = await this.assertProjectTarget(target);
-		const path = join(root, ".pi", "mcp.json");
-		if (!pathInside(root, path)) throw new Error("Project path is outside boundary.");
-		await mkdir(dirname(path), { recursive: true });
-		const temporaryPath = `${path}.${randomUUID()}.tmp`;
+		const boundary = await createProjectFileReadBoundary(root);
+		const lexicalPath = join(root, ".pi", "mcp.json");
+		const initialPath = await resolveProjectFileWritePath(boundary, lexicalPath);
+		await mkdir(dirname(initialPath), { recursive: true });
+		const safePath = await resolveProjectFileWritePath(boundary, lexicalPath);
+		const temporaryLexicalPath = join(dirname(lexicalPath), `.${randomUUID()}.mcp.tmp`);
+		const temporaryPath = await resolveProjectFileWritePath(boundary, temporaryLexicalPath);
 		try {
-			await writeFile(temporaryPath, `${JSON.stringify(file, null, 2)}\n`, "utf8");
-			await rename(temporaryPath, path);
+			await writeFile(temporaryPath, `${JSON.stringify(file, null, 2)}\n`, { encoding: "utf8", flag: "wx" });
+			if (await resolveProjectFileWritePath(boundary, lexicalPath) !== safePath) {
+				throw new Error("Project path is outside boundary.");
+			}
+			await rename(temporaryPath, safePath);
 		} finally {
 			await rm(temporaryPath, { force: true }).catch(() => undefined);
 		}
 	}
 
 	private async existingSkillNames(target: ResourceImportTarget): Promise<Set<string>> {
-		const names = new Set<string>();
 		if (target.scope === "global") {
-			const listed = await this.skillManager.list();
-			for (const skill of listed.skills ?? []) names.add(skill.name.toLowerCase());
 			const location = this.skillManager.getLocations().find((item) => item.id === target.locationId);
-			if (location) for (const entry of await readdir(location.path, { withFileTypes: true }).catch(() => [])) names.add(entry.name.toLowerCase());
-			return names;
+			if (!location) return new Set<string>();
+			// SkillManager validates the managed global root before it is used as an import
+			// destination.  Reuse that check during scan so a symlink/junction target is
+			// rejected before the dialog can offer candidates for an unsafe path.
+			const resolver = this.skillManager.resolveImportLocationPath;
+			const directory = typeof resolver === "function"
+				? await resolver.call(this.skillManager, target.locationId)
+				: location.path;
+			return this.readExistingSkillNames(directory, location.rootMarkdownEnabled);
 		}
-		const listed = await this.projectResourceManager.list(target.projectId);
-		for (const skill of listed.skills ?? []) names.add(skill.name.toLowerCase());
+		await this.assertProjectTarget(target);
 		const resolver = this.projectResourceManager.resolveResourceDirectory;
 		const directory = typeof resolver === "function"
 			? await resolver.call(this.projectResourceManager, target.projectId, target.locationId)
 			: join(await this.assertProjectTarget(target), target.locationId === "project-pi" ? ".pi/skills" : ".agents/skills");
-		for (const entry of await readdir(directory, { withFileTypes: true }).catch(() => [])) names.add(entry.name.toLowerCase());
+		return this.readExistingSkillNames(directory, target.locationId === "project-pi");
+	}
+
+	/**
+	 * Read occupancy for one selected target only.  SkillManager.list() is deliberately
+	 * avoided here because it creates missing global directories; a scan/cancel must be
+	 * read-only.  Immediate entries reserve their target names even when malformed, while
+	 * nested directory skills and root markdown files contribute their frontmatter name.
+	 */
+	private async readExistingSkillNames(directory: string, rootMarkdownEnabled: boolean): Promise<Set<string>> {
+		const names = new Set<string>();
+		const entries = await readdir(directory, { withFileTypes: true }).catch(() => [] as import("node:fs").Dirent[]);
+		for (const entry of entries) {
+			// A destination path cannot replace any existing entry, regardless of whether
+			// that entry currently contains a valid SKILL.md.
+			names.add(entry.name.toLowerCase());
+			// The imported target is a normalized Pi skill name.  Reserve the normalized
+			// form of existing directories too, otherwise a legacy folder such as
+			// "My Skill" could sit beside a new "my-skill" directory and create an
+			// ambiguous resource identity.
+			if (entry.isDirectory() || entry.isSymbolicLink()) {
+				const normalizedEntryName = normalizeSkillName(entry.name);
+				if (normalizedEntryName) names.add(normalizedEntryName.toLowerCase());
+			}
+			if (rootMarkdownEnabled && entry.isFile() && entry.name.toLowerCase().endsWith(".md")) {
+				await this.addExistingSkillFileName(join(directory, entry.name), entry.name.slice(0, -3), names);
+			}
+		}
+		const discovery = await findSkillDirs(directory);
+		for (const dir of discovery.dirs) {
+			const fallback = dir.split(/[\\/]/).pop() ?? "";
+			await this.addExistingSkillFileName(join(dir, "SKILL.md"), fallback, names);
+		}
 		return names;
 	}
 
-	private async assertCandidateFresh(candidate: StoredResourceImportCandidate, kind: "mcp" | "skill"): Promise<void> {
-		if (kind === "mcp") {
-			const source = await readFile(candidate.sourcePath, "utf8").catch(() => null);
-			if (source === null || fingerprint(source) !== candidate.sourceFingerprint) throw new Error("Source changed. Please scan again.");
-			return;
-		}
+	private async addExistingSkillFileName(filePath: string, fallback: string, names: Set<string>): Promise<void> {
 		try {
-			if (await skillTreeFingerprint(candidate.sourcePath) !== candidate.sourceFingerprint) throw new Error("Source changed. Please scan again.");
+			const entry = await lstat(filePath);
+			if (!entry.isFile() || entry.size > MAX_FILE_BYTES) return;
+			const frontmatter = parseSkillFrontmatter(await readFile(filePath, "utf8"));
+			const name = normalizeSkillName(frontmatter.name || fallback);
+			if (name) names.add(name.toLowerCase());
 		} catch {
-			throw new Error("Source changed or is no longer safe. Please scan again.");
+			// Occupancy discovery is best effort; apply re-checks the target atomically.
 		}
 	}
 

@@ -72,9 +72,9 @@ import type {
 	ProjectResourceDiscoveryResult,
 	ProjectResourceOverrides,
 	ResourceImportScanInput,
-	ResourceImportScanResult,
 	ResourceImportApplyInput,
-	ResourceImportReport,
+	ResourceImportScanResponse,
+	ResourceImportApplyResponse,
 	PetAggregateState,
 	PetManifest,
 	PetNotification,
@@ -1416,9 +1416,9 @@ const api = {
 	},
 	resourceImport: {
 		scan: (input: ResourceImportScanInput) =>
-			ipcRenderer.invoke(ipcChannels.resourceImportScan, input) as Promise<ResourceImportScanResult>,
+			ipcRenderer.invoke(ipcChannels.resourceImportScan, input) as Promise<ResourceImportScanResponse>,
 		apply: (input: ResourceImportApplyInput) =>
-			ipcRenderer.invoke(ipcChannels.resourceImportApply, input) as Promise<ResourceImportReport>,
+			ipcRenderer.invoke(ipcChannels.resourceImportApply, input) as Promise<ResourceImportApplyResponse>,
 	},
 	prompts: {
 		list: () =>

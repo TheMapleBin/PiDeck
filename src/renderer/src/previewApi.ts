@@ -1021,15 +1021,21 @@ export function createPreviewApi(): PiDesktopApi {
 		resourceImport: {
 			scan: async (input) => {
 				previewImportKinds.set("preview-scan", input.kind);
-				return { scanId: "preview-scan", kind: input.kind, target: input.target, sources: [], candidates: [] };
+				return {
+					ok: true as const,
+					result: { scanId: "preview-scan", kind: input.kind, target: input.target, sources: [], candidates: [] },
+				};
 			},
 			apply: async (input) => ({
-				scanId: input.scanId,
-				kind: previewImportKinds.get(input.scanId) ?? "mcp",
-				results: [],
-				imported: 0,
-				skipped: 0,
-				failed: 0,
+				ok: true as const,
+				result: {
+					scanId: input.scanId,
+					kind: previewImportKinds.get(input.scanId) ?? "mcp",
+					results: [],
+					imported: 0,
+					skipped: 0,
+					failed: 0,
+				},
 			}),
 		},
 		extensions: {
