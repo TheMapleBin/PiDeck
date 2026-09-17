@@ -14,6 +14,13 @@ on:
         required: false
         type: boolean
         default: false
+      push_refs:
+        # 镜像仓库时代分支/标签由 AtomGit 平台自动跟随；解除镜像后不再自动同步，
+        # 需主动推送。release 事件下默认就会做（见下方 job steps），本开关用于手动补推。
+        description: "同时把全部分支与标签推送到 AtomGit（增量；用于镜像解除后手动补同步）"
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -79,6 +86,19 @@ jobs:
           echo "tags=${TAGS}" >> $GITHUB_OUTPUT
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # git refs（分支 + 标签）同步：AtomGit 解除「镜像仓库」后，分支/标签不再由平台自动跟随，
+      # 必须先把 tag 推过去 —— sync-release-to-atomgit.mjs 只处理 Release 与附件，不做 git 推送，
+      # 远端缺 tag 时建 Release 会直接报错（v0.7.6 曾因此整链失败）。
+      # 放在资产等待之前：tag 越早到位越好，且推送成本随发版增量（通常 1-2 个 ref）。
+      # continue-on-error：refs 同步失败不阻断 Release 资产同步（两条链路互不依赖），
+      # 但失败会以 warning + error 注解暴露在本次 run 里，可勾选 push_refs 单独重跑。
+      - name: Sync git refs to AtomGit (branches + tags)
+        if: ${{ github.event_name == 'release' || github.event.inputs.push_refs == 'true' }}
+        continue-on-error: true
+        env:
+          ATOMGIT_TOKEN: ${{ secrets.ATOMGIT_TOKEN }}
+        run: node scripts/sync-refs-to-atomgit.mjs
 
       # 等待 Release 资产清单稳定后再同步：release:published 在第一个构建 job 发布
       # Release 时就触发，此时安装包 / runtime tgz / runner-node 往往只传了一部分；
