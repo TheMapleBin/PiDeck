@@ -360,7 +360,9 @@ export type SessionCommandErrorCode =
 	| "SESSION_RUNTIME_CHANGED"
 	| "SESSION_RUNTIME_BUSY"
 	| "SESSION_COMMAND_FAILED"
-	| "SESSION_MODEL_NOT_FOUND";
+	| "SESSION_MODEL_NOT_FOUND"
+	/** 会话文件超出可安全编辑的上限（SessionFileEditor 的整读护栏，见 v8HeapLimits.ts）*/
+	| "SESSION_FILE_TOO_LARGE";
 
 export type SessionCommandError = {
 	code: SessionCommandErrorCode;

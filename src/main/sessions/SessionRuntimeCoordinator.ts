@@ -31,6 +31,7 @@ import type {
 import { buildSessionOriginKey } from "../../shared/sessionIdentity";
 import { isRewindCheckpointId, isRewindRestoreScope } from "../../shared/types";
 import type { SessionCatalogEntry } from "./SessionCatalog";
+import { sessionFileSizeMb } from "./sessionFileSizeCopy";
 
 export interface SessionCatalogGateway {
 	get(sessionId: string): SessionCatalogEntry | undefined;
@@ -2073,11 +2074,16 @@ export class SessionRuntimeCoordinator {
 		const model = this.extractModelFromNotFound(message);
 		const editorCode = this.sessionFileEditorErrorCode(error);
 		const code: SessionCommandErrorCode =
-			// SessionFileEditor 的 SESSION_ENTRY_NOT_FOUND 包括「不在活动分支」/
-			// 「leaf 不在文件里」/「已删除」，文案并不都带 "message not found"。
-			// 按 code 识别，避免历史会话删消息落到 SESSION_COMMAND_FAILED
-			//（用户只看到「会话操作失败，请重试」且主进程没日志）。
-			editorCode === "SESSION_ENTRY_NOT_FOUND"
+			// 会话文件超编辑上限：SessionFileEditor 的整读护栏拒绝（编辑需完整文档，无法流式）。
+			// 必须单独成一类——否则用户只看到泛化的「会话操作失败」，既不知道原因也不知道
+			// 「这个会话大到不能改」（比起重试，正确动作是换个会话 / 导出归档）。
+			editorCode === "SESSION_FILE_TOO_LARGE"
+				? "SESSION_FILE_TOO_LARGE"
+				// SessionFileEditor 的 SESSION_ENTRY_NOT_FOUND 包括「不在活动分支」/
+				// 「leaf 不在文件里」/「已删除」，文案并不都带 "message not found"。
+				// 按 code 识别，避免历史会话删消息落到 SESSION_COMMAND_FAILED
+				//（用户只看到「会话操作失败，请重试」且主进程没日志）。
+				: editorCode === "SESSION_ENTRY_NOT_FOUND"
 				|| lower.includes("message not found")
 				|| lower.includes("not found on the active session branch")
 				|| lower.includes("not part of the active session branch")
@@ -2109,10 +2115,26 @@ export class SessionRuntimeCoordinator {
 			error: {
 				code,
 				debugDetails: message,
-				// 仅模型不存在类错误带 model 参数（i18n 文案占位）；其余错误不附加
+				// 模型不存在带 model、文件过大带体积：文案里的 {model} / {sizeMb} 占位
 				...(code === "SESSION_MODEL_NOT_FOUND" && model ? { params: { model } } : {}),
+				...(code === "SESSION_FILE_TOO_LARGE" ? { params: this.sessionFileSizeParams(error) } : {}),
 			},
 		};
+	}
+
+	/**
+	 * 从 SessionFileEditorError.details 取「文件过大」的展示参数。
+	 *
+	 * 两个占位符缺一不可：文案里写的是「{sizeMb}MB，上限 {limitMb}MB」——
+	 * 只给 size 会让 {limitMb} 原样显示成 `{limitMb}`。编辑器已带 details，
+	 * 这里只做取值与取整；取不到时给保守默认，至少不把原始占位符漏给用户。
+	 */
+	private sessionFileSizeParams(error: unknown): Record<string, number> {
+		const details = (error as { details?: Record<string, unknown> } | null)?.details;
+		const size = typeof details?.size === "number" ? details.size : undefined;
+		const limit = typeof details?.limit === "number" ? details.limit : undefined;
+		const { sizeMb, limitMb } = sessionFileSizeMb({ size, limit });
+		return { sizeMb, limitMb };
 	}
 
 	/**

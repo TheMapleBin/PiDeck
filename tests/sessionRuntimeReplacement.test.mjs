@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import test from "node:test";
 import ts from "typescript";
 import vm from "node:vm";
+import { tryRequireLocalTs } from "./helpers/requireLocalTs.mjs";
 
 const nodeRequire = createRequire(import.meta.url);
 
@@ -16,10 +17,18 @@ function compileModule(filePath, imports = {}) {
     fileName: filePath,
   }).outputText;
   const module = { exports: {} };
+  const localRequire = (specifier) => {
+    if (Object.hasOwn(imports, specifier)) return imports[specifier];
+    // 生产代码的相对 import 以源文件目录为基准解析；nodeRequire 以 tests/ 为基准，
+    // 直接交回会得 MODULE_NOT_FOUND（见 fix-vm-loader-module-not-found）。
+    const localFromSource = tryRequireLocalTs(specifier, "src/main/sessions");
+    if (localFromSource) return localFromSource;
+    return nodeRequire(specifier);
+  };
   vm.runInNewContext(output, {
     module,
     exports: module.exports,
-    require: (specifier) => imports[specifier] ?? nodeRequire(specifier),
+    require: localRequire,
     console,
   }, { filename: filePath });
   return module.exports;

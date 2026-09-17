@@ -214,6 +214,7 @@ test("Session command failures map stable codes to localized renderer keys", () 
     SESSION_RUNTIME_CHANGED: "sessionCommand.runtimeChanged",
     SESSION_RUNTIME_BUSY: "sessionCommand.runtimeBusy",
     SESSION_COMMAND_FAILED: "sessionCommand.commandFailed",
+    SESSION_FILE_TOO_LARGE: "sessionCommand.fileTooLarge",
   };
   for (const [code, key] of Object.entries(expected)) {
     assert.match(source, new RegExp(`${code}: "${key.replaceAll(".", "\\.")}"`));
