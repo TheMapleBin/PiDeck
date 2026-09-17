@@ -19,7 +19,8 @@ import {
 } from "./importNormalize";
 
 export type ConvertedCursorSession = {
-	raw: string;
+	/** 转换结果元数据；`raw` 仅在内存模式（scan 摘要）下由调用方拼装 */
+	raw?: string;
 	title: string;
 	preview: string;
 	messageCount: number;
@@ -30,6 +31,26 @@ export type ConvertCursorInput = {
 	session: ParsedCursorSession;
 	translate: SessionImportCopy;
 };
+
+/**
+ * 内存版转换：把结果拼成完整文本返回。
+ *
+ * 仅供**扫描**使用（entries 是头部小数组，体积有上界）；
+ * 导入路径请走 convertCursorSessionTo（流式写盘）。
+ */
+export async function convertCursorSession(
+	input: ConvertCursorInput,
+): Promise<ConvertedCursorSession> {
+	const lines: string[] = [];
+	const result = await convertCursorSessionTo({
+		...input,
+		entries: input.session.entries,
+		sink: (line) => {
+			lines.push(line);
+		},
+	});
+	return { ...result, raw: `${lines.join("\n")}\n` };
+}
 
 type PiContent = Record<string, unknown>;
 
@@ -183,23 +204,28 @@ export function convertCursorContentBlocks(
  * 每个 tool_use 写成 assistant.toolCall，并紧跟一条 toolResult（Cursor 源常缺输出，
  * 结果正文可为空）。连续多条 assistant 行不合并。turn_ended 是控制标记，丢掉。
  */
-export function convertCursorSession(input: ConvertCursorInput): ConvertedCursorSession {
-	const { projectPath, session, translate } = input;
+export async function convertCursorSessionTo(input: {
+	projectPath: string;
+	session: ParsedCursorSession;
+	translate: SessionImportCopy;
+	entries: Iterable<CursorRecord> | AsyncIterable<CursorRecord>;
+	sink: (line: string) => Promise<void> | void;
+}): Promise<ConvertedCursorSession> {
+	const { projectPath, session, translate, entries, sink } = input;
 	const sessionId = session.meta.sessionId;
 	const timestamp = new Date(session.meta.firstTimestamp).toISOString();
 	const titleState = { title: "", preview: "" };
-	const lines: string[] = [];
 	let parentId: string | null = null;
 	let sequence = 0;
 	let messageCount = 0;
 	const toolSeq = { n: 0 };
 	let lastTimestamp = session.meta.firstTimestamp;
 
-	const pushEntry = (entry: Record<string, unknown>) => {
-		lines.push(JSON.stringify(entry));
+	const pushEntry = async (entry: Record<string, unknown>) => {
+		await sink(JSON.stringify(entry));
 	};
 
-	const pushMessage = (
+	const pushMessage = async (
 		role: "user" | "assistant" | "toolResult",
 		content: PiContent[],
 		extra: Record<string, unknown> = {},
@@ -208,7 +234,7 @@ export function convertCursorSession(input: ConvertCursorInput): ConvertedCursor
 		if (content.length === 0) return;
 		const id = makeId(sessionId, sequence++);
 		const ts = new Date(timestampValue ?? lastTimestamp).toISOString();
-		pushEntry({
+		await pushEntry({
 			type: "message",
 			id,
 			parentId,
@@ -230,8 +256,8 @@ export function convertCursorSession(input: ConvertCursorInput): ConvertedCursor
 		}
 	};
 
-	pushEntry({ type: "session", version: 3, id: sessionId, timestamp, cwd: projectPath });
-	pushEntry({
+	await pushEntry({ type: "session", version: 3, id: sessionId, timestamp, cwd: projectPath });
+	await pushEntry({
 		type: "cursor_import",
 		version: 1,
 		cursorSessionId: sessionId,
@@ -242,7 +268,7 @@ export function convertCursorSession(input: ConvertCursorInput): ConvertedCursor
 	});
 
 	const modelChangeId = makeId(sessionId, sequence++);
-	pushEntry({
+	await pushEntry({
 		type: "model_change",
 		id: modelChangeId,
 		parentId,
@@ -252,7 +278,7 @@ export function convertCursorSession(input: ConvertCursorInput): ConvertedCursor
 	});
 	parentId = modelChangeId;
 
-	for (const entry of session.entries) {
+	for await (const entry of entries) {
 		const type = readString(entry.type);
 		if (type === "turn_ended") continue;
 
@@ -284,9 +310,9 @@ export function convertCursorSession(input: ConvertCursorInput): ConvertedCursor
 				content.push(item);
 			}
 			if (!wrapperReplaced && text) content.push({ type: "text", text });
-			pushMessage("user", content, {}, at);
+			await pushMessage("user", content, {}, at);
 			for (const result of converted.toolResults) {
-				pushMessage(
+				await pushMessage(
 					"toolResult",
 					[{ type: "text", text: result.text }],
 					{
@@ -302,7 +328,7 @@ export function convertCursorSession(input: ConvertCursorInput): ConvertedCursor
 
 		if (role === "assistant") {
 			const converted = convertCursorContentBlocks(blocks, sessionId, toolSeq);
-			pushMessage(
+			await pushMessage(
 				"assistant",
 				converted.content,
 				{
@@ -316,7 +342,7 @@ export function convertCursorSession(input: ConvertCursorInput): ConvertedCursor
 				lastTimestamp,
 			);
 			for (const result of converted.toolResults) {
-				pushMessage(
+				await pushMessage(
 					"toolResult",
 					[{ type: "text", text: result.text }],
 					{
@@ -337,7 +363,7 @@ export function convertCursorSession(input: ConvertCursorInput): ConvertedCursor
 				toolSeq,
 			);
 			for (const result of converted.toolResults) {
-				pushMessage(
+				await pushMessage(
 					"toolResult",
 					[{ type: "text", text: result.text }],
 					{
@@ -356,19 +382,16 @@ export function convertCursorSession(input: ConvertCursorInput): ConvertedCursor
 		translate("session.importedTitle", { source: "Cursor" });
 	// 使用 pi 原生 session_info 格式追加在末尾，避免旧版 sessionName 行（无 type 字段）
 	// 在文件头破坏 pi 的首行校验导致会话无法加载（见 #114）。
-	lines.push(
-		JSON.stringify({
-			type: "session_info",
-			id: randomUUID().slice(0, 8),
-			parentId,
-			timestamp: new Date().toISOString(),
-			name: title,
-			cwd: projectPath,
-		}),
-	);
+	await pushEntry({
+		type: "session_info",
+		id: randomUUID().slice(0, 8),
+		parentId,
+		timestamp: new Date().toISOString(),
+		name: title,
+		cwd: projectPath,
+	});
 
 	return {
-		raw: `${lines.join("\n")}\n`,
 		title,
 		preview: titleState.preview || translate("session.importedPreview", { source: "Cursor" }),
 		messageCount,

@@ -1,7 +1,8 @@
-import { mkdir, readFile, readdir, stat } from "node:fs/promises";
+import { mkdir, readdir, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { normalizeImportedToolArguments } from "./importToolArguments";
 import { readImportMetaHead } from "./importMetaHead";
+import { readSessionSourceHead } from "./sessionSourceHead";
 
 /** WorkBuddy 的 JSONL 行结构不固定，统一按 unknown 读取后再逐字段收窄。 */
 export type WorkBuddyRecord = Record<string, unknown>;
@@ -130,16 +131,30 @@ export async function collectWorkBuddyJsonl(dir: string): Promise<string[]> {
 	}
 }
 
-export async function readWorkBuddySession(
+/**
+ * 只读头部解析 WorkBuddy 会话元数据（scan 用）。
+ *
+ * 与 readWorkBuddySession 的差异：不把整文件读成字符串，内存占用与文件体积解耦；
+ * entries 只含头部区间，摘要字段因此是近似值（与 Codex head-only 扫描同口径）。
+ * 时间戳：firstTimestamp 取头部最早，lastTimestamp 用 mtime（头部看不到文件尾）。
+ */
+export async function readWorkBuddySessionHead(
 	root: string,
 	filePath: string,
 ): Promise<ParsedWorkBuddySession> {
 	assertWorkBuddySourcePath(root, filePath);
-	const [raw, info] = await Promise.all([readFile(filePath, "utf8"), stat(filePath)]);
+	const { head, size, mtimeMs, truncated } = await readSessionSourceHead(filePath);
+
 	const entries: WorkBuddyRecord[] = [];
-	for (const line of raw.split(/\r?\n/)) {
+	for (const line of head.split(/\r?\n/)) {
 		if (!line.trim()) continue;
-		const parsed: unknown = JSON.parse(line);
+		let parsed: unknown;
+		try {
+			parsed = JSON.parse(line);
+		} catch {
+			// 头部截断可能切在行中间：坏行跳过（与 readWorkBuddySessionHead 同策略）
+			continue;
+		}
 		if (parsed && typeof parsed === "object") entries.push(parsed as WorkBuddyRecord);
 	}
 
@@ -168,16 +183,19 @@ export async function readWorkBuddySession(
 			sessionId,
 			cwd,
 			firstTimestamp: Math.min(...timestamps),
-			lastTimestamp: Math.max(...timestamps),
+			// 未截断（头部即全文件）时用真实末次时间戳，列表排序靠它；
+			// 截断时头部看不到文件尾，退化用 mtime。
+			lastTimestamp: truncated ? mtimeMs : Math.max(...timestamps),
 			modelId,
 			aiTitle,
 		},
 		entries,
 		sourcePath: filePath,
-		sourceSize: info.size,
-		sourceMtime: info.mtimeMs,
+		sourceSize: size,
+		sourceMtime: mtimeMs,
 	};
 }
+
 
 /** 读取导入产物头部的 import 标记（有界读头部，不再整读会话文件——见 importMetaHead）。 */
 export async function readWorkBuddyImportMeta(
