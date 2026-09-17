@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import type { MouseEvent } from "react";
 import { Check, Copy, Eye, EyeOff } from "lucide-react";
 import { t } from "../i18n";
@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Input } from "../components/ui-shadcn/input";
 import { Popover, PopoverContent, PopoverTrigger } from "../components/ui-shadcn/popover";
 import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from "../components/ui-shadcn/command";
-import { filterComboboxOptions, isKnownComboboxValue } from "./comboboxOptions";
+import { filterComboboxOptions, groupComboboxOptions, isKnownComboboxValue } from "./comboboxOptions";
 
 // ── 复制到剪贴板工具 ──────────────────────────────────
 
@@ -147,13 +147,17 @@ export function ConfigSelect(props: {
  */
 export function ConfigComboboxInput(props: {
 	value: string;
-	options: Array<{ value: string; label?: string }>;
+	options: Array<{ value: string; label?: string; group?: string }>;
 	onChange: (value: string) => void;
 	placeholder?: string;
 }) {
 	const [open, setOpen] = useState(false);
 	const [filter, setFilter] = useState("");
 	const filtered = filterComboboxOptions(props.options, filter);
+
+	// 按 group 分段展示（如 User-Agent 的「官方 CLI / SDK / 通用客户端」）。
+	// 分段规则在 comboboxOptions 里做纯函数，过滤后自然合并空组，不额外排空。
+	const grouped = groupComboboxOptions(filtered);
 
 	// 提交即关闭：选中选项（鼠标/键盘回车命中选项）与无匹配时按 Enter 走同一条路。
 	const commit = (value: string) => {
@@ -207,17 +211,27 @@ export function ConfigComboboxInput(props: {
 						{filtered.length === 0 && (
 							<CommandEmpty>{t("config.comboboxNoMatchCommitHint")}</CommandEmpty>
 						)}
-						{filtered.map((option) => (
-							<CommandItem
-								key={option.value}
-								value={option.value}
-								onSelect={() => commit(option.value)}
-							>
-								<span className="flex min-w-0 flex-1 items-center gap-2 truncate">
-									<span className="truncate">{option.label ?? option.value}</span>
-								</span>
-								{option.value === props.value && <Check className="size-3.5 shrink-0" aria-hidden="true" />}
-							</CommandItem>
+						{grouped.map((section, sectionIndex) => (
+							<Fragment key={section.group ?? `__ungrouped_${sectionIndex}`}>
+								{section.group && (
+									// 分组标题不可选中：cmdk 会把 CommandItem 当选项，标题用 div 避免干扰键盘导航。
+									<div className="px-2 pt-2 pb-1 text-[11px] font-medium text-text-tertiary">
+										section.group
+									</div>
+								)}
+								{section.items.map((option) => (
+									<CommandItem
+										key={option.value}
+										value={option.value}
+										onSelect={() => commit(option.value)}
+									>
+										<span className="flex min-w-0 flex-1 items-center gap-2 truncate">
+											<span className="truncate">{option.label ?? option.value}</span>
+										</span>
+										{option.value === props.value && <Check className="size-3.5 shrink-0" aria-hidden="true" />}
+									</CommandItem>
+								))}
+							</Fragment>
 						))}
 					</CommandList>
 				</Command>

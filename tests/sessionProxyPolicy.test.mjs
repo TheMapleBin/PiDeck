@@ -14,6 +14,7 @@ const {
   resolveDshHostProxyMode,
   applyPiProxyModeWithProvider,
   computeGenProxyKey,
+  buildPiProxyEnvPatch,
 } = loadTsCommonJs("src/main/sessions/sessionProxyPolicy.ts");
 
 // 注：loadTsCommonJs 跨 vm realm 加载，对象原型与本地不同，deepEqual 会因 prototype
@@ -194,4 +195,51 @@ test("applyProxyEnvPatch: 先剥离后注入，顺序固定", () => {
   const off = buildHostProxyEnvPatch("off", { url: "x", bypass: "" });
   applyProxyEnvPatch(env2, off);
   assert.deepEqual(Object.keys(env2), []);
+});
+// ── buildPiProxyEnvPatch：pi 子进程代理 env（★2026-09 故障回归） ──────────────
+// 真实故障：用户报告 anyrouter.top / agentrouter.org 在 PiDeck 里「拉不到模型 +
+// 手填模型也用不了」，但 cc-switch 正常。根因之一是 pi 子进程只注入了 HTTPS_PROXY
+// 等 URL，漏了 NODE_USE_ENV_PROXY —— pi 的 LLM 调用走 undici，默认不读这些 env，
+// 于是「配了代理 = 没配代理」，请求仍直连而失败。
+
+test("buildPiProxyEnvPatch: 开启代理必须带 NODE_USE_ENV_PROXY=1（否则 undici 无视 HTTPS_PROXY）", () => {
+  const patch = buildPiProxyEnvPatch({
+    piProxyEnabled: true,
+    piProxyUrl: "http://127.0.0.1:7890",
+    piProxyBypass: "",
+  });
+  assert.ok(patch, "开启且 URL 非空时必须返回 patch");
+  // 回归核心：这一项缺失 = 用户的代理设置对 pi 的模型请求完全无效。
+  assert.equal(patch.NODE_USE_ENV_PROXY, "1");
+  // 标准代理键大小写双份（覆盖 win/mac/linux 工具链）
+  for (const key of PROXY_ENV_KEYS) assert.equal(patch[key], "http://127.0.0.1:7890");
+  // 未配 bypass 时不注入 NO_PROXY，避免空值把系统既有绕过规则清掉
+  assert.equal(patch.NO_PROXY, undefined);
+  assert.equal(patch.no_proxy, undefined);
+});
+
+test("buildPiProxyEnvPatch: 关闭开关 / URL 为空 → 不注入任何代理 env", () => {
+  assert.equal(
+    buildPiProxyEnvPatch({ piProxyEnabled: false, piProxyUrl: "http://127.0.0.1:7890", piProxyBypass: "" }),
+    undefined,
+  );
+  // 开关开着但没填地址：无法代理，应保持原 env 而不是注入半个配置
+  assert.equal(
+    buildPiProxyEnvPatch({ piProxyEnabled: true, piProxyUrl: "   ", piProxyBypass: "" }),
+    undefined,
+  );
+  assert.equal(buildPiProxyEnvPatch(undefined), undefined);
+});
+
+test("buildPiProxyEnvPatch: bypass 非空 → 注入 NO_PROXY 大小写双份并 trim URL", () => {
+  const patch = buildPiProxyEnvPatch({
+    piProxyEnabled: true,
+    piProxyUrl: "  http://127.0.0.1:7890  ",
+    piProxyBypass: " localhost,127.0.0.1 ",
+  });
+  assert.ok(patch);
+  assert.equal(patch.HTTPS_PROXY, "http://127.0.0.1:7890");
+  assert.equal(patch.NO_PROXY, "localhost,127.0.0.1");
+  assert.equal(patch.no_proxy, "localhost,127.0.0.1");
+  assert.equal(patch.NODE_USE_ENV_PROXY, "1");
 });

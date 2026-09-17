@@ -346,3 +346,35 @@ export function applyConfigProxyTarget<T extends { piProxyEnabled: boolean; piPr
 	if (target.mode === "off") return { ...settings, piProxyEnabled: false };
 	return { ...settings, piProxyEnabled: true, piProxyUrl: target.url, piProxyBypass: target.bypass };
 }
+
+/**
+ * pi 子进程的代理环境变量集合（纯函数，可单测）。
+ * 返回 undefined 表示「不注入代理 env」（开关关闭 / URL 为空）。
+ *
+ * 为什么必须带 NODE_USE_ENV_PROXY（2026-09 真实故障）：
+ * pi 的 LLM 调用链是 openai SDK → globalThis.fetch（undici），而 undici **默认完全不读**
+ * HTTP_PROXY/HTTPS_PROXY —— 只注入代理 URL 等于没配：用户以为挂了代理，请求实际仍直连。
+ * 表现为需要代理才能通的第三方中转站「拉不到模型 / 手填模型也用不了 / Connection error」。
+ * 实测对照（Node 24，向需代理的网关调 models.list）：
+ *   仅 HTTPS_PROXY         → FAIL Connection error
+ *   HTTPS_PROXY + 本开关   → OK models=15
+ * 该开关只在**进程启动时**被 undici 读取，运行时改 env 无效，所以必须进 spawn env。
+ * DSH host 侧早有同一开关（见 buildHostProxyEnvPatch），此处补齐 pi 子进程的对应项。
+ */
+export function buildPiProxyEnvPatch(
+	settings: PiProxyModeSettings & { piProxyBypass: string } | undefined,
+): Record<string, string> | undefined {
+	if (!settings?.piProxyEnabled) return undefined;
+	const proxyUrl = settings.piProxyUrl.trim();
+	// URL 为空时无法代理：返回 undefined 让调用方保持原 env（直连），而不是注入半个配置。
+	if (!proxyUrl) return undefined;
+
+	const patch: Record<string, string> = {};
+	for (const key of PROXY_ENV_KEYS) patch[key] = proxyUrl;
+	const bypass = settings.piProxyBypass.trim();
+	if (bypass) {
+		for (const key of PROXY_BYPASS_ENV_KEYS) patch[key] = bypass;
+	}
+	patch[NODE_USE_ENV_PROXY] = "1";
+	return patch;
+}

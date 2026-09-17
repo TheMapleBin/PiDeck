@@ -5,8 +5,8 @@ import { Button } from "../components/ui-shadcn/button";
 import { Input } from "../components/ui-shadcn/input";
 import { Label } from "../components/ui-shadcn/label";
 import { t } from "../i18n";
-import { ApiTypeInput, ConfigSelect, SecretInput } from "./ConfigShared";
-import { CUSTOM_USER_AGENT_VALUE, getUserAgentOptions } from "./providerHeaders";
+import { ApiTypeInput, ConfigComboboxInput, ConfigSelect, SecretInput } from "./ConfigShared";
+import { getUserAgentOptions, isValidUserAgent } from "./userAgentPresets";
 import type { ConfigProxyMode } from "../../../shared/types/fetchedModel";
 
 export type ProviderTestResult = {
@@ -69,12 +69,13 @@ export function ProviderConnectionForm(props: {
 	/** 高级字段保留提示（可选 slot；草稿页无未知字段时不传）。 */
 	advancedHint?: ReactNode;
 }) {
+	// User-Agent 是「单个可输入下拉」：内置预设在下拉里挑，也能直接手写任意值。
+	// 不再拆成「下拉选预设 + 另一个输入框」——两套控件会互相打架
+	// （选完预设后输入框里还是旧值、手写值又不在下拉选项里），用户报告过这个体验问题。
 	const userAgentOptions = getUserAgentOptions();
-	const userAgentSelectValue = userAgentOptions.some(
-		(option) => option.value === props.userAgent,
-	)
-		? props.userAgent
-		: CUSTOM_USER_AGENT_VALUE;
+	// 用户填了含控制字符（换行等）的 UA：请求头注入风险且会被静默忽略，
+	// 表现为「配了却不生效」，所以在表单里显式提示而不是静默丢弃。
+	const userAgentInvalid = Boolean(props.userAgent.trim()) && !isValidUserAgent(props.userAgent);
 
 	return (
 		<div className="config-provider-form grid gap-2.5">
@@ -101,23 +102,16 @@ export function ProviderConnectionForm(props: {
 			<div className="grid grid-cols-[90px_1fr] items-center gap-2.5">
 				<Label className="pl-0.5 text-left text-xs font-medium text-text-secondary">{t("config.field.userAgent")}</Label>
 				<div className="config-header-field">
-					<ConfigSelect
-						value={userAgentSelectValue}
-						options={[
-							...userAgentOptions,
-							{ value: CUSTOM_USER_AGENT_VALUE, label: t("config.custom") },
-						]}
-						onChange={(value) => {
-							if (value === CUSTOM_USER_AGENT_VALUE) return;
-							props.onChangeUserAgent(value);
-						}}
-					/>
-					<Input
+					<ConfigComboboxInput
 						value={props.userAgent}
-						onChange={(e) => props.onChangeUserAgent(e.target.value)}
-						placeholder={t("common.notConfigured")}
+						options={userAgentOptions}
+						onChange={props.onChangeUserAgent}
+						placeholder={t("config.userAgentRuntimeDefault")}
 					/>
 					<span>{t("config.headerEmptyHint")}</span>
+					{userAgentInvalid && (
+						<span className="text-danger">{t("config.userAgentInvalid")}</span>
+					)}
 				</div>
 			</div>
 

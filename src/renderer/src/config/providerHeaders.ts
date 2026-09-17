@@ -1,22 +1,9 @@
 import { t, type TranslationKey } from "../i18n";
 
-export function getUserAgentOptions() {
-	return [
-		{ value: "", label: t("config.userAgentRuntimeDefault") },
-		{ value: "claude-cli/2.1.161 (external, cli)", label: "claude-cli/2.1.161 (external, cli)" },
-		{ value: "claude-cli/2.1.161", label: "claude-cli/2.1.161" },
-		{ value: "claude-code/1.0.0", label: "claude-code/1.0.0" },
-		{ value: "claude-code/0.1.0", label: "claude-code/0.1.0" },
-		{ value: "Kilo-Code/1.0", label: "Kilo-Code/1.0" },
-		{ value: "OpenAI/JS 6.26.0", label: "OpenAI/JS 6.26.0" },
-		{ value: "anthropic-sdk-typescript/0.27.3", label: "Anthropic SDK (anthropic-sdk-typescript/0.27.3)" },
-		{ value: "Mozilla/5.0", label: t("config.userAgentBrowser") },
-		{ value: "pi-coding-agent", label: "pi-coding-agent" },
-		{ value: "python-requests/2.31.0", label: "Python Requests" },
-		{ value: "axios/1.6.0", label: "Axios" },
-	];
-}
-export const CUSTOM_USER_AGENT_VALUE = "__custom__";
+// User-Agent 预设清单已迁到 ./userAgentPresets（纯函数 + 分组元数据，可单测）：
+// 这里保留 providerHeaders 的职责——headers 对象的规范读取/写入与 API 类型映射。
+
+export { getUserAgentOptions, USER_AGENT_UNSET, USER_AGENT_PRESETS } from "./userAgentPresets";
 
 export function getProviderHeaders(value: unknown): Record<string, string> | undefined {
 	if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;

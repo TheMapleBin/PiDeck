@@ -135,6 +135,34 @@ function hasControlChar(value: string): boolean {
 	return /[\x00-\x1f\x7f]/.test(value);
 }
 
+/**
+ * 网络层失败文本 → 可操作提示。
+ *
+ * 为什么要按错误码分类，而不是统一报「获取模型失败」：
+ *  - `ERR_SSL_*` / `ERR_CERT_*` 说明链路被中间设备（防火墙 / 代理 / 运营商）改动过，
+ *    直连必然失败但**开代理能通**——实测 anyrouter.top 在国内直连就报
+ *    ERR_SSL_VERSION_OR_CIPHER_MISMATCH，经代理正常。
+ *  - `ERR_CONNECTION_*` / `ENOTFOUND` 是压根连不上，提示检查网络与代理开关。
+ * 这两类都不是「配置写错」，笼统文案会把用户引到改 baseUrl / API Key 的错方向。
+ * 没有命中已知模式时返回 undefined，由调用方用默认文案兜底。
+ */
+function describeNetworkFailure(
+	detail: string,
+	translate: (key: MainProcessTranslationKey) => string,
+): string | undefined {
+	if (/ERR_SSL|ERR_CERT|SSL_ERROR/i.test(detail)) {
+		return translate("mainConfig.fetchTlsBlocked");
+	}
+	if (
+		/ERR_CONNECTION_TIMED_OUT|ERR_TIMED_OUT|ETIMEDOUT|ERR_CONNECTION_REFUSED|ERR_CONNECTION_RESET|ENOTFOUND|EAI_AGAIN|ERR_NAME_NOT_RESOLVED/i.test(
+			detail,
+		)
+	) {
+		return translate("mainConfig.fetchUnreachable");
+	}
+	return undefined;
+}
+
 export type PiModelItem = {
 	id: string;
 	name?: string;
@@ -589,7 +617,32 @@ export class ConfigManager {
 						continue;
 					}
 
-					const body = (await res.json()) as Record<string, unknown>;
+					// WAF / 反爬拦截：网关（如 Cloudflare / 阿里云 WAF）会返回 HTTP 200，
+					// 但正文是 JS 挑战页 HTML 而非 JSON。若不识别，`res.json()` 报出的是
+					// `Unexpected token '<'` 这类无关堆栈，用户只会看到笼统的「获取失败」。
+					// 这里先看 content-type，再拿正文做判定，给出可操作的提示：
+					// 切换代理 / 配置能过白名单的 User-Agent（如 claude-cli/...）。
+					const contentType = res.headers?.get?.("content-type") ?? "";
+					if (/text\/html/i.test(contentType)) {
+						lastDebugDetails = `HTTP ${res.status} text/html (WAF/anti-bot page)`;
+						console.warn("[ConfigManager] Provider returned an HTML page instead of JSON", {
+							requestUrl: lastRequestUrl,
+							contentType,
+						});
+						lastError = this.translate("mainConfig.fetchBlockedByHtml");
+						continue;
+					}
+
+					let body: Record<string, unknown>;
+					try {
+						body = (await res.json()) as Record<string, unknown>;
+					} catch {
+						// content-type 撒谎（声称 JSON 实则 HTML）或返回截断/非 JSON 正文：
+						// 同样归入「被拦截」而非笼统失败，引导用户排查网络出口与 UA。
+						lastDebugDetails = `HTTP ${res.status} non-JSON body`;
+						lastError = this.translate("mainConfig.fetchBlockedByHtml");
+						continue;
+					}
 					// listing 有容量就用；缺的再按 pi-ai 内置目录精确匹配，仍缺则空着
 					const models = this.parseModelsResponse(body, apiType);
 
@@ -620,8 +673,17 @@ export class ConfigManager {
 				if (e instanceof Error && e.name === "AbortError") {
 					lastError = this.translate("mainConfig.fetchTimeout");
 				} else {
+					// 网络层异常需分类提示：这些站点常见失败形态是 TLS 被中间设备干扰
+					// （ERR_SSL_VERSION_OR_CIPHER_MISMATCH）或连不上（ERR_CONNECTION_TIMED_OUT /
+					// ENOTFOUND），分类后给出「开代理 / 换域名」的可操作文案。
+					// 注意：原始异常文本只进日志，**不得**回传渲染层——异常 message 可能裹挟
+					// 请求 URL（Gemini 的 key 在 query 上）或网关回显的正文，返回值会跨 IPC
+					// 序列化到渲染进程；可操作指引已由下面的专用文案承载，无需原始文本。
+					const detail = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
 					console.error("[ConfigManager] Provider model list request failed", e);
-					lastError = this.translate("mainConfig.fetchModelsFailed");
+					lastError =
+						describeNetworkFailure(detail, (key) => this.translate(key)) ??
+						this.translate("mainConfig.fetchModelsFailed");
 				}
 			}
 		}

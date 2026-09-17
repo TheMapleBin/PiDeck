@@ -16,6 +16,7 @@ import {
   type WslPiProbeResult,
 } from "../wsl/wslPiProbe";
 import { decodeWslOutput } from "../wsl/wslExe";
+import { buildPiProxyEnvPatch } from "../sessions/sessionProxyPolicy";
 
 /**
  * 进程级 WSL pi 探测缓存。
@@ -500,22 +501,10 @@ export class PiLocator {
     env: NodeJS.ProcessEnv,
     settings?: PiProxySettings,
   ) {
-    if (!settings?.piProxyEnabled) return env;
-    const proxyUrl = settings.piProxyUrl.trim();
-    if (!proxyUrl) return env;
-    const bypass = settings.piProxyBypass.trim();
-
-    // 这里只给 pi agent 子进程注入标准代理环境变量，避免误影响 desktop 自身的更新、外链和配置管理请求。
-    return {
-      ...env,
-      HTTP_PROXY: proxyUrl,
-      HTTPS_PROXY: proxyUrl,
-      ALL_PROXY: proxyUrl,
-      http_proxy: proxyUrl,
-      https_proxy: proxyUrl,
-      all_proxy: proxyUrl,
-      ...(bypass ? { NO_PROXY: bypass, no_proxy: bypass } : {}),
-    };
+    // 代理 env 的组装规则（含为什么必须带 NODE_USE_ENV_PROXY）集中在
+    // sessionProxyPolicy.buildPiProxyEnvPatch，与 DSH host 共用同一套语义，避免两处漂移。
+    const patch = buildPiProxyEnvPatch(settings);
+    return patch ? { ...env, ...patch } : env;
   }
 
   /**
