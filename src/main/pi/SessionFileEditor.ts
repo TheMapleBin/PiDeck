@@ -5,6 +5,7 @@ import {
 	realpath,
 	readdir,
 	rename,
+	stat,
 	unlink,
 	type FileHandle,
 } from "node:fs/promises";
@@ -52,9 +53,19 @@ export type AppendMessagesInput = {
 	entries: AppendMessageEntry[];
 };
 
+/**
+ * 编辑类操作可安全整读的会话文件上限（字节）。
+ *
+ * 与 SessionScanner.MAX_IN_MEMORY_SESSION_BYTES 同口径（32MB）：正常会话几 MB 以内，
+ * 超限的都是该走流式路径的大会话。这里无法流式（编辑要完整文档），只能拒绝。
+ */
+const MAX_IN_MEMORY_SESSION_BYTES = 32 * 1024 * 1024;
+
 export type SessionFileEditorErrorCode =
 	| "SESSION_FILE_EMPTY"
 	| "SESSION_FILE_INVALID_JSONL"
+	/** 文件超出可安全整读的上限（编辑类操作需完整文档，见 assertInMemoryReadSafe） */
+	| "SESSION_FILE_TOO_LARGE"
 	| "SESSION_ENTRY_NOT_FOUND"
 	| "SESSION_ENTRY_AMBIGUOUS"
 	| "SESSION_ENTRY_ROLE_INVALID"
@@ -93,6 +104,8 @@ type WritableFileHandle = Pick<FileHandle, "writeFile" | "sync" | "close">;
 
 export type SessionFileEditorFs = {
 	readFile(path: string): Promise<Buffer>;
+	/** 体量护栏用的 stat；测试替身可省（缺省时跳过护栏，不影响行为） */
+	stat(path: string): Promise<{ size: number }>;
 	realpath(path: string): Promise<string>;
 	open(path: string, flags: "wx"): Promise<WritableFileHandle>;
 	readdir(path: string): Promise<string[]>;
@@ -150,6 +163,7 @@ class ReloadAttemptFailure extends Error {
 }
 
 const defaultFs: SessionFileEditorFs = {
+	stat,
 	readFile: (path) => readFile(path),
 	realpath,
 	open: (path, flags) => openFile(path, flags),
@@ -829,7 +843,15 @@ export class SessionFileEditor {
 	}
 
 	private async readSessionFile(path: string): Promise<Buffer> {
-		try {
+		// 体量护栏：下面的 parseDocument 会 decode 文本 + 逐行 JSON.parse，
+		// 内存占用约为文件体积的数倍。主进程 V8 老生代堆被钉在 384MB
+		// （见 v8HeapLimits.ts），几百 MB 的会话会直接让 V8
+		// FatalProcessOutOfMemory **abort 整个主进程**（用户看到闪退、无堆栈）；
+		// 超过 V8 单字符串上限（2^29-24 ≈ 5.37 亿字符）则报 ERR_STRING_TOO_LONG。
+		//
+		// 编辑/删除/重发确实需要完整文档（要定位条目、重算 parentId 链），无法像
+		// 读取那样流式化。所以这里明确拒绝并给可读错误，而不是让应用崩掉。
+		await this.assertInMemoryReadSafe(path);		try {
 			return await this.fs.readFile(path);
 		} catch (cause) {
 			throw new SessionFileEditorError(
@@ -838,6 +860,31 @@ export class SessionFileEditor {
 				{ cause },
 			);
 		}
+	}
+
+	/**
+	 * 整文件读入前的体量护栏。
+	 *
+	 * 与 SessionScanner.MAX_IN_MEMORY_SESSION_BYTES 同口径（32MB）：正常会话在几 MB 内，
+	 * 超限的都是应该走流式路径的大会话；这里既拦不住也做不了流式，所以报可读错误。
+	 */
+	private async assertInMemoryReadSafe(path: string): Promise<void> {
+		// 测试替身可能不提供 stat（它们不关心体量）：缺省时跳过护栏，不改变既有测试行为
+		if (typeof this.fs.stat !== "function") return;
+		let size: number;
+		try {
+			size = (await this.fs.stat(path)).size;
+		} catch {
+			// stat 失败（文件不存在等）：交给下面的 readFile 报原有错误，不改变错误码
+			return;
+		}
+		if (size <= MAX_IN_MEMORY_SESSION_BYTES) return;
+		throw new SessionFileEditorError(
+			"SESSION_FILE_TOO_LARGE",
+			`Session file is too large to edit (${Math.round(size / (1024 * 1024))}MB, `
+				+ `over the ${Math.round(MAX_IN_MEMORY_SESSION_BYTES / (1024 * 1024))}MB limit)`,
+			{ details: { size, limit: MAX_IN_MEMORY_SESSION_BYTES } },
+		);
 	}
 
 	private async createBackup(path: string, original: Buffer): Promise<string> {
