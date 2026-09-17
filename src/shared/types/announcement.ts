@@ -70,9 +70,17 @@ export type AnnouncementSnapshot = {
 };
 
 /**
- * 渲染层收到的完整状态（快照本体 + 已读集合）。
- * 未读判定由渲染层按 id 差集计算；已读集合持久化在主进程 userData。
+ * 渲染层收到的完整状态（快照本体 + 已读集合 + 已提醒集合）。
+ * 未读判定由渲染层按 id 差集计算；两个集合都持久化在主进程 userData。
  */
 export type AnnouncementState = AnnouncementSnapshot & {
 	readIds: string[];
+	/**
+	 * 已弹过 toast 的公告 id（与 readIds 独立：用户关掉 toast 不等于看过公告）。
+	 * 存在的意义是「每条公告在这台机器上只弹一次」——只靠渲染层内存去重，重启 / 渲染进程
+	 * 崩溃自动 reload 都会重置，同一条未读公告会跟着每次启动重放（用户反馈的「一直弹」）。
+	 * 必须持久化，且裁剪规则与 readIds 不同：只保留仍在当前 feed 里的 id
+	 * （公告下线后这个 id 再无意义，不像 readIds 还要标记归档条目）。
+	 */
+	notifiedIds: string[];
 };

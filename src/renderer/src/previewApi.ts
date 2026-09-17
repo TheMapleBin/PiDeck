@@ -1404,10 +1404,11 @@ export function createPreviewApi(): PiDesktopApi {
 		},
 		announcements: {
 			// 预览模式：无公告数据，返回空快照保持 PiDesktopApi 形状完整（订阅空操作）
-			list: async () => ({ items: [], fetchedAt: null, source: "cache" as const, readIds: [] }),
-			refresh: async () => ({ items: [], fetchedAt: null, source: "cache" as const, readIds: [] }),
+			list: async () => ({ items: [], fetchedAt: null, source: "cache" as const, readIds: [], notifiedIds: [] }),
+			refresh: async () => ({ items: [], fetchedAt: null, source: "cache" as const, readIds: [], notifiedIds: [] }),
 			markRead: async () => true,
 			markAllRead: async () => true,
+			markNotified: async () => true,
 			onChanged: () => () => {},
 		},
 		terminal: {

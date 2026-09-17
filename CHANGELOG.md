@@ -1,3 +1,8 @@
+## Unreleased
+
+### 🐛 Fixes
+- **Announcement toasts no longer repeat forever** — A toast was only deduplicated in renderer memory, while the only way to mark an announcement read was opening the announcement center. Closing a toast (or letting it time out) therefore recorded nothing, so the same unread announcement was re-shown on **every launch** and **every renderer crash-reload** — and a backlog of unread items was popped one by one at 4s intervals, which is exactly the “it keeps popping up, not just once” report. The “already notified” set is now persisted in the main process (`notifiedIds`, separate from `readIds`, following the same save path as the read set), so each announcement toasts **once per machine**; a round shows only the newest item and marks the suppressed older ones as notified too (otherwise they would take their turn as the next “newest”, popping N times for N backlogged items) — older unread items still surface via the sidebar dot. Turning off “Announcement notifications” while running now also takes effect immediately: the toggle is re-read on every poll tick, so a poll already in flight can no longer keep popping (previously only the sidebar entry disappeared). Turning off a toast is deliberately **not** treated as read — the red dot and the read archive stay until the user actually opens the announcement center.
+
 ## v0.7.6 - 2026-09-17
 
 ### 🚀 New Features

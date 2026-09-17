@@ -5,7 +5,7 @@
  * 全部用 fake fetch + 临时目录，不依赖真实网络与 electron。
  */
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -427,6 +427,159 @@ test("markRead：非法入参静默忽略（边界防御，不抛不崩）", () 
 		svc.markRead("");
 		svc.markRead("x".repeat(129));
 		assert.deepEqual(Array.from(svc.getState().readIds), []);
+	} finally {
+		rmSync(dir, { recursive: true, force: true });
+	}
+});
+
+// ── 已提醒标记（notifiedIds）：保证「每条公告只弹一次」跨重启成立 ──
+
+test("markNotified：幂等合并、与 readIds 互不影响", async () => {
+	const dir = makeTempDir();
+	try {
+		const svc = new svcMod.AnnouncementService({
+			userDataDir: dir,
+			appVersion: "0.6.6",
+			fetchImpl: fetchStub([
+				{
+					match: "api.atomgit.com",
+					body: JSON.stringify({
+						encoding: "base64",
+						content: Buffer.from(feedJson([item({ id: "a1" }), item({ id: "a2" })])).toString("base64"),
+					}),
+				},
+			]),
+			now: () => 1_000,
+		});
+		await svc.refresh("manual");
+		svc.markNotified(["a1"]);
+		svc.markNotified(["a1", "a2"]); // 重复 + 新增混合，幂等
+		assert.deepEqual(Array.from(svc.getState().notifiedIds).sort(), ["a1", "a2"]);
+		// 关键语义：弹过提醒 ≠ 已读，readIds 必须纹丝不动（否则红点/归档会被误清）
+		assert.deepEqual(Array.from(svc.getState().readIds), []);
+	} finally {
+		rmSync(dir, { recursive: true, force: true });
+	}
+});
+
+test("markNotified：持久化后跨实例可见（重启不再重弹的根据）", async () => {
+	const dir = makeTempDir();
+	try {
+		const routes = [
+			{
+				match: "api.atomgit.com",
+				body: JSON.stringify({
+					encoding: "base64",
+					content: Buffer.from(feedJson([item({ id: "a1" })])).toString("base64"),
+				}),
+			},
+		];
+		const svc = new svcMod.AnnouncementService({
+			userDataDir: dir,
+			appVersion: "0.6.6",
+			fetchImpl: fetchStub(routes),
+			now: () => 1_000,
+		});
+		await svc.refresh("manual");
+		svc.markNotified(["a1"]);
+
+		// 第二个实例只读缓存（无 fetch）：notifiedIds 必须从磁盘恢复
+		const second = new svcMod.AnnouncementService({
+			userDataDir: dir,
+			appVersion: "0.6.6",
+			now: () => 1_000,
+		});
+		second.start();
+		try {
+			assert.deepEqual(Array.from(second.getState().notifiedIds), ["a1"]);
+			assert.equal(second.getState().source, "cache");
+		} finally {
+			second.stop();
+		}
+	} finally {
+		rmSync(dir, { recursive: true, force: true });
+	}
+});
+
+test("markNotified：非法入参静默忽略（元素级 + 非数组）", async () => {
+	const dir = makeTempDir();
+	try {
+		const svc = new svcMod.AnnouncementService({
+			userDataDir: dir,
+			appVersion: "0.6.6",
+			now: () => 1_000,
+		});
+		svc.markNotified([]);
+		svc.markNotified([""]);
+		svc.markNotified(["x".repeat(129)]);
+		svc.markNotified([123, null, undefined, {}]);
+		svc.markNotified("a1"); // 非数组：不炸
+		assert.deepEqual(Array.from(svc.getState().notifiedIds), []);
+	} finally {
+		rmSync(dir, { recursive: true, force: true });
+	}
+});
+
+test("notifiedIds 按当前 feed 裁剪：公告下线后不留残渣（与 readIds 策略不同）", async () => {
+	const dir = makeTempDir();
+	try {
+		// feed 由可变变量驱动：模拟同一个客户端先后拉到两份不同的 feed（构造后 fetchImpl 被固化，
+		// 不能再替换，所以路由必须读闭包里的当前 feed）
+		let currentItems = [item({ id: "a1" }), item({ id: "a2" })];
+		const svc = new svcMod.AnnouncementService({
+			userDataDir: dir,
+			appVersion: "0.6.6",
+			fetchImpl: (url) =>
+				Promise.resolve({
+					ok: true,
+					status: 200,
+					arrayBuffer: async () =>
+						new TextEncoder().encode(
+							JSON.stringify({
+								encoding: "base64",
+								content: Buffer.from(feedJson(currentItems)).toString("base64"),
+							}),
+						).buffer,
+				}),
+			now: () => 1_000,
+		});
+		await svc.refresh("manual");
+		svc.markNotified(["a1", "a2"]);
+		svc.markRead("a1");
+		assert.deepEqual(Array.from(svc.getState().notifiedIds).sort(), ["a1", "a2"]);
+
+		// a2 从 feed 下线：notifiedIds 应当裁剪掉 a2，readIds 保留 a1（归档仍需展示）
+		currentItems = [item({ id: "a1" })];
+		await svc.refresh("manual");
+		assert.deepEqual(Array.from(svc.getState().notifiedIds), ["a1"]);
+		assert.deepEqual(Array.from(svc.getState().readIds), ["a1"]);
+	} finally {
+		rmSync(dir, { recursive: true, force: true });
+	}
+});
+
+test("旧缓存无 notifiedIds 字段：按空集兼容（最多再弹一次，不炸）", async () => {
+	const dir = makeTempDir();
+	try {
+		const legacy = {
+			cacheVersion: 1,
+			fetchedAt: 1_000,
+			items: [item({ id: "a1" })],
+			readIds: ["a1"],
+		};
+		writeFileSync(join(dir, "announcements-cache.json"), JSON.stringify(legacy), "utf8");
+		const svc = new svcMod.AnnouncementService({
+			userDataDir: dir,
+			appVersion: "0.6.6",
+			now: () => 1_000,
+		});
+		svc.start();
+		try {
+			assert.deepEqual(Array.from(svc.getState().notifiedIds), []);
+			assert.deepEqual(Array.from(svc.getState().readIds), ["a1"]);
+		} finally {
+			svc.stop();
+		}
 	} finally {
 		rmSync(dir, { recursive: true, force: true });
 	}

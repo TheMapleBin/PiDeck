@@ -756,6 +756,8 @@ export const ipcChannels = {
 	announcementMarkRead: "announcement:mark-read",
 	/** 渲染层 → 主进程：标记全部公告已读 */
 	announcementMarkAllRead: "announcement:mark-all-read",
+	/** 渲染层 → 主进程：记录已弹过提醒的公告（持久化，保证每条公告只弹一次） */
+	announcementMarkNotified: "announcement:mark-notified",
 	/** 主进程 → 渲染层：推送公告快照（定时拉取成功/缓存加载完成后广播） */
 	announcementChanged: "announcement:changed",
 

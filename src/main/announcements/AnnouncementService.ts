@@ -9,6 +9,11 @@
  * - 定时拉取（2h，用户指定）+ 启动延迟抖动（防集中打源）；refresh("manual") 供手动刷新；
  * - 快照推送回调（index.ts 接 webContents.send 给渲染层）。
  *
+ * 两类用户状态都在这里持久化（渲染层只管算差集）：
+ * - readIds：用户**看过**的公告（打开公告中心即视为已读），驱动红点与归档；
+ * - notifiedIds：已经**弹过提醒**的公告，保证同一条公告在这台机器上只弹一次。
+ *   两者必须分离：关掉 toast 不等于看过公告，混用会让用户“瞥一眼就永久丢失红点”。
+ *
  * 设计对齐 PiAiCatalogUpdater：依赖注入（fetchImpl/now/random/log），主服务不 import electron。
  * 静默失败：公告是附属功能，任何失败都不向调用方抛出，只记 log 并保留现状。
  */
@@ -38,6 +43,11 @@ export const ANNOUNCEMENT_MAX_BYTES = 256 * 1024;
 export const ANNOUNCEMENT_CACHE_FILE = "announcements-cache.json";
 /** 已读 id 集合上限：公告是滚动窗口，200 足够且防历史堆积。 */
 const READ_IDS_LIMIT = 200;
+/**
+ * 已提醒 id 上限：仅作防御性上界。实际数量由 feed 大小决定——持久化时按当前 feed 的 id 裁剪
+ * （见 pruneNotified），所以正常情况下这个上限永远不会绷到。
+ */
+const NOTIFIED_IDS_LIMIT = 200;
 
 /** 服务依赖（全部注入，便于单测）。 */
 export type AnnouncementServiceOptions = {
@@ -64,6 +74,8 @@ type AnnouncementCacheFile = {
 	fetchedAt: number | null;
 	items: AnnouncementItem[];
 	readIds: string[];
+	/** 已弹过 toast 的 id；旧版本缓存无此字段，读取时按空集兼容。 */
+	notifiedIds?: string[];
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -172,7 +184,13 @@ export class AnnouncementService {
 	/** 校验后的全量公告（未过滤 TTL），缓存落盘用；内存态唯一事实来源。 */
 	private rawItems: AnnouncementItem[] = [];
 	/** 对渲染层可见的状态（TTL/版本过滤后）。 */
-	private state: AnnouncementState = { items: [], fetchedAt: null, source: "cache", readIds: [] };
+	private state: AnnouncementState = {
+		items: [],
+		fetchedAt: null,
+		source: "cache",
+		readIds: [],
+		notifiedIds: [],
+	};
 	private refreshTimer: ReturnType<typeof setTimeout> | null = null;
 	private refreshing = false;
 
@@ -237,6 +255,8 @@ export class AnnouncementService {
 				fetchedAt: this.now(),
 				source: "remote",
 				readIds: this.state.readIds,
+				// 新 feed 可能已下线旧公告：顺带裁掉不再存在的已提醒 id（见 pruneNotifiedIds）
+				notifiedIds: this.pruneNotifiedIds(this.state.notifiedIds),
 			};
 			this.persistCache();
 			this.log("announcement", "announcement refreshed", { count: items.length, trigger });
@@ -303,6 +323,16 @@ export class AnnouncementService {
 		}
 	}
 
+	/**
+	 * 裁掉当前 feed 里已不存在的已提醒 id：公告下线后这个 id 永远不会再出现，留着只是
+	 * 无界增长。在每次拉取后调用，所以 notifiedIds 的规模天然被 feed 大小封顶。
+	 * 注意与 readIds 的区别：readIds 不这样裁（归档仍要展示已读条目）。
+	 */
+	private pruneNotifiedIds(ids: string[]): string[] {
+		const live = new Set(this.rawItems.map((item) => item.id));
+		return ids.filter((id) => live.has(id));
+	}
+
 	/** 读缓存：损坏/版本不符整体忽略走空态（缓存是加速，不是信任源）。 */
 	private loadCache(): void {
 		try {
@@ -324,6 +354,12 @@ export class AnnouncementService {
 				fetchedAt: typeof parsed.fetchedAt === "number" ? parsed.fetchedAt : null,
 				source: "cache",
 				readIds,
+				// 旧版本缓存没有 notifiedIds 字段：缺省空集（代价是最多再弹一次，随后即写回）
+				notifiedIds: this.pruneNotifiedIds(
+					Array.isArray(parsed.notifiedIds)
+						? parsed.notifiedIds.filter((v): v is string => typeof v === "string")
+						: [],
+				),
 			};
 			this.emit();
 		} catch {
@@ -340,6 +376,7 @@ export class AnnouncementService {
 				fetchedAt: this.state.fetchedAt,
 				items: this.rawItems,
 				readIds: this.state.readIds,
+				notifiedIds: this.state.notifiedIds,
 			};
 			const tmp = `${this.cachePath}.tmp`;
 			writeFileSync(tmp, JSON.stringify(payload), "utf8");
@@ -372,6 +409,39 @@ export class AnnouncementService {
 		const all = new Set(this.state.readIds);
 		for (const item of this.state.items) all.add(item.id);
 		this.state = { ...this.state, readIds: [...all].slice(-READ_IDS_LIMIT) };
+		this.persistCache();
+		this.emit();
+	}
+
+	/**
+	 * 记录「已弹过 toast」的公告 id（幂等，批量）。与 markRead 分离：用户关掉 toast 只是
+	 * 不想看这条提醒，不代表已经了解内容，所以不能顺手标已读（那会让红点和归档一起消失）。
+	 *
+	 * 持久化的目的：让「每条公告只弹一次」跨重启/崩溃重载都成立（渲染层内存去重做不到）。
+	 * 只被渲染层在真正弹出（或被主动跳过，见 useAnnouncementNotifier）后调用。
+	 */
+	markNotified(ids: readonly unknown[]): void {
+		// 边界校验：渲染层数据不可信，非法元素静默丢弃；全非法则不动状态（不空写缓存）。
+		// 非数组也要拦（IPC 已筛一层，但 service 可被直接调用，不能假设调用方守约）。
+		if (!Array.isArray(ids)) return;
+		const valid = ids.filter(
+			(id): id is string => typeof id === "string" && id.length > 0 && id.length <= 128,
+		);
+		if (valid.length === 0) return;
+		const merged = new Set(this.state.notifiedIds);
+		let changed = false;
+		for (const id of valid) {
+			if (!merged.has(id)) {
+				merged.add(id);
+				changed = true;
+			}
+		}
+		if (!changed) return;
+		this.state = {
+			...this.state,
+			// 追加序 = 时间序，裁掉最旧（数组头部）保上限；正常路径由 pruneNotifiedIds 兜底，这里只是防御
+			notifiedIds: [...merged].slice(-NOTIFIED_IDS_LIMIT),
+		};
 		this.persistCache();
 		this.emit();
 	}

@@ -1985,6 +1985,12 @@ const api = {
 		/** 全部已读 */
 		markAllRead: () =>
 			ipcRenderer.invoke(ipcChannels.announcementMarkAllRead) as Promise<boolean>,
+		/**
+		 * 记录已弹过提醒的公告 id（批量幂等）。与 markRead 分离：关掉 toast 不等于已读。
+		 * 持久化在主进程，保证「每条公告只弹一次」跨重启/崩溃重载成立。
+		 */
+		markNotified: (ids: readonly string[]) =>
+			ipcRenderer.invoke(ipcChannels.announcementMarkNotified, ids) as Promise<boolean>,
 		/** 订阅公告快照推送（定时拉取/已读变更后触发）；返回退订函数，组件卸载必须调用 */
 		onChanged: (callback: (state: AnnouncementState) => void) =>
 			subscribe(ipcChannels.announcementChanged, callback),
