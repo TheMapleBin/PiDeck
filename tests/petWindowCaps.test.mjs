@@ -1,12 +1,30 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import { resolve } from "node:path";
 import test from "node:test";
 import ts from "typescript";
 import vm from "node:vm";
-import { tryRequireLocalTs } from "./helpers/requireLocalTs.mjs";
+import { createTsSandbox } from "./helpers/createTsSandbox.mjs";
 
 const require = createRequire(import.meta.url);
+
+/**
+ * 未显式打桩的相对 import → 交给统一沙箱按**源文件目录**解析。
+ *
+ * 本文件需要自建 sandbox 全局（MockBrowserWindow / 计时器 spies），因此不能直接用
+ * createTsSandbox 加载 PetWindow；这里只借用它「按源文件目录解析」的能力。
+ */
+const petSandbox = createTsSandbox();
+
+function resolveUnstubbedRequire(specifier) {
+  if (!specifier.startsWith(".")) return require(specifier);
+  const target = resolve(
+    "src/main/pet",
+    /\.(ts|tsx|js)$/.test(specifier) ? specifier : `${specifier}.ts`,
+  );
+  return petSandbox(target);
+}
 
 function loadModule(mockProcess = {}) {
 	const source = readFileSync("src/main/pet/PetWindow.ts", "utf8");
@@ -109,12 +127,9 @@ function loadModule(mockProcess = {}) {
 			if (id.endsWith("logging/sharedLogger")) {
 				return { getAppLogger: () => null };
 			}
-			// 相对 import 按 src/main/pet 解析后用 Node 原生 TS 加载（见 helper 注释）；
-			// 直接交 require(id) 会以 tests/ 为基准，生产新增本地模块（#213 的 ../v8HeapLimits）
-			// 就会让本文件整片 MODULE_NOT_FOUND。
-			const localFromSource = tryRequireLocalTs(id, "src/main/pet");
-			if (localFromSource) return localFromSource;
-			return require(id);
+			// 未显式打桩的相对 import：交给统一沙箱按**源文件目录**（src/main/pet）解析。
+			// 生产新增本地模块（#213 的 ../v8HeapLimits 等）不再让本文件整片 MODULE_NOT_FOUND。
+			return resolveUnstubbedRequire(id);
 		},
 	};
 	vm.runInNewContext(outputText, sandbox, {

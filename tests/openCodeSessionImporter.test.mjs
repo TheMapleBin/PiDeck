@@ -2,14 +2,10 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createRequire } from "node:module";
 import test from "node:test";
-import ts from "typescript";
-import vm from "node:vm";
 import { DatabaseSync } from "node:sqlite";
 
-const require = createRequire(import.meta.url);
-import { tryRequireLocalTs } from "./helpers/requireLocalTs.mjs";
+import { createTsSandbox } from "./helpers/createTsSandbox.mjs";
 
 function loadTranspiled(sourcePath, sandbox) {
 	const source = readFileSync(sourcePath, "utf8");
@@ -24,33 +20,10 @@ function loadTranspiled(sourcePath, sandbox) {
 }
 
 function loadImporter(homePath) {
-	const importCopy = loadTranspiled("src/main/sessions/SessionImportCopy.ts", { exports: {} });
-	const toolArgs = loadTranspiled("src/main/sessions/importToolArguments.ts", { exports: {} });
-	const normalize = loadTranspiled("src/main/sessions/importNormalize.ts", { exports: {} });
-	const sandbox = {
-		exports: {},
-		require: (id) => {
-			if (id === "electron") return { app: { getPath: () => homePath } };
-			if (id === "./SessionImportCopy") return importCopy;
-			if (id === "./importToolArguments") return toolArgs;
-			if (id === "./importNormalize") return normalize;
-			// 生产代码的相对 import 以源文件目录为基准解析；这里的 require 以 tests/ 为基准，
-			// 直接把 id 交回会得到 MODULE_NOT_FOUND（见 fix-vm-loader-module-not-found）。
-			const localFromSource = tryRequireLocalTs(id, "src/main/sessions");
-			if (localFromSource) return localFromSource;
-			return require(id);
-		},
-		process,
-		Buffer,
-		console,
-		setTimeout,
-		clearTimeout,
-		URL,
-		TextEncoder,
-		TextDecoder,
-	};
-	const mod = loadTranspiled("src/main/sessions/OpenCodeSessionImporter.ts", sandbox);
-	return new mod.OpenCodeSessionImporter();
+	// 统一沙箱加载器：相对 import 自动按**源文件目录**解析，不再手写 require 桥。
+	const load = createTsSandbox({ stubs: { electron: { app: { getPath: () => homePath } } } });
+	const mod = load("src/main/sessions/OpenCodeSessionImporter.ts");
+	return { ...mod, importer: new mod.OpenCodeSessionImporter() };
 }
 
 const T0 = 1_700_000_000_000;
@@ -112,7 +85,7 @@ test("import: assistant 上的 tool part 拆成 toolCall + toolResult", async ()
 		mkdirSync(dbDir, { recursive: true });
 		seedOpenCodeDb(join(dbDir, "opencode.db"), projectPath);
 
-		const importer = loadImporter(home);
+		const { importer } = loadImporter(home);
 		const sessions = await importer.scan(projectPath);
 		assert.equal(sessions.length, 1);
 		const report = await importer.import(projectPath, [sessions[0].sourcePath]);

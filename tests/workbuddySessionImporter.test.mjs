@@ -2,13 +2,9 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createRequire } from "node:module";
 import test from "node:test";
-import ts from "typescript";
-import vm from "node:vm";
 
-const require = createRequire(import.meta.url);
-import { tryRequireLocalTs } from "./helpers/requireLocalTs.mjs";
+import { createTsSandbox } from "./helpers/createTsSandbox.mjs";
 
 /**
  * WorkBuddySessionImporter 单测。
@@ -32,38 +28,15 @@ function transpile(sourcePath, sandbox) {
 }
 
 function loadImporter(homePath) {
-	const registry = {};
-	const makeSandbox = () => ({
-		exports: {},
-		require: (id) => {
-			if (id === "electron") return { app: { getPath: () => homePath } };
-			if (id === "./SessionImportCopy") return registry.importCopy;
-			if (id === "./importToolArguments") return registry.toolArgs;
-			if (id === "./importNormalize") return registry.normalize;
-			if (id === "./workbuddySessionSource") return registry.source;
-			if (id === "./workbuddySessionConvert") return registry.convert;
-			// 生产代码的相对 import 以源文件目录为基准解析；这里的 require 以 tests/ 为基准，
-			// 直接把 id 交回会得到 MODULE_NOT_FOUND（见 fix-vm-loader-module-not-found）。
-			const localFromSource = tryRequireLocalTs(id, "src/main/sessions");
-			if (localFromSource) return localFromSource;
-			return require(id);
-		},
-		process,
-		Buffer,
-		console,
-		setTimeout,
-		clearTimeout,
-		URL,
-		TextEncoder,
-		TextDecoder,
-	});
-
-	registry.importCopy = transpile("src/main/sessions/SessionImportCopy.ts", makeSandbox());
-	registry.toolArgs = transpile("src/main/sessions/importToolArguments.ts", makeSandbox());
-	registry.normalize = transpile("src/main/sessions/importNormalize.ts", makeSandbox());
-	registry.source = transpile("src/main/sessions/workbuddySessionSource.ts", makeSandbox());
-	registry.convert = transpile("src/main/sessions/workbuddySessionConvert.ts", makeSandbox());
-	const mod = transpile("src/main/sessions/WorkBuddySessionImporter.ts", makeSandbox());
+	// 统一沙箱加载器：相对 import 自动按**源文件目录**解析（不再手写 require 桥 +
+	// tryRequireLocalTs 补层）。registry 保留给需要直接取纯函数的用例
+	// （registry.source / registry.convert 等）。
+	const load = createTsSandbox({ stubs: { electron: { app: { getPath: () => homePath } } } });
+	const registry = {
+		source: load("src/main/sessions/workbuddySessionSource.ts"),
+		convert: load("src/main/sessions/workbuddySessionConvert.ts"),
+	};
+	const mod = load("src/main/sessions/WorkBuddySessionImporter.ts");
 	return { importer: new mod.WorkBuddySessionImporter(), registry };
 }
 

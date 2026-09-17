@@ -160,6 +160,13 @@ src/
    - 测行为不测实现：从公开接口/IPC 边界断言结果，不断言内部私有函数调用次数。
    - 不依赖执行顺序、不依赖真实网络/真实 pi 进程；外部依赖用 mock/替身。
    - 一个测试只验证一件事，命名即意图（如 `agentCreateTimeout.test.mjs`）。
+   - **加载生产 TS 模块用现成 helper，不要手写 vm 加载器**：
+     - 需要完整依赖图、桩注入：`tests/helpers/loadTsCommonJs.mjs`；
+     - 需要自定义 sandbox 全局（自建 mock、注入计时器/Date/Map）：
+       `tests/helpers/createTsSandbox.mjs` 的 `createTsSandbox({ stubs, globals })`。
+     - 两者的相对 import 都按**源文件目录**解析。手写沙箱最常见的坑是把
+       specifier 丢给 `require(specifier)` —— 它以 `tests/` 为基准，生产代码一新增
+       本地 import 就整片 MODULE_NOT_FOUND（2026-09 连踩三次，已清理全部旧写法）。
 4. **禁止**：为通过测试而放宽断言、注释掉失败测试、把测试改成恒真。
 
 ## 安全约束

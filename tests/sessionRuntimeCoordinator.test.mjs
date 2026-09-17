@@ -1,40 +1,17 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { createRequire } from "node:module";
 import test from "node:test";
-import ts from "typescript";
-import vm from "node:vm";
-import { tryRequireLocalTs } from "./helpers/requireLocalTs.mjs";
+import { createTsSandbox } from "./helpers/createTsSandbox.mjs";
 
-const nodeRequire = createRequire(import.meta.url);
 
+/**
+ * 加载生产模块：统一走 createTsSandbox（相对 import 自动按源文件目录解析）。
+ *
+ * 注意 imports 的键是**源码里写的 specifier**，与 createTsSandbox 的 stubs 同语义；
+ * 每次调用新建一个沙箱实例，因此各用例的桩互不串味（与原先行为一致）。
+ */
 function compileModule(filePath, imports = {}) {
-  const source = readFileSync(filePath, "utf8");
-  const output = ts.transpileModule(source, {
-    compilerOptions: {
-      module: ts.ModuleKind.CommonJS,
-      target: ts.ScriptTarget.ES2022,
-    },
-    fileName: filePath,
-  }).outputText;
-  const module = { exports: {} };
-  const localRequire = (specifier) => {
-    if (Object.hasOwn(imports, specifier)) return imports[specifier];
-    // 生产代码的相对 import 以源文件目录为基准解析；这里的 nodeRequire 以 tests/ 为基准，
-    // 直接把 specifier 交回会得到 MODULE_NOT_FOUND（见 fix-vm-loader-module-not-found）。
-    const localFromSource = tryRequireLocalTs(specifier, "src/main/sessions");
-    if (localFromSource) return localFromSource;
-    return nodeRequire(specifier);
-  };
-  vm.runInNewContext(output, {
-    module,
-    exports: module.exports,
-    require: localRequire,
-    console,
-    setTimeout,
-    clearTimeout,
-  }, { filename: filePath });
-  return module.exports;
+  return createTsSandbox({ stubs: imports })(filePath);
 }
 
 function loadCoordinator() {

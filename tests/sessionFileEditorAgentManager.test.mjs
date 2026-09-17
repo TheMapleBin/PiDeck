@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
-import { tryRequireLocalTs } from "./helpers/requireLocalTs.mjs";
+import { createTsSandbox } from "./helpers/createTsSandbox.mjs";
 import { createRequire } from "node:module";
 import test from "node:test";
 import ts from "typescript";
@@ -26,6 +26,26 @@ const noCompactionOwner = {
     notes: [],
   }),
 };
+
+/**
+ * 未显式打桩的相对 import → 交给统一沙箱按**源文件目录**解析。
+ *
+ * 原先这里调 tryRequireLocalTs(specifier, "src/main/pi")，但那只是绕过「解析基准是
+ * tests/」的补丁；统一到 createTsSandbox 后，解析基准由加载器保证。
+ * 包名（electron 等）交回 Node —— 相对路径交给 nodeRequire 会以 tests/ 为基准，
+ * 必然 MODULE_NOT_FOUND（这正是历史上反复踩的坑）。
+ */
+const piSandbox = createTsSandbox();
+
+function resolveUnstubbedRequire(specifier) {
+  if (!specifier.startsWith(".")) return nodeRequire(specifier);
+  // 按 AgentManager 所在目录解析；已带扩展名的不再追加 .ts
+  const target = resolve(
+    "src/main/pi",
+    /\.(ts|tsx|js)$/.test(specifier) ? specifier : `${specifier}.ts`,
+  );
+  return piSandbox(target);
+}
 
 function loadAgentManager() {
   const filePath = "src/main/pi/AgentManager.ts";
@@ -201,11 +221,10 @@ function loadAgentManager() {
           toCheckpointSummary: (checkpoint) => checkpoint,
         };
       }
-      // 相对 import 按 src/main/pi 解析后交给 Node 原生 TS 加载（见 helper 注释）；
-      // 直接交 nodeRequire 会以 tests/ 为基准，生产新增本地模块即整片 MODULE_NOT_FOUND（#213）
-      const localFromSource = tryRequireLocalTs(specifier, "src/main/pi");
-      if (localFromSource) return localFromSource;
-      return nodeRequire(specifier);
+      // 未在上面显式列出的相对 import：交给沙箱按**源文件目录**（src/main/pi）解析。
+      // 生产新增本地模块（#213 的 messagePayloadSize、2026-09 的 cacheHitStats 依赖等）
+      // 不再让本文件整片 MODULE_NOT_FOUND。
+      return resolveUnstubbedRequire(specifier);
     },
     Date,
     Map,
