@@ -194,6 +194,50 @@ test("assistant/message 无流式骨架时按终态正常 push（历史重放路
 	assert.equal(p.messages[0].thinking, "内部推理");
 });
 
+test("assistant/message 带 tool-call 块投影 stopReason=toolUse（中间回复，不再拆碎回合）", () => {
+	// 回归（2026-09-17，用户报告 DSH 会话每个中间短文本都渲染成独立小回合）：
+	// DSH 一次 turn 的每步模型响应各落一条 assistant/message（中间步骤也带 tool-call），
+	// 旧实现全部标 stopReason="stop"，渲染层 groupToolMessages 按 stop 断回合 →
+	// 每条中间回复独立成 agent-run（头像+时间戳+「执行过程」chip 重复出现）。
+	// 修后语义对齐 pi：带 tool-call = toolUse（中间回复），纯文本终态 = stop（最终回复）。
+	// 场景1：历史重放路径（无骨架）。
+	const replay = projectDshEvent(undefined, event("assistant/message", 5, {
+		message: {
+			content: [
+				{ type: "text", text: "先查一下" },
+				{ type: "tool-call", id: "call-1", name: "pwsh", arguments: { command: "Get-Location" } },
+			],
+		},
+	}), AGENT);
+	assert.equal(replay.messages.length, 1);
+	assert.equal(replay.messages[0].stopReason, "toolUse");
+	// 场景2：流式骨架路径（同 id 原位更新）。
+	let p = projectDshEvent(undefined, event("turn/start", 2), AGENT);
+	p = projectDshEvent(p, event("assistant/chunk", 3, {
+		chunk: { type: "text-delta", index: 0, text: "先查一下" },
+	}), AGENT);
+	p = projectDshEvent(p, event("assistant/message", 5, {
+		message: {
+			content: [
+				{ type: "tool-call", id: "call-1", name: "pwsh", arguments: { command: "Get-Location" } },
+			],
+		},
+	}), AGENT);
+	assert.equal(p.messages.length, 1);
+	assert.equal(p.messages[0].id, "dsh:3", "骨架 id 不变");
+	assert.equal(p.messages[0].stopReason, "toolUse");
+});
+
+test("assistant/message 纯文本终态投影 stopReason=stop（最终回复，可收口回合）", () => {
+	// 与上条互补：无 tool-call 的终态才是回合收尾信号，渲染层据此在下一个
+	// 新回合到来前保持同一 agent-run。
+	const p = projectDshEvent(undefined, event("assistant/message", 5, {
+		message: { content: [{ type: "text", text: "完整回答" }] },
+	}), AGENT);
+	assert.equal(p.messages.length, 1);
+	assert.equal(p.messages[0].stopReason, "stop");
+});
+
 test("assistant/message 只有 tool-call 块（无正文无思考）不落空气泡", () => {
 	// 模型直接发起工具调用时，assistant/message 的 content 只含 tool-call 块：
 	// 落一条空文本 assistant 消息会让时间线出现空白气泡，终态由 tool/call 卡片承接。
