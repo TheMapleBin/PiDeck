@@ -133,7 +133,12 @@ jobs:
           GH_TOKEN: ${{ secrets.RELEASE_PAT }}
         run: |
           TAG="${{ github.event.release.tag_name }}"
+          # 必须走 tags_custom（自由字符串）而不是下拉的 tags：
+          # `type: choice` 的输入在 dispatch 时会被服务端校验，值不在静态 options 列表里
+          # 直接 422 拒绝。本步骤是无人值守的自动链，万一发版时忘了跑
+          # scripts/sync-workflow-choices.js 把新 tag 插进列表，整条 AtomGit 同步就会静默断掉。
+          # tags_custom 无列表校验，从根上解耦（beta / 补发历史版本场景同样安全）。
           gh workflow run sync-atomgit.yml \
             --repo "${{ github.repository }}" \
-            -f "tags=${TAG}"
+            -f "tags_custom=${TAG}"
           echo "已触发 sync-atomgit.yml，目标 tag：${TAG}"

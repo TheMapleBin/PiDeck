@@ -316,6 +316,13 @@ src/
    - `--apply` 后检查 `git diff`：脚本只清理重复的 v0.6.6 条目，历史条目不允许丢失（2026-08 曾因
      无条件删除逻辑误删唯一一份 v0.6.6 条目，已修复）。
 7. 架构级变更（如 session-first 切换）先发 pre-release 观察，再标正式版。
+8. 同步 workflow_dispatch 的 tag 下拉列表（`type: choice`）：GitHub 的 choice 只能写死静态列表，
+   无法动态读 tag，所以每发一版都要跟新，否则新版本在下拉里选不到（只能手输 `tag_custom`）：
+   - 发版前跑 `node scripts/sync-workflow-choices.js --check`（列表与 CHANGELOG 不一致则退出码 1）；
+   - 有差异时 `--apply` 应用，默认保留最近 10 个正式版（`--keep N` 可调），更旧的版本走 `tag_custom`；
+   - 列表首项是哨兵值 `auto`（语义：跟随 GitHub latest / 按 package.json 正式发版），不要手动移动或删除；
+     带 `auto` 的 workflow 都必须有 `tag_custom` 兜底输入，且 `tag_custom` 非空时优先级高于下拉；
+   - 回归测试：`node --test tests/syncWorkflowChoices.test.mjs`（含 v 前缀、新→旧排序、哨兵值、input 顺序）。
 
 ## 提交 commit 规则
 
