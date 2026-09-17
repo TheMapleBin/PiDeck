@@ -2,49 +2,16 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createRequire } from "node:module";
 import test from "node:test";
-import ts from "typescript";
-import vm from "node:vm";
-
-const require = createRequire(import.meta.url);
-
-function transpile(sourcePath, sandbox) {
-	const source = readFileSync(sourcePath, "utf8");
-	const { outputText } = ts.transpileModule(source, {
-		compilerOptions: {
-			module: ts.ModuleKind.CommonJS,
-			target: ts.ScriptTarget.ES2022,
-		},
-	});
-	vm.runInNewContext(outputText, sandbox, { filename: sourcePath });
-	return sandbox.exports;
-}
+import { createTsSandbox } from "./helpers/createTsSandbox.mjs";
 
 function loadImporter(homePath) {
-	const importCopy = transpile("src/main/sessions/SessionImportCopy.ts", { exports: {} });
-	const toolArgs = transpile("src/main/sessions/importToolArguments.ts", { exports: {} });
-	const normalize = transpile("src/main/sessions/importNormalize.ts", { exports: {} });
-	const sandbox = {
-		exports: {},
-		require: (id) => {
-			if (id === "electron") return { app: { getPath: () => homePath } };
-			if (id === "./SessionImportCopy") return importCopy;
-			if (id === "./importToolArguments") return toolArgs;
-			if (id === "./importNormalize") return normalize;
-			return require(id);
-		},
-		process,
-		Buffer,
-		console,
-		setTimeout,
-		clearTimeout,
-		URL,
-		TextEncoder,
-		TextDecoder,
-	};
-	const mod = transpile("src/main/sessions/ClaudeSessionImporter.ts", sandbox);
-	return new mod.ClaudeSessionImporter();
+	// 用统一沙箱加载器：相对 import 自动按**源文件目录**解析（不再手写 require 桥 +
+	// tryRequireLocalTs 补层）。生产代码新增本地依赖时不会再连锁破坏本测试。
+	const load = createTsSandbox({
+		stubs: { electron: { app: { getPath: () => homePath } } },
+	});
+	return new (load("src/main/sessions/ClaudeSessionImporter.ts")).ClaudeSessionImporter();
 }
 
 function writeClaudeSession(home, projectPath, sessionId, entries) {

@@ -1001,3 +1001,41 @@ test("a missing pi.cmd reports 'path does not exist' instead of a silent cmd fal
 	}
 });
 
+test("composeCheckFailure surfaces the first meaningful stderr line instead of the generic copy only", () => {
+	const seen = [];
+	const { PiLocator } = loadPiLocatorModule("win32");
+	// 与 mainProcessT 同形的迷你翻译器：校验的是 composeCheckFailure 的提取逻辑与参数透传，
+	// 文案内容本身由 mainProcessI18n 测试覆盖。
+	const locator = new PiLocator((key, params) => {
+		seen.push({ key, params });
+		return key === "mainPi.checkFailedReason" ? `REASON<${params?.reason}>` : `BASE<${key}>`;
+	});
+	// ANSI 噪音行（清洗后为空）被跳过，真实原因取自第一条非空行；其余行丢弃
+	const composed = locator.composeCheckFailure(
+		"\x1b[0m\r\n/home/user/.volta/bin/pi: No such file or directory\r\nwsl: second line dropped",
+	);
+	assert.equal(composed, "REASON</home/user/.volta/bin/pi: No such file or directory>");
+	assert.ok(!composed.includes("\x1b"));
+	// 全空输入回落到通用文案键
+	assert.equal(locator.composeCheckFailure("  \r\n\t\n"), "BASE<mainPi.checkFailed>");
+	// 超长首行截断到 160 字符 + 省略号
+	const truncated = locator.composeCheckFailure("x".repeat(300));
+	assert.equal(truncated, `REASON<${"x".repeat(160)}…>`);
+});
+
+test("a driveless linux path without wsl context reports the actionable copy instead of ENOENT", async () => {
+	const { PiLocator } = loadPiLocatorModule("win32");
+	const locator = new PiLocator((key) => `KEY<${key}>`);
+	// wslEnabled=false（对应设置草稿未提交 / 非 WSL 模式粘贴了 WSL 内路径）：
+	// 不再把 Linux 绝对路径当 Windows 文件 spawn（必然 ENOENT + 笼统文案），
+	// 而是直接提示先启用/保存 WSL 模式。
+	const validated = await locator.validateCustomPath("/home/user/.volta/bin/pi", false, undefined, undefined);
+	assert.equal(validated.installed, false);
+	assert.equal(validated.error, "KEY<mainPi.linuxPathOutsideWsl>");
+	assert.equal(validated.command, "/home/user/.volta/bin/pi");
+	// /mnt/c 互操作路径同样命中（不能被当 Windows 可执行文件直接跑）
+	const interop = await locator.validateCustomPath("/mnt/c/Users/x/AppData/Roaming/npm/pi", false, undefined, undefined);
+	assert.equal(interop.error, "KEY<mainPi.linuxPathOutsideWsl>");
+	// wsl:// 标记与 Windows 路径不受护栏影响——分别由 checkWslCommand / runCheck 分支的既有测试覆盖
+});
+

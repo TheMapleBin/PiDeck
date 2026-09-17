@@ -17,7 +17,8 @@ import {
 } from "./workbuddySessionSource";
 
 export type ConvertedWorkBuddySession = {
-	raw: string;
+	/** 转换结果元数据；`raw` 仅在内存模式（scan 摘要）下由调用方拼装 */
+	raw?: string;
 	title: string;
 	preview: string;
 	messageCount: number;
@@ -28,6 +29,26 @@ export type ConvertWorkBuddyInput = {
 	session: ParsedWorkBuddySession;
 	translate: SessionImportCopy;
 };
+
+/**
+ * 内存版转换：把结果拼成完整文本返回。
+ *
+ * 仅供**扫描**使用（entries 是头部小数组，体积有上界）；
+ * 导入路径请走 convertWorkBuddySessionTo（流式写盘）。
+ */
+export async function convertWorkBuddySession(
+	input: ConvertWorkBuddyInput,
+): Promise<ConvertedWorkBuddySession> {
+	const lines: string[] = [];
+	const result = await convertWorkBuddySessionTo({
+		...input,
+		entries: input.session.entries,
+		sink: (line) => {
+			lines.push(line);
+		},
+	});
+	return { ...result, raw: `${lines.join("\n")}\n` };
+}
 
 type PiContent = Record<string, unknown>;
 
@@ -102,14 +123,17 @@ function makeId(sessionId: string, sequence: number): string {
  * 而 pi 要求它们挂在同一个 assistant 消息的 content 数组里，因此这里用
  * pending 缓冲区聚合同一轮的推理与工具调用，遇到文本消息或工具结果时再 flush。
  */
-export function convertWorkBuddySession(
-	input: ConvertWorkBuddyInput,
-): ConvertedWorkBuddySession {
-	const { projectPath, session, translate } = input;
+export async function convertWorkBuddySessionTo(input: {
+	projectPath: string;
+	session: ParsedWorkBuddySession;
+	translate: SessionImportCopy;
+	entries: Iterable<WorkBuddyRecord> | AsyncIterable<WorkBuddyRecord>;
+	sink: (line: string) => Promise<void> | void;
+}): Promise<ConvertedWorkBuddySession> {
+	const { projectPath, session, translate, entries, sink } = input;
 	const sessionId = session.meta.sessionId;
 	const timestamp = new Date(session.meta.firstTimestamp).toISOString();
 	const titleState = { title: session.meta.aiTitle, preview: "" };
-	const lines: string[] = [];
 	let pending: PiContent[] = [];
 	let parentId: string | null = null;
 	let sequence = 0;
@@ -117,11 +141,11 @@ export function convertWorkBuddySession(
 
 	const modelId = session.meta.modelId || "unknown";
 
-	const pushEntry = (entry: Record<string, unknown>) => {
-		lines.push(JSON.stringify(entry));
+	const pushEntry = async (entry: Record<string, unknown>) => {
+		await sink(JSON.stringify(entry));
 	};
 
-	const pushMessage = (
+	const pushMessage = async (
 		role: "user" | "assistant" | "toolResult",
 		content: PiContent[],
 		extra: Record<string, unknown> = {},
@@ -130,7 +154,7 @@ export function convertWorkBuddySession(
 		if (content.length === 0) return;
 		const id = makeId(sessionId, sequence++);
 		const ts = new Date(timestampValue ?? session.meta.firstTimestamp).toISOString();
-		pushEntry({
+		await pushEntry({
 			type: "message",
 			id,
 			parentId,
@@ -152,11 +176,11 @@ export function convertWorkBuddySession(
 		}
 	};
 
-	const flushPending = (fallbackTimestamp: number) => {
+	const flushPending = async (fallbackTimestamp: number) => {
 		if (pending.length === 0) return;
 		const content = pending;
 		pending = [];
-		pushMessage(
+		await pushMessage(
 			"assistant",
 			content,
 			{
@@ -171,8 +195,8 @@ export function convertWorkBuddySession(
 		);
 	};
 
-	pushEntry({ type: "session", version: 3, id: sessionId, timestamp, cwd: projectPath });
-	pushEntry({
+	await pushEntry({ type: "session", version: 3, id: sessionId, timestamp, cwd: projectPath });
+	await pushEntry({
 		type: "workbuddy_import",
 		version: 1,
 		workbuddySessionId: sessionId,
@@ -183,7 +207,7 @@ export function convertWorkBuddySession(
 	});
 
 	const modelChangeId = makeId(sessionId, sequence++);
-	pushEntry({
+	await pushEntry({
 		type: "model_change",
 		id: modelChangeId,
 		parentId,
@@ -193,7 +217,7 @@ export function convertWorkBuddySession(
 	});
 	parentId = modelChangeId;
 
-	for (const entry of session.entries) {
+	for await (const entry of entries) {
 		const type = readString(entry.type);
 		const at = readNumber(entry.timestamp) || session.meta.firstTimestamp;
 
@@ -202,12 +226,12 @@ export function convertWorkBuddySession(
 
 		if (type === "message") {
 			// 文本消息标志新一轮开始，先把上一轮的推理/工具调用落盘。
-			flushPending(at);
+			await flushPending(at);
 			if (readString(entry.role) === "assistant") {
 				const content: PiContent[] = [];
 				const text = pickText(entry.content, "output_text");
 				if (text) content.push({ type: "text", text });
-				pushMessage(
+				await pushMessage(
 					"assistant",
 					content,
 					{
@@ -223,7 +247,7 @@ export function convertWorkBuddySession(
 			if (readString(entry.role) === "user") {
 				const raw = pickText(entry.content, "input_text");
 				const text = stripInjectedContext(raw);
-				if (text) pushMessage("user", [{ type: "text", text }], {}, at);
+				if (text) await pushMessage("user", [{ type: "text", text }], {}, at);
 				continue;
 			}
 			continue;
@@ -253,8 +277,8 @@ export function convertWorkBuddySession(
 
 		if (type === "function_call_result") {
 			// 工具结果必须晚于承载 toolCall 的 assistant 消息，先 flush 再写结果。
-			flushPending(at);
-			pushMessage(
+			await flushPending(at);
+			await pushMessage(
 				"toolResult",
 				[{ type: "text", text: extractToolOutput(entry) }],
 				{
@@ -267,26 +291,23 @@ export function convertWorkBuddySession(
 		}
 	}
 
-	flushPending(session.meta.lastTimestamp);
+	await flushPending(session.meta.lastTimestamp);
 
 	const title =
 		cleanWorkBuddyTitle(titleState.title) ||
 		translate("session.importedTitle", { source: "WorkBuddy" });
 	// 使用 pi 原生 session_info 格式追加在末尾，避免旧版 sessionName 行（无 type 字段）
 	// 在文件头破坏 pi 的首行校验导致会话无法加载（见 #114）。
-	lines.push(
-		JSON.stringify({
-			type: "session_info",
-			id: randomUUID().slice(0, 8),
-			parentId,
-			timestamp: new Date().toISOString(),
-			name: title,
-			cwd: projectPath,
-		}),
-	);
+	await pushEntry({
+		type: "session_info",
+		id: randomUUID().slice(0, 8),
+		parentId,
+		timestamp: new Date().toISOString(),
+		name: title,
+		cwd: projectPath,
+	});
 
 	return {
-		raw: `${lines.join("\n")}\n`,
 		title,
 		preview:
 			titleState.preview || translate("session.importedPreview", { source: "WorkBuddy" }),

@@ -1,5 +1,7 @@
-import { mkdir, readFile, readdir, stat } from "node:fs/promises";
+import { mkdir, readdir, stat } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
+import { readImportMetaHead } from "./importMetaHead";
+import { readSessionSourceHead } from "./sessionSourceHead";
 
 /** Cursor JSONL 行结构不固定，统一按 unknown 读取后再逐字段收窄。 */
 export type CursorRecord = Record<string, unknown>;
@@ -186,20 +188,28 @@ export function parseCursorTimestampFromText(raw: string): number {
 	return match ? parseCursorClock(match[1]) : 0;
 }
 
-export async function readCursorSession(
+/**
+ * 只读头部解析 Cursor 会话元数据（scan 用）。
+ *
+ * Cursor 的 sessionId 来自**文件路径**、cwd 来自目录结构，两者都不需要读正文；
+ * 只有「是否有对话」与时间戳依赖内容，头部足够近似。
+ * 这样扫描内存占用与 transcript 体积解耦（源文件可达几十 MB~GB，整读会 abort 主进程）。
+ */
+export async function readCursorSessionHead(
 	root: string,
 	filePath: string,
 ): Promise<ParsedCursorSession> {
 	assertCursorSourcePath(root, filePath);
-	const [raw, info] = await Promise.all([readFile(filePath, "utf8"), stat(filePath)]);
+	const { head, size, mtimeMs, truncated } = await readSessionSourceHead(filePath);
+
 	const entries: CursorRecord[] = [];
-	for (const line of raw.split(/\r?\n/)) {
+	for (const line of head.split(/\r?\n/)) {
 		if (!line.trim()) continue;
 		let parsed: unknown;
 		try {
 			parsed = JSON.parse(line);
 		} catch {
-			// 损坏行跳过，不让整份会话导入失败。
+			// 头部截断可能切在行中间：坏行跳过（与 readCursorSession 同策略）
 			continue;
 		}
 		if (parsed && typeof parsed === "object") entries.push(parsed as CursorRecord);
@@ -220,41 +230,33 @@ export async function readCursorSession(
 	}
 	if (!hasConversation) throw new Error("Missing Cursor session messages");
 
-	const firstTimestamp = timestamps.length > 0 ? Math.min(...timestamps) : info.mtimeMs;
-	const lastTimestamp = timestamps.length > 0 ? Math.max(...timestamps) : info.mtimeMs;
-
+	const firstTimestamp = timestamps.length > 0 ? Math.min(...timestamps) : mtimeMs;
+	// 未截断（头部即全文件）时用真实末次时间戳，列表排序靠它；
+	// 截断时头部看不到文件尾，退化用 mtime（比头部最大值更接近真实末次活动）。
 	return {
 		meta: {
 			sessionId,
 			cwd: dirname(dirname(filePath)),
 			firstTimestamp,
-			lastTimestamp,
+			lastTimestamp: truncated
+				? mtimeMs
+				: timestamps.length > 0
+					? Math.max(...timestamps)
+					: mtimeMs,
 		},
 		entries,
 		sourcePath: filePath,
-		sourceSize: info.size,
-		sourceMtime: info.mtimeMs,
+		sourceSize: size,
+		sourceMtime: mtimeMs,
 	};
 }
 
+
+/** 读取导入产物头部的 import 标记（有界读头部，不再整读会话文件——见 importMetaHead）。 */
 export async function readCursorImportMeta(
 	targetPath: string,
 ): Promise<CursorImportMeta | undefined> {
-	try {
-		const raw = await readFile(targetPath, "utf8");
-		for (const line of raw.split(/\r?\n/).filter(Boolean).slice(0, 8)) {
-			const entry = JSON.parse(line) as CursorRecord;
-			if (readString(entry.type) === "cursor_import") {
-				return {
-					sourceMtime: readNumber(entry.sourceMtime),
-					sourceSize: readNumber(entry.sourceSize),
-				};
-			}
-		}
-	} catch {
-		return undefined;
-	}
-	return undefined;
+	return readImportMetaHead(targetPath, "cursor_import");
 }
 
 export async function ensureProjectSessionDir(piRoot: string, projectPath: string) {

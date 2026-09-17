@@ -899,3 +899,78 @@ test("appendMessages runs reload with marker and cleans it up", async () => {
     assert.equal((await readFile(path, "utf8")).includes("_reloadMarker"), false);
   });
 });
+
+/**
+ * 大会话编辑的体量护栏（2026-09 第三次同类闪退）。
+ *
+ * 编辑/删除/重发需要完整文档（定位条目 + 重算 parentId 链），无法像读取那样流式化，
+ * 因此原实现对会话文件 readFile(utf8) + 逐行 JSON.parse。主进程 V8 老生代堆被钉在
+ * 384MB：几百 MB 的会话会让 V8 FatalProcessOutOfMemory **abort 主进程**（闪退、无堆栈），
+ * 超过 V8 单字符串上限（约 5.37 亿字符）则抛 ERR_STRING_TOO_LONG（实测 1GB 文件）。
+ *
+ * 现在先 stat 过护栏：超限抛 SESSION_FILE_TOO_LARGE（可读错误），不读文件。
+ */
+test("编辑超过整读上限的会话：报 SESSION_FILE_TOO_LARGE 且不读文件", async () => {
+  await withTempSession(basicEntries(), {}, async ({ path }) => {
+    let readCalls = 0;
+    const editor = new SessionFileEditor({
+      fs: {
+        // 只覆盖 stat：声称文件超大，触发护栏
+        stat: async () => ({ size: 512 * 1024 * 1024 }),
+        readFile: async (...args) => {
+          readCalls += 1;
+          return readFile(...args);
+        },
+      },
+    });
+
+    await expectCode(
+      editor.editMessage({
+        file: fileRef(path),
+        target: target({ text: "answer" }),
+        newText: "新",
+      }),
+      "SESSION_FILE_TOO_LARGE",
+    );
+    assert.equal(readCalls, 0, "超限时不应读取会话文件（读取会 abort 主进程）");
+  });
+});
+
+test("编辑未超限的会话：护栏放行，正常写入", async () => {
+  await withTempSession(basicEntries("旧答案"), {}, async ({ path }) => {
+    // 默认 fs 带真实 stat：正常大小文件必须照常编辑（护栏不能误伤）
+    const editor = new SessionFileEditor();
+    const result = await editor.editMessage({
+      file: fileRef(path),
+      target: target({ text: "旧答案" }),
+      newText: "新答案",
+      reload: async () => undefined,
+    });
+    assert.ok(result);
+    assert.equal((await readFile(path, "utf8")).includes("新答案"), true);
+  });
+});
+
+test("体量护栏：缺省 stat 时不误伤（测试替身兼容）", async () => {
+  await withTempSession(basicEntries("旧答案"), {}, async ({ path }) => {
+    // 只提供 readFile 的替身（无 stat）：应跳过护栏而不是抛错
+    const editor = new SessionFileEditor({
+      fs: {
+        readFile: async (...args) => readFile(...args),
+        realpath: async (p) => p,
+        open: async (...args) => open(...args),
+        readdir: async (...args) => readdir(...args),
+        rename: async (...args) => rename(...args),
+        unlink: async (...args) => unlink(...args),
+      },
+    });
+    const result = await editor.editMessage({
+      file: fileRef(path),
+      target: target({ text: "旧答案" }),
+      newText: "替身也能改",
+      reload: async () => undefined,
+    });
+    assert.ok(result);
+    assert.equal((await readFile(path, "utf8")).includes("替身也能改"), true);
+  });
+});

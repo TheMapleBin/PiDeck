@@ -2,58 +2,25 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createRequire } from "node:module";
 import test from "node:test";
-import ts from "typescript";
-import vm from "node:vm";
 import { DatabaseSync } from "node:sqlite";
 
-const require = createRequire(import.meta.url);
+import { createTsSandbox } from "./helpers/createTsSandbox.mjs";
 
 /**
  * ZCodeSessionImporter 单测。
  *
- * 与 codex/claude importer 测试同款做法：把 TS 源转译成 CJS 后在 vm 沙箱运行，
+ * 统一用 createTsSandbox 加载（相对 import 自动按源文件目录解析），
  * mock electron（app.getPath("home") 指向临时目录），node:sqlite / fs 用真实实现。
  * 数据库按 zcode 真实 schema 的字段子集构造（importer 只查询这些列），
  * 不依赖真实 zcode 安装，也不触碰用户 ~/.zcode 数据。
  */
 
-function loadTranspiled(sourcePath, sandbox) {
-	const source = readFileSync(sourcePath, "utf8");
-	const { outputText } = ts.transpileModule(source, {
-		compilerOptions: {
-			module: ts.ModuleKind.CommonJS,
-			target: ts.ScriptTarget.ES2022,
-		},
-	});
-	vm.runInNewContext(outputText, sandbox, { filename: sourcePath });
-	return sandbox.exports;
-}
-
 function loadImporter(homePath) {
-	const importCopy = loadTranspiled("src/main/sessions/SessionImportCopy.ts", { exports: {} });
-	const toolArgs = loadTranspiled("src/main/sessions/importToolArguments.ts", { exports: {} });
-	const normalize = loadTranspiled("src/main/sessions/importNormalize.ts", { exports: {} });
-	const sandbox = {
-		exports: {},
-		require: (id) => {
-			if (id === "electron") return { app: { getPath: () => homePath } };
-			if (id === "./SessionImportCopy") return importCopy;
-			if (id === "./importToolArguments") return toolArgs;
-			if (id === "./importNormalize") return normalize;
-			return require(id);
-		},
-		process,
-		Buffer,
-		console,
-		setTimeout,
-		clearTimeout,
-		URL,
-		TextEncoder,
-		TextDecoder,
-	};
-	return loadTranspiled("src/main/sessions/ZCodeSessionImporter.ts", sandbox);
+	// 统一沙箱加载器：相对 import 自动按**源文件目录**解析，不再手写 require 桥。
+	const load = createTsSandbox({ stubs: { electron: { app: { getPath: () => homePath } } } });
+	const mod = load("src/main/sessions/ZCodeSessionImporter.ts");
+	return { ...mod, importer: new mod.ZCodeSessionImporter() };
 }
 
 function createZcodeDb(dbPath, { projectPath }) {
@@ -405,141 +372,35 @@ test("zcode import: 状态流转 new -> current -> outdated", async () => {
 
 // ── SessionScanner 来源标签识别（zcode_import → source=zcode） ──
 
-function loadScannedModule(filePath, overrides = new Map()) {
-	const source = readFileSync(filePath, "utf8");
-	const { outputText } = ts.transpileModule(source, {
-		compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-	});
-	const sandbox = {
-		clearTimeout,
-		exports: {},
-		process,
-		require: (id) => (overrides.has(id) ? overrides.get(id) : require(id)),
-		setTimeout,
-	};
-	vm.runInNewContext(outputText, sandbox, { filename: filePath });
-	return sandbox.exports;
-}
-
-function loadZCodeMetaModule() {
-	return loadScannedModule("src/shared/codexSessionMeta.ts", new Map());
-}
-
-function loadZCodeMessageContentModule() {
-	const compilerOptions = { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 };
-	const docActions = { exports: {} };
-	vm.runInNewContext(
-		ts.transpileModule(readFileSync("src/main/feishu/docActions.ts", "utf8"), { compilerOptions }).outputText,
-		docActions,
-		{ filename: "docActions.ts" },
-	);
-	const messageContent = {
-		exports: {},
-		require: (id) => {
-			if (id === "../feishu/docActions") return docActions.exports;
-			throw new Error(`Unexpected messageContent import: ${id}`);
-		},
-	};
-	vm.runInNewContext(
-		ts.transpileModule(readFileSync("src/main/pi/messageContent.ts", "utf8"), { compilerOptions }).outputText,
-		messageContent,
-		{ filename: "messageContent.ts" },
-	);
-	return messageContent.exports;
-}
-
-function loadZCodeWslPathsModule() {
-	const source = readFileSync("src/main/wsl/WslPaths.ts", "utf8");
-	const { outputText } = ts.transpileModule(source, {
-		compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-	});
-	const sandbox = { exports: {}, require };
-	vm.runInNewContext(outputText, sandbox, { filename: "WslPaths.ts" });
-	return sandbox.exports;
-}
-
-function loadZCodeFsRetryModule() {
-	const source = readFileSync("src/main/utils/fsRetry.ts", "utf8");
-	const { outputText } = ts.transpileModule(source, {
-		compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-	});
-	const sandbox = { clearTimeout, exports: {}, process, require, setTimeout };
-	vm.runInNewContext(outputText, sandbox, { filename: "fsRetry.ts" });
-	return sandbox.exports;
-}
-
-function loadZCodeSummaryCacheModule(homePath) {
-	const source = readFileSync("src/main/sessions/sessionSummaryCache.ts", "utf8");
-	const { outputText } = ts.transpileModule(source, {
-		compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-	});
-	const fsRetry = loadZCodeFsRetryModule();
-	const sandbox = {
-		clearTimeout: () => undefined,
-		exports: {},
-		process,
-		require: (id) => {
-			if (id === "electron") {
-				return { app: { getPath: (name) => (name === "userData" ? join(homePath, "user-data") : homePath) } };
-			}
-			if (id === "../utils/fsRetry") return fsRetry;
-			return require(id);
-		},
-		setTimeout: () => ({ unref: () => undefined }),
-	};
-	vm.runInNewContext(outputText, sandbox, { filename: "sessionSummaryCache.ts" });
-	return sandbox.exports;
-}
-
-function loadZCodeSessionNameLineModule() {
-	const source = readFileSync("src/main/sessions/sessionNameLine.ts", "utf8");
-	const { outputText } = ts.transpileModule(source, {
-		compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-	});
-	const sandbox = { exports: {}, process, require, setTimeout };
-	vm.runInNewContext(outputText, sandbox, { filename: "sessionNameLine.ts" });
-	return sandbox.exports;
-}
-
+/**
+ * 会话扫描器：用统一沙箱加载。
+ *
+ * 原先这里有一整簇手写加载器（loadScannedModule / loadZCodeMetaModule /
+ * loadZCodeMessageContentModule / loadZCodeWslPathsModule / loadZCodeFsRetryModule /
+ * loadZCodeSummaryCacheModule / loadZCodeSessionNameLineModule / loadZCodeScanner），
+ * 每个都要为 SessionScanner 的本地依赖单独补桩——生产代码一新增依赖就整片
+ * MODULE_NOT_FOUND（2026-09 连踩三次）。现在依赖解析交给 createTsSandbox，
+ * 只有真正需要替身的外部边界（electron / 日志 / 定时器）才写桩。
+ */
 function loadZCodeScanner(homePath) {
-	const source = readFileSync("src/main/sessions/SessionScanner.ts", "utf8");
-	const { outputText } = ts.transpileModule(source, {
-		compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-	});
-	const codexMeta = loadZCodeMetaModule();
-	const messageContent = loadZCodeMessageContentModule();
-	const sessionSummaryCache = loadZCodeSummaryCacheModule(homePath);
-	const wslPaths = loadZCodeWslPathsModule();
-	const sessionIdentity = loadScannedModule("src/shared/sessionIdentity.ts", new Map());
-	// SessionScanner 新增的自包含块折叠（纯函数、无依赖）：自定义 loader 需显式提供
-	const expandedRefBlocks = loadScannedModule("src/shared/expandedRefBlocks.ts", new Map());
-	// 会话 JSONL 流式行扫描器（只依赖 node:fs/promises）：自定义 loader 需显式提供
-	const jsonlLineStream = loadScannedModule("src/main/sessions/jsonlLineStream.ts", new Map());
-	const sandbox = {
-		AbortController,
-		AbortSignal,
-		Buffer,
-		clearTimeout,
-		exports: {},
-		process,
-		require: (id) => {
-			if (id === "electron") return { app: { getPath: () => homePath }, shell: {} };
-			if (id === "../../shared/codexSessionMeta") return codexMeta;
-			if (id === "../pi/messageContent") return messageContent;
-			if (id === "../wsl/WslPaths") return wslPaths;
-			if (id === "./sessionSummaryCache") return sessionSummaryCache;
-			if (id === "./sessionNameLine") return loadZCodeSessionNameLineModule();
-			if (id === "../../shared/sessionIdentity") return sessionIdentity;
-			if (id === "../../shared/expandedRefBlocks") return expandedRefBlocks;
-			if (id === "./jsonlLineStream") return jsonlLineStream;
-			if (id === "../logging/sharedLogger") return { getAppLogger: () => null };
-			return require(id);
+	const load = createTsSandbox({
+		stubs: {
+			electron: {
+				app: {
+					getPath: (name) =>
+						name === "userData" ? join(homePath, "user-data") : homePath,
+				},
+				shell: {},
+			},
+			"../logging/sharedLogger": { getAppLogger: () => null },
 		},
-		setTimeout,
-	};
-	vm.runInNewContext(outputText, sandbox, { filename: "SessionScanner.ts" });
-	return sandbox.exports;
+		// sessionSummaryCache 用 setTimeout(...).unref() 做防挂起；给一个带 unref 的替身，
+		// 避免真定时器把测试进程挂住
+		globals: { setTimeout: () => ({ unref: () => undefined }) },
+	});
+	return load("src/main/sessions/SessionScanner.ts");
 }
+
 
 test("zcode import: 导入产物被 SessionScanner 识别为 zcode 来源（标签链路）", async () => {
 	const home = mkdtempSync(join(tmpdir(), "zcode-scanner-"));

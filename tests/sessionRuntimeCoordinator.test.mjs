@@ -1,32 +1,17 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { createRequire } from "node:module";
 import test from "node:test";
-import ts from "typescript";
-import vm from "node:vm";
+import { createTsSandbox } from "./helpers/createTsSandbox.mjs";
 
-const nodeRequire = createRequire(import.meta.url);
 
+/**
+ * 加载生产模块：统一走 createTsSandbox（相对 import 自动按源文件目录解析）。
+ *
+ * 注意 imports 的键是**源码里写的 specifier**，与 createTsSandbox 的 stubs 同语义；
+ * 每次调用新建一个沙箱实例，因此各用例的桩互不串味（与原先行为一致）。
+ */
 function compileModule(filePath, imports = {}) {
-  const source = readFileSync(filePath, "utf8");
-  const output = ts.transpileModule(source, {
-    compilerOptions: {
-      module: ts.ModuleKind.CommonJS,
-      target: ts.ScriptTarget.ES2022,
-    },
-    fileName: filePath,
-  }).outputText;
-  const module = { exports: {} };
-  const localRequire = (specifier) => imports[specifier] ?? nodeRequire(specifier);
-  vm.runInNewContext(output, {
-    module,
-    exports: module.exports,
-    require: localRequire,
-    console,
-    setTimeout,
-    clearTimeout,
-  }, { filename: filePath });
-  return module.exports;
+  return createTsSandbox({ stubs: imports })(filePath);
 }
 
 function loadCoordinator() {
@@ -1758,4 +1743,85 @@ test("stopRuntime reports SESSION_NOT_FOUND only when neither binding nor catalo
   });
   assert.equal(unbound.ok, false);
   assert.equal(unbound.error.code, "SESSION_RUNTIME_UNAVAILABLE");
+});
+
+/**
+ * 会话文件过大（SESSION_FILE_TOO_LARGE）的稳定映射与展示参数。
+ *
+ * 背景（2026-09 第三次同类闪退）：SessionFileEditor 的编辑类操作需要完整文档，
+ * 无法流式化，因此对超过 32MB 的会话文件直接拒绝。若不把它单独映射成稳定错误码，
+ * 用户只看到泛化的「会话操作失败，请重试」——既不知道原因，也不知道「这个会话大到
+ * 改不了」，重试永远不会成功（正确动作是换会话 / 导出归档）。
+ */
+test("SESSION_FILE_TOO_LARGE 被映射为稳定错误码，且带上体积参数", () => {
+  const source = readFileSync("src/main/sessions/SessionRuntimeCoordinator.ts", "utf8");
+  // 必须按 editorCode 识别（而不是靠 message 文本），否则改文案就会静默退回泛化错误
+  assert.match(source, /editorCode === "SESSION_FILE_TOO_LARGE"/);
+  assert.match(source, /SESSION_FILE_TOO_LARGE"\s*\?\s*"SESSION_FILE_TOO_LARGE"/);
+  // 文案两个占位符都要有值，缺一就会把 {limitMb} 原样显示给用户
+  assert.match(source, /sessionFileSizeParams\(error\)/);
+  assert.match(source, /code === "SESSION_FILE_TOO_LARGE"/);
+});
+
+test("sessionFileSizeMb：字节换算成 MB，缺参时给保守默认不漏占位符", () => {
+  const { sessionFileSizeMb, bytesToMb } = compileModule("src/main/sessions/sessionFileSizeCopy.ts");
+  // 200MB 文件、32MB 上限
+  assert.deepEqual(
+    { ...sessionFileSizeMb({ size: 200 * 1024 * 1024, limit: 32 * 1024 * 1024 }) },
+    { sizeMb: 200, limitMb: 32 },
+  );
+  // 向上取整：略超 1MB 显示 2MB（宁可略大也不显示 0MB 误导）
+  assert.equal(sessionFileSizeMb({ size: 1024 * 1024 + 1 }).sizeMb, 2);
+  assert.equal(bytesToMb(0), 0);
+  assert.equal(bytesToMb(Number.NaN), 0);
+  // 两个占位符都必须有值：limit 缺省兜底 32MB
+  const fallback = sessionFileSizeMb({});
+  assert.equal(typeof fallback.sizeMb, "number");
+  assert.equal(fallback.limitMb, 32);
+});
+
+test("渲染层与主进程的错误码→文案映射都覆盖 SESSION_FILE_TOO_LARGE", () => {
+  for (const file of [
+    "src/renderer/src/utils/sessionCommands.ts",
+    "src/main/sessions/SessionCommandIpcError.ts",
+  ]) {
+    const source = readFileSync(file, "utf8");
+    assert.match(
+      source,
+      /SESSION_FILE_TOO_LARGE: "sessionCommand\.fileTooLarge"/,
+      `${file} 缺少 SESSION_FILE_TOO_LARGE 的文案映射`,
+    );
+  }
+});
+
+test("中英文案都提供 fileTooLarge 且带 sizeMb / limitMb 占位", () => {
+  const source = readFileSync("src/shared/i18n/mainProcessCopy.ts", "utf8");
+  // 中英各一处，且都必须含两个占位符（漏占位会让模板串直接展示）
+  const matches = source.match(/"sessionCommand\.fileTooLarge": "[^"]*"/g) ?? [];
+  assert.equal(matches.length, 2, "中英文案各一条");
+  for (const line of matches) {
+    assert.match(line, /\{sizeMb\}/, `${line} 缺少 {sizeMb}`);
+    assert.match(line, /\{limitMb\}/, `${line} 缺少 {limitMb}`);
+  }
+});
+
+/**
+ * 端到端：SessionFileEditor 的过大错误 → 协调器错误码 → 渲染层文案。
+ * 这条链路任一段断开，用户都会退回泛化的「会话操作失败，请重试」。
+ */
+test("过大错误经协调器映射后能渲染出带体积的中文文案", () => {
+  const { sessionFileSizeMb } = compileModule("src/main/sessions/sessionFileSizeCopy.ts");
+  const i18n = compileModule("src/shared/i18n/mainProcessCopy.ts");
+  const params = sessionFileSizeMb({ size: 200 * 1024 * 1024, limit: 32 * 1024 * 1024 });
+  const render = (dict) =>
+    dict["sessionCommand.fileTooLarge"].replace(/\{(\w+)\}/g, (m, key) => String(params[key] ?? m));
+
+  const zh = render(i18n.mainProcessZhCN);
+  const en = render(i18n.mainProcessEnUS);
+  assert.match(zh, /200MB/);
+  assert.match(zh, /32MB/);
+  assert.match(en, /200MB/);
+  // 两个占位符都必须被替换掉（漏掉会把模板串展示给用户）
+  assert.doesNotMatch(zh, /\{\w+\}/);
+  assert.doesNotMatch(en, /\{\w+\}/);
 });

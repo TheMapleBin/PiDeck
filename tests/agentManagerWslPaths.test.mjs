@@ -6,7 +6,7 @@ import test from "node:test";
 import ts from "typescript";
 import vm from "node:vm";
 import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
-import { tryRequireLocalTs } from "./helpers/requireLocalTs.mjs";
+import { createTsSandbox } from "./helpers/createTsSandbox.mjs";
 
 const require = createRequire(import.meta.url);
 
@@ -24,6 +24,22 @@ const noCompactionOwner = {
 		notes: [],
 	}),
 };
+
+/**
+ * 未显式打桩的相对 import → 交给统一沙箱按**源文件目录**解析。
+ * 原先的 tryRequireLocalTs 只是绕过「解析基准是 tests/」的补丁；统一到 createTsSandbox。
+ */
+const piSandbox = createTsSandbox();
+const nodeRequire = createRequire(import.meta.url);
+
+function resolveUnstubbedRequire(specifier) {
+  if (!specifier.startsWith(".")) return nodeRequire(specifier);
+  const target = path.resolve(
+    "src/main/pi",
+    /\.(ts|tsx|js)$/.test(specifier) ? specifier : `${specifier}.ts`,
+  );
+  return piSandbox(target);
+}
 
 function transpile(filePath) {
 	return ts.transpileModule(readFileSync(filePath, "utf8"), {
@@ -265,9 +281,8 @@ function loadAgentManager(existsPredicate = () => false) {
 			// 相对 import 按 src/main/pi 解析后交给 Node 原生 TS 加载（见 helper 注释）；
 			// 直接交 require(id) 会以 tests/ 为基准，生产新增本地模块（#213 的
 			// ./messagePayloadSize）就会让本文件整片 MODULE_NOT_FOUND。
-			const localFromSource = tryRequireLocalTs(id, "src/main/pi");
-			if (localFromSource) return localFromSource;
-			return require(id);
+			// 未显式打桩的相对 import：交给统一沙箱按**源文件目录**（src/main/pi）解析。
+			return resolveUnstubbedRequire(id);
 		},
 	};
 	vm.runInNewContext(transpile("src/main/pi/AgentManager.ts"), sandbox, { filename: "AgentManager.ts" });

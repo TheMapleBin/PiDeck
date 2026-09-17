@@ -1,30 +1,20 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { createRequire } from "node:module";
 import test from "node:test";
-import ts from "typescript";
-import vm from "node:vm";
+import { createTsSandbox } from "./helpers/createTsSandbox.mjs";
 
-const nodeRequire = createRequire(import.meta.url);
 
+/**
+ * 加载生产模块：统一走 createTsSandbox（相对 import 自动按源文件目录解析）。
+ * imports 的键是源码里写的 specifier，与 createTsSandbox 的 stubs 同语义。
+ */
+/**
+ * 加载生产模块：统一走 createTsSandbox（相对 import 自动按源文件目录解析）。
+ * imports 的键是源码里写的 specifier，与 createTsSandbox 的 stubs 同语义。
+ */
 function compileModule(filePath, imports = {}) {
-  const output = ts.transpileModule(readFileSync(filePath, "utf8"), {
-    compilerOptions: {
-      module: ts.ModuleKind.CommonJS,
-      target: ts.ScriptTarget.ES2022,
-    },
-    fileName: filePath,
-  }).outputText;
-  const module = { exports: {} };
-  vm.runInNewContext(output, {
-    module,
-    exports: module.exports,
-    require: (specifier) => imports[specifier] ?? nodeRequire(specifier),
-    console,
-  }, { filename: filePath });
-  return module.exports;
+  return createTsSandbox({ stubs: imports })(filePath);
 }
-
 function loadCoordinator() {
   const identity = compileModule("src/shared/sessionIdentity.ts");
   return compileModule("src/main/sessions/SessionRuntimeCoordinator.ts", {

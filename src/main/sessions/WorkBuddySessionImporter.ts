@@ -1,13 +1,14 @@
 import { app } from "electron";
-import { utimes, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { randomUUID } from "node:crypto";
+import { open, rm, utimes } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import type {
 	WorkBuddyImportReport,
 	WorkBuddyImportResult,
 	WorkBuddyImportStatus,
 	WorkBuddySessionSummary,
 } from "../../shared/types";
-import { convertWorkBuddySession } from "./workbuddySessionConvert";
+import { convertWorkBuddySession, convertWorkBuddySessionTo } from "./workbuddySessionConvert";
 import { defaultSessionImportCopy, type SessionImportCopy } from "./SessionImportCopy";
 import {
 	collectWorkBuddyJsonl,
@@ -15,9 +16,16 @@ import {
 	getWorkBuddyProjectDir,
 	getWorkBuddyTargetPath,
 	readWorkBuddyImportMeta,
-	readWorkBuddySession,
+	readWorkBuddySessionHead,
 	type ParsedWorkBuddySession,
 } from "./workbuddySessionSource";
+import {
+	createBufferedLineSink,
+	mapWithConcurrency,
+	readJsonlObjects,
+	renameWithRetry,
+	SESSION_SCAN_CONCURRENCY,
+} from "./sessionSourceHead";
 
 /**
  * 导入 WorkBuddy（~/.workbuddy/projects）会话为 pi 原生会话文件。
@@ -33,8 +41,10 @@ export class WorkBuddySessionImporter {
 	async scan(projectPath: string): Promise<WorkBuddySessionSummary[]> {
 		const projectDir = getWorkBuddyProjectDir(this.workbuddyRoot, projectPath);
 		const files = await collectWorkBuddyJsonl(projectDir).catch(() => []);
-		const sessions = await Promise.all(
-			files.map((file) => readWorkBuddySession(this.workbuddyRoot, file).catch(() => null)),
+		// 有界并发 + 只读头部：源 transcript 可达几十 MB~GB，
+		// 整读（尤其是并发整读）会让主进程 384MB 堆 abort，表现为应用闪退。
+		const sessions = await mapWithConcurrency(files, SESSION_SCAN_CONCURRENCY, (file) =>
+			readWorkBuddySessionHead(this.workbuddyRoot, file).catch(() => null),
 		);
 
 		const summaries = await Promise.all(
@@ -62,17 +72,33 @@ export class WorkBuddySessionImporter {
 		projectPath: string,
 		sourcePath: string,
 	): Promise<WorkBuddyImportResult> {
+		let handle: Awaited<ReturnType<typeof open>> | undefined;
+		let tempPath: string | undefined;
 		try {
-			const parsed = await readWorkBuddySession(this.workbuddyRoot, sourcePath);
+			// 元数据只读头部（大源文件不能整读），正文逐行流式转换写盘：内存 O(单行)
+			const parsed = await readWorkBuddySessionHead(this.workbuddyRoot, sourcePath);
 			const targetPath = getWorkBuddyTargetPath(this.piRoot, projectPath, parsed);
 			const existing = await readWorkBuddyImportMeta(targetPath);
-			const converted = convertWorkBuddySession({
+			await ensureProjectSessionDir(this.piRoot, projectPath);
+			// 临时文件放在目标目录旁（此时已确保存在），与目标同盘才能原子改名；
+			// 不写进源目录（~/.workbuddy），避免给其他应用留下垃圾文件。
+			tempPath = join(dirname(targetPath), `.pideck-import-${randomUUID().slice(0, 8)}.tmp`);
+
+			// 先写临时文件再原子改名：中途失败不会留下半截会话文件污染列表
+			handle = await open(tempPath, "w");
+			const buffered = createBufferedLineSink(handle);
+			const converted = await convertWorkBuddySessionTo({
 				projectPath,
 				session: parsed,
 				translate: this.translate,
+				entries: readJsonlObjects(sourcePath),
+				sink: buffered.sink,
 			});
-			await ensureProjectSessionDir(this.piRoot, projectPath);
-			await writeFile(targetPath, converted.raw, "utf8");
+			await buffered.flush();
+			await handle.close();
+			handle = undefined;
+			await renameWithRetry(tempPath, targetPath);
+
 			// 侧栏列表时间取文件 mtime：写入后回调为会话真实最后时间，避免导入会话
 			// 全部显示为「刚刚导入」并排序置顶（与其他导入器同口径）。
 			if (parsed.meta.lastTimestamp > 0) {
@@ -90,6 +116,8 @@ export class WorkBuddySessionImporter {
 				messageCount: converted.messageCount,
 			};
 		} catch (error) {
+			await handle?.close().catch(() => undefined);
+			if (tempPath) await rm(tempPath, { force: true }).catch(() => undefined);
 			return {
 				id: sourcePath,
 				sourcePath,
@@ -105,7 +133,7 @@ export class WorkBuddySessionImporter {
 	): Promise<WorkBuddySessionSummary> {
 		const targetPath = getWorkBuddyTargetPath(this.piRoot, projectPath, session);
 		const importMeta = await readWorkBuddyImportMeta(targetPath);
-		const converted = convertWorkBuddySession({
+		const converted = await convertWorkBuddySession({
 			projectPath,
 			session,
 			translate: this.translate,

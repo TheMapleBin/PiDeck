@@ -2,13 +2,13 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { createRequire } from "node:module";
 import test from "node:test";
 import ts from "typescript";
 import vm from "node:vm";
 import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
-import { tryRequireLocalTs } from "./helpers/requireLocalTs.mjs";
+import { createTsSandbox } from "./helpers/createTsSandbox.mjs";
 
 const nodeRequire = createRequire(import.meta.url);
 
@@ -26,6 +26,22 @@ const noCompactionOwner = {
 		notes: [],
 	}),
 };
+
+/**
+ * 未显式打桩的相对 import → 交给统一沙箱按**源文件目录**（src/main/pi）解析。
+ * 生产新增本地模块（#213 的 messagePayloadSize、2026-09 的 cacheHitStats 等）
+ * 不再让本文件整片 MODULE_NOT_FOUND。
+ */
+const piSandbox = createTsSandbox();
+
+function resolveUnstubbedRequire(specifier) {
+  if (!specifier.startsWith(".")) return nodeRequire(specifier);
+  const target = resolve(
+    "src/main/pi",
+    /\.(ts|tsx|js)$/.test(specifier) ? specifier : `${specifier}.ts`,
+  );
+  return piSandbox(target);
+}
 
 function extractMessageText(content) {
   return Array.isArray(content)
@@ -100,11 +116,7 @@ function loadAgentMessageProjectorModule() {
       }
       // rewind checkpoint 纯 git 模块：本测试不涉及，空桩满足依赖契约
       if (specifier === "../rewind/index.ts") return {};
-      // 相对 import 按 src/main/pi 解析后交给 Node 原生 TS 加载（见 helper 注释）；
-      // 直接交 nodeRequire 会以 tests/ 为基准，生产新增本地模块即整片 MODULE_NOT_FOUND（#213）
-      const localFromSource = tryRequireLocalTs(specifier, "src/main/pi");
-      if (localFromSource) return localFromSource;
-      return nodeRequire(specifier);
+      return resolveUnstubbedRequire(specifier);
     },
     Date,
     Map,
@@ -124,16 +136,9 @@ function loadAgentManagerModule() {
 		{ module: streamGateModule, exports: streamGateModule.exports },
 		{ filename: "streamGate.ts" },
 	);
-	// cacheHitStats：纯函数真实加载（getRuntimeState 读会话文件统计缓存命中率）
-	const cacheHitStatsModule = { exports: {} };
-	vm.runInNewContext(
-		ts.transpileModule(readFileSync("src/main/pi/cacheHitStats.ts", "utf8"), {
-			compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-			fileName: "cacheHitStats.ts",
-		}).outputText,
-		{ module: cacheHitStatsModule, exports: cacheHitStatsModule.exports },
-		{ filename: "cacheHitStats.ts" },
-	);
+	// cacheHitStats：用标准 loader 真实加载；该模块 import 了 node:fs/promises
+	// （增量续算要读前缀锚点），裸 vm 沙箱没有 require 会在顶层直接抛错。
+	const cacheHitStatsModule = loadTsCommonJs("src/main/pi/cacheHitStats.ts");
 	const messageProjectorModule = loadAgentMessageProjectorModule();
 	const historyReaderModule = { exports: {} };
 	const historyReaderOutput = ts.transpileModule(
@@ -269,7 +274,7 @@ function loadAgentManagerModule() {
       // 上下文接管探测：本测试不涉及压缩归属，按「没有接管者」透传（退回原生 compact RPC）
       if (specifier === "./compactionOwner") return noCompactionOwner;
       if (specifier === "./streamGate") return streamGateModule.exports;
-      if (specifier === "./cacheHitStats") return cacheHitStatsModule.exports;
+      if (specifier === "./cacheHitStats") return cacheHitStatsModule;
       if (specifier === "../../shared/toolRuntimeState") return { updateActiveToolCalls: () => undefined };
       if (specifier === "../wsl/WslPaths") {
         return { toWindowsHostPath: (path) => path, toWslLinuxPath: (path) => path };
@@ -306,10 +311,7 @@ function loadAgentManagerModule() {
       }
       // rewind checkpoint 纯 git 模块：本测试不涉及，空桩满足依赖契约
       if (specifier === "../rewind/index.ts") return {};
-      // 同上：生产新增的本地纯模块（如 #213 的 ./messagePayloadSize）从 src/main/pi 解析加载
-      const localFromSource = tryRequireLocalTs(specifier, "src/main/pi");
-      if (localFromSource) return localFromSource;
-      return nodeRequire(specifier);
+      return resolveUnstubbedRequire(specifier);
     },
     Date,
     Map,

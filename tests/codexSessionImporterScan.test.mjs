@@ -2,12 +2,9 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createRequire } from "node:module";
 import test from "node:test";
-import ts from "typescript";
-import vm from "node:vm";
 
-const require = createRequire(import.meta.url);
+import { createTsSandbox } from "./helpers/createTsSandbox.mjs";
 
 /**
  * CodexSessionImporter 扫描防 OOM 单测。
@@ -33,24 +30,10 @@ function loadTranspiled(sourcePath, sandbox) {
 }
 
 function loadImporter(homePath) {
-	const codexMeta = loadTranspiled("src/shared/codexSessionMeta.ts", { exports: {} });
-	const importCopy = loadTranspiled("src/main/sessions/SessionImportCopy.ts", { exports: {} });
-	const toolArgs = loadTranspiled("src/main/sessions/importToolArguments.ts", { exports: {} });
-	const normalize = loadTranspiled("src/main/sessions/importNormalize.ts", { exports: {} });
-	const sandbox = {
-		Buffer,
-		exports: {},
-		process,
-		require: (id) => {
-			if (id === "electron") return { app: { getPath: () => homePath }, shell: {} };
-			if (id === "../../shared/codexSessionMeta") return codexMeta;
-			if (id === "./SessionImportCopy") return importCopy;
-			if (id === "./importToolArguments") return toolArgs;
-			if (id === "./importNormalize") return normalize;
-			return require(id);
-		},
-	};
-	return loadTranspiled("src/main/sessions/CodexSessionImporter.ts", sandbox);
+	// 统一沙箱加载器：相对 import 自动按**源文件目录**解析，不再手写 require 桥。
+	const load = createTsSandbox({ stubs: { electron: { app: { getPath: () => homePath }, shell: {} } } });
+	const mod = load("src/main/sessions/CodexSessionImporter.ts");
+	return { ...mod, importer: new mod.CodexSessionImporter() };
 }
 
 function sessionJsonl(id, cwd) {

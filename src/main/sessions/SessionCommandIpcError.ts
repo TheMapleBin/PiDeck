@@ -12,6 +12,7 @@ type SessionCommandCopyKey = Extract<MainProcessTranslationKey,
 	| "sessionCommand.runtimeBusy"
 	| "sessionCommand.commandFailed"
 	| "sessionCommand.modelNotFound"
+	| "sessionCommand.fileTooLarge"
 >;
 
 type SessionCommandCopy = (
@@ -27,6 +28,7 @@ const SESSION_COMMAND_COPY_KEYS: Record<SessionCommandErrorCode, SessionCommandC
 	SESSION_RUNTIME_BUSY: "sessionCommand.runtimeBusy",
 	SESSION_COMMAND_FAILED: "sessionCommand.commandFailed",
 	SESSION_MODEL_NOT_FOUND: "sessionCommand.modelNotFound",
+	SESSION_FILE_TOO_LARGE: "sessionCommand.fileTooLarge",
 };
 
 /** IPC exposes only the stable message; diagnostics remain available for local logging. */

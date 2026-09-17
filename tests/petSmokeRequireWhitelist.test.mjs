@@ -1,9 +1,10 @@
 /**
  * pet-smoke.cjs require 白名单与 PetWindow.ts 运行时 import 的双向把关。
  *
- * 背景（2026-09-15）：#213 给 PetWindow 新增 `../v8HeapLimits` import 后，只有
- * tests/petWindowCaps.test.mjs 加了兜底（tryRequireLocalTs），scripts/pet-smoke.cjs
- * 的 require 钩子没有同步——CI「Pet Linux smoke (xvfb)」一进 require 钩子就抛
+ * 背景（2026-09-15）：#213 给 PetWindow 新增 `../v8HeapLimits` import 后，
+ * tests/petWindowCaps.test.mjs 与 scripts/pet-smoke.cjs 的 require 钩子都要同步——
+ * 当时只给测试加了兜底（现已统一到 tests/helpers/createTsSandbox.mjs），
+ * pet-smoke.cjs 的白名单没同步，CI「Pet Linux smoke (xvfb)」一进 require 钩子就抛
  * `unexpected require(../v8HeapLimits)`，4 秒失败，且白名单随 import 演进还会再漂。
  *
  * 约定：PetWindow.ts 每个运行时 import 的说明符必须作为字面量出现在
