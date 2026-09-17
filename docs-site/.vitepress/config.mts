@@ -1,4 +1,5 @@
 import { defineConfig } from "vitepress";
+import { sharedReadmeImagesPlugin } from "./sharedReadmeImages";
 
 // 自定义域名部署在站点根路径；本地/兼容旧 github.io 子路径时可用 VITEPRESS_BASE=/PiDeck/
 const base = process.env.VITEPRESS_BASE ?? "/";
@@ -9,6 +10,12 @@ export default defineConfig({
   base,
   cleanUrls: true,
   lastUpdated: true,
+
+  // README 与官网共用的图片（如微信群二维码）以 docs/images 为唯一数据源，
+  // dev / build 启动时由插件同步进 public/images，避免同一张图两边各存一份。
+  vite: {
+    plugins: [sharedReadmeImagesPlugin()],
+  },
 
   // ===== 多语言：key 必须用 root / en（不是 / 和 /en/）=====
   locales: {

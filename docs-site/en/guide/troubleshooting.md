@@ -217,6 +217,6 @@ Settings → Dev → Update source: switch gateway (ghfast / ghproxy.net / CN mi
 
 1. Generate a **diagnostic report** (Settings → Dev → Diagnostics);
 2. Search or open an Issue at [GitHub Issues](https://github.com/ayuayue/PiDeck/issues) (attach report + version + repro steps);
-3. Join the community **QQ group: 1026218644**.
+3. Join the community **QQ group: 1026218644** or add the author's **WeChat: caoayu97**.
 
 > When debugging, confirm the version first, then cross-check the [changelog](/en/changelog) for known issues.

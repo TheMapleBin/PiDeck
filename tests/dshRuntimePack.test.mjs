@@ -400,3 +400,43 @@ test("pack script pre-flights entry files before tarring", () => {
 	// 磁盘侧判定与归档侧校验（check-dsh-asar）同源复用同一入口提取逻辑
 	assert.match(pruneRules, /export function runtimeEntryResolvableOnDisk/);
 });
+
+// 2026-09 发版自动化链：push tag 后应无人值守完成「构建 → 补 sidecar → AtomGit 同步」。
+// 这里把链路契约固化：事件衔接、平台覆盖、PAT 要求、资产稳定窗口。
+// （背景：v0.7.5 曾因 runtime tgz 缺平台 + 同名资产被静默跳过，镜像用户升到旧包。）
+test("发版自动化链：release → post-release-sidecars → sync-atomgit 事件衔接完整", () => {
+	const release = readFileSync(join(repoRoot, ".github/workflows/release.yml"), "utf8");
+	const sidecars = readFileSync(join(repoRoot, ".github/workflows/post-release-sidecars.yml"), "utf8");
+	const sync = readFileSync(join(repoRoot, ".github/workflows/sync-atomgit.yml"), "utf8");
+
+	// 触发链：release.yml 用 PAT 发布（广播 release: published）→ sidecars 监听 published
+	// → sidecars 结尾用 PAT workflow_dispatch 触发 sync-atomgit（sync 自身也监听 published）。
+	assert.match(release, /token: \$\{\{ secrets\.RELEASE_PAT \}\}/, "softprops 必须用 PAT 发布");
+	assert.match(sidecars, /release:\s*\n\s*types:\s*\[published\]/);
+	assert.match(sidecars, /gh workflow run sync-atomgit\.yml/);
+	assert.match(sidecars, /GH_TOKEN: \$\{\{ secrets\.RELEASE_PAT \}\}/, "触发下游必须用 PAT（GITHUB_TOKEN 不再触发 workflow）");
+	assert.match(sync, /types:\s*\[published\]/);
+	assert.match(sync, /workflow_dispatch/);
+
+	// 平台覆盖：release.yml 构建矩阵产 4 份 runtime tgz（win32-x64/darwin-arm64/linux-x64/arm64，
+	// 两个 mac 构建都在 arm64 runner 上）；sidecars 原生补 win32-arm64 与 darwin-x64。
+	assert.match(sidecars, /os: windows-11-arm/);
+	assert.match(sidecars, /platform: win32\s*\n\s*arch: arm64/);
+	assert.match(sidecars, /os: macos-15-intel/);
+	assert.match(sidecars, /platform: darwin\s*\n\s*arch: x64/);
+	assert.match(sidecars, /node scripts\/pack-dsh-runtime\.mjs/);
+	assert.match(sidecars, /node scripts\/check-dsh-asar\.mjs/);
+	assert.match(sidecars, /gh release upload/);
+	assert.match(sidecars, /--clobber/);
+
+	// sidecars 上传目标必须来自 release 事件本体且限定 v*（禁止 sidecar tag 抢 latest）。
+	assert.match(sidecars, /github\.event\.release\.tag_name/);
+	assert.match(sidecars, /\^v\[0-9\]/);
+
+	// sync-atomgit 必须等资产清单稳定再同步（release:published 触发时构建 job 还在传资产）。
+	assert.match(sync, /ASSET_WAIT_DEADLINE_SECONDS/);
+	assert.match(sync, /ASSET_STABLE_REQUIRED/);
+	assert.match(sync, /releases\/tags\/\$\{TAG\}/);
+	// 预期 runtime tgz 总数 = 4（release.yml）+ 2（sidecars）= 6。
+	assert.match(sync, /-ge 6/);
+});

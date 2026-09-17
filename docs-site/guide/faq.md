@@ -82,4 +82,4 @@ PiDeck 默认发送匿名、低频的 `app_heartbeat` 使用统计，用于了�
 
 - 先看 [问题排查指南](/guide/troubleshooting)，按症状分类的处理路径
 - 查看 [GitHub Issues](https://github.com/ayuayue/PiDeck/issues)
-- 加入 **QQ 群：1026218644** 进行交流
+- 加入 **QQ 群：1026218644**，或加 **作者微信：caoayu97** 拉你进微信群
