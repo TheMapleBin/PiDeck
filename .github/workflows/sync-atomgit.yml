@@ -98,7 +98,15 @@ jobs:
         continue-on-error: true
         env:
           ATOMGIT_TOKEN: ${{ secrets.ATOMGIT_TOKEN }}
-        run: node scripts/sync-refs-to-atomgit.mjs
+        run: |
+          # 手动补同步（push_refs）时顺便验一次 Token 写权限：权限不足就直接给出
+          # 「勾选 write_repository」的明确指引，而不是等到发版当晚才暴露。
+          # release 自动链不加探针——正常路径零额外推送，真缺权限时脚本自己会在推 refs 前拦住。
+          REFS_ARGS=""
+          if [ "${{ github.event.inputs.push_refs }}" = "true" ]; then
+            REFS_ARGS="--probe-write"
+          fi
+          node scripts/sync-refs-to-atomgit.mjs $REFS_ARGS
 
       # 等待 Release 资产清单稳定后再同步：release:published 在第一个构建 job 发布
       # Release 时就触发，此时安装包 / runtime tgz / runner-node 往往只传了一部分；
