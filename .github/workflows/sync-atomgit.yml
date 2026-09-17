@@ -21,6 +21,14 @@ on:
         required: false
         type: boolean
         default: false
+      refs_only:
+        # 「只同步代码」专用：只跑分支/标签推送，跳过 Release 与附件相关的所有步骤
+        # （tag 解析、资产等待、hosts 加速、附件上传）。
+        # 与 push_refs 的区别：push_refs 是「顺带推代码」，本开关是「只推代码」。
+        description: "只同步代码（分支与标签）到 AtomGit，跳过 Release 与附件同步（此时 tags / force_resync 均被忽略）"
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -60,6 +68,8 @@ jobs:
 
       - name: Resolve target tags
         id: resolve-tags
+        # refs_only 模式不涉及 Release：跳过解析，也避开「拿不到 tag 就 exit 1」的硬失败
+        if: ${{ github.event.inputs.refs_only != 'true' }}
         run: |
           TAGS="${{ github.event.inputs.tags }}"
           if [ -z "$TAGS" ] && [ "${{ github.event_name }}" = "release" ]; then
@@ -94,16 +104,20 @@ jobs:
       # continue-on-error：refs 同步失败不阻断 Release 资产同步（两条链路互不依赖），
       # 但失败会以 warning + error 注解暴露在本次 run 里，可勾选 push_refs 单独重跑。
       - name: Sync git refs to AtomGit (branches + tags)
-        if: ${{ github.event_name == 'release' || github.event.inputs.push_refs == 'true' }}
-        continue-on-error: true
+        # 三条触发路径：① 发版自动链（release）；② push_refs 手动补推（顺带验写权限）；
+        # ③ refs_only 只同步代码（此时它是本次唯一的实质步骤）。
+        if: ${{ github.event_name == 'release' || github.event.inputs.push_refs == 'true' || github.event.inputs.refs_only == 'true' }}
+        # refs_only 模式下本步骤就是全部目标，失败必须硬失败；
+        # 其余场景（发版链 / 顺带补推）后面还有 Release 同步，refs 失败不应阻断它。
+        continue-on-error: ${{ github.event.inputs.refs_only != 'true' }}
         env:
           ATOMGIT_TOKEN: ${{ secrets.ATOMGIT_TOKEN }}
         run: |
-          # 手动补同步（push_refs）时顺便验一次 Token 写权限：权限不足就直接给出
+          # 手动补同步（push_refs / refs_only）时顺便验一次 Token 写权限：权限不足就直接给出
           # 「勾选 write_repository」的明确指引，而不是等到发版当晚才暴露。
           # release 自动链不加探针——正常路径零额外推送，真缺权限时脚本自己会在推 refs 前拦住。
           REFS_ARGS=""
-          if [ "${{ github.event.inputs.push_refs }}" = "true" ]; then
+          if [ "${{ github.event.inputs.push_refs }}" = "true" ] || [ "${{ github.event.inputs.refs_only }}" = "true" ]; then
             REFS_ARGS="--probe-write"
           fi
           node scripts/sync-refs-to-atomgit.mjs $REFS_ARGS
@@ -114,6 +128,8 @@ jobs:
       # 手动触发（workflow_dispatch）通常用于补同步，资产已稳定，但同样走一遍窗口
       # 只是立即生效（对每个 tag 也采样，稳定即过，不会白等）。
       - name: Wait until release assets stop changing
+        # refs_only 不碰 Release，没有任何资产需要等
+        if: ${{ github.event.inputs.refs_only != 'true' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAGS: ${{ steps.resolve-tags.outputs.tags }}
@@ -150,6 +166,8 @@ jobs:
           done
 
       - name: AtomGit 官方代理解析加速（/etc/hosts）
+        # refs_only 不需要上传（走 git 协议，非对象存储），跳过
+        if: ${{ github.event.inputs.refs_only != 'true' }}
         # AtomGit 官方提供的加速方案：runner 直连 AtomGit/GitCode 对象存储跨境上传极慢
         # （实测 160MB 需 20-35 分钟），固定解析到官方代理 IP 后走优化线路。
         # 仅 runner 内临时生效，不改仓库。
@@ -160,6 +178,8 @@ jobs:
           getent hosts api.atomgit.com file.atomgit.com file.gitcode.com
 
       - name: Run sync script
+        # refs_only 的核心语义：跳过 Release 与附件同步
+        if: ${{ github.event.inputs.refs_only != 'true' }}
         run: |
           EXTRA_ARGS=""
           if [ "${{ github.event.inputs.force_resync }}" = "true" ]; then
