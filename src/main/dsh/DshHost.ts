@@ -21,6 +21,11 @@ import {
 	pideckHostLockPath,
 } from "./pideckDshHome";
 import { foldSessionTitleFromDir, listForeignSessionsFromDisk, scanDshSessionHeaders } from "./dshForeignSessionScan";
+import {
+	externalHostHolderPid,
+	resolveDshHomeSharing,
+} from "./dshHomeSharing";
+import type { DshHomeSharingState } from "../../shared/types/dshHome";
 import { PIDECK_PLUGIN_BRIDGE_PATH } from "./pideckPluginBridge";
 import { classifyStaticPlugins, isUserPluginEntry, nearestPackageDir, readUserPatchRows, removeUserPatchRow, resolveManagedPluginDir, USER_PATCH_FILENAME } from "./dshUserPlugins";
 import { PIDECK_COMMANDS_BRIDGE_PATH } from "./pideckCommandsBridge";
@@ -362,16 +367,50 @@ export class DshHost {
 		homeDir: string;
 		/** 最近一次 host boot 失败的真实原因（host-error 详情/stderr 尾部）；成功或从未失败为 null。 */
 		bootError?: string | null;
+		/** DSH_HOME 共享/冲突状态（issue #189 问题 1：与 dsh CLI 共用目录会互相覆盖状态）。 */
+		sharing: DshHomeSharingState;
 	}> {
 		// E14：started 语义 = host 进程存活且 boot 完成（client 非 null 可能在崩溃重启
 		// 超限放弃后仍是陈旧引用，UI 会误显示「已启动」）。
 		const started = this.client !== null && this.isHostProcessRunning() && this.isHostReady();
+		const homeDir = this.getHomeDir();
 		return {
 			started,
-			homeDir: this.getHomeDir(),
+			homeDir,
 			// boot 失败详情透给渲染层：即使 describe 抛错，概览页也能拿到真实原因。
 			bootError: this.hostProcess?.getLastBootError() ?? null,
+			sharing: {
+				...resolveDshHomeSharing({
+					dshHome: homeDir,
+					override: this.getDshHomeOverride(),
+					homeDir: homedir(),
+				}),
+				// 双 PiDeck 实例可检测：锁文件记录的 pid 仍存活且不是自己。
+				// 外部 dsh CLI 不写该锁，属已知盲区（sharesCliHome 负责兜底提示）。
+				externalHostPid: this.readExternalHostPid(),
+			},
 		};
+	}
+
+	/**
+	 * 读锁文件取「另一个存活 DSH host」的 pid（无/陈旧/自己持有 = undefined）。
+	 * 只读不写：getStatus 是纯查询路径，不得因为看一眼状态就改锁。
+	 */
+	private readExternalHostPid(): number | undefined {
+		const lockPath = this.hostLockPath || pideckHostLockPath(this.getHomeDir());
+		let raw: string | undefined;
+		try {
+			if (!existsSync(lockPath)) return undefined;
+			raw = readFileSync(lockPath, "utf8");
+		} catch {
+			// 锁文件读不到（权限/占用）：无法判定，按无冲突处理。
+			return undefined;
+		}
+		return externalHostHolderPid({
+			lockRaw: raw,
+			selfPid: process.pid,
+			isAlive: isProcessAlive,
+		});
 	}
 
 	/**

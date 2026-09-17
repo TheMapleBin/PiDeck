@@ -29,6 +29,7 @@ export * from "./types/todo";
 export * from "./types/dshPlugin";
 export * from "./types/dshLlm";
 export * from "./types/dshRuntime";
+export * from "./types/dshHome";
 export * from "./types/dshRuntimeManifest";
 export * from "./types/dshRunnerNode";
 export * from "./types/dshRunnerNodeRelease";

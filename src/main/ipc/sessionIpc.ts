@@ -126,6 +126,8 @@ export type DshBackendIpcDeps = {
 		homeDir: string;
 		/** 最近一次 host boot 失败的真实原因；无失败/未启动为 null。 */
 		bootError?: string | null;
+		/** DSH_HOME 共享/冲突状态（issue #189：与 dsh CLI 共用目录会互相覆盖状态）。 */
+		sharing?: import("../../shared/types/dshHome").DshHomeSharingState;
 	}>;
 	/**
 	 * DSH runtime 安装态（AgentRuntimeProvider 阶段 1）：installed/notInstalled/broken。

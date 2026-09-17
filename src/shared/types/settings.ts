@@ -500,6 +500,9 @@ export type AppSettings = {
 	 * DSH_HOME 覆盖目录：用户自己的 DSH 配置目录（如 ~/.dsh）。
 	 * 缺省 undefined/空串：自动使用用户真实 ~/.dsh（与 dsh CLI 行为一致，
 	 * 配置/凭证/会话全在同一处，不复制）；目录不存在时启动时自动创建。
+	 * 注意：DSH 官方约束「同一 DSH_HOME 只允许一个 host」，与 dsh CLI 共用默认目录
+	 * 时两实例会互相覆盖状态；配置页概览据此给出 DSH_HOME 隔离提示（#189，判定见
+	 * `src/main/dsh/dshHomeSharing.ts`）。
 	 * 实现见 DshHost.resolveDshHomeDir。启动预热前变更会被新 host 读取；
 	 * 已运行时切换需重启 host。
 	 */

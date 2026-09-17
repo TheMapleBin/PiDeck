@@ -33,6 +33,7 @@ import { CodeMirrorEditor } from "../components/app/CodeMirrorEditor";
 import { useSaveRegistry } from "../hooks/useSaveRegistry";
 import { DshSchemaForm, type DshNamespaceView } from "./DshSchemaForm";
 import { DshRuntimeSection } from "./DshRuntimeSection";
+import { DshHomeSharingNotice } from "./DshHomeSharingNotice";
 import { dshRuntimeStatusAtom } from "../atoms/dsh-atoms";
 import { isDshPluginNamespace, dshPluginNamespaceTitleKey, dshPluginNamespaceDescriptionKey } from "./dshPluginNamespaces";
 import { DshPluginSection, PluginInventoryView } from "./DshPluginSection";
@@ -42,12 +43,15 @@ import { presetDisplayDescription, presetDisplayName } from "./dshPresetDisplay"
 import { credentialRefFor } from "./dshCredentialRef";
 import { managerArchivedDshLabel } from "../sessionManagerModel";
 import type { ArchivedDshSession } from "../../../shared/types";
+import type { DshHomeSharingState } from "../../../shared/types/dshHome";
 
 type DshStatus = {
 	started: boolean;
 	homeDir: string;
 	/** 最近一次 host boot 失败的真实原因（host-error 详情/stderr 尾部）；无失败为 null。 */
 	bootError?: string | null;
+	/** DSH_HOME 共享/冲突状态（issue #189）；旧主进程未回传时缺省。 */
+	sharing?: DshHomeSharingState;
 };
 type CredentialState = {
 	configured: boolean;
@@ -772,6 +776,9 @@ function Overview(props: {
 			</section>
 			<section className="grid gap-2">
 				<h3 className="text-caption font-semibold text-muted-foreground">{t("config.dsh.directories")}</h3>
+				{/* 共享/并发冲突提示（issue #189）：默认 ~/.dsh 与 dsh CLI 共用（中性说明），
+				    或锁文件里有另一个存活的 PiDeck host（升级为警告）。显式覆盖过目录时不提示。 */}
+				<DshHomeSharingNotice sharing={status?.sharing} />
 				{/* DSH_HOME 即唯一配置目录：settings.yaml / .credentials.yaml / sessions / storages 全在同一目录 */}
 				<DirRow label={t("config.dsh.homeDir")} path={status?.homeDir ?? ""} onOpen={props.onOpenFolder} />
 				<div className="flex items-center gap-2">
