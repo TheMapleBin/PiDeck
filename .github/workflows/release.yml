@@ -65,8 +65,9 @@ jobs:
         id: resolve
         env:
           # 手工输入一律走 env，避免自定义 tag 直接拼进 shell；
-          # 两个输入在此归一：tag_custom 非空则优先（供下拉列表外的旧版本使用），
-          # push 事件下两者均为空串，行为与原先的「未指定 tag」完全一致。
+          # 两个输入在此归一：tag_custom 非空则优先（供下拉列表外的旧版本使用）；
+          # dispatch 下 tag 必有值（choice 的 default=auto 会被服务端填入），
+          # push 事件下两者都为空串，走 push tag 分支。
           INPUT_TAG: ${{ github.event.inputs.tag_custom != '' && github.event.inputs.tag_custom || github.event.inputs.tag }}
         run: |
           TARGET_COMMITISH=""
