@@ -1,5 +1,15 @@
 name: Release
 
+# 发版链路（tag push 即全自动）：
+#   push tag v* → 本 workflow 5 个构建 job（安装包 + runner-node zip + 本平台 runtime tgz）
+#   → softprops 用 RELEASE_PAT 发布（GITHUB_TOKEN 发布不广播 release: published，防递归）
+#   → post-release-sidecars.yml 被触发：原生补齐 win32-arm64 / darwin-x64 两份 runtime tgz
+#     （release.yml 两个 mac 构建都跑在 arm64 runner 上，产出的是 darwin-arm64；
+#      Windows 没有 arm64 构建 job）→ 结尾用 PAT 触发 sync-atomgit.yml
+#   → sync-atomgit.yml 等资产清单稳定后同步到 AtomGit 镜像。
+# 手动补发入口：publish-dsh-runtime.yml / publish-dsh-runner-node.yml（保留，用于
+# 给旧版本补发或重试），sync-atomgit.yml 手动触发用于补同步。
+
 on:
   push:
     tags:

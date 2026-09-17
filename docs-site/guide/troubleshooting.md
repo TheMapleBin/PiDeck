@@ -217,6 +217,6 @@ PiDeck 默认发送**匿名、低频**的 `app_heartbeat`（版本分布/平台/
 
 1. 生成**诊断报告**（设置 → 开发 → 诊断报告）；
 2. 到 [GitHub Issues](https://github.com/ayuayue/PiDeck/issues) 搜索或新建 Issue（附报告 + 版本号 + 复现步骤）；
-3. 加入 **QQ 群：1026218644** 交流。
+3. 加入 **QQ 群：1026218644** 或加 **作者微信：caoayu97** 交流。
 
 > 排查时先确认右上角/设置里的版本号，再对照 [更新日志](/changelog) 看是否已知问题。

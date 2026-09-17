@@ -69,7 +69,7 @@ Thanks to all group members who submitted suggestions and bug reports! 🙏
 
 Thanks to everyone who filed issues and feature requests on GitHub! 🙏
 
-> 💬 **QQ feedback group: 1026218644**
+> 💬 **QQ feedback group: 1026218644** | **Author's WeChat: caoayu97** (mention "PiDeck"; WeChat group invites available)
 
 ## v0.7.5 - 2026-09-12
 

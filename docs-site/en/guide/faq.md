@@ -76,4 +76,4 @@ PiDeck tries PowerShell, cmd, and sh in order. If none are available, the termin
 
 - Check the [Troubleshooting guide](/en/guide/troubleshooting) for symptom-based paths
 - Browse [GitHub Issues](https://github.com/ayuayue/PiDeck/issues)
-- Join the **QQ group: 1026218644**
+- Join the **QQ group: 1026218644**, or add the author's **WeChat: caoayu97** to be added to the WeChat group

@@ -212,6 +212,22 @@
   text-align: center;
 }
 
+/* 微信群二维码：与赞赏码同款视觉，但下方还有内容，所以不留大下边距 */
+.community-block {
+  margin: 24px 0 32px;
+  text-align: center;
+}
+
+.community-qr {
+  display: inline-block;
+  width: 280px;
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 16px;
+  box-shadow: 0 12px 30px rgba(20, 33, 31, 0.08);
+}
+
 .sponsor-qr {
   display: inline-block;
   width: 280px;

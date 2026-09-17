@@ -92,9 +92,17 @@ features:
 
 ## 社区交流
 
-加入 PiDeck QQ 群进行交流、反馈和讨论：
+加入 PiDeck 社区群进行交流、反馈和讨论：
 
-**1026218644**
+| 渠道 | 入口 |
+|---|---|
+| **QQ 交流群** | `1026218644` |
+| **微信群** | 扫描下方二维码（群二维码 7 天有效，过期请加作者微信） |
+| **作者微信** | `caoayu97`（加好友请备注「PiDeck」） |
+
+<p class="community-block">
+  <img class="community-qr" src="/images/wechat-qrcode.png" alt="PiDeck 微信群二维码" />
+</p>
 
 ---
 

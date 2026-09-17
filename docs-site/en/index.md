@@ -62,6 +62,22 @@ features:
 
 ---
 
+## Community
+
+Join the PiDeck community for discussion and feedback:
+
+| Channel | Entry |
+|---|---|
+| **QQ group** | `1026218644` |
+| **WeChat group** | Scan the QR code below (group links expire after 7 days — add the author's WeChat instead if it no longer works) |
+| **Author's WeChat** | `caoayu97` (mention "PiDeck" when adding) |
+
+<p class="community-block">
+  <img class="community-qr" src="/images/wechat-qrcode.png" alt="PiDeck WeChat group QR code" />
+</p>
+
+---
+
 ## Sponsor
 
 If PiDeck is useful to you, you can buy the author a coffee. Scan the WeChat Pay QR code below to tip. Thank you.

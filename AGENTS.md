@@ -56,6 +56,13 @@ src/
 └── shared/            # 主/渲染共享类型（按域拆分）与 IPC 通道定义
 ```
 
+### README 与官网共用图片（docs/images 单一数据源）
+
+- 微信群二维码这类 README 与 docs-site 都要展示、且会**周期性换图**的资源，唯一数据源固定为 `docs/images/<名>`；**不要在 `docs-site/public/images/` 再存一份**（历史上 `wechat_pay.png` 就是两份拷贝，换图要手工同步两处）。
+- 映射由 `docs-site/.vitepress/sharedReadmeImages.ts` 插件完成：`configResolved` 阶段把白名单图片复制进 `docs-site/public/images/`，dev / build 因此共用同一条资源链路。**同步必须留在 `configResolved`**——Vite 在 createServer 一开始就快照 publicDir 文件清单，晚于该阶段落盘的文件不会被当成公共资源（dev 回落成 index.html、build 报 `Rollup failed to resolve import`）。
+- 生成的副本**不进版本库**（`.gitignore` 显式忽略）；源图缺失时同步函数抛错而非跳过，否则线上直接是一张破图。新增共用图片：加进 `SHARED_README_IMAGES` 白名单 + `.gitignore` + `tests/docsSharedImages.test.mjs` 的四处引用断言。
+- README 用仓库相对路径（`docs/images/<名>`）、官网用站点根路径（`/images/<名>`），两者不可互换；`docs-site` 目录下的 TS 已纳入 `npm run typecheck`。
+
 ### 公告维护与发布（announcements-md → announcements.json）
 
 - 公告的**唯一编辑入口**是 `announcements-md/*.md`（front matter + markdown 正文；目录内 `README.md` 是维护说明，脚本显式跳过）。**禁止手写仓库根 `announcements.json`**，客户端实际拉取的文件必须由脚本生成。

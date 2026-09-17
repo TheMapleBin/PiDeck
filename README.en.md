@@ -40,7 +40,7 @@
   - [📑 Table of Contents](#-table-of-contents)
   - [✨ Highlights](#-highlights)
   - [📋 Changelog](#-changelog)
-    - [v0.7.5 Release Highlights](#v075-release-highlights)
+    - [v0.7.6 Release Highlights](#v076-release-highlights)
   - [🧩 Features](#-features)
     - [Workspace & Projects](#workspace--projects)
     - [Sessions & Conversation](#sessions--conversation)
@@ -285,7 +285,7 @@ A: The app sends an anonymous, low-frequency `app_heartbeat` usage statistic by 
 
 **Q: How do I report issues?**
 
-A: Join the QQ group at the bottom of this page, or file an issue on [GitHub Issues](https://github.com/ayuayue/PiDeck/issues); you can export logs from Settings when troubleshooting.
+A: Join the QQ / WeChat group at the bottom of this page (or add the author's WeChat `caoayu97`), or file an issue on [GitHub Issues](https://github.com/ayuayue/PiDeck/issues); you can export logs from Settings when troubleshooting.
 
 ---
 
@@ -359,9 +359,17 @@ Thank you to everyone who has contributed to PiDeck! See the full list in [CONTR
 
 ## 💬 Community
 
-Join the PiDeck QQ group for discussion and feedback:
+Join the PiDeck community for discussion and feedback:
 
-**1026218644**
+| Channel | Entry |
+|---|---|
+| **QQ group** | `1026218644` |
+| **WeChat group** | Scan the QR code below (group links expire after 7 days — add the author's WeChat instead if it no longer works) |
+| **Author's WeChat** | `caoayu97` (mention "PiDeck" when adding) |
+
+<p align="center">
+  <img src="docs/images/wechat-qrcode.png" alt="PiDeck WeChat group QR code" width="280" />
+</p>
 
 ---
 

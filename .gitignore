@@ -17,6 +17,9 @@ dist-runtime/**/*.json
 release*/
 docs-site/.vitepress/cache/
 docs-site/.vitepress/dist/
+# README 共用图片的生成副本：唯一数据源是 docs/images/<名>，由 docs-site 插件在
+# dev / build 时复制到这里（其余 public/images 下的图仍入库）。
+docs-site/public/images/wechat-qrcode.png
 *.asar
 
 # Electron/Vite
