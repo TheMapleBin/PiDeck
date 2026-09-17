@@ -4,6 +4,7 @@ import type { TokendanceAuthMode } from "../shared/tokendance";
 import type { AnnouncementState } from "../shared/types/announcement";
 import type { RpcLogBatch, RpcLogEntry } from "../shared/types/rpcLog";
 import type { DshRuntimeStatus, DshRuntimeInstallProgress } from "../shared/types/dshRuntime";
+import type { DshHomeSharingState } from "../shared/types/dshHome";
 import type { GitExecutableInfo } from "../shared/types/git";
 import type { DshRunnerNodeInfo, DshRunnerNodeInstallResult } from "../shared/types/dshRunnerNode";
 import type { ImageBlobPayload, ImageGenConfigFile, ImageGenRequest, ImageGenResult, ImageGenSaveResult } from "../shared/types/imagegen";
@@ -475,12 +476,14 @@ const api = {
 				model: string;
 				reasoningEffort?: string;
 			} | undefined>,
-		/** DSH 配置管理页状态（host 启动状态 + DSH_HOME 目录 + 最近 boot 失败原因）。 */
+		/** DSH 配置管理页状态（host 启动状态 + DSH_HOME 目录 + 最近 boot 失败原因 + 共享状态）。 */
 		getDshStatus: () =>
 			ipcRenderer.invoke(ipcChannels.dshGetStatus) as Promise<{
 				started: boolean;
 				homeDir: string;
 				bootError?: string | null;
+				/** 共享/冲突状态（issue #189）；旧主进程未回传时缺省。 */
+				sharing?: DshHomeSharingState;
 			}>,
 		/** 探测本机 CUI node（DSH 沙箱 runner）。传草稿路径可在保存前预览。 */
 		detectDshRunnerNode: (configuredPath?: string) =>
