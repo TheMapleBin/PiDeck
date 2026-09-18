@@ -142,7 +142,7 @@ test("sidebar omits the redundant projects heading and tabs shrink to their titl
   // 项目标签不再作为独立分组标题，而是收拢到 Chats/项目分段 beUI Tab 的 trigger 文案
   assert.match(sidebarContent, /<TabsTrigger[\s\S]{0,500}value="projects"[\s\S]{0,500}\{t\("app\.sidebarProjects"\)\}/);
   // 固定 Tab 与普通 Tab 同宽策略：不再用 w-20 固定宽度（Pin 图标挤占标题空间）
-  assert.match(tabBar, /"w-fit max-w-32",/);
+  assert.match(tabBar, /"w-fit max-w-52",/);
   assert.doesNotMatch(tabBar, /pinned \? "w-20"/);
   assert.match(tabBar, /session-tabs-scroll (?:relative )?flex (?:h-full )?min-w-0 flex-1/);
   assert.match(tabBar, /session-tabs-actions flex shrink-0/);

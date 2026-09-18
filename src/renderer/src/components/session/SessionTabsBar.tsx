@@ -875,8 +875,8 @@ function EditorWorkbenchTab(props: {
       aria-selected={Boolean(tab.active)}
       title={tab.title ?? tab.label}
       className={cn(
-        "session-tab group relative flex h-7 shrink-0 cursor-pointer select-none items-center rounded-md border px-2 text-caption transition-[color,background-color,border-color,box-shadow,transform] duration-200",
-        "w-fit max-w-40",
+        "session-tab group relative flex h-7 shrink-0 cursor-pointer select-none items-center rounded-md border px-2 text-micro transition-[color,background-color,border-color,box-shadow,transform] duration-200",
+        "w-fit max-w-52",
         // 选中态：灰色柔和实底（以 bg-accent = --color-bg-active，与会话 Tab/侧栏一致），文字 text-foreground
         tab.active
           ? "border-transparent font-medium text-foreground"
@@ -1036,10 +1036,10 @@ function SessionTab(props: {
     isReloading: props.isReloading,
   });
   const title = sessionDisplayName(record?.title, record?.forked) || t("common.untitled");
-  // DSH/生图徽标与计划/目标模式 chip 都是不可压缩的固定宽度内容。tab 上限 128px 时
-  // 这些前置徽章 + 关闭按钮就能占满整块宽度，标题（flex-1 min-w-0）会被压到 0 宽度
-  // 完全消失（2026-09 浅色主题 + 目标模式实测）。有前置徽章时放宽上限到 176px，
-  // 给标题留出可读空间；无徽章的普通 tab 维持 128px 紧凑上限。
+  // DSH/生图徽标与计划/目标模式 chip 都是不可压缩的固定宽度内容。
+  // 普通 tab 上限若只有 128px 时标题只能显示 4-5 个字。结合精致 micro 字号（11px），
+  // 普通 tab 上限放宽到 208px（max-w-52），兼顾多 tab 容纳量与长标题可读性（可显示 12-14 个字）；
+  // 有前置徽章时放宽到 256px（max-w-64），给标题留出充足可读空间。
   const hasLeadingBadges = Boolean(
     record?.backend === "dsh" ||
       record?.backend === "imagegen" ||
@@ -1076,11 +1076,11 @@ function SessionTab(props: {
           if (event.button === 1 && !pinned) close();
         }}
         className={cn(
-          "session-tab group relative flex h-7 shrink-0 cursor-pointer select-none items-center rounded-md border px-2 text-caption transition-[color,background-color,border-color,box-shadow,transform] duration-200",
+          "session-tab group relative flex h-7 shrink-0 cursor-pointer select-none items-center rounded-md border px-2 text-micro transition-[color,background-color,border-color,box-shadow,transform] duration-200",
           // 固定 Tab 与普通 Tab 同宽策略（按内容收缩）：固定 Tab 无关闭按钮，
           // hover 不会因按钮出现而跳动，无需 w-20 占位；固定宽度反而让 Pin 图标挤占标题空间。
           // 有 DSH/生图徽标或模式 chip 时放宽上限（见上方 hasLeadingBadges 注释）。
-          hasLeadingBadges ? "w-fit max-w-44" : "w-fit max-w-32",
+          hasLeadingBadges ? "w-fit max-w-64" : "w-fit max-w-52",
           dragging && "opacity-50",
           // 选中态：灰色柔和实底（bg-accent = --color-bg-active，与左侧 SessionTree 选中行一致），
           // 背景由下方共享 layoutId 的 motion.span spring 滑到当前 Tab；不做黑色实底/阴影/底部条。
