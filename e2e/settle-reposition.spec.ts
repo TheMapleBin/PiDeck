@@ -4,10 +4,10 @@ import { makeSeedProject } from "./open-session";
 
 /**
  * 「最新轮结束后把最终回答开头放到视口 30%」的行为级回归（2026-09 状态驱动重构）：
- * - 触发只由状态决定：最新轮 busy→idle 且仍跟随 → 1.5s 阅读停顿 → 定位；
- *   打开/切回仍跟随的已结束会话同样补齐定位。
- * - 输入不参与取消：1.5s 窗口内移动鼠标、在输入框打字都不取消；
- * - 真实上滚读历史是唯一跳过路径：上滚后位置保持，不被拉回 30%。
+ * - 修复底线（几何守卫）：长回答结束时视口仍贴底跟随，绝不把视口向上倒拽回回答开头；
+ * - 输入不再决定是否定位：长回答 + 底部跟随时定位被整体禁用（鼠标移动、输入框打字都不触发上拉）；
+ * - 真实上滚读历史仍不被拉回 30%（几何守卫 + 物理距离脱逸双保险）；
+ * - 切回仍跟随的已结束会话同样保持底部，不再把视口拉回 30%。
  *
  * 说明：mock 的 "LONG" 生成 120 行长回复（约 2500px 高），保证最终回答高过
  * 0.7×视口 + 70px 的「无位移短路」门槛，使定位必然产生可断言的位移。
@@ -119,7 +119,7 @@ async function goBackToFollowing(window: Page) {
 	await expect(bottomButton(window)).toHaveCount(0);
 }
 
-test("mouse move + typing during the settle window do not cancel repositioning", async ({ app, window }) => {
+test("long settled answer keeps the bottom despite mouse move and typing in the settle window", async ({ app, window }) => {
 	test.setTimeout(180_000);
 	await expect(window.locator("#boot-overlay")).toHaveCount(0, { timeout: 20_000 });
 	await ensureWindowVisible(app);
@@ -148,21 +148,12 @@ test("mouse move + typing during the settle window do not cancel repositioning",
 	await composer.click();
 	await window.keyboard.type("不会发送的草稿文本，模拟开始打下一轮");
 
-	// 定位必须在这些输入之后仍然发生：最终回答开头滚到视口 30% 处并稳定下来。
-	// 注意：不能只轮询 anchor 偏差（动画中间帧 anchor 滚过 135~315px 区间也会命中，
-	// 此时 dist 还很小）；也不能只轮询 dist（动画拉起第一帧就满足）。
-	// 双条件同时成立才算动画完成：已离开底部（dist>90）且已到 30% 目标。
-	await expect
-		.poll(async () => {
-			await ensureWindowVisible(app);
-			const f = await anchorFingerprint(window);
-			if (!f || f.dist <= 90) return Number.POSITIVE_INFINITY;
-			return Math.abs(f.anchorTopInViewport - f.clientHeight * 0.3);
-		}, { timeout: 8_000 })
-		.toBeLessThan(90);
-	const fingerprint = await anchorFingerprint(window);
-	expect(fingerprint).not.toBeNull();
-	expect(fingerprint.dist, `repositioning must leave the bottom: ${JSON.stringify(fingerprint)}`).toBeGreaterThan(90);
+	// 长回答 + 贴底跟随时，settle 定位被几何守卫整体禁用：即使输入框打字、鼠标移动，
+	// 视口也必须保持在底部跟随，不得被拉回回答开头（旧行为会在此时上拉数百 px）。
+	await window.waitForTimeout(2600);
+	const after = await geometry(window);
+	expect(after.dist, `long settled answer must stay at the bottom: ${JSON.stringify(after)}`).toBeLessThan(90);
+	await expect(bottomButton(window)).toHaveCount(0);
 });
 
 test("real up-scroll before settle keeps the manual history position", async ({ app, window }) => {
@@ -205,13 +196,14 @@ test("real up-scroll before settle keeps the manual history position", async ({ 
 	await expect(bottomButton(window)).toHaveCount(1);
 
 	// 跨过 1.5s tick + 320ms + 动画窗口：位置必须保持不变（不被定位拉回 30%）
+	// 几何守卫（scrollTop 已远高于目标位置）+ 物理距离脱逸双保险兜底。
 	await window.waitForTimeout(2600);
 	const after = await geometry(window);
 	expect(Math.abs(after.scrollTop - before.top), `viewport must stay at manual history position: before=${before.top} after=${JSON.stringify(after)}`).toBeLessThan(5);
 	expect(after.scrollHeight).toBe(before.scrollHeight);
 });
 
-test("opening a settled session while following still repositions without input", async ({ app, window }) => {
+test("switching back to a settled following session keeps the bottom position", async ({ app, window }) => {
 	test.setTimeout(180_000);
 	await expect(window.locator("#boot-overlay")).toHaveCount(0, { timeout: 20_000 });
 	await ensureWindowVisible(app);
@@ -226,27 +218,10 @@ test("opening a settled session while following still repositions without input"
 	await expect(historyRow).toBeVisible({ timeout: 15_000 });
 	await historyRow.click();
 	await expect(window.locator(".message-timeline")).toContainText(LONG_REPLY.slice(0, 24), { timeout: 20_000 });
-	// 打开瞬间跟随尾部（无保存锚点）：挂载补齐流水线生效，无需任何输入。
-	// seed 会话内容较短时定位目标会被 clamp 到顶部（anchor 未必精确在 30%），
-	// 因此这里只轮询「最终回答进入视口上半部且视口离开底部」的稳定终态，
-	// 而不是死磕 30% 像素——30% 的精确锚定由场景 1（长内容）覆盖。
-	await expect
-		.poll(async () => {
-			await ensureWindowVisible(app);
-			const f = await anchorFingerprint(window);
-			if (!f) return Number.POSITIVE_INFINITY;
-			if (f.dist <= 300) return Number.POSITIVE_INFINITY;
-			// 最终回答顶部应在视口内（上方 10% 到 60% 高度区间）
-			return f.anchorTopInViewport > -f.clientHeight * 0.1 &&
-				f.anchorTopInViewport < f.clientHeight * 0.6
-				? 0
-				: Number.POSITIVE_INFINITY;
-		}, { timeout: 8_000 })
-		.toBeLessThan(90);
-	const fingerprint = await anchorFingerprint(window);
-	expect(fingerprint).not.toBeNull();
-	expect(
-		fingerprint.dist,
-		`settled session reopen should leave the bottom: ${JSON.stringify(fingerprint)}`,
-	).toBeGreaterThan(300);
+	// 打开瞬间跟随尾部（无保存锚点）；旧行为会在此后 1.5s+320ms 把视口强拉到
+	// 最终回答 30% 处（用户切回会话却被拽走）。修复后视口保持底部跟随不动。
+	await window.waitForTimeout(2600);
+	const after = await geometry(window);
+	expect(after.dist, `settled session reopen must stay at the bottom: ${JSON.stringify(after)}`).toBeLessThan(90);
+	await expect(bottomButton(window)).toHaveCount(0);
 });

@@ -328,27 +328,34 @@ export const useStickToBottom = (options: StickToBottomOptions = {}): StickToBot
 
   const scrollToBottom = useCallback<ScrollToBottom>(
     (scrollOptions = {}) => {
-      if (typeof scrollOptions === "string") {
-        scrollOptions = { animation: scrollOptions };
-      }
-      if (!scrollOptions.preserveScrollPosition) {
+      const normalizedOptions =
+        typeof scrollOptions === "string"
+          ? { animation: scrollOptions }
+          : scrollOptions;
+      const {
+        preserveScrollPosition = false,
+        wait = false,
+        ignoreEscapes = false,
+        duration = 0,
+        animation: animationOption,
+      } = normalizedOptions;
+      if (!preserveScrollPosition) {
         resetReaderUp();
         setIsAtBottom(true);
       }
-      const waitElapsed = Date.now() + (Number(scrollOptions.wait) || 0);
-      const behavior = mergeAnimations(optionsRef.current ?? {}, scrollOptions.animation);
-      const { ignoreEscapes = false } = scrollOptions;
+      const waitElapsed = Date.now() + (Number(wait) || 0);
+      const behavior = mergeAnimations(optionsRef.current ?? {}, animationOption);
       let durationElapsed: number;
       let startTarget = state.calculatedTargetScrollTop;
-      if (scrollOptions.duration instanceof Promise) {
-        scrollOptions.duration.finally(() => {
+      if (duration instanceof Promise) {
+        duration.finally(() => {
           durationElapsed = Date.now();
         });
       } else {
-        durationElapsed = waitElapsed + (scrollOptions.duration ?? 0);
+        durationElapsed = waitElapsed + duration;
       }
       // instant 不复用在途动画：旧闭包的 startTarget 会把连续增高拖成多帧阶梯。
-      if (scrollOptions.wait !== true || behavior === "instant") {
+      if (wait !== true || behavior === "instant") {
         state.animation = undefined;
       }
       if (state.animation?.behavior === behavior) {
@@ -409,6 +416,7 @@ export const useStickToBottom = (options: StickToBottomOptions = {}): StickToBot
             return scrollToBottom({
               animation: mergeAnimations(optionsRef.current ?? {}, optionsRef.current?.resize),
               ignoreEscapes,
+              preserveScrollPosition,
               duration: Math.max(0, durationElapsed - Date.now()) || undefined,
             });
           }
@@ -591,8 +599,17 @@ export const useStickToBottom = (options: StickToBottomOptions = {}): StickToBot
         }
         element = element.parentElement;
       }
-      if (element !== scroll) return;
-      applyWheelOnScroll(element, deltaY);
+      if (element !== scroll) {
+        // 若子元素在滚轮方向上仍可滚动，交由子元素消费；
+        // 若已滚至边缘或无实际溢出，滚轮链冒泡至外层，外层时间线必须处理逃逸/重锁意图。
+        // 增加 1px 容差，防御 Windows 高分屏缩放（125%/150%）下的浮点舍入误差。
+        const canChildScroll =
+          deltaY < 0
+            ? element.scrollTop > 1
+            : element.scrollTop + element.clientHeight < element.scrollHeight - 1;
+        if (canChildScroll) return;
+      }
+      applyWheelOnScroll(scroll, deltaY);
     },
     [applyWheelOnScroll],
   );

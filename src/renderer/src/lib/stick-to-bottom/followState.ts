@@ -105,7 +105,10 @@ export function decideFollowFromUserInput(input: {
 		if (input.canScroll === false) {
 			return { action: "none" };
 		}
-		if (input.readerDisplacementPx > AT_BOTTOM_TOLERANCE_PX) {
+		if (
+			input.distanceFromBottom > STICK_TO_BOTTOM_OFFSET_PX ||
+			input.readerDisplacementPx > AT_BOTTOM_TOLERANCE_PX
+		) {
 			return { action: "escape", report: "up" };
 		}
 		return { action: "none" };
