@@ -228,6 +228,14 @@ export const ipcChannels = {
 	dshOpenDocument: "dsh:open-document",
 	/** DSH host 重启（DSH_HOME 切换后立即生效；有活跃 DSH 会话时拒绝）。 */
 	dshRestartHost: "dsh:restart-host",
+	/**
+	 * DSH host 手动停止（用户不想让它运行）：停所有 DSH 会话 + dispose host，
+	 * 并把 dshManualStopped 持久化为 true——之后所有自动拉起路径都被门控，
+	 * 只有 dshStartHost（显式启动）才能恢复。
+	 */
+	dshStopHost: "dsh:stop-host",
+	/** DSH host 显式启动：清除手动停止标记并 boot；返回 host 是否就绪。 */
+	dshStartHost: "dsh:start-host",
 	/** DSH credentials.describe（configured/source/writable，无值）。 */
 	dshCredentialDescribe: "dsh:credential-describe",
 	/** DSH credentials.set（写凭证值）。 */

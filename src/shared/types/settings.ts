@@ -539,6 +539,17 @@ export type AppSettings = {
 	 */
 	dshAutoImportSessions?: boolean;
 
+	/**
+	 * DSH host 是否被用户手动停止（不想让它运行）。
+	 *
+	 * 持久化跨应用重启：标记为真后，预热（startDshHostInBackground）、按需兜底
+	 * （ensureStarted）、崩溃自动重启（DshHostProcess.restartAfterCrash）、runtime
+	 * 磁盘操作后的 host 恢复等所有非用户显式发起的路径都不再 fork host。
+	 * 只有用户在 DSH 配置页点「启动」才清除标记并重新 boot。
+	 * 缺省 undefined/false：保持按需自动启动的历史语义。
+	 */
+	dshManualStopped?: boolean;
+
 };
 
 // ── 桌面宠物类型 ──

@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { existsSync } from "node:fs";
 import type { UtilityProcess } from "electron";
 import { getAppLogger } from "../logging/sharedLogger";
+import { dshManuallyStoppedError, isDshManuallyStoppedError } from "./dshManualStop";
 
 /**
  * DSH host utilityProcess 生命周期管理（v2 形态，对应计划 §3.2 形态 b）。
@@ -50,6 +51,12 @@ export class DshHostProcess {
 		/** fork 环境变量（DSH_HOME 等已在 entry 内设置；这里可补应用级 env）。 */
 		private readonly forkEnv: Record<string, string>,
 		log?: (scope: string, message: string, detail?: unknown) => void,
+		/**
+		 * 用户是否手动停止了 host（由 DshHost 透传 settings.dshManualStopped）。
+		 * 崩溃自动重启路径（restartAfterCrash → start）不经过 DshHost.start，
+		 * 必须在这里二次门控，否则「停止后崩溃重启又把 host 拉起来」。
+		 */
+		private readonly isManualStopped: () => boolean = () => false,
 	) {
 		this.log = log ?? ((scope, message, detail) => getAppLogger()?.info(scope, message, detail));
 	}
@@ -87,6 +94,9 @@ export class DshHostProcess {
 			await this.waitForReady();
 			return;
 		}
+		// 手动停止门控（崩溃自动重启路径也走这里）：用户停过之后不再 fork，
+		// 调用方（restartAfterCrash）按 isDshManuallyStoppedError 判定后静默放弃。
+		if (this.isManualStopped()) throw dshManuallyStoppedError();
 		this.ready = false;
 		if (resetCrashCounters) {
 			this.bootFailures = 0;
@@ -292,7 +302,13 @@ export class DshHostProcess {
 			this.log("dsh-host", `host restarted after crash (attempt ${attempt})`);
 			return true;
 		} catch (error) {
-			this.log("dsh-host", `host restart failed: ${String(error)}`);
+			// 手动停止态下的 fork 被拒绝（start() 抛出 dshManuallyStoppedError）不算「崩溃重启失败」：
+			// 用 info 记一行即可，warn 会在日志里堆成假故障信号。
+			if (isDshManuallyStoppedError(error)) {
+				this.log("dsh-host", "host auto-restart skipped: manually stopped by user");
+			} else {
+				this.log("dsh-host", `host restart failed: ${String(error)}`);
+			}
 			return false;
 		}
 	}

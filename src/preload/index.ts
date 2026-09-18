@@ -490,6 +490,8 @@ const api = {
 				bootError?: string | null;
 				/** 共享/冲突状态（issue #189）；旧主进程未回传时缺省。 */
 				sharing?: DshHomeSharingState;
+				/** 用户是否手动停止了 host（true 时不会自动启动）；旧主进程未回传时缺省。 */
+				manuallyStopped?: boolean;
 			}>,
 		/** 探测本机 CUI node（DSH 沙箱 runner）。传草稿路径可在保存前预览。 */
 		detectDshRunnerNode: (configuredPath?: string) =>
@@ -584,6 +586,12 @@ const api = {
 		/** DSH host 重启（DSH_HOME 切换后立即生效；有活跃 DSH 会话时返回 false）。 */
 		restartDshHost: () =>
 			ipcRenderer.invoke(ipcChannels.dshRestartHost) as Promise<boolean>,
+		/** DSH host 手动停止（停活跃 DSH 会话 + dispose + 持久化停止标记，跨重启不自动启动）。 */
+		stopDshHost: () =>
+			ipcRenderer.invoke(ipcChannels.dshStopHost) as Promise<boolean>,
+		/** DSH host 显式启动（清除手动停止标记并 boot；返回 host 是否就绪）。 */
+		startDshHost: () =>
+			ipcRenderer.invoke(ipcChannels.dshStartHost) as Promise<boolean>,
 		deleteRecord: (sessionId: string) =>
 			ipcRenderer.invoke(ipcChannels.sessionsCatalogDelete, sessionId) as Promise<boolean>,
 		/** 归档会话（移入 .pideck-archive/ 并从目录移除）；运行中的会话会抛错 */
