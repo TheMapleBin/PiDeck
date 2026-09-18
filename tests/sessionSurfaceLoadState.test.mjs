@@ -87,6 +87,11 @@ test("timeline controller exposes surface loading for the bottom composer gate",
   assert.match(controllerSource, /if \(cachedEntry \|\| knownEmpty\) return/);
   // 预热写 filePath/dshSessionId 后仍粘住空会话，避免起始页 / 历史骨架抽搐。
   assert.match(controllerSource, /stickyEmptyRef/);
+  // 无锚点恢复必须等读盘完成，否则冷会话 scrollHeight≈0 把 restorePhase 钉成 complete。
+  assert.match(
+    controllerSource,
+    /if \(isSurfaceLoading\) return;\s*const requestOwnerKey = ownerKey;\s*if \(!anchor\)/,
+  );
   const timelineSource = readFileSync(
     "src/renderer/src/components/session/SessionMessageTimeline.tsx",
     "utf8",

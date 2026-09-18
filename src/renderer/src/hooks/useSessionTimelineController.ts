@@ -971,7 +971,7 @@ export function useSessionTimelineController(options: {
    * ResizeObserver 在 isAtBottom 时会把视口钉回底部（上滑扩窗跳到最新一轮的根因）。
    */
   const pinViewportAfterPrepend = useCallback((nextTop: number) => {
-    markProgrammaticScroll();
+    markProgrammaticScroll(120);
     const api = scrollerScrollApiRef.current;
     if (api?.restoreAt) {
       api.restoreAt(nextTop);
@@ -1427,30 +1427,38 @@ export function useSessionTimelineController(options: {
   useEffect(() => {
     if (!controllerEnabled || restorePhase !== "pending") return;
     const anchor = restoreAnchor;
+    if (anchor) {
+      // 上滚阅读状态必须在首个 child commit 前关闭跟随；窗口尚在读盘时先等待，
+      // 不把「锚点暂未挂载」误判成永久失效。
+      autoScrollRef.current = false;
+      setAutoScroll(false);
+      setShowScrollToBottom(true);
+    }
+    // 无锚点路径也必须等首批消息上屏：冷会话切入时 DOM 只有骨架（scrollHeight≈0），
+    // 过早 scrollTo + restorePhase=complete 会把视口永久钉在顶部第一条。
+    if (isSurfaceLoading) return;
+
+    const requestOwnerKey = ownerKey;
     if (!anchor) {
       // 无锚点（切走时在底部或从未保存）：默认滚到底、恢复跟底。
       autoScrollRef.current = true;
       setAutoScroll(true);
       setShowScrollToBottom(false);
       setRestorePhase("complete");
-      const requestOwnerKey = ownerKey;
       const frame = requestAnimationFrame(() => {
         const timeline = timelineRef.current;
         if (!timeline || ownerKeyRef.current !== requestOwnerKey) return;
         markProgrammaticScroll();
-        timeline.scrollTo({ top: timeline.scrollHeight, behavior: "instant" });
+        const api = scrollerScrollApiRef.current;
+        if (api?.scrollToBottom) {
+          void api.scrollToBottom({ animation: "instant" });
+        } else {
+          timeline.scrollTo({ top: timeline.scrollHeight, behavior: "instant" });
+        }
       });
       return () => cancelAnimationFrame(frame);
     }
 
-    // 上滚阅读状态必须在首个 child commit 前关闭跟随；窗口尚在读盘时先等待，
-    // 不把「锚点暂未挂载」误判成永久失效。
-    autoScrollRef.current = false;
-    setAutoScroll(false);
-    setShowScrollToBottom(true);
-    if (isSurfaceLoading) return;
-
-    const requestOwnerKey = ownerKey;
     const frame = requestAnimationFrame(() => {
       const timeline = timelineRef.current;
       if (!timeline || ownerKeyRef.current !== requestOwnerKey) return;

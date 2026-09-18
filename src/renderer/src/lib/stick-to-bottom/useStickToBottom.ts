@@ -337,7 +337,7 @@ export const useStickToBottom = (options: StickToBottomOptions = {}): StickToBot
       }
       const waitElapsed = Date.now() + (Number(scrollOptions.wait) || 0);
       const behavior = mergeAnimations(optionsRef.current ?? {}, scrollOptions.animation);
-      const { ignoreEscapes = false } = scrollOptions;
+      const { ignoreEscapes = false, preserveScrollPosition = false } = scrollOptions;
       let durationElapsed: number;
       let startTarget = state.calculatedTargetScrollTop;
       if (scrollOptions.duration instanceof Promise) {
@@ -409,6 +409,7 @@ export const useStickToBottom = (options: StickToBottomOptions = {}): StickToBot
             return scrollToBottom({
               animation: mergeAnimations(optionsRef.current ?? {}, optionsRef.current?.resize),
               ignoreEscapes,
+              preserveScrollPosition,
               duration: Math.max(0, durationElapsed - Date.now()) || undefined,
             });
           }
@@ -591,8 +592,17 @@ export const useStickToBottom = (options: StickToBottomOptions = {}): StickToBot
         }
         element = element.parentElement;
       }
-      if (element !== scroll) return;
-      applyWheelOnScroll(element, deltaY);
+      if (element !== scroll) {
+        // 子容器（代码块 / 长工具输出）在滚轮方向上还能滚时交给它；
+        // 已经到边缘则把意图传给外层时间线，否则引擎看不见逃逸/重锁。
+        // 1px 容差：Windows 125%/150% 缩放下的浮点舍入。
+        const canChildScroll =
+          deltaY < 0
+            ? element.scrollTop > 1
+            : element.scrollTop + element.clientHeight < element.scrollHeight - 1;
+        if (canChildScroll) return;
+      }
+      applyWheelOnScroll(scroll, deltaY);
     },
     [applyWheelOnScroll],
   );

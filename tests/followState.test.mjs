@@ -203,6 +203,49 @@ test("reader up accumulation expires across gestures and ignores 1px stream jitt
   assert.equal(down.readerUpPx, 0);
 });
 
+test("slow real notches accumulate across 250ms gaps until escape", () => {
+  let acc = { readerUpPx: 0, at: 0 };
+  for (let i = 0; i < 6; i += 1) {
+    acc = follow.nextReaderUpPx({
+      previous: acc.readerUpPx,
+      previousAt: acc.at,
+      now: 1000 + i * 300,
+      direction: "up",
+      thisInputPx: 5,
+    });
+  }
+  assert.equal(acc.readerUpPx, 30);
+  assertDecision(
+    follow.decideFollowFromUserInput({
+      direction: "up",
+      readerDisplacementPx: acc.readerUpPx,
+      distanceFromBottom: 30,
+    }),
+    "escape",
+    "up",
+  );
+});
+
+test("far-from-bottom up input escapes; near-bottom 1px jitter does not", () => {
+  assertDecision(
+    follow.decideFollowFromUserInput({
+      direction: "up",
+      readerDisplacementPx: 1,
+      distanceFromBottom: 71,
+    }),
+    "none",
+  );
+  assertDecision(
+    follow.decideFollowFromUserInput({
+      direction: "up",
+      readerDisplacementPx: 1,
+      distanceFromBottom: follow.FAR_FROM_BOTTOM_PX + 1,
+    }),
+    "escape",
+    "up",
+  );
+});
+
 test("keyboard and scrollbar helpers classify real input only", () => {
   assert.equal(follow.followDirectionFromKey("ArrowUp"), "up");
   assert.equal(follow.followDirectionFromKey("PageUp"), "up");
