@@ -1043,6 +1043,14 @@ export function useSessionTimelineController(options: {
       settleScrollCancelRef.current?.();
       return;
     }
+    // 用户正在输入区打字、聚焦输入框，或正在划词选中文本时，绝对不篡改视口位置
+    if (
+      document.activeElement?.closest(".composer, [contenteditable], input, textarea") ||
+      (window.getSelection()?.toString().length ?? 0) > 0
+    ) {
+      settleScrollCancelRef.current?.();
+      return;
+    }
     // 只认最终回答容器（data-final-answer=runId）：手动停止/异常中断的 run 只有思考与
     // 工具调用、没有回答 → 该属性不存在 → 直接放弃收起（保持现状跟随）。
     // 若回退到 data-message-id=runId 把 run 行当锚，会误把视口拽离底部并弹出回底按钮，
@@ -1070,6 +1078,12 @@ export function useSessionTimelineController(options: {
       timeline.scrollHeight - targetTop - timeline.clientHeight <=
       SETTLED_TURN_KEEP_BOTTOM_EPSILON_PX
     ) {
+      settleScrollCancelRef.current?.();
+      return;
+    }
+    // 若当前视口已经在目标位置下方（用户已随流式阅读到回答中后段，或者正在看尾部）：
+    // 严禁将视口大幅向上倒退滚回回答开头——这是「在最后突然跳到前面」的直接根因。
+    if (timeline.scrollTop > targetTop + 60) {
       settleScrollCancelRef.current?.();
       return;
     }

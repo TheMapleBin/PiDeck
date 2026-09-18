@@ -328,10 +328,18 @@ export const useStickToBottom = (options: StickToBottomOptions = {}): StickToBot
 
   const scrollToBottom = useCallback<ScrollToBottom>(
     (scrollOptions = {}) => {
-      if (typeof scrollOptions === "string") {
-        scrollOptions = { animation: scrollOptions };
-      }
-      if (!scrollOptions.preserveScrollPosition) {
+      const normalizedOptions =
+        typeof scrollOptions === "string"
+          ? { animation: scrollOptions }
+          : scrollOptions;
+      const {
+        preserveScrollPosition = false,
+        wait = false,
+        ignoreEscapes = false,
+        duration = 0,
+        animation: animationOption,
+      } = normalizedOptions;
+      if (!preserveScrollPosition) {
         resetReaderUp();
         setIsAtBottom(true);
       }
@@ -340,15 +348,15 @@ export const useStickToBottom = (options: StickToBottomOptions = {}): StickToBot
       const { ignoreEscapes = false, preserveScrollPosition = false } = scrollOptions;
       let durationElapsed: number;
       let startTarget = state.calculatedTargetScrollTop;
-      if (scrollOptions.duration instanceof Promise) {
-        scrollOptions.duration.finally(() => {
+      if (duration instanceof Promise) {
+        duration.finally(() => {
           durationElapsed = Date.now();
         });
       } else {
-        durationElapsed = waitElapsed + (scrollOptions.duration ?? 0);
+        durationElapsed = waitElapsed + duration;
       }
       // instant 不复用在途动画：旧闭包的 startTarget 会把连续增高拖成多帧阶梯。
-      if (scrollOptions.wait !== true || behavior === "instant") {
+      if (wait !== true || behavior === "instant") {
         state.animation = undefined;
       }
       if (state.animation?.behavior === behavior) {
