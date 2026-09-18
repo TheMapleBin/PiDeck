@@ -23,6 +23,16 @@ export function getHeaderValue(headers: unknown, targetKey: string) {
 	return entry?.[1] ?? "";
 }
 
+/**
+ * provider.modelOverrides[modelId] 的逐模型 User-Agent 读写（纯函数，可单测）。
+ *
+ * 结构已按 pi 源码核实（v0.85.1）：
+ * - `core/model-config.d.ts` 中 modelOverrides 是 `{ [modelId]: { headers?: Record<string,string>, … } }`，
+ *   headers 是合法的 TypeBox 字段，不是会被校验拒绝的自定义字段。
+ * - `core/provider-composer.js` 的 rawModelHeaders 把 `modelOverrides[id].headers` 展开在
+ *   **最后**：优先级高于 provider.headers，因此这里写的 UA 会覆盖供应商级 UA。
+ * 留空语义 = 删除该键，让模型继承 provider 级 UA（而不是写空串去覆盖它）。
+ */
 export function setHeaderValue(
 	headers: unknown,
 	targetKey: string,
@@ -34,6 +44,66 @@ export function setHeaderValue(
 	}
 	if (value.trim()) normalized[targetKey] = value.trim();
 	return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
+
+export function getModelUserAgentOverride(
+	modelOverrides: unknown,
+	modelId: string,
+): string {
+	const headers = getOverrideHeaders(modelOverrides, modelId);
+	return headers ? getHeaderValue(headers, "User-Agent") : "";
+}
+
+/**
+ * 写入逐模型 UA，返回新的 modelOverrides 对象（不改动入参）。
+ * 值清空 → 移除该模型的 UA 键；若该模型只剩空壳则一并删掉，避免留下
+ * `{ m1: {} }` 这种让 pi 白跑一层覆盖的空对象。
+ */
+export function setModelUserAgentOverride(
+	modelOverrides: unknown,
+	modelId: string,
+	value: string,
+): Record<string, Record<string, unknown>> | undefined {
+	const id = modelId.trim();
+	if (!id) return asOverridesRecord(modelOverrides);
+	const base = asOverridesRecord(modelOverrides) ?? {};
+	const current = isPlainObject(base[id]) ? { ...base[id] } : {};
+	const nextHeaders = setHeaderValue(current.headers, "User-Agent", value);
+	const next = { ...base };
+	if (nextHeaders) {
+		current.headers = nextHeaders;
+		next[id] = current;
+	} else {
+		// 只删 UA 键：模型可能还有 maxTokens 等其它覆盖字段，不能整块丢掉。
+		delete current.headers;
+		if (Object.keys(current).length > 0) next[id] = current;
+		else delete next[id];
+	}
+	return Object.keys(next).length > 0 ? next : undefined;
+}
+
+function getOverrideHeaders(
+	modelOverrides: unknown,
+	modelId: string,
+): Record<string, string> | undefined {
+	const overrides = asOverridesRecord(modelOverrides);
+	const entry = overrides?.[modelId];
+	return isPlainObject(entry) ? getProviderHeaders(entry.headers) : undefined;
+}
+
+function asOverridesRecord(
+	value: unknown,
+): Record<string, Record<string, unknown>> | undefined {
+	if (!isPlainObject(value)) return undefined;
+	// 逐项收窄：value 是 unknown，整体断言会绕过类型检查（项目禁止 as 强转）。
+	const entries = Object.entries(value).filter(
+		(entry): entry is [string, Record<string, unknown>] => isPlainObject(entry[1]),
+	);
+	return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+	return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 // pi provider 的 api 字段必须使用官方 registry 名称；openai-completions 实际对应 Chat Completions。

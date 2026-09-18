@@ -96,7 +96,12 @@ import {
 	isProjectPrompt,
 	isProjectSkill,
 } from "./config/resourceScopeModel";
-import { getProviderHeaders, KNOWN_PROVIDER_ENDPOINTS } from "./config/providerHeaders";
+import {
+	getModelUserAgentOverride,
+	getProviderHeaders,
+	KNOWN_PROVIDER_ENDPOINTS,
+	setModelUserAgentOverride,
+} from "./config/providerHeaders";
 import { TOKENDANCE_PROVIDER } from "../../shared/tokendance";
 import { ALL_CONFIG_DIRTY_KEYS, dirtyKeysClearedByReload, dirtyKeysPreservedOnReload, reconcileConfigDirty } from "./config/configDirtyMarks";
 import { formatConfigUnsavedMessage, summarizeConfigUnsavedChanges, type ConfigUnsavedItem } from "./config/configUnsavedChangesSummary";
@@ -1405,6 +1410,36 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 		}
 	};
 
+	/**
+	 * 逐模型 User-Agent：写 provider.modelOverrides[modelId].headers["User-Agent"]。
+	 * 该结构由 pi 在发请求前最后合并（优先级高于 provider.headers），用于
+	 * 「同一供应商里只有个别模型需要特殊 UA」的场景（如某个模型走 Response 协议）。
+	 */
+	const handleUpdateModelUserAgent = (
+		providerName: string,
+		index: number,
+		value: string,
+	) => {
+		const provider = modelsData.providers[providerName];
+		const model = provider?.models[index];
+		if (!provider || !model) return;
+		setModelsData({
+			...modelsData,
+			providers: {
+				...modelsData.providers,
+				[providerName]: {
+					...provider,
+					modelOverrides: setModelUserAgentOverride(
+						provider.modelOverrides,
+						model.id,
+						value,
+					),
+				},
+			},
+		});
+		markDirty("config:models");
+	};
+
 	const handleUpdateModelThinkingLevel = (
 		providerName: string,
 		index: number,
@@ -2661,6 +2696,14 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 							onAddModel={handleAddModel}
 							onUpdateModel={handleUpdateModel}
 							onUpdateModelThinkingLevel={handleUpdateModelThinkingLevel}
+							onUpdateModelUserAgent={handleUpdateModelUserAgent}
+							getModelUserAgentOverride={(providerName, index) => {
+								const provider = modelsData.providers[providerName];
+								const model = provider?.models[index];
+								return model
+									? getModelUserAgentOverride(provider.modelOverrides, model.id)
+									: "";
+							}}
 							onDeleteModel={handleDeleteModel}
 							onDeleteModels={handleDeleteModels}
 							onResetModel={handleResetModelToAdaptive}

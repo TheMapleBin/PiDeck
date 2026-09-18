@@ -121,6 +121,14 @@ export function ModelsTab(props: {
 		key: "xhigh" | "max",
 		value: "" | "xhigh" | "max",
 	) => void;
+	/** 逐模型 User-Agent 覆盖（落到 provider.modelOverrides），可选。 */
+	onUpdateModelUserAgent?: (
+		providerName: string,
+		index: number,
+		value: string,
+	) => void;
+	/** 读取某模型当前的 UA 覆盖值（可选；与上一个回调成对出现才渲染该列）。 */
+	getModelUserAgentOverride?: (providerName: string, index: number) => string;
 	onDeleteModel: (providerName: string, index: number) => void;
 	onDeleteModels: (providerName: string, indexes: number[]) => void;
 	/** 重置为自适应：显式刷新 endpoint /models 后按模板清空并重填能力字段。 */
@@ -680,6 +688,16 @@ export function ModelsTab(props: {
 											models={provider.models}
 											onUpdateModel={(i, field, value) => props.onUpdateModel(name, i, field, value)}
 											onUpdateModelThinkingLevel={(i, key, value) => props.onUpdateModelThinkingLevel(name, i, key, value)}
+											onUpdateModelUserAgent={
+												props.onUpdateModelUserAgent && props.getModelUserAgentOverride
+													? (i, value) => props.onUpdateModelUserAgent!(name, i, value)
+													: undefined
+											}
+											getModelUserAgentOverride={
+												props.onUpdateModelUserAgent && props.getModelUserAgentOverride
+													? (i) => props.getModelUserAgentOverride!(name, i)
+													: undefined
+											}
 											onDeleteModel={(i) => {
 												clearModelBatch();
 												props.onDeleteModel(name, i);

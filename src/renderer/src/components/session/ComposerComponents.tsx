@@ -851,6 +851,7 @@ const MODEL_LIST_FAILURE_REASON_TEXT: Record<ModelListFailReason, TranslationKey
 	"version-too-old": "app.modelListFailVersionTooOld",
 	"config-invalid": "app.modelListFailConfigInvalid",
 	"cli-failed": "app.modelListFailCliFailed",
+	"waf-blocked": "app.modelListFailWafBlocked",
 	"empty": "app.modelListFailEmpty",
 };
 
