@@ -1475,7 +1475,6 @@ export function useSessionTimelineController(options: {
       return () => cancelAnimationFrame(frame);
     }
 
-    const requestOwnerKey = ownerKey;
     const frame = requestAnimationFrame(() => {
       const timeline = timelineRef.current;
       if (!timeline || ownerKeyRef.current !== requestOwnerKey) return;
