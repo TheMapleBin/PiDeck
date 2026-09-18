@@ -14,6 +14,18 @@ import type { GitResource, GitResourceGroups } from "../../shared/types";
 const execFileAsync = promisify(execFile);
 const GIT_MUTATION_TIMEOUT_MS = 30_000;
 
+/** 渲染层传入的 hash 是不可信输入：以 `-` 开头的值会被 git 当作选项
+ *  （如 cherry-pick 的 `--exec=` 参数注入），非全 SHA 的短 ref 也可能命中意外对象。
+ *  UI 侧 commit log 一律输出 %H 全 SHA（见 getCommitLog 的 COMMIT_FORMAT），
+ *  此处用 40 位十六进制白名单兜底，守卫在 spawn git 之前生效。 */
+const FULL_COMMIT_SHA_RE = /^[0-9a-f]{40}$/i;
+
+function assertFullCommitHash(hash: string): void {
+	if (!FULL_COMMIT_SHA_RE.test(hash)) {
+		throw new Error(`invalid commit hash: ${JSON.stringify(hash.slice(0, 40))}`);
+	}
+}
+
 export class GitService {
 	/**
 	 * 统一的 git 子进程入口：注入当前生效的可执行文件（用户配置优先，否则字面量 "git" 走 PATH），
@@ -867,11 +879,13 @@ export class GitService {
 
 	/** Cherry-pick：将指定提交应用到当前分支 */
 	async cherryPick(cwd: string, hash: string): Promise<void> {
+		assertFullCommitHash(hash);
 		await this.git(["cherry-pick", hash], { cwd, timeoutMs: GIT_MUTATION_TIMEOUT_MS });
 	}
 
 	/** Revert：创建一个反向提交撤销指定提交的变更 */
 	async revertCommit(cwd: string, hash: string): Promise<void> {
+		assertFullCommitHash(hash);
 		await this.git(["revert", "--no-edit", hash], { cwd, timeoutMs: GIT_MUTATION_TIMEOUT_MS });
 	}
 
@@ -880,6 +894,11 @@ export class GitService {
 	 * @param mode soft｜mixed｜hard，默认 soft
 	 */
 	async resetToCommit(cwd: string, hash: string, mode: "soft" | "mixed" | "hard" = "soft"): Promise<void> {
+		assertFullCommitHash(hash);
+		// mode 经 IPC 边界以自由字符串传入（gitIpc 未做枚举校验），运行时白名单兜底
+		if (mode !== "soft" && mode !== "mixed" && mode !== "hard") {
+			throw new Error(`invalid reset mode: ${JSON.stringify(String(mode))}`);
+		}
 		await this.git(["reset", `--${mode}`, hash], { cwd, timeoutMs: GIT_MUTATION_TIMEOUT_MS });
 	}
 
@@ -888,6 +907,7 @@ export class GitService {
 	 * 注意：只能删除非 HEAD 的提交
 	 */
 	async dropCommit(cwd: string, hash: string): Promise<void> {
+		assertFullCommitHash(hash);
 		// 先获取 parent hash
 		const { stdout: parentHash } = await this.git(["rev-parse", `${hash}^`], { cwd, timeoutMs: GIT_MUTATION_TIMEOUT_MS });
 		await this.git(["rebase", "--onto", parentHash.trim(), hash], { cwd, timeoutMs: GIT_MUTATION_TIMEOUT_MS });
