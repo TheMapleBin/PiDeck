@@ -291,7 +291,7 @@ test("没有随包资源时走在线索引", async () => {
 	rmSync(root, { recursive: true, force: true });
 });
 
-test("runtime:pack 默认 lite，CI 上传分平台归档，禁止独立 dsh-runtime tag", () => {
+test("runtime:pack 默认 lite，CI 交叉打满 6 平台并上传，禁止独立 dsh-runtime tag", () => {
 	const pack = readFileSync("scripts/pack-dsh-runtime.mjs", "utf8");
 	const pkgJson = readFileSync("package.json", "utf8");
 	const pkg = JSON.parse(pkgJson);
@@ -309,8 +309,11 @@ test("runtime:pack 默认 lite，CI 上传分平台归档，禁止独立 dsh-run
 		/@larksuiteoapi\/node-sdk\/es/,
 		"electron-builder files 必须排除飞书 SDK 的 ESM 副本",
 	);
-	assert.match(release, /dist-runtime\/dsh-runtime-\*\.tgz/);
-	assert.match(release, /dist-runtime\/dsh-runtime-\*-releases\.json/);
+	// 2026-09 起 runtime tgz 由 pack-dsh-runtime job（单 runner 交叉打包）上传，
+	// 安装包构建 job 不再顺带产出 runtime（glob 已从它的 files 列表移除）。
+	const packJob = release.split("pack-dsh-runtime:")[1] ?? "";
+	assert.ok(packJob.includes("dsh-runtime-${{ matrix.os }}-${{ matrix.arch }}.tgz"), "交叉 job 必须上传目标平台命名的归档");
+	assert.ok(packJob.includes("--target-os ${{ matrix.os }}"), "交叉 job 必须传 --target-*");
 	assert.doesNotMatch(
 		release,
 		/releases\/download\/dsh-runtime/,
@@ -351,7 +354,7 @@ test("publish-dsh-runtime.yml 不依赖不会触发 workflow 的 runtime:pack �
 	assert.match(publish, /node scripts\/pack-dsh-runtime\.mjs/);
 });
 
-test("publish-dsh-runtime.yml 按原生平台打 tgz，挂 latest 应用 Release", () => {
+test("publish-dsh-runtime.yml 默认原生矩阵 + 可选交叉模式，挂 latest 应用 Release", () => {
 	const publish = readFileSync(".github/workflows/publish-dsh-runtime.yml", "utf8");
 	assert.match(publish, /workflow_dispatch/);
 	assert.match(publish, /node scripts\/pack-dsh-runtime\.mjs/);
@@ -361,12 +364,15 @@ test("publish-dsh-runtime.yml 按原生平台打 tgz，挂 latest 应用 Release
 	assert.match(publish, /name: Publish DSH runtime/);
 	assert.match(publish, /RELEASE_PAT/);
 	assert.match(publish, /--clobber/);
+	// 原生矩阵保留（回退路径）：win32-arm64 / darwin-x64 必须有原生 runner 覆盖。
 	assert.match(publish, /windows-11-arm/);
 	assert.match(publish, /ubuntu-24\.04-arm/);
 	assert.match(publish, /macos-15-intel/);
-	assert.match(publish, /RELEASE_PAT/);
+	// 交叉模式（2026-09 新增）：单 ubuntu runner 打全 6 平台，--target-* 参数化。
+	assert.match(publish, /cross_pack/);
+	assert.match(publish, /--target-os \$\{\{ matrix\.os \}\} --target-arch \$\{\{ matrix\.arch \}\}/);
 	assert.match(publish, /dsh-runtime-\$\{\{ matrix\.platform \}\}-\$\{\{ matrix\.arch \}\}\.tgz/);
-	assert.match(publish, /dsh-runtime-\$\{\{ matrix\.platform \}\}-\$\{\{ matrix\.arch \}\}-releases\.json/);
+	assert.match(publish, /dsh-runtime-\$\{\{ matrix\.os \}\}-\$\{\{ matrix\.arch \}\}\.tgz/);
 	assert.match(publish, /\^v\[0-9\]/, "只允许挂到 v* 应用 tag");
 	assert.doesNotMatch(publish, /TAG=dsh-runtime/);
 	assert.doesNotMatch(
@@ -409,10 +415,13 @@ test("pack script pre-flights entry files before tarring", () => {
 	assert.match(pruneRules, /export function runtimeEntryResolvableOnDisk/);
 });
 
-// 2026-09 发版自动化链：push tag 后应无人值守完成「构建 → 补 sidecar → AtomGit 同步」。
+// 2026-09 发版自动化链：push tag 后应无人值守完成「构建 → runtime tgz → AtomGit 同步」。
 // 这里把链路契约固化：事件衔接、平台覆盖、PAT 要求、资产稳定窗口。
 // （背景：v0.7.5 曾因 runtime tgz 缺平台 + 同名资产被静默跳过，镜像用户升到旧包。）
-test("发版自动化链：release → post-release-sidecars → sync-atomgit 事件衔接完整", () => {
+// 2026-09 起平台覆盖改由 release.yml 内 pack-dsh-runtime job 交叉打包全 6 平台
+// （不再需要原生 runner 矩阵 + post-release-sidecars 补缺），sidecars 仅保留
+// sync-atomgit 触发兑底。
+test("发版自动化链：release → pack-dsh-runtime/sidecars → sync-atomgit 事件衔接完整", () => {
 	const release = readFileSync(join(repoRoot, ".github/workflows/release.yml"), "utf8");
 	const sidecars = readFileSync(join(repoRoot, ".github/workflows/post-release-sidecars.yml"), "utf8");
 	const sync = readFileSync(join(repoRoot, ".github/workflows/sync-atomgit.yml"), "utf8");
@@ -426,16 +435,22 @@ test("发版自动化链：release → post-release-sidecars → sync-atomgit �
 	assert.match(sync, /types:\s*\[published\]/);
 	assert.match(sync, /workflow_dispatch/);
 
-	// 平台覆盖：release.yml 构建矩阵产 4 份 runtime tgz（win32-x64/darwin-arm64/linux-x64/arm64，
-	// 两个 mac 构建都在 arm64 runner 上）；sidecars 原生补 win32-arm64 与 darwin-x64。
-	assert.match(sidecars, /os: windows-11-arm/);
-	assert.match(sidecars, /platform: win32\s*\n\s*arch: arm64/);
-	assert.match(sidecars, /os: macos-15-intel/);
-	assert.match(sidecars, /platform: darwin\s*\n\s*arch: x64/);
-	assert.match(sidecars, /node scripts\/pack-dsh-runtime\.mjs/);
-	assert.match(sidecars, /node scripts\/check-dsh-asar\.mjs/);
-	assert.match(sidecars, /gh release upload/);
-	assert.match(sidecars, /--clobber/);
+	// 平台覆盖：release.yml 的 pack-dsh-runtime job 必须交叉打满 6 平台
+	// （win32/darwin/linux × x64/arm64），linux 强制 glibc（非 Linux 宿主上 npm 检测
+	// 不到 libc 会静默过滤 @img/sharp-linux-x64 等平台包）。
+	for (const [os, arch] of [
+		["win32", "x64"], ["win32", "arm64"],
+		["darwin", "x64"], ["darwin", "arm64"],
+		["linux", "x64"], ["linux", "arm64"],
+	]) {
+		assert.match(release, new RegExp(`os: ${os}\\s*\\n\\s*arch: ${arch}`), `缺失平台 ${os}-${arch}`);
+	}
+	assert.match(release, /--target-os \$\{\{ matrix\.os \}\} --target-arch \$\{\{ matrix\.arch \}\}/);
+	// 归档校验必须带同一组 --target-* 参数（原生包在位断言按目标平台检查）。
+	assert.match(release, /check-dsh-asar\.mjs --target-os \$\{\{ matrix\.os \}\} --target-arch \$\{\{ matrix\.arch \}\}/);
+	// sidecars 不再打包/上传 runtime（补发职责已移除，仅保留 sync-atomgit 触发）。
+	assert.doesNotMatch(sidecars, /pack-dsh-runtime\.mjs/);
+	assert.doesNotMatch(sidecars, /gh release upload/);
 
 	// sidecars 上传目标必须来自 release 事件本体且限定 v*（禁止 sidecar tag 抢 latest）。
 	assert.match(sidecars, /github\.event\.release\.tag_name/);
@@ -445,6 +460,6 @@ test("发版自动化链：release → post-release-sidecars → sync-atomgit �
 	assert.match(sync, /ASSET_WAIT_DEADLINE_SECONDS/);
 	assert.match(sync, /ASSET_STABLE_REQUIRED/);
 	assert.match(sync, /releases\/tags\/\$\{TAG\}/);
-	// 预期 runtime tgz 总数 = 4（release.yml）+ 2（sidecars）= 6。
+	// 预期 runtime tgz 总数 = 6（release.yml 交叉打满 6 平台）。
 	assert.match(sync, /-ge 6/);
 });

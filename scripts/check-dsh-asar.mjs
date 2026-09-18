@@ -2,9 +2,10 @@
 /**
  * 校验 DSH runtime 归档（原「校验 asar 里的 dsh 包」，阶段 2 后职责迁移）。
  *
- *   node scripts/check-dsh-asar.mjs [<dsh-runtime-*.tgz>]
+ *   node scripts/check-dsh-asar.mjs [--target-os <os>] [--target-arch <arch>] [<dsh-runtime-*.tgz>]
  *
- * 不传路径时默认取 dist-runtime/dsh-runtime-<platform>-<arch>.tgz（runtime:pack 的产物）。
+ * 不传路径时默认取 dist-runtime/dsh-runtime-<platform>-<arch>.tgz（runtime:pack 的产物）；
+ * --target-* 与 pack 脚本同语义，用于校验交叉打包的目标平台归档（CI 单 runner 逐平台调用）。
  * 深校验用 `npm run runtime:check:boot`：解压到临时目录并真实 boot 一次插件树
  * （见 scripts/check-dsh-boot.mjs）。
  *
@@ -18,22 +19,55 @@
  * 依赖包整体缺席」的情况（@earendil-works/pi-ai 空壳、koffi 的 src/ 被裁）。
  * 嵌套依赖（<pkg>/node_modules/<sub>/）按完整目录独立收集，避免子包 package.json
  * 污染外层包的入口判定。
+ *
+ * 原生包在位断言（2026-09-18 新增）：交叉解析模式下 linux 平台包声明 libc:["glibc"]，
+ * npm 在非 Linux 宿主上检测不到 libc 会把它们静默过滤（只剩 wasm32 兑底），
+ * 归档体积还会变小（看似「优化」实为缺陷）。这里按目标平台断言 @img/sharp-*、
+ * @koromix/koffi-*、node-pty prebuilds 的平台原生目录必须在位。
  */
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as tar from "tar";
+import { normalizeTarget } from "./dshRuntimeLockClosure.mjs";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
+
+// --target-os/--target-arch 与 pack 脚本同源解析（校验哪个平台的归档）。
+const argv = process.argv.slice(2);
+const argValue = (name) => {
+	const index = argv.indexOf(name);
+	return index >= 0 ? argv[index + 1] : undefined;
+};
+const hasTarget = argv.includes("--target-os") || argv.includes("--target-arch");
+let targetPlatform = process.platform;
+let targetArch = process.arch;
+let targetLibc = "";
+if (hasTarget) {
+	const normalized = normalizeTarget({
+		os: argValue("--target-os") ?? process.platform,
+		arch: argValue("--target-arch") ?? process.arch,
+		libc: argValue("--target-libc"),
+	});
+	if (normalized.error) {
+		console.error(`[check-dsh-asar] ${normalized.error}`);
+		process.exit(1);
+	}
+	targetPlatform = normalized.os;
+	targetArch = normalized.arch;
+	targetLibc = normalized.libc ?? "";
+}
+
+const firstNonFlag = argv.find((value, index) => !value.startsWith("--") && (index === 0 || !argv[index - 1].startsWith("--")));
 const defaultArchive = join(
 	scriptDir,
 	"..",
 	"dist-runtime",
-	`dsh-runtime-${process.platform}-${process.arch}.tgz`,
+	`dsh-runtime-${targetPlatform}-${targetArch}.tgz`,
 );
 
-const [rawPath] = process.argv.slice(2);
-const archivePath = rawPath ? resolve(rawPath) : defaultArchive;
+const archivePath = firstNonFlag ? resolve(firstNonFlag) : defaultArchive;
 
 if (!existsSync(archivePath)) {
 	console.error(`用法: node scripts/check-dsh-asar.mjs [<dsh-runtime-*.tgz>]\n找不到归档: ${archivePath}`);
@@ -238,6 +272,40 @@ for (const file of MUST_HAVE_FILES) {
 	if (!topLevel.get(pkgName)?.has(rel)) {
 		failures.push(`missing critical file: ${file}`);
 	}
+}
+
+/**
+ * 原生包在位断言：按目标平台检查三类原生资产的目录在位。
+ * 这是交叉解析模式独有的门禁——libc 缺包（linux）或 --os/--cpu 参数错误时
+ * npm 不报错而是静默跳过 optional 平台包，只有这里能拦住。
+ * sharp/koffi/rg 可能被 npm hoist 到顶层或嵌套在依赖它的包下（lock 布局
+ * 与临时 package.json 解析结果可能不同），所以扫全部包目录而非仅顶层。
+ */
+const expectedNativePackages = [
+	// sharp 的平台二进制（dsh-attachment-local 的图像处理后端）。
+	`@img/sharp-${targetPlatform}-${targetArch}`,
+	// koffi 的平台二进制（沙箱 ACL / win32-process / 持久 pwsh 都走它）。
+	`@koromix/koffi-${targetPlatform}-${targetArch}`,
+	// rg 平台二进制（dsh-tool-fs-search 的搜索引擎）。
+	`@vscode/ripgrep-${targetPlatform}-${targetArch}`,
+];
+for (const nativePkg of expectedNativePackages) {
+	// 归档条目收集的 dir 键由贪婪正则拼接（prefix 含最近的 node_modules/ 段），
+	// 嵌套在 sharp 下的 @img/* 会被拼成 …/sharp/@img/<pkg>（少一段 node_modules）。
+	// 所以这里不拼 dir 形状，直接用「包名后缀 + 路径中含该包」双条件兜住两种布局。
+	const found = [...presentRelByDir.keys()].some((dir) => dir.endsWith(`/${nativePkg}`));
+	if (!found) failures.push(`native package missing for ${targetPlatform}-${targetArch}: ${nativePkg}`);
+}
+// node-pty 的目标平台 prebuild 目录（win32 上 conpty.dll 是硬运行时依赖）。
+// prebuilds/<platform>-<arch>/ 结构由 node-gyp-build 运行时选择；node-pty 可能
+// 顶层与嵌套各一份（版本不同），任一份带有目标平台 prebuild 即可。
+const ptyPrebuildPrefix = `prebuilds/${targetPlatform}-${targetArch}/`;
+const ptyDirs = [...presentRelByDir.keys()].filter((dir) => dir.endsWith("/node-pty"));
+const ptyHasPrebuild = ptyDirs.some((dir) =>
+	[...(presentRelByDir.get(dir) ?? new Set())].some((rel) => rel.startsWith(ptyPrebuildPrefix)),
+);
+if (!ptyHasPrebuild) {
+	failures.push(`node-pty prebuilds/${targetPlatform}-${targetArch}/ missing（原生模块缺平台二进制）`);
 }
 
 console.log(`entries: ${entryCount} | packages: ${present.size}`);
