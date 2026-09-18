@@ -10,6 +10,7 @@ import { DSH_RUNNER_NODE_ENV } from "./dshRunnerNodeSidecar";
 import { resolveDshRunnerNodePath } from "./dshRunnerNode";
 import { DshApiClient, type DshFetchTransport } from "./DshApiClient";
 import { dshManuallyStoppedError } from "./dshManualStop";
+import { applyDshBillBackfillPatch } from "./dshBillBackfillPatch";
 import { DshRemoteClient } from "./dshRemoteClient";
 import { toDshAvailableModels, toDshFetchedModels, unwrapDshDiscoveryModels } from "./dshModels";
 import { parseAgentDefaultModel } from "./dshDefaultModel";
@@ -1017,6 +1018,18 @@ export class DshHost {
 		const require = createRequire(join(runtimeRoot, "package.json"));
 		const appRoot = dirname(dirname(dirname(require.resolve("@deepseek-ai/dsh-base/package.json"))));
 		const hostEntryPath = resolveHostEntryPath(this.getAppPath());
+
+		// dsh-bill 启动回填默认关（CPU 修复）：必须在 fork 前对 host 实际加载的那份
+		// dsh-bill 应用文件补丁——require 锚点与 hostEntry 的 require.resolve 同源
+		//（runtimeRoot），dev / 打包内置 / userData 安装的 runtime 三种形态都命中。
+		// 失败不阻断 boot（fail-open：保持官方行为，只是 CPU 问题仍在）。
+		try {
+			applyDshBillBackfillPatch(require.resolve("dsh-bill"), (message, detail) =>
+				this.log("dsh-host", message, detail),
+			);
+		} catch (error) {
+			this.log("dsh-host", "dsh-bill 回填补丁异常（继续启动）", { error: String(error) });
+		}
 
 		// 会话级代理覆盖（DSH 降级方案）：DSH 是单一共享 host，无法按会话注入，
 		// 只能聚合所有 DSH 会话的开关应用到 host（off 优先于 on，见 sessionProxyPolicy）。
