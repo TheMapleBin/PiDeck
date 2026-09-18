@@ -1,5 +1,6 @@
 import { test as base, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { mkdtempSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -32,7 +33,10 @@ export const test = base.extend<AppFixture & { seedProjects: SeedProject[] | und
 	userDataRoot: async ({}, use) => {
 		const dir = mkdtempSync(join(tmpdir(), "pideck-e2e-"));
 		await use(dir);
-		rmSync(dir, { recursive: true, force: true });
+		// Electron/native-addon shutdown may finish a cache write just after app.close().
+		// Let Node retry the documented Windows transient errors, but still surface a
+		// persistent cleanup failure instead of silently leaving test profiles behind.
+		await rm(dir, { recursive: true, force: true, maxRetries: 12, retryDelay: 250 });
 	},
 	app: async ({ userDataRoot, seedProjects, seedSettings }, use) => {
 		// 预置项目列表（ProjectStore.load 保留种子项目并追加内置 Chat 项目）；
@@ -68,8 +72,11 @@ export const test = base.extend<AppFixture & { seedProjects: SeedProject[] | und
 			PIDECK_E2E_USER_DATA_DIR: profileDir,
 			// 隔离 userData；同时清掉 dev 注入，防止指到 dev server
 			ELECTRON_RENDERER_URL: "",
+			// APPDATA isolates Electron's userData, while USERPROFILE/HOME isolate APIs
+			// such as os.homedir() used by external-resource scans. Without the latter,
+			// an E2E MCP import dialog could inspect the developer's real .claude/.codex.
 			...(process.platform === "win32"
-				? { APPDATA: userDataRoot, LOCALAPPDATA: userDataRoot }
+				? { APPDATA: userDataRoot, LOCALAPPDATA: userDataRoot, USERPROFILE: userDataRoot, HOME: userDataRoot }
 				: process.platform === "darwin"
 					? { HOME: userDataRoot }
 					: { XDG_CONFIG_HOME: userDataRoot, HOME: userDataRoot }),

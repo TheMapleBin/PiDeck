@@ -1,6 +1,8 @@
 import { app, shell } from "electron";
 import { existsSync, type Dirent } from "node:fs";
 import {
+	cp,
+	lstat,
 	mkdir,
 	readdir,
 	readFile,
@@ -10,8 +12,9 @@ import {
 	stat,
 	writeFile,
 } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { homedir } from "node:os";
+import { randomUUID } from "node:crypto";
 import { trashPath } from "../fs/trash";
 import type {
 	AppSettings,
@@ -24,6 +27,40 @@ import type { WslEnvironment } from "../wsl/WslPaths";
 import type { MainProcessTranslationKey } from "../../shared/i18n/mainProcessCopy";
 
 const SKILL_FILE = "SKILL.md";
+const IMPORT_MAX_FILE_BYTES = 10 * 1024 * 1024;
+const IMPORT_MAX_TREE_BYTES = 50 * 1024 * 1024;
+const IMPORT_MAX_DEPTH = 32;
+const UNSAFE_IMPORT_TARGET = "Skill target is unavailable.";
+
+type ImportTreeState = { totalBytes: number };
+
+/**
+ * Node errors can cross an Electron/vm realm boundary, where `instanceof Error`
+ * is no longer reliable. File-system control flow only needs the stable errno code.
+ */
+function hasErrorCode(error: unknown, code: string): boolean {
+	return typeof error === "object" && error !== null && Reflect.get(error, "code") === code;
+}
+
+/**
+ * Check containment for managed global skill paths without importing the file-tree
+ * service.  SkillManager is also loaded in a small VM by legacy unit tests, so
+ * keeping this boundary helper local avoids coupling that loader to a renderer-
+ * unrelated filesystem module.  Global skill roots are host paths (including the
+ * host-side WSL home), therefore resolve + platform-aware comparison is sufficient.
+ */
+function isManagedPathInside(root: string, target: string): boolean {
+	const rootResolved = resolve(root);
+	const targetResolved = resolve(target);
+	const normalize = (value: string) => process.platform === "win32" ? value.toLowerCase() : value;
+	const normalizedRoot = normalize(rootResolved);
+	const normalizedTarget = normalize(targetResolved);
+	if (normalizedTarget === normalizedRoot) return true;
+	const prefix = normalizedRoot.endsWith("\\") || normalizedRoot.endsWith("/")
+		? normalizedRoot
+		: `${normalizedRoot}${process.platform === "win32" ? "\\" : "/"}`;
+	return normalizedTarget.startsWith(prefix);
+}
 
 type SkillCopy = (
 	key: MainProcessTranslationKey,
@@ -36,6 +73,8 @@ type SkillCopy = (
  */
 export class SkillManager {
 	private locations: PiSkillLocation[];
+	/** Canonical user home used to constrain global import destinations. */
+	private managedHome: string;
 	/** PiDeck 设置的读取/写入（禁用列表持久化）；未配置时开关仅写 frontmatter（旧行为）。 */
 	private settingsProvider: (() => AppSettings) | null = null;
 	private settingsPatcher: ((patch: Partial<AppSettings>) => Promise<AppSettings>) | null = null;
@@ -49,7 +88,8 @@ export class SkillManager {
 		home?: string,
 		private readonly translate: SkillCopy = () => "Skill operation failed.",
 	) {
-		this.locations = this.buildLocations(home ?? homedir());
+		this.managedHome = home ?? homedir();
+		this.locations = this.buildLocations(this.managedHome);
 	}
 
 	/** 注入内置技能覆盖层目录提供器（启动装配时由 SkillStoreUpdater 提供）。 */
@@ -68,7 +108,8 @@ export class SkillManager {
 
 	/** 将 skill 目录切换到统一解析出的 WSL HOME；null 恢复 Windows home。 */
 	configureWsl(environment: WslEnvironment | null) {
-		this.locations = this.buildLocations(environment?.windowsHome ?? homedir());
+		this.managedHome = environment?.windowsHome ?? homedir();
+		this.locations = this.buildLocations(this.managedHome);
 	}
 
 	/** 当前全局技能位置副本（WSL 配置后为主机路径），供读内容 IPC 的白名单校验。 */
@@ -126,6 +167,142 @@ export class SkillManager {
 			"utf8",
 		);
 		return this.readSkill(skillPath, location, "directory");
+	}
+
+	/**
+	 * Copy a complete external skill into one of PiDeck's managed global locations.
+	 * The source path is supplied only by the main-process import scan cache; callers cannot
+	 * provide it over IPC. The original SKILL.md and all companion assets remain byte-for-byte
+	 * unchanged, and a temporary sibling directory prevents partial installs.
+	 */
+	async importSkillDirectory(
+		locationId: "pi-global" | "agents-global",
+		sourceDirectory: string,
+		targetName: string,
+	): Promise<void> {
+		const location = this.requireLocation(locationId);
+		if (!targetName || this.normalizeSkillName(targetName) !== targetName || targetName.length > 64) {
+			throw new Error(this.translate("mainSkill.nameRequiredDetailed"));
+		}
+		await this.assertImportSkillTree(sourceDirectory);
+
+		// The global skill roots are user-managed directories, so an existing symlink or
+		// junction must never be followed as a write target.  Resolve the nearest existing
+		// ancestor before mkdir, then resolve again after mkdir to close the common swap gap.
+		const initialRoot = await this.resolveManagedImportLocation(location);
+		await mkdir(initialRoot, { recursive: true });
+		const targetRoot = await this.resolveManagedImportLocation(location);
+
+		const occupied = (await readdir(targetRoot, { withFileTypes: true }).catch(() => []))
+			.some((entry) => entry.name.toLowerCase() === targetName.toLowerCase() || this.normalizeSkillName(entry.name) === targetName);
+		if (occupied) throw new Error(this.translate("mainSkill.alreadyExists", { name: targetName }));
+
+		const targetDirectory = join(targetRoot, targetName);
+		const temporaryDirectory = join(targetRoot, `.${targetName}.${randomUUID()}.tmp`);
+		const assertTargetAbsent = async (): Promise<void> => {
+			const entry = await lstat(targetDirectory).catch((error: unknown) => {
+				if (hasErrorCode(error, "ENOENT")) return null;
+				throw error;
+			});
+			if (entry) throw new Error(this.translate("mainSkill.alreadyExists", { name: targetName }));
+		};
+		try {
+			await assertTargetAbsent();
+			await cp(sourceDirectory, temporaryDirectory, {
+				recursive: true,
+				errorOnExist: true,
+				force: false,
+				verbatimSymlinks: true,
+			});
+			// Re-check the copied tree as well as the source.  A source can change between
+			// validation and cp; rejecting a link/special file in the temporary tree keeps
+			// the managed destination free of unsafe entries.
+			await this.assertImportSkillTree(temporaryDirectory);
+			await assertTargetAbsent();
+			if (await this.resolveManagedImportLocation(location) !== targetRoot) throw new Error(UNSAFE_IMPORT_TARGET);
+			await rename(temporaryDirectory, targetDirectory);
+		} finally {
+			await rm(temporaryDirectory, { recursive: true, force: true }).catch(() => undefined);
+		}
+	}
+
+	/** Resolve a global skill root without following an escaping symlink/junction. */
+	async resolveImportLocationPath(locationId: "pi-global" | "agents-global"): Promise<string> {
+		return this.resolveManagedImportLocation(this.requireLocation(locationId));
+	}
+
+	private async resolveManagedImportLocation(location: PiSkillLocation): Promise<string> {
+		const home = resolve(this.managedHome);
+		const lexicalLocation = resolve(location.path);
+		if (!isManagedPathInside(home, lexicalLocation)) throw new Error(UNSAFE_IMPORT_TARGET);
+
+		let canonicalHome: string;
+		try {
+			canonicalHome = await realpath(home);
+		} catch {
+			throw new Error(UNSAFE_IMPORT_TARGET);
+		}
+
+		const existing = await lstat(lexicalLocation).catch((error: unknown) => {
+			if (hasErrorCode(error, "ENOENT")) return null;
+			throw error;
+		});
+		if (existing) {
+			if (existing.isSymbolicLink() || !existing.isDirectory()) throw new Error(UNSAFE_IMPORT_TARGET);
+			const canonicalLocation = await realpath(lexicalLocation).catch(() => null);
+			if (!canonicalLocation || !isManagedPathInside(canonicalHome, canonicalLocation)) throw new Error(UNSAFE_IMPORT_TARGET);
+			return canonicalLocation;
+		}
+
+		// The target may not exist yet.  Resolve its nearest existing parent and derive
+		// the missing suffix from that canonical parent; this prevents a pre-existing
+		// parent junction from redirecting mkdir outside the user home.
+		let ancestor = dirname(lexicalLocation);
+		while (true) {
+			const ancestorEntry = await lstat(ancestor).catch((error: unknown) => {
+				if (hasErrorCode(error, "ENOENT")) return null;
+				throw error;
+			});
+			if (ancestorEntry) {
+				// A redirected profile may itself contain a junction (for example OneDrive).
+				// It is safe to retain an ancestor link when its canonical destination remains
+				// under the managed home; the final location entry is still rejected if linked.
+				if (!ancestorEntry.isSymbolicLink() && !ancestorEntry.isDirectory()) throw new Error(UNSAFE_IMPORT_TARGET);
+				const canonicalAncestor = await realpath(ancestor).catch(() => null);
+				if (!canonicalAncestor || !isManagedPathInside(canonicalHome, canonicalAncestor)) throw new Error(UNSAFE_IMPORT_TARGET);
+				const candidate = resolve(canonicalAncestor, relative(ancestor, lexicalLocation));
+				if (!isManagedPathInside(canonicalHome, candidate)) throw new Error(UNSAFE_IMPORT_TARGET);
+				return candidate;
+			}
+			const parent = dirname(ancestor);
+			if (parent === ancestor) throw new Error(UNSAFE_IMPORT_TARGET);
+			ancestor = parent;
+		}
+	}
+
+	private async assertImportSkillTree(
+		root: string,
+		depth = 0,
+		state: ImportTreeState = { totalBytes: 0 },
+	): Promise<void> {
+		if (depth > IMPORT_MAX_DEPTH) throw new Error("Skill directory is too deep.");
+		const rootEntry = await lstat(root);
+		if (!rootEntry.isDirectory() || rootEntry.isSymbolicLink()) {
+			throw new Error("Skill source must be a directory without symbolic links.");
+		}
+		for (const entry of await readdir(root, { withFileTypes: true })) {
+			if (entry.isSymbolicLink()) throw new Error("Skill contains a symbolic link and cannot be imported.");
+			const fullPath = join(root, entry.name);
+			if (entry.isDirectory()) {
+				await this.assertImportSkillTree(fullPath, depth + 1, state);
+				continue;
+			}
+			if (!entry.isFile()) throw new Error("Skill contains an unsupported file type.");
+			const size = (await stat(fullPath)).size;
+			if (size > IMPORT_MAX_FILE_BYTES) throw new Error("Skill file is too large.");
+			state.totalBytes += size;
+			if (state.totalBytes > IMPORT_MAX_TREE_BYTES) throw new Error("Skill directory is too large.");
+		}
 	}
 
 	async toggle(skillPath: string, enabled: boolean): Promise<PiSkillSummary> {

@@ -1,4 +1,5 @@
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { readFile, writeFile, mkdir, rename, rm } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import { normalize, join, dirname } from "node:path";
 import { dirname as posixDirname, normalize as posixNormalize } from "node:path/posix";
 import { homedir } from "node:os";
@@ -286,7 +287,7 @@ export class ConfigManager {
 	async saveMcpConfig(file: McpConfigFile): Promise<ConfigValidationResult> {
 		const error = validateMcpConfigFile(file);
 		if (error) return { valid: false, error };
-		await this.writeJsonFile("mcp.json", file);
+		await this.writeJsonFileAtomic("mcp.json", file);
 		return { valid: true };
 	}
 
@@ -550,6 +551,20 @@ export class ConfigManager {
 		const json =
 			typeof content === "string" ? content : JSON.stringify(content, null, 2);
 		await writeFile(filePath, json, "utf8");
+	}
+
+	/** Write a validated configuration with a sibling temporary file and atomic replacement. */
+	private async writeJsonFileAtomic(fileName: string, content: unknown): Promise<void> {
+		await mkdir(this.configDir, { recursive: true });
+		const filePath = join(this.configDir, fileName);
+		const temporaryPath = join(this.configDir, `.${fileName}.${randomUUID()}.tmp`);
+		const json = typeof content === "string" ? content : JSON.stringify(content, null, 2);
+		try {
+			await writeFile(temporaryPath, json, { encoding: "utf8", flag: "wx" });
+			await rename(temporaryPath, filePath);
+		} finally {
+			await rm(temporaryPath, { force: true }).catch(() => undefined);
+		}
 	}
 
 	// ── 远程拉取模型列表 ─────────────────────────────────
