@@ -1441,28 +1441,39 @@ export function useSessionTimelineController(options: {
   useEffect(() => {
     if (!controllerEnabled || restorePhase !== "pending") return;
     const anchor = restoreAnchor;
+    if (anchor) {
+      // 上滚阅读状态必须在首个 child commit 前关闭跟随；窗口尚在读盘时先等待，
+      // 不把「锚点暂未挂载」误判成永久失效。
+      autoScrollRef.current = false;
+      setAutoScroll(false);
+      setShowScrollToBottom(true);
+    }
+    // 关键修正：必须等待会话首批消息数据加载完毕！
+    // 否则在 isSurfaceLoading 期间 DOM 只有骨架或 0 条消息，scrollHeight 极小，
+    // 会误把视口钉在 scrollTop = 0（最开始），并将 restorePhase 提前标记为 complete，
+    // 导致真实数据到达后视口永久停留在顶部第一条消息。
+    if (isSurfaceLoading) return;
+
+    const requestOwnerKey = ownerKey;
     if (!anchor) {
       // 无锚点（切走时在底部或从未保存）：默认滚到底、恢复跟底。
       autoScrollRef.current = true;
       setAutoScroll(true);
       setShowScrollToBottom(false);
       setRestorePhase("complete");
-      const requestOwnerKey = ownerKey;
       const frame = requestAnimationFrame(() => {
         const timeline = timelineRef.current;
         if (!timeline || ownerKeyRef.current !== requestOwnerKey) return;
         markProgrammaticScroll();
-        timeline.scrollTo({ top: timeline.scrollHeight, behavior: "instant" });
+        const api = scrollerScrollApiRef.current;
+        if (api?.scrollToBottom) {
+          void api.scrollToBottom({ animation: "instant" });
+        } else {
+          timeline.scrollTo({ top: timeline.scrollHeight, behavior: "instant" });
+        }
       });
       return () => cancelAnimationFrame(frame);
     }
-
-    // 上滚阅读状态必须在首个 child commit 前关闭跟随；窗口尚在读盘时先等待，
-    // 不把「锚点暂未挂载」误判成永久失效。
-    autoScrollRef.current = false;
-    setAutoScroll(false);
-    setShowScrollToBottom(true);
-    if (isSurfaceLoading) return;
 
     const requestOwnerKey = ownerKey;
     const frame = requestAnimationFrame(() => {
