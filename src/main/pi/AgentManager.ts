@@ -4372,11 +4372,16 @@ export class AgentManager {
 			}
 		});
 		piProcess.on("stderr", (text) =>
-			this.emit(ipcChannels.agentsLog, { agentId, text }),
+			this.emit(ipcChannels.agentsLog, {
+				agentId,
+				...this.streamRuntimeTriple(agentId),
+				text,
+			}),
 		);
 		piProcess.on("protocol-error", (line) => {
 			this.emit(ipcChannels.agentsLog, {
 				agentId,
+				...this.streamRuntimeTriple(agentId),
 				text: `Protocol error: ${line}`,
 			});
 			void this.appLogger?.error(
@@ -4945,7 +4950,13 @@ export class AgentManager {
 			this.emitToolRuntimeTransition(agentId, false);
 			this.emitStreamingStatePatch(agentId);
 			// 新一轮丢掉上一轮 held live 槽，避免旧正文串到本轮。
-			this.emit(ipcChannels.agentsTextStream, { agentId, text: "", done: true, reset: true });
+			this.emit(ipcChannels.agentsTextStream, {
+				agentId,
+				...this.streamRuntimeTriple(agentId),
+				text: "",
+				done: true,
+				reset: true,
+			});
 		}
 
 		if (typed.type === "message_start" && typed.message?.role === "assistant") {
@@ -7151,11 +7162,14 @@ export class AgentManager {
 		const sendFull = !text.startsWith(lastSent) || pushCount >= 50;
 		const payload: {
 			agentId: string;
+			sessionId?: string;
+			runtimeGeneration?: number;
 			text?: string;
 			delta?: string;
 			done: boolean;
 		} = {
 			agentId,
+			...this.streamRuntimeTriple(agentId),
 			...(!sendFull ? { delta: text.slice(lastSent.length) } : { text }),
 			done,
 		};
@@ -7176,6 +7190,19 @@ export class AgentManager {
 		// 设计文档原拟用 ipcMain.on("agents:state") 桥接是错的：webContents.send 是
 		// 主进程→渲染层单向通道，ipcMain 收不到主进程自己发出的消息，故改用本钩子。
 		this.notifyStateListeners(tabs);
+	}
+
+	/** AGENTS 硬约束：所有 runtime 事件必须携带 sessionId + agentId + runtimeGeneration，
+	 *  迟到 runtime 的结果由消费端按三元组丢弃。取自 AgentTab 当前绑定。 */
+	private streamRuntimeTriple(agentId: string): {
+		sessionId?: string;
+		runtimeGeneration?: number;
+	} {
+		const runtime = this.agents.get(agentId);
+		return {
+			sessionId: runtime?.tab.deckSessionId,
+			runtimeGeneration: runtime?.tab.runtimeGeneration,
+		};
 	}
 
 	private emit(channel: string, payload: unknown) {
