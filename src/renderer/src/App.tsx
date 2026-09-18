@@ -31,7 +31,7 @@ import {
   RefreshCw,
   Fingerprint,
 } from "lucide-react";
-import { showNotice } from "./utils/notice";
+import { showNotice, type NoticeKind } from "./utils/notice";
 import { copyTextWithCopiedNotice } from "./utils/clipboardNotice";
 import { buildSettingsCommands, type PaletteCommand } from "./utils/commandPaletteCommands";
 import { CommandPalette } from "./components/overlays/CommandPalette";
@@ -384,7 +384,7 @@ export function App() {
   /** 编辑器展示模式：弹框或侧栏 */
   // showToast 必须是稳定回调：文件树 / overlay 等 effect 若把它当依赖，
   // 每次 render 新建函数会把 setFiles([]) 打成无限更新（设置/关窗点不动）。
-  const showToast = useCallback((message: string, duration?: number, kind?: "info" | "warning" | "error") => {
+  const showToast = useCallback((message: string, duration?: number, kind?: NoticeKind) => {
     showNotice(message, duration, kind);
   }, []);
   // 历史命令：按 agent 隔离，agent 关闭即清除（不持久化）

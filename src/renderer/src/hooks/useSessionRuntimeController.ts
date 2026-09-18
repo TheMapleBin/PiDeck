@@ -22,7 +22,7 @@ import {
 import { isUserFacingSessionStart } from "./useSessionTimelineController";
 import type { QueuedPrompt } from "./useQueuedPrompt";
 import { t } from "../i18n";
-import { dismissNotice, type NoticeActions, type NoticeId } from "../utils/notice";
+import { dismissNotice, type NoticeActions, type NoticeId, type NoticeKind } from "../utils/notice";
 import {
   describeBackgroundAsk,
   forgetBackgroundAsk,
@@ -80,7 +80,7 @@ export interface UseSessionRuntimeControllerOptions {
   showNotice: (
     message: string,
     duration?: number,
-    kind?: "info" | "warning" | "error",
+    kind?: NoticeKind,
     title?: string,
     actions?: NoticeActions,
   ) => NoticeId | undefined;
@@ -255,7 +255,9 @@ export function useSessionRuntimeController(
       const message = display.question
         ? t("ask.backgroundPendingDetail", { title: display.sessionName, question: display.question })
         : t("ask.backgroundPending", { title: display.sessionName });
-      const noticeId = showNotice(message, Number.POSITIVE_INFINITY, "warning", undefined, {
+      // question 档（问号气泡图标 + ask 身份色）：Ask 是「等你回答」而不是异常，
+      // 用 warning 黄三角会让用户误以为会话出错。
+      const noticeId = showNotice(message, Number.POSITIVE_INFINITY, "question", undefined, {
         action: onFocusSession
           ? { label: t("ask.jumpToSession"), onClick: () => onFocusSession(sessionId) }
           : undefined,

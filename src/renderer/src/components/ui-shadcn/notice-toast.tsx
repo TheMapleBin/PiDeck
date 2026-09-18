@@ -1,4 +1,14 @@
-import { ArrowRight, Bell, Check, CircleAlert, Copy, Info, TriangleAlert, X } from "lucide-react";
+import {
+	ArrowRight,
+	Bell,
+	Check,
+	CircleAlert,
+	Copy,
+	Info,
+	MessageCircleQuestion,
+	TriangleAlert,
+	X,
+} from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { t } from "../../i18n";
@@ -15,12 +25,21 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./dialog";
  * 视觉与弹窗/抽屉同一套 token，类型语义只体现在图标色（沿用 surfaces.css 约定）。
  */
 
-/** 状态图标与颜色：中性卡片 + 彩色图标（与旧 surfaces.css 的图标色约定一致）。 */
+/**
+ * 状态图标与颜色：中性卡片 + 彩色图标（与旧 surfaces.css 的图标色约定一致）。
+ *
+ * `question` 是 Ask（等待回答）专用档：语义是「等你操作」而非「出错」，因此不能用
+ * warning 的黄三角（用户会误读成失败/异常），改用问号气泡图标 + 身份色（--color-tool，
+ * 与会话内 ask 工具卡同色）；文案也自带「等待你的回答」。
+ */
 const KIND_ICON = {
 	neutral: { Icon: Bell, className: "text-text-tertiary" },
 	info: { Icon: Info, className: "text-info" },
 	warning: { Icon: TriangleAlert, className: "text-warning" },
 	error: { Icon: CircleAlert, className: "text-danger" },
+	// 与会话内 ask 工具卡同色（--color-tool，默认=info 蓝，可由皮肤覆盖）；
+	// 注意 Tailwind 的 --color-accent 是「面」色，此处不能写 text-accent
+	question: { Icon: MessageCircleQuestion, className: "text-[var(--color-tool)]" },
 } as const;
 
 export type NoticeToastKind = keyof typeof KIND_ICON;

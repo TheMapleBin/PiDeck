@@ -13,10 +13,17 @@ import { toast } from "sonner";
 import { NoticeToastCard, writeClipboardText } from "../components/ui-shadcn/notice-toast";
 import { t } from "../i18n";
 
+/**
+ * 通知语义档位。
+ * `question` 专供 Ask 等待回答：「需要你操作」而非「出错」，不用 warning 黄三角
+ * 以免被误读成失败。
+ */
+export type NoticeKind = "info" | "error" | "warning" | "question";
+
 type NoticeData = {
 	message: string;
 	duration: number;
-	kind?: "info" | "error" | "warning";
+	kind?: NoticeKind;
 };
 
 /** toast 上的可点击按钮（对应 sonner 的 action/cancel）。 */
@@ -40,12 +47,14 @@ export type NoticeId = string | number;
 // ── DOM 兜底 toast 的图标源（与 NoticeToastCard 的 KIND_ICON 同款 lucide path）──
 // 正常路径走 React 组件（lucide-react）；这里只能用纯 DOM 重建卡片，直接内嵌同款
 // path 保证两套渲染（sonner 自定义卡片 / Toaster 未挂载时的 DOM 兜底）视觉完全一致。
-type FallbackIconKey = "neutral" | "info" | "warning" | "error" | "copy" | "check" | "close";
+type FallbackIconKey = "neutral" | "info" | "warning" | "error" | "question" | "copy" | "check" | "close";
 const KIND_ICON_PATHS: Record<FallbackIconKey, string> = {
 	neutral: "<path d='M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9'/><path d='M10.3 21a1.94 1.94 0 0 0 3.4 0'/>",
 	info: "<circle cx='12' cy='12' r='10'/><path d='M12 16v-4'/><path d='M12 8h.01'/>",
 	warning: "<path d='m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 20h16a2 2 0 0 0 1.73-2Z'/><path d='M12 9v4'/><path d='M12 17h.01'/>",
 	error: "<circle cx='12' cy='12' r='10'/><line x1='12' y1='8' x2='12' y2='12'/><line x1='12' y1='16' x2='12.01' y2='16'/>",
+	// 与 NoticeToastCard 的 MessageCircleQuestion 同款 path（lucide message-circle-question-mark）
+	question: "<path d='M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719'/><path d='M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3'/><path d='M12 17h.01'/>",
 	copy: "<rect width='14' height='14' x='8' y='8' rx='2' ry='2'/><path d='M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2'/>",
 	check: "<path d='M20 6 9 17l-5-5'/>",
 	close: "<path d='M18 6 6 18'/><path d='m6 6 12 12'/>",
@@ -69,11 +78,13 @@ function svgIcon(key: FallbackIconKey, size = 14): SVGSVGElement {
 }
 
 /** 图标块的 kind 对应颜色（与 NoticeToastCard 的 KIND_ICON className 语义一致）。 */
-const KIND_ICON_COLORS: Record<"neutral" | "info" | "warning" | "error", string> = {
+const KIND_ICON_COLORS: Record<"neutral" | "info" | "warning" | "error" | "question", string> = {
 	neutral: "var(--color-text-tertiary)",
 	info: "var(--color-info)",
 	warning: "var(--color-warning)",
 	error: "var(--color-danger)",
+	// 提问档跟会话内 ask 工具卡同色：不是出错，也不占用 warning 语义
+	question: "var(--color-tool)",
 };
 
 // sonner 2.x 在没有可见 toast 时不会渲染任何 DOM（源码里 `if (!filteredToasts.length) return null`），
@@ -127,7 +138,7 @@ function dismissFallbackNotice(item: HTMLDivElement, host: HTMLDivElement) {
 }
 
 /** Toaster 未挂载时的 DOM 兜底 toast，避免全局异常完全静默。 */
-function showFallbackNotice(message: string, duration: number, kind: NoticeData["kind"] = "info", title?: string, actions?: NoticeActions, id?: NoticeId): NoticeId | undefined {
+function showFallbackNotice(message: string, duration: number, kind: NoticeKind = "info", title?: string, actions?: NoticeActions, id?: NoticeId): NoticeId | undefined {
 	if (typeof document === "undefined") return;
 	// 同稳定 id 再弹：先撤掉上一条，避免自动重试连发堆一排。
 	if (id !== undefined && fallbackHost) {
@@ -298,20 +309,22 @@ const iconButtonCss = [
 ].join(";");
 
 /**
- * 弹出全局 toast。duration 省略时 info=1500ms、error/warning=3000ms。
+ * 弹出全局 toast。duration 省略时 info=1500ms、需要用户留意/处理的 error/warning/question=3000ms。
  * 粘性提示必须传 Number.POSITIVE_INFINITY：sonner 把 duration: 0 当成立刻关闭，
  * 看起来就像“闪一下就没了”。空 message 会直接丢弃，调用方需保证有正文。
  */
 export function showNotice(
 	message: string,
 	duration?: number,
-	kind?: NoticeData["kind"],
+	kind?: NoticeKind,
 	title?: string,
 	actions?: NoticeActions,
 	/** 稳定 id：同 id 再次弹出时顶掉上一条，避免自动重试等连发场景堆一排 toast。 */
 	id?: NoticeId,
 ): NoticeId | undefined {
-	const resolvedDuration = duration ?? (kind === "error" || kind === "warning" ? 3000 : 1500);
+	// question 需要用户点开会话去回答，比纯提示停留更久（Ask 场景通常自带 Infinity 保持粘性）。
+	const resolvedDuration =
+		duration ?? (kind === "error" || kind === "warning" || kind === "question" ? 3000 : 1500);
 	const text = String(message ?? "").trim();
 	if (!text) return;
 	if (!toasterMounted()) {
