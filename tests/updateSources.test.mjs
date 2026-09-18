@@ -42,7 +42,7 @@ const mainModule = loadTsModule("src/main/update/updateSources.ts", {
 });
 
 const { normalizeUpdateSource, updateSourceFeedUrl, updateSourceLatestReleaseUrl } = mainModule;
-const { gitHubLatestDownloadBase, atomGitFeedUrl, normalizeCustomMirrorHost } = shared;
+const { gitHubLatestDownloadBase, atomGitFeedUrl, atomGitLatestReleaseApiUrl, normalizeCustomMirrorHost } = shared;
 
 test("normalizeUpdateSource: 已知 id 原样保留", () => {
 	assert.equal(normalizeUpdateSource("atomgit"), "atomgit");
@@ -76,11 +76,12 @@ test("updateSourceFeedUrl: atomgit 源生成 AtomGit generic feed baseUrl", () =
 	);
 });
 
-test("updateSourceLatestReleaseUrl: macOS manual 检查的 AtomGit release 页面 URL", () => {
+test("updateSourceLatestReleaseUrl: macOS manual 检查走 AtomGit OpenAPI latest", () => {
 	assert.equal(
 		updateSourceLatestReleaseUrl("atomgit"),
-		"https://atomgit.com/ayuayue/PiDeck/releases/latest",
+		"https://api.atomgit.com/api/v5/repos/ayuayue/PiDeck/releases/latest",
 	);
+	assert.equal(updateSourceLatestReleaseUrl("atomgit"), atomGitLatestReleaseApiUrl());
 	assert.equal(updateSourceLatestReleaseUrl("github"), null);
 });
 

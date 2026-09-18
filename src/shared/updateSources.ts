@@ -43,6 +43,16 @@ export function atomGitFeedUrl(): string {
   return `${atomGitReleasesBase()}/releases/download/latest`;
 }
 
+/**
+ * AtomGit latest release 的 OpenAPI。
+ *
+ * 网页 `atomgit.com/.../releases/latest` 是 SPA 壳，不会像 GitHub 那样 302 到
+ * `/releases/tag/vX.Y.Z`，程序化读版本必须走 JSON 的 `tag_name`。
+ */
+export function atomGitLatestReleaseApiUrl(): string {
+  return `${ATOMGIT_API_HOST}/api/v5/repos/${UPDATE_REPO_OWNER}/${UPDATE_REPO}/releases/latest`;
+}
+
 /** 镜像/非官方更新源清单：保留 AtomGit 作为国内加速源（第一首选）；github 走原生链路。 */
 export const UPDATE_SOURCE_MIRRORS: ReadonlyArray<{ id: UpdateSourceId; host: string }> = [
   { id: "atomgit", host: ATOMGIT_HOST },

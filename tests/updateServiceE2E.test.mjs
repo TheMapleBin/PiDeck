@@ -349,6 +349,7 @@ test("direct updater rejection becomes a visible error state", async (t) => {
 	await service.checkNow();
 	const snapshot = service.getSnapshot();
 	assert.equal(snapshot.app.download.phase, "error");
+	assert.equal(snapshot.app.download.errorKind, "check");
 	assert.match(snapshot.app.download.error, /network unavailable/);
 	assert.equal(typeof snapshot.lastCheckAt, "number");
 });
@@ -567,5 +568,32 @@ test("manual delivery uses latestReleaseUrl from the configured atomgit source p
 	await settings.update({ updateSource: "atomgit" });
 	await service.checkNow();
 	// macOS manual 检查：AtomGit 源 URL 传进检查器（GitHub 源时为 undefined）
-	assert.equal(receivedUrl, "https://atomgit.com/ayuayue/PiDeck/releases/latest");
+	assert.equal(receivedUrl, "https://api.atomgit.com/api/v5/repos/ayuayue/PiDeck/releases/latest");
 });
+
+test("manual check rejection is a check error, not a download error", async (t) => {
+	const { service } = createManualService(async () => {
+		throw new Error("Latest release response did not resolve to a release tag.");
+	});
+	stopAfter(t, service);
+	await service.checkNow();
+	const snapshot = service.getSnapshot();
+	assert.equal(snapshot.app.download.phase, "error");
+	assert.equal(snapshot.app.download.errorKind, "check");
+});
+
+test("download rejection is a download error", async (t) => {
+	const { service, updater } = createAutomaticService();
+	stopAfter(t, service);
+	updater.setAutoDownload(false);
+	updater.emitAvailable("0.7.4");
+	updater.downloadImpl = async () => {
+		throw new Error("disk full");
+	};
+	await service.downloadNow();
+	const snapshot = service.getSnapshot();
+	assert.equal(snapshot.app.download.phase, "error");
+	assert.equal(snapshot.app.download.errorKind, "download");
+	assert.match(snapshot.app.download.error, /disk full/);
+});
+

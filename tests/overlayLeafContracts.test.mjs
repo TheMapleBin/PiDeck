@@ -263,7 +263,8 @@ test("settings update card and import root keep error paths visible", () => {
   const updateCard = read("components/app/settings/AppUpdateCard.tsx");
   const imports = read("components/overlays/ImportOverlayHost.tsx");
   assert.match(updateCard, /download && download\.phase === "error"/);
-  assert.match(updateCard, /t\("settings\.updateErrorDetail"/);
+  assert.match(updateCard, /update\.checkFailedDetail/);
+  assert.match(updateCard, /update\.downloadFailedDetail/);
   assert.match(updateCard, /onClick=\{props\.onCheckUpdate\}/);
   // Release 页面必须交给系统浏览器，不能让 webview 截获安装引导。
   assert.match(updateCard, /desktopApi\.app\.openExternal\(releaseUrl, true\)/);

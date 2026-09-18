@@ -3919,6 +3919,8 @@ export const zhCN = {
   "update.saveBeforeInstallTitle": "请先保存文件更改",
   "update.saveBeforeInstallDetail": "PiDeck 未能保存所有打开文件的更改。请处理编辑器中的错误后重试。",
   "update.restartNow": "重启并安装",
+  "update.checkFailedTitle": "检查更新失败",
+  "update.checkFailedDetail": "检查失败：{error}",
   "update.downloadFailedTitle": "更新下载失败",
   "update.downloadFailedDetail": "下载失败：{error}",
   "update.availableToastTitle": "发现新版本",

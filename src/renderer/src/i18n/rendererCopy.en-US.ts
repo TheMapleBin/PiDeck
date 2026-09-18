@@ -3955,6 +3955,8 @@ export const enUS: Record<TranslationKey, string> = {
   "update.saveBeforeInstallTitle": "Save File Changes Before Installing",
   "update.saveBeforeInstallDetail": "PiDeck could not save every open file change. Resolve the editor error, then try again.",
   "update.restartNow": "Restart & Install",
+  "update.checkFailedTitle": "Update Check Failed",
+  "update.checkFailedDetail": "Check failed: {error}",
   "update.downloadFailedTitle": "Update Download Failed",
   "update.downloadFailedDetail": "Download failed: {error}",
   "update.availableToastTitle": "New Version Available",

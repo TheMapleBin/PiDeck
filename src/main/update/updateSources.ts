@@ -8,10 +8,9 @@
 import type { UpdateSourceId } from "../../shared/types/settings";
 import {
   ATOMGIT_HOST,
-  atomGitReleasesBase,
+  atomGitLatestReleaseApiUrl,
   UPDATE_SOURCE_MIRRORS,
   buildCustomSourceFeedUrl,
-  gitHubReleasesBase,
   normalizeCustomMirrorHost,
 } from "../../shared/updateSources";
 
@@ -61,11 +60,11 @@ export function updateSourceFeedUrl(source: UpdateSourceId, _customHost?: string
 }
 
 /**
- * macOS manual 检查的 latest-release 页 URL：
- * atomgit 源返回 AtomGit release 页面；
- * github 源返回 null → 主进程走官方 GitHub URL。
+ * macOS manual 检查的 latest-release 探测 URL：
+ * atomgit 源返回 OpenAPI latest（网页是 SPA，不会 302 到 tag）；
+ * github 源返回 null → 主进程走官方 GitHub `/releases/latest` 重定向。
  */
 export function updateSourceLatestReleaseUrl(source: UpdateSourceId, _customHost?: string | null): string | null {
   if (source === "github") return null;
-  return `${atomGitReleasesBase()}/releases/latest`;
+  return atomGitLatestReleaseApiUrl();
 }

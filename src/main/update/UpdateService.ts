@@ -116,7 +116,7 @@ export class UpdateService {
 		this.applyAutoDownloadPreference();
 		// 已下载的更新保持 ready，不能因手动检测而让安装入口消失。
 		if (this.download.phase !== "ready") {
-			this.download = { ...this.download, phase: "checking", error: undefined };
+			this.download = { ...this.download, phase: "checking", error: undefined, errorKind: undefined };
 			this.pushSnapshot();
 		}
 		try {
@@ -176,6 +176,7 @@ export class UpdateService {
 			version,
 			percent: this.download.percent ?? 0,
 			error: undefined,
+			errorKind: undefined,
 		};
 		this.pushSnapshot();
 		try {
@@ -309,7 +310,7 @@ export class UpdateService {
 			onChecking: () => {
 				// 已完整下载的包必须优先保留，后续定时检查不能吞掉「重启并安装」入口。
 				if (this.download.phase === "ready" || this.isInstallInProgress()) return;
-				this.download = { ...this.download, phase: "checking", error: undefined };
+				this.download = { ...this.download, phase: "checking", error: undefined, errorKind: undefined };
 				this.pushSnapshot();
 			},
 			onUpdateAvailable: (version, willDownload) => {
@@ -462,7 +463,9 @@ export class UpdateService {
 
 	/** 将 updater 的 reject/事件错误统一折叠为渲染层可展示的快照状态。 */
 	private setDownloadError(error: string): void {
-		this.download = { ...this.download, phase: "error", error };
+		// 正在下包才叫下载失败；检查阶段（含 macOS 只查不装）是检查失败。
+		const errorKind = this.download.phase === "downloading" ? "download" : "check";
+		this.download = { ...this.download, phase: "error", error, errorKind };
 		this.pushSnapshot();
 	}
 
