@@ -437,7 +437,7 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
   const followingForTurnWindow = controller.autoScroll;
   const turnWindowTurns = followingForTurnWindow
     ? TIMELINE_MOUNTED_TURN_LIMIT
-    : Math.max(TIMELINE_MOUNTED_TURN_LIMIT, controller.scrolledWindowTurns);
+    : controller.scrolledWindowTurns;
   const displayRuns = useMemo(
     () => selectTimelineTurnWindow(reconciledRuns, turnWindowTurns),
     [reconciledRuns, turnWindowTurns],
@@ -538,10 +538,6 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
       if (turnSettleScrollTimerRef.current !== undefined) {
         window.clearTimeout(turnSettleScrollTimerRef.current);
         turnSettleScrollTimerRef.current = undefined;
-      }
-      // 用户正在输入区交互时，不安排自动定位
-      if (document.activeElement?.closest(".composer, [contenteditable], input, textarea")) {
-        return;
       }
       turnSettleScrollTimerRef.current = window.setTimeout(() => {
         turnSettleScrollTimerRef.current = undefined;
