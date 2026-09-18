@@ -1379,6 +1379,8 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 					provider.apiKey,
 					provider.api as string | undefined,
 					getProviderHeaders(provider.headers),
+					// 与列表拉取 / 测试连接同用 per-provider 代理选择，否则需要代理的网关在这里会直连失败。
+					testProxyModeByProvider[providerName] ?? "follow",
 				);
 				if (result.success && result.models) {
 					listing = result.models.find((item) => item.id === model.id);

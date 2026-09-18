@@ -137,6 +137,10 @@ export function AddProviderDialog(props: {
 				apiKey.trim(),
 				api || undefined,
 				userAgent.trim() ? { "User-Agent": userAgent.trim() } : undefined,
+				// 「获取模型」必须带上代理选择：此前这里漏传 proxyMode，导致下拉框选了 pi/desktop
+				// 代理也仍然走 follow（跟随全局开关）→ 全局关闭时直连→需要代理的网关直接 TLS 握手失败。
+				// 同一个对话框里「测试连接」已正确接线，两个按钮共用同一个 testProxyMode。
+				testProxyMode,
 			);
 			if (result.success && result.models) {
 				setFetchedModels(result.models);
