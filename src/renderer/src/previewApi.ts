@@ -182,8 +182,9 @@ let previewSettings: AppSettings = {
 	idleAgentKeepCount: 5,
 	idleAgentTimeoutMin: 60,
 	favoriteModels: [],
-	// 提供商显示开关：与 SettingsStore 默认一致，预览壳默认全显示
+	// 提供商与模型显示开关：与 SettingsStore 默认一致，预览壳默认全显示
 	hiddenProviders: [],
+	hiddenModels: [],
 
 	fontSize: "default",
 	uiFontSize: null,

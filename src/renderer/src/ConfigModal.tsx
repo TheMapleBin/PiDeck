@@ -697,6 +697,8 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 	const providerPageSavePendingRef = useRef(false);
 	/** 用户隐藏的供应商 key 列表（模型页眼睛开关持久化到 AppSettings.hiddenProviders）。 */
 	const [hiddenProviders, setHiddenProviders] = useState<string[]>([]);
+	/** 用户隐藏的模型列表（格式："provider/modelId"，持久化到 AppSettings.hiddenModels）。 */
+	const [hiddenModels, setHiddenModels] = useState<string[]>([]);
 	/** 切换供应商隐藏状态：本地立即生效 + 持久化到 AppSettings（不影响 models.json 配置本身）。 */
 	const handleToggleHiddenProvider = useCallback((name: string) => {
 		setHiddenProviders((prev) => {
@@ -705,13 +707,25 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 			return next;
 		});
 	}, []);
-	// 打开配置页时读取 AppSettings.hiddenProviders（模型页眼睛开关的持久化来源）
+	/** 切换模型隐藏状态：本地立即生效 + 持久化到 AppSettings。 */
+	const handleToggleHiddenModel = useCallback((provider: string, modelId: string) => {
+		const key = `${provider}/${modelId}`;
+		setHiddenModels((prev) => {
+			const next = prev.includes(key) ? prev.filter((item) => item !== key) : [...prev, key];
+			void api.settings.update({ hiddenModels: next }).catch(() => undefined);
+			return next;
+		});
+	}, []);
+	// 打开配置页时读取 AppSettings.hiddenProviders 与 AppSettings.hiddenModels
 	useEffect(() => {
 		let cancelled = false;
 		void api.settings
 			.get()
 			.then((settings) => {
-				if (!cancelled) setHiddenProviders(settings.hiddenProviders ?? []);
+				if (!cancelled) {
+					setHiddenProviders(settings.hiddenProviders ?? []);
+					setHiddenModels(settings.hiddenModels ?? []);
+				}
 			})
 			.catch(() => undefined);
 		return () => {
@@ -2672,6 +2686,8 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 							providerPageSaveRef={providerPageSaveRef}
 							hiddenProviders={hiddenProviders}
 							onToggleHiddenProvider={handleToggleHiddenProvider}
+							hiddenModels={hiddenModels}
+							onToggleHiddenModel={handleToggleHiddenModel}
 							fetchingProvider={fetchingProvider}
 							fetchedModels={fetchedModels}
 							fetchModelsErrorByProvider={fetchModelsErrorByProvider}

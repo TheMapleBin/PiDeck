@@ -87,6 +87,8 @@ export function ComposerPickerHost(props: ComposerPickerHostProps) {
   const [recentProviders, setRecentProviders] = useState<string[]>([]);
   /** 用户隐藏的供应商（Pi 模型页眼睛开关）：Pi 后端模型选择器按 provider 过滤。 */
   const [hiddenProviders, setHiddenProviders] = useState<string[]>([]);
+  /** 用户隐藏的模型（Pi 模型页或选择器内隐藏）：按 provider/modelId 过滤。 */
+  const [hiddenModels, setHiddenModels] = useState<string[]>([]);
   /** 模型在本地 models.json 存在但运行中 Agent 未加载：待确认重启的目标。 */
   const [restartTarget, setRestartTarget] = useState<{
     handle: SessionRuntimeTarget;
@@ -111,6 +113,7 @@ export function ComposerPickerHost(props: ComposerPickerHostProps) {
       setFavoriteModels(settings.favoriteModels ?? []);
       setRecentProviders(settings.recentProviders ?? []);
       setHiddenProviders(settings.hiddenProviders ?? []);
+      setHiddenModels(settings.hiddenModels ?? []);
     }).catch(() => undefined);
   }, []);
 
@@ -533,6 +536,20 @@ export function ComposerPickerHost(props: ComposerPickerHostProps) {
     }
   }
 
+  async function toggleHideModel(provider: string, modelId: string) {
+    const key = `${provider}/${modelId}`;
+    const next = hiddenModels.includes(key)
+      ? hiddenModels.filter((item) => item !== key)
+      : [...hiddenModels, key];
+    setHiddenModels(next);
+    try {
+      await desktopApi.settings.update({ hiddenModels: next });
+    } catch (error) {
+      setHiddenModels(hiddenModels);
+      showNotice(error instanceof Error ? error.message : String(error), 4000);
+    }
+  }
+
   if (props.picker === "template") {
     return (
       <PromptTemplatePicker
@@ -573,6 +590,8 @@ export function ComposerPickerHost(props: ComposerPickerHostProps) {
         onToggleFavorite={(provider, modelId) => void toggleFavorite(provider, modelId)}
         recentProviders={recentProviders}
         hiddenProviders={hiddenProviders}
+        hiddenModels={hiddenModels}
+        onToggleHideModel={(provider, modelId) => void toggleHideModel(provider, modelId)}
         // 用量查询链路随会话后端：DSH 目录的 provider 是 route 名，配置/凭据走 dsh 链路
         backend={isDshSession ? "dsh" : "pi"}
       />

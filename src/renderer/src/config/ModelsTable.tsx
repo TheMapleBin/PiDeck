@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Brain, Coins, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Brain, Coins, EyeOff, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { t } from "../i18n";
 import type { ModelItem } from "./configTypes";
 import { ConfigSelect, ConfigComboboxInput, openDocsInSystemBrowser } from "./ConfigShared";
@@ -73,6 +73,10 @@ export type ModelsTableProps = {
 	focusModelKey?: string | null;
 	/** 聚焦完成后清理（可选；对应 ModelsTab 的 pendingModelFocusKey 清空）。 */
 	onFocusHandled?: () => void;
+	/** 上移/下移模型（改变该 provider 下模型的实际顺序） */
+	onMoveModel?: (index: number, direction: "up" | "down") => void;
+	/** 隐藏模型回调（加入 hiddenModels 列表） */
+	onHideModel?: (index: number) => void;
 };
 
 /**
@@ -342,9 +346,44 @@ export function ModelsTable(props: ModelsTableProps) {
 											/>
 										</TableCell>
 									)}
-									{/* 操作列：重置为自适应（显式刷 endpoint）+ 计费（Dialog）+ 删除 */}
+									{/* 操作列：排序（上移/下移）+ 隐藏 + 重置为自适应 + 计费（Dialog）+ 删除 */}
 									<TableCell className="p-2">
 										<div className="flex items-center justify-end gap-0.5">
+											{props.onMoveModel && (
+												<>
+													<Button
+														variant="ghost"
+														size="icon-sm"
+														className="size-7"
+														onClick={() => props.onMoveModel!(i, "up")}
+														disabled={i === 0}
+														title={t("config.moveModelUp")}
+													>
+														<ArrowUp className="size-3.5" aria-hidden="true" />
+													</Button>
+													<Button
+														variant="ghost"
+														size="icon-sm"
+														className="size-7"
+														onClick={() => props.onMoveModel!(i, "down")}
+														disabled={i === models.length - 1}
+														title={t("config.moveModelDown")}
+													>
+														<ArrowDown className="size-3.5" aria-hidden="true" />
+													</Button>
+												</>
+											)}
+											{props.onHideModel && (
+												<Button
+													variant="ghost"
+													size="icon-sm"
+													className="size-7"
+													onClick={() => props.onHideModel!(i)}
+													title={t("config.hideModel")}
+												>
+													<EyeOff className="size-3.5" aria-hidden="true" />
+												</Button>
+											)}
 											{props.onResetModel && (
 												<Button variant="ghost" size="icon-sm" className="size-7" onClick={() => props.onResetModel!(i)} disabled={props.resettingModelKey === rowKey} title={t("config.modelResetAdaptive")}>
 													<RotateCcw className="size-3.5" aria-hidden="true" />
