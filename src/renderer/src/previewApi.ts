@@ -160,7 +160,7 @@ let previewSettings: AppSettings = {
 	wslUser: "root",
 	telemetryEnabled: true,
 	webServiceEnabled: false,
-	webServiceHost: "0.0.0.0",
+	webServiceHost: "127.0.0.1",
 	webServicePort: 8765,
 	rpcTimeout: 600_000,
 	linkOpenMode: "external",
@@ -1307,6 +1307,13 @@ export function createPreviewApi(): PiDesktopApi {
 				return { ...previewSettings };
 			},
 			restartWebService: async () => undefined,
+			webServiceStatus: async () => ({
+				running: false,
+				host: "",
+				port: 0,
+				token: "",
+				requiresAuth: false,
+			}),
 			testPiProxy: async () => ({
 				success: true,
 				url: "https://api.openai.com/v1/models",

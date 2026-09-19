@@ -4372,11 +4372,16 @@ export class AgentManager {
 			}
 		});
 		piProcess.on("stderr", (text) =>
-			this.emit(ipcChannels.agentsLog, { agentId, text }),
+			this.emit(ipcChannels.agentsLog, {
+				agentId,
+				...this.streamRuntimeTriple(agentId),
+				text,
+			}),
 		);
 		piProcess.on("protocol-error", (line) => {
 			this.emit(ipcChannels.agentsLog, {
 				agentId,
+				...this.streamRuntimeTriple(agentId),
 				text: `Protocol error: ${line}`,
 			});
 			void this.appLogger?.error(
@@ -4391,27 +4396,39 @@ export class AgentManager {
 		// 转发 RPC 日志到前端，用于调试面板展示请求/响应/事件
 		piProcess.on("rpc-log", (entry: { direction: string; data: unknown }) => {
 			try {
-				const data = entry.data as Record<string, any>;
+				// data 可能是任意 RPC 形状（含字符串污染），isRecord 收窄后逐字段判型
+				const data = isRecord(entry.data) ? entry.data : undefined;
 				let summary: string;
-				if (entry.direction === "send") {
-					const type = data.type ?? "?";
+				if (!data) {
+					summary = `${entry.direction === "send" ? "→" : "←"} ${String(entry.data).slice(0, 60)}`;
+				} else if (entry.direction === "send") {
+					const type = typeof data.type === "string" ? data.type : "?";
 					if (type === "prompt") {
-						const desc = data.description ? ` [${data.description}]` : "";
-						summary = `→ prompt${desc}: ${(data.message ?? "").slice(0, 60)}`;
+						const message = typeof data.message === "string" ? data.message : "";
+						const desc = typeof data.description === "string" ? ` [${data.description}]` : "";
+						summary = `→ prompt${desc}: ${message.slice(0, 60)}`;
 					}
 					else if (type === "set_model")
 						summary = `→ set_model: ${data.provider}/${data.modelId}`;
 					else if (type === "set_thinking_level")
 						summary = `→ set_thinking: ${data.level}`;
-					else if (type === "bash")
-						summary = `→ bash: ${(data.command ?? "").slice(0, 60)}`;
+					else if (type === "bash") {
+						const command = typeof data.command === "string" ? data.command : "";
+						summary = `→ bash: ${command.slice(0, 60)}`;
+					}
 					else summary = `→ ${type}`;
 				} else {
-					const type = data.type ?? "?";
+					const type = typeof data.type === "string" ? data.type : "?";
 					if (type === "response")
 						summary = `← ${data.command ?? "?"} ${data.success ? "✓" : "✗"}${data.error ? ` ${data.error}` : ""}`;
 					else if (type === "message_update") {
-						const evt = data.assistantMessageEvent?.type ?? "?";
+						const assistantEvent = isRecord(data.assistantMessageEvent)
+							? data.assistantMessageEvent
+							: undefined;
+						const evt =
+							assistantEvent && typeof assistantEvent.type === "string"
+								? assistantEvent.type
+								: "?";
 						summary = `← message_update.${evt}`;
 					} else summary = `← ${type}`;
 				}
@@ -4897,8 +4914,8 @@ export class AgentManager {
 		// web SSE/飞书等内部订阅走上方 localEventListeners，不受影响。
 		// this.emit(ipcChannels.agentsEvent, { agentId, event });
 
-		if (!event || typeof event !== "object") return;
-		const typed = event as Record<string, any>;
+		if (!isRecord(event)) return;
+		const typed = event;
 		const runtime = this.agents.get(agentId);
 
 		// 扩展/RPC 调用 setSessionName 后 Pi 会发 session_info_changed；
@@ -4945,12 +4962,22 @@ export class AgentManager {
 			this.emitToolRuntimeTransition(agentId, false);
 			this.emitStreamingStatePatch(agentId);
 			// 新一轮丢掉上一轮 held live 槽，避免旧正文串到本轮。
-			this.emit(ipcChannels.agentsTextStream, { agentId, text: "", done: true, reset: true });
+			this.emit(ipcChannels.agentsTextStream, {
+				agentId,
+				...this.streamRuntimeTriple(agentId),
+				text: "",
+				done: true,
+				reset: true,
+			});
 		}
 
-		if (typed.type === "message_start" && typed.message?.role === "assistant") {
+		const startMessage = isRecord(typed.message) ? typed.message : undefined;
+		if (typed.type === "message_start" && startMessage?.role === "assistant") {
 			// abort 封印后的残留 assistant 事件应丢弃，防止误重新激活流式状态。
-			if (this.isAgentStreamSealed(agentId)) {
+			// stop()/关闭路径已 agents.delete + clearStreamGate（封印随之删除），
+			// 死 agentId 的封印恒为「未封」；runtime 缺失即拒绝——迟到 delta 不得
+			// 为死 agentId 重建 messages/streamingText 键并外发死 agent 事件。
+			if (!runtime || this.isAgentStreamSealed(agentId)) {
 				return;
 			}
 			this.beginAssistantMessage(agentId);
@@ -4960,7 +4987,7 @@ export class AgentManager {
 			this.ensurePerfTimer(agentId);
 			// 顶层 message_start（mock/pi 均走此路径）：必须允许空骨架，否则
 			// text_delta 不再 upsert 时 History 无挂载点，Live 正文无处渲染。
-			this.upsertAssistantMessage(agentId, typed.message, "", { allowEmpty: true });
+			this.upsertAssistantMessage(agentId, startMessage, "", { allowEmpty: true });
 			this.flushMessageEmit(agentId);
 		}
 
@@ -5240,29 +5267,28 @@ export class AgentManager {
 			typed.assistantMessageEvent
 		) {
 			// abort 封印后的延迟 text/thinking delta 一律丢弃，避免重建气泡或串台。
-			if (this.isAgentStreamSealed(agentId)) {
+			if (!runtime || this.isAgentStreamSealed(agentId)) {
 				return;
 			}
 			this.handleAssistantMessageEvent(agentId, typed);
 		}
 
-		if (
-			typed.type === "message_end" &&
-			typed.message?.role === "assistant"
-		) {
-			if (this.isAgentStreamSealed(agentId)) {
+		const messageEnd = isRecord(typed.message) ? typed.message : undefined;
+		if (typed.type === "message_end" && messageEnd?.role === "assistant") {
+			// stop() 后 runtime 已删：迟到 message_end 不得为死 agentId 重建状态。
+			if (!runtime || this.isAgentStreamSealed(agentId)) {
 				return;
 			}
 			if (this.activeAssistantMessageIds.has(agentId)) {
 				// 先写入 History thinking 并 flush，再发 done 清 live（顺序写进测试）。
 				this.finalizeThinkingIntoMessage(agentId);
-				this.upsertAssistantMessage(agentId, typed.message);
+				this.upsertAssistantMessage(agentId, messageEnd);
 				this.flushMessageEmit(agentId);
 				this.finishThinkingChannel(agentId);
 				this.activeAssistantMessageIds.delete(agentId);
 			}
 			// 结算性能指标（幂等：message_update done 先结算则 map 已删，直接返回）
-			this.settleMessagePerf(agentId, typed.message);
+			this.settleMessagePerf(agentId, messageEnd);
 			// 终结 Live 正文通道（顶层 message_end 不经 handleAssistantMessageEvent）
 			this.streamingAgents.delete(agentId);
 			const finalText = this.streamingText.get(agentId);
@@ -5279,7 +5305,7 @@ export class AgentManager {
 
 		if (typed.type === "tool_execution_start") {
 			// abort 封印后的延迟工具事件应丢弃，避免重新激活流式状态。
-			if (this.isAgentStreamSealed(agentId)) {
+			if (!runtime || this.isAgentStreamSealed(agentId)) {
 				return;
 			}
 			// 新工具轮次开始：上一个 ask 的等待累计若未被其 end 事件消耗（如 abort 封印），
@@ -5287,7 +5313,8 @@ export class AgentManager {
 			this.askWaitMsByAgent.delete(agentId);
 			this.upsertToolMessage(agentId, typed, "running");
 			// 并行工具会先连续发多个 start；按 toolCallId 追踪，只有最后一个 end 才能表示工具阶段完成。
-			const toolName = typed.toolName ?? "tool";
+			const toolName =
+				typeof typed.toolName === "string" ? typed.toolName : "tool";
 			const toolCallId = String(typed.toolCallId ?? `${toolName}-${Date.now()}`);
 			const toolState = updateActiveToolCalls(
 				this.activeToolCallsByAgent.get(agentId) ?? new Map<string, string>(),
@@ -5305,7 +5332,7 @@ export class AgentManager {
 
 		if (typed.type === "tool_execution_end") {
 			// abort 封印后的延迟工具事件应丢弃。
-			if (this.isAgentStreamSealed(agentId)) {
+			if (!runtime || this.isAgentStreamSealed(agentId)) {
 				return;
 			}
 			this.upsertToolMessage(
@@ -5315,7 +5342,8 @@ export class AgentManager {
 			);
 			// 文件类工具执行完成 → 异步自动打点（快照包含该工具改动后的状态）。
 			// 检查点创建不阻塞工具结果推送（fire-and-forget，失败只记日志）。
-			const endedToolName = typed.toolName ?? "";
+			const endedToolName =
+				typeof typed.toolName === "string" ? typed.toolName : "";
 			if (MUTATING_TOOLS.has(endedToolName)) {
 				this.scheduleRewindCheckpoint(
 					agentId,
@@ -5345,7 +5373,7 @@ export class AgentManager {
 
 		if (typed.type === "tool_execution_update") {
 			// abort 封印后的延迟工具事件应丢弃。
-			if (this.isAgentStreamSealed(agentId)) {
+			if (!runtime || this.isAgentStreamSealed(agentId)) {
 				return;
 			}
 			this.upsertToolMessage(agentId, typed, "running");
@@ -5385,7 +5413,7 @@ export class AgentManager {
 	 * 处理 pi 扩展发起的 UI 请求。
 	 * 对话类请求写入消息流等待用户回答；fire-and-forget 请求只转发给渲染进程或忽略。
 	 */
-	private handleUIRequest(agentId: string, typed: Record<string, any>) {
+	private handleUIRequest(agentId: string, typed: Record<string, unknown>) {
 		const method = String(typed.method ?? "");
 		const requestId = String(typed.id ?? "");
 		// pi RPC 协议将 setWidget / dialog 字段放在顶层，不嵌套 params
@@ -5665,11 +5693,15 @@ export class AgentManager {
 		}
 	}
 
-	private handleAssistantMessageEvent(agentId: string, event: Record<string, any>) {
+	private handleAssistantMessageEvent(agentId: string, event: unknown) {
 		// 双保险：即使调用方漏判，也在这里拦截封印 generation 的残留 delta。
 		if (this.isAgentStreamSealed(agentId)) return;
-		const assistantEvent = event.assistantMessageEvent as Record<string, any>;
-		const eventType = assistantEvent.type as string | undefined;
+		if (!isRecord(event)) return;
+		const assistantEventRaw = event.assistantMessageEvent;
+		if (!isRecord(assistantEventRaw)) return;
+		const assistantEvent = assistantEventRaw;
+		const eventType =
+			typeof assistantEvent.type === "string" ? assistantEvent.type : undefined;
 		const partialMessage =
 			event.message ??
 			assistantEvent.message ??
@@ -5815,7 +5847,7 @@ export class AgentManager {
 	 * - tps = output tokens ÷ 生成期时长（首 delta → 终态），分母排除 TTFT 更贴近真实生成速度。
 	 * 纯工具调用回合（无 text/thinking delta）只有 totalMs，ttft/tps 缺省。
 	 */
-	private settleMessagePerf(agentId: string, message?: Record<string, any>) {
+	private settleMessagePerf(agentId: string, message?: unknown) {
 		const perf = this.messagePerfByAgent.get(agentId);
 		this.messagePerfByAgent.delete(agentId);
 		if (!perf) return;
@@ -5826,7 +5858,7 @@ export class AgentManager {
 			perf.firstTextAt > 0 ? perf.firstTextAt : perf.firstDeltaAt > 0 ? perf.firstDeltaAt : 0;
 		const ttftMs = firstContentAt > 0 ? firstContentAt - perf.startedAt : undefined;
 		// message_end 携带完整 assistant 消息，usage 兼容多种命名提取 output tokens
-		const usage = (message as any)?.usage;
+		const usage = isRecord(message) && isRecord(message.usage) ? message.usage : undefined;
 		const outputTokens = pickNumber(
 			usage?.output,
 			usage?.outputTokens,
@@ -6172,10 +6204,11 @@ export class AgentManager {
 
 	private upsertToolMessage(
 		agentId: string,
-		event: Record<string, any>,
+		event: Record<string, unknown>,
 		status: "running" | "done" | "error",
 	) {
-		const toolName = event.toolName || "tool";
+		const toolName =
+			typeof event.toolName === "string" ? event.toolName : "tool";
 		const toolCallId = String(event.toolCallId ?? `${toolName}-${Date.now()}`);
 		let agentTools = this.toolMessageIds.get(agentId);
 		if (!agentTools) {
@@ -6465,7 +6498,7 @@ export class AgentManager {
 
 	private upsertRetryStatusMessage(
 		agentId: string,
-		event: Record<string, any>,
+		event: Record<string, unknown>,
 		status: "running" | "success" | "error",
 	) {
 		const list = this.messages.get(agentId) ?? [];
@@ -7147,11 +7180,14 @@ export class AgentManager {
 		const sendFull = !text.startsWith(lastSent) || pushCount >= 50;
 		const payload: {
 			agentId: string;
+			sessionId?: string;
+			runtimeGeneration?: number;
 			text?: string;
 			delta?: string;
 			done: boolean;
 		} = {
 			agentId,
+			...this.streamRuntimeTriple(agentId),
 			...(!sendFull ? { delta: text.slice(lastSent.length) } : { text }),
 			done,
 		};
@@ -7174,12 +7210,39 @@ export class AgentManager {
 		this.notifyStateListeners(tabs);
 	}
 
+	/** AGENTS 硬约束：所有 runtime 事件必须携带 sessionId + agentId + runtimeGeneration，
+	 *  迟到 runtime 的结果由消费端按三元组丢弃。取自 AgentTab 当前绑定。 */
+	private streamRuntimeTriple(agentId: string): {
+		sessionId?: string;
+		runtimeGeneration?: number;
+	} {
+		const runtime = this.agents.get(agentId);
+		return {
+			sessionId: runtime?.tab.deckSessionId,
+			runtimeGeneration: runtime?.tab.runtimeGeneration,
+		};
+	}
+
 	private emit(channel: string, payload: unknown) {
+		// 白名单外只通知主进程内部订阅（index.ts 桥、FeishuBridge、WebEventStream 等）
 		for (const listener of this.outputListeners) listener(channel, payload);
+		if (!DIRECT_EMIT_CHANNELS.has(channel)) return;
 		const window = this.getWindow();
 		if (!window || window.isDestroyed()) return;
 		window.webContents.send(channel, payload);
 	}
+}
+
+/** 直发渲染层（webContents.send）的通道白名单：preload 只订阅 agentsRpcLog
+ *  （src/preload/index.ts），其余 agents:* 通道渲染层经 sessions:runtime-envelope
+ *  （index.ts 桥）消费，直发只是无人接收的死流量（每 token 级事件 × 跨进程序列化）。
+ *  preload 新增订阅时必须同步此白名单（tests/agentManagerDirectEmitChannels.test.mjs 锁死一致性）。 */
+export const DIRECT_EMIT_CHANNELS: ReadonlySet<string> = new Set([ipcChannels.agentsRpcLog]);
+
+/** unknown → Record 收窄谓词（与 AnnouncementService.ts 同型）：
+ *  RPC 事件负载形状不可信，统一经此谓词后再逐字段判型。 */
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null;
 }
 
 type AgentRuntime = {

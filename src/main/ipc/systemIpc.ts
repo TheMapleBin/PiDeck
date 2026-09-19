@@ -31,6 +31,7 @@ import type {
 	PiInstallStatus,
 	PiRuntimeNodeInstallResult,
 	PiRuntimeNodeStatus,
+	WebServiceStatusInfo,
 } from "../../shared/types";
 import type {
 	AppInfo,
@@ -259,8 +260,8 @@ export type SystemIpcDeps = {
 		checkPiUpdate: () => Promise<import("../../shared/types").PiUpdateCheckResult>;
 		updatePi: () => Promise<import("../../shared/types").PiCliUpdateResult>;
 	};
-	/** Web service manager for restart */
-	webServiceManager?: { stop: () => Promise<void> };
+	/** Web service manager for restart / 运行状态查询 */
+	webServiceManager?: { stop: () => Promise<void>; getStatus: () => WebServiceStatusInfo };
 	/** Terminal manager for restart */
 	terminalManager?: { closeAll: () => void };
 	/** Is quitting flag (for restart) */
@@ -1674,6 +1675,19 @@ export function registerSystemIpc(deps: SystemIpcDeps): void {
 		await restartWebService(settingsStore.get());
 	});
 
+	ipcMain.handle(ipcChannels.webServiceStatus, () => {
+		if (!webServiceManager) {
+			return {
+				running: false,
+				host: "",
+				port: 0,
+				token: "",
+				requiresAuth: false,
+			} satisfies WebServiceStatusInfo;
+		}
+		return webServiceManager.getStatus();
+	});
+
 	ipcMain.handle(ipcChannels.settingsTestPiProxy, async () => {
 		if (!testPiProxy) throw new Error("testPiProxy not available");
 		const result = await testPiProxy(settingsStore.get(), undefined, mainCopy);
@@ -1702,6 +1716,18 @@ export function registerSystemIpc(deps: SystemIpcDeps): void {
 	ipcMain.handle(ipcChannels.skillsDelete, async (_event, path: string) => {
 		const result = await skillManager.delete(path);
 		void appLogger.info("skill", "Skill deleted", { path });
+		return result;
+	});
+	ipcMain.handle(ipcChannels.skillsRename, async (_event, skillPath: unknown, newName: unknown) => {
+		// 渲染层入参不可信：先校验再进 SkillManager（与 projectResourceIpc 的边界校验同一纪律）。
+		if (typeof skillPath !== "string" || skillPath.trim().length === 0 || skillPath.length > 4096) {
+			throw new Error("Invalid skill path for rename.");
+		}
+		if (typeof newName !== "string" || newName.trim().length === 0 || newName.length > 256) {
+			throw new Error("Invalid skill name for rename.");
+		}
+		const result = await skillManager.rename(skillPath, newName);
+		void appLogger.info("skill", "Skill renamed", { skillPath, newName });
 		return result;
 	});
 	ipcMain.handle(ipcChannels.skillsOpenFolder, (_event, path?: string) =>

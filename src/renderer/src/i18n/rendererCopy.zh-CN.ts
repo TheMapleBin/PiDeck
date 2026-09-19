@@ -2395,7 +2395,6 @@ export const zhCN = {
   // 已安装列表：内置扩展一行简介（ExtensionTableRow 按 source 映射 builtInExtDesc.*）
   "config.builtInExtDesc.pi-deck-request-size-recovery": "请求体超限自动恢复：识别网关 413/请求体过大错误，征得同意后临时切换大上限模型压缩会话再切回，解除无法发送的死锁。",
   "config.builtInExtDesc.pi-deck-ask-question": "注册 ask_question 工具：模型可通过桌面 UI 向你提问（单选/输入/确认/批量问题 Tab），回答回传给模型。",
-  "config.builtInExtDesc.pi-deck-file-links": "文件引用提示：要求模型使用工作区相对路径和 path:line 格式，避免生成 file:// 等 URI，让桌面端把文件引用安全地渲染成可点击链接。",
   "config.builtInExtDesc.pi-deck-goal-mode": "目标模式：围绕一条目标自动续轮推进，直到完成、阻塞、暂停或到达轮次上限；状态跨重启可恢复。",
   "config.builtInExtDesc.pi-deck-nul-redirect-fix": "NUL 重定向修复：bash 执行前把「> nul」等 Windows 重定向改写为 /dev/null，避免 Git Bash 产生删不掉的 nul 文件。",
   "config.builtInExtDesc.pi-deck-plan-mode": "计划模式：先以只读工具集产出编号计划，经你选择执行/停留/修改后再恢复写工具，[DONE:n] 标记驱动进度展示。",
@@ -3130,6 +3129,7 @@ export const zhCN = {
   "imagegen.error.badBaseUrlDetail": "生图接口地址不对。{detail}",
   "imagegen.error.network": "生图网络请求失败（检查网络/代理或稍后重试）",
   "imagegen.error.http": "生图服务返回错误（{detail}）",
+  "imagegen.error.responseTooLarge": "生图响应体积超过 32MB 上限，已中止下载（请检查接口是否返回了异常内容）",
   "imagegen.error.empty": "生图服务没有返回图片数据",
   "imagegen.size": "尺寸",
   "imagegen.sizeAuto": "不设置",
@@ -3827,6 +3827,7 @@ export const zhCN = {
   "settings.webNoNetworkAddress": "未检测到可用的局域网地址",
   "settings.webQrAlt": "PiDeck Web 服务二维码",
   "settings.webQrScanHint": "手机和电脑需要连接到同一个局域网",
+  "settings.webQrTokenHint": "局域网访问需要令牌，二维码链接已自动附带",
   "settings.webQrUnavailable": "当前无法生成二维码，请检查服务端口",
   "settings.webQrEnableHint": "开启 Web 服务后生成二维码",
   "settings.webRestartService": "重启 Web 服务",

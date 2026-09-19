@@ -33,12 +33,23 @@ test("SessionTabsBar dangerous actions are configured with variant=destructive",
     "utf8"
   );
 
-  // 右侧更多菜单中的“停止 Agent”操作应标记为 destructive
-  // （ onSelect 已从 props.onStopCurrent 重构为 control.onAction("stop")，语义不变）
+  // 破坏性语义归属「关闭 Agent」（杀进程 + 解绑）：必须标记 destructive。
+  // 2026-09 语义拆分后「停止回答」= abort（只中断当前回合、进程保留）不再是破坏性操作，
+  // 因此 destructive 从旧的 onAction("stop") 项移到了 onCloseAgent 项。
   assert.match(
     tabsSrc,
-    /<DropdownMenuItem[\s\S]*?variant="destructive"[\s\S]*?onSelect=\{\(\) => control\.onAction\("stop"\)\}/,
-    "Stop Agent action in more dropdown menu should have variant='destructive'"
+    /<DropdownMenuItem\s+variant="destructive"\s+title=\{t\("menu\.closeAgentHint"\)\}\s+onSelect=\{control\.onCloseAgent\}/,
+    "Close Agent action in more dropdown menu should have variant='destructive'"
+  );
+
+  // 反向断言：abort 项不得再被标记 destructive，防止「中断回合」与「杀进程」两种语义再次被合并。
+  const abortPos = tabsSrc.indexOf('control.onAction("abort")');
+  assert.ok(abortPos > 0, "abort action should be wired through control.onAction");
+  const abortItemStart = tabsSrc.lastIndexOf("<DropdownMenuItem", abortPos);
+  assert.doesNotMatch(
+    tabsSrc.slice(abortItemStart, abortPos),
+    /variant="destructive"/,
+    "Stop Answer (abort) is not destructive and must not be marked as such"
   );
 
   // Tab 右键 ContextMenu 中的“关闭其他标签页”和“关闭全部标签页”操作应标记为 destructive

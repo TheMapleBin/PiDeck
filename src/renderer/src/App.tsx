@@ -60,6 +60,7 @@ import { useSessionRuntimeBridge } from "./hooks/useSessionRuntimeBridge";
 import { useAgentLoadNotice } from "./hooks/useAgentLoadNotice";
 import { useAnnouncementNotifier } from "./hooks/useAnnouncementNotifier";
 import { useModelsVerifyNotifier } from "./hooks/useModelsVerifyNotifier";
+import { useBackgroundAskPatrol } from "./hooks/useBackgroundAskPatrol";
 import {
   announcementCenterOpenAtom,
   announcementNotificationEnabledAtom,
@@ -712,7 +713,7 @@ export function App() {
     wslUser: "root",
     telemetryEnabled: true,
     webServiceEnabled: false,
-    webServiceHost: "0.0.0.0",
+    webServiceHost: "127.0.0.1",
     webServicePort: 8765,
     rpcTimeout: 600_000,
     linkOpenMode: "external",
@@ -1375,7 +1376,7 @@ export function App() {
       const toolName: string | undefined = msg.meta?.toolName as
         | string
         | undefined;
-      const args: any = msg.meta?.args;
+      const args: unknown = msg.meta?.args;
       const status: string = String(msg.meta?.status ?? "done");
       // 只收集文件写入/编辑类的工具调用，作为右侧 Files 与会话结束摘要的统一数据源。
       if (!toolName || !/write|edit|create|patch/i.test(toolName)) continue;
@@ -2697,7 +2698,7 @@ export function App() {
     if (!currentSessionId) return false;
     const rt = store.get(currentSessionRuntimeAtom);
     // 与 composer isBusy 对齐（含 isExecutingTool）：DSH 工具执行期间 steer 也应可用。
-    return rt?.status === "running" || Boolean((rt?.state as any)?.isStreaming) || Boolean((rt?.state as any)?.isExecutingTool);
+    return rt?.status === "running" || Boolean(rt?.state?.isStreaming) || Boolean(rt?.state?.isExecutingTool);
   }
 
   // Drain by stable Session identity so runtime replacement cannot orphan queued work.
@@ -3452,6 +3453,9 @@ export function App() {
     workspaceChrome.registerOpenSession(sessionId, "permanent");
     selectSessionCommand(record.projectId, sessionId, true);
   }, [selectSessionCommand, store, workspaceChrome]);
+
+  // M7：后台 Ask 巡检全应用单点挂载（原寄生在每栏 runtime 控制器，全局订阅拖垮分屏）
+  useBackgroundAskPatrol({ onFocusSession: jumpToAskSession });
 
   // 切会话过渡：会话区整体做一次 160ms 淡入+微位移（Web Animations API，
   // 不卸载树/不动布局，避免整树重建的卡顿与瞬间替换的生硬）；

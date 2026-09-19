@@ -124,6 +124,15 @@ test("session chip without whitelist falls back to first word for timeline displ
 	);
 });
 
+test("timeline fallback keeps shell control operators as plain text", () => {
+	const command = "cd F:/PiDeck && echo \"--- app.stopping usage ---\" && grep -rn 't(\"app.stopping\")' src/renderer/src/ &> command.log";
+	const chips = parseRichInputChips(command);
+	assertJsonEqual(
+		chips.filter((chip) => chip.kind === "session").map((chip) => chip.raw),
+		[],
+	);
+});
+
 test("URL path segments are not parsed as chips", () => {
 	const chips = parseRichInputChips(
 		"https://example.com/foo @src/a.ts",

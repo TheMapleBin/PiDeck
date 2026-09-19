@@ -278,6 +278,8 @@ export const ipcChannels = {
 	settingsUpdate: "settings:update",
 	/** 重启当前已启用的 Web 服务，不修改 Web 设置 */
 	settingsRestartWebService: "settings:restart-web-service",
+	/** 查询 Web 服务运行状态（端口 / 本次启动的访问令牌 / 是否要求鉴权） */
+	webServiceStatus: "web:status",
 	settingsTestPiProxy: "settings:test-pi-proxy",
 	settingsApplyWindow: "settings:apply-window",
 	skillsList: "skills:list",
@@ -304,7 +306,6 @@ export const ipcChannels = {
 	yaoPromptsDetail: "yao-prompts:detail",
 	yaoPromptsImport: "yao-prompts:import",
 	skillStoreSearch: "skill-store:search",
-	skillStoreGet: "skill-store:get",
 	skillStoreImport: "skill-store:import",
 	// SkillHub（api.skillhub.cn）
 	skillHubSearch: "skill-hub:search",
@@ -659,10 +660,7 @@ export const ipcChannels = {
 	feishuBindingsChanged: "feishu:bindings-changed",
 	feishuBotsChanged: "feishu:bots-changed",
 	feishuMessages: "feishu:messages",
-	feishuQrCode: "feishu:qr-code",
 	feishuConnectByBot: "feishu:connect-by-bot",
-	/** Pi 创建会话时触发飞书自动拉群 */
-	feishuAutoGroup: "feishu:auto-group",
 	/** 获取指定稳定 Session 绑定的飞书 Bot ID */
 	feishuSessionBotGet: "feishu:session-bot-get",
 	/** 设置指定稳定 Session 使用的飞书 Bot ID */

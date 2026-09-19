@@ -14,6 +14,18 @@ import type { GitResource, GitResourceGroups } from "../../shared/types";
 const execFileAsync = promisify(execFile);
 const GIT_MUTATION_TIMEOUT_MS = 30_000;
 
+/** 渲染层传入的 hash 是不可信输入：以 `-` 开头的值会被 git 当作选项
+ *  （如 cherry-pick 的 `--exec=` 参数注入），非全 SHA 的短 ref 也可能命中意外对象。
+ *  UI 侧 commit log 一律输出 %H 全 SHA（见 getCommitLog 的 COMMIT_FORMAT），
+ *  此处用 40 位十六进制白名单兜底，守卫在 spawn git 之前生效。 */
+const FULL_COMMIT_SHA_RE = /^[0-9a-f]{40}$/i;
+
+function assertFullCommitHash(hash: string): void {
+	if (!FULL_COMMIT_SHA_RE.test(hash)) {
+		throw new Error(`invalid commit hash: ${JSON.stringify(hash.slice(0, 40))}`);
+	}
+}
+
 export class GitService {
 	/**
 	 * 统一的 git 子进程入口：注入当前生效的可执行文件（用户配置优先，否则字面量 "git" 走 PATH），
@@ -78,7 +90,7 @@ export class GitService {
 	private async resolveCommitHash(cwd: string, ref: string): Promise<string | null> {
 		try {
 			const { stdout } = await execFileAsync(
-				"git",
+				currentGitExecutable(),
 				["rev-parse", "--verify", "--end-of-options", `${ref}^{commit}`],
 				{ cwd },
 			);
@@ -171,7 +183,7 @@ export class GitService {
 		try {
 			const dir = dirname(filePath);
 			const { stdout: rootRaw } = await execFileAsync(
-				"git",
+				currentGitExecutable(),
 				["rev-parse", "--show-toplevel"],
 				{ cwd: dir },
 			);
@@ -185,7 +197,7 @@ export class GitService {
 			const blobRef = `HEAD:${relPath}`;
 			const limit = Math.max(1, Math.floor(maxBytes));
 			const { stdout } = await execFileAsync(
-				"git",
+				currentGitExecutable(),
 				["-C", repoRoot, "show", blobRef],
 				{ maxBuffer: limit + 1 },
 			);
@@ -204,7 +216,7 @@ export class GitService {
 		// `-- .` 将 monorepo 中的状态限定到当前项目目录，避免 sibling 资源进入抽屉。
 		const [{ stdout: statusRaw }, { stdout: rootRaw }] = await Promise.all([
 			execFileAsync(
-				"git", ["status", "--porcelain", "-z", "--untracked-files=all", "--", "."],
+				currentGitExecutable(), ["status", "--porcelain", "-z", "--untracked-files=all", "--", "."],
 				{ cwd, maxBuffer: 16 * 1024 * 1024, timeout: GIT_MUTATION_TIMEOUT_MS },
 			),
 			execFileAsync(currentGitExecutable(), ["rev-parse", "--show-toplevel"], { cwd, timeout: GIT_MUTATION_TIMEOUT_MS }),
@@ -399,7 +411,7 @@ export class GitService {
 	async getStagedDiff(cwd: string, maxBytes = 100 * 1024): Promise<string> {
 		try {
 			// 先试暂存区 diff
-			let { stdout } = await execFileAsync(currentGitExecutable(), ["diff", "--staged", "--unified=3"], {
+			const { stdout } = await execFileAsync(currentGitExecutable(), ["diff", "--staged", "--unified=3"], {
 				cwd,
 				encoding: "utf8",
 				timeout: GIT_MUTATION_TIMEOUT_MS,
@@ -505,7 +517,7 @@ export class GitService {
 		const format = "%(refname)%00%(objectname)%00%(*objectname)";
 		try {
 			const { stdout } = await execFileAsync(
-				"git",
+				currentGitExecutable(),
 				["for-each-ref", `--format=${format}`, "--sort=-committerdate"],
 				{ cwd, maxBuffer: 32 * 1024 * 1024 },
 			);
@@ -538,12 +550,12 @@ export class GitService {
 			const range = `${baseHash}...${targetHash}`;
 			const [{ stdout: diffOut }, { stdout: countOut }] = await Promise.all([
 				execFileAsync(
-					"git",
+					currentGitExecutable(),
 					["diff", "--name-status", "-z", "--diff-filter=ADMR", range],
 					{ cwd, maxBuffer: 32 * 1024 * 1024 },
 				),
 				execFileAsync(
-					"git",
+					currentGitExecutable(),
 					["rev-list", "--left-right", "--count", range],
 					{ cwd },
 				).catch(() => ({ stdout: "0\t0" })),
@@ -563,12 +575,14 @@ export class GitService {
 	/**
 	 * 获取任意两个 ref 之间单个文件的 diff 文本。
 	 * 复刻 VS Code 的 diffBetween(ref1, ref2, path)。
+	 * @param maxBytes 最大返回字符数（默认 5MB），超出截断并追加内联标记。
 	 */
 	async diffFileBetweenRefs(
 		cwd: string,
 		ref1: string,
 		ref2: string,
 		filePath: string,
+		maxBytes = 5 * 1024 * 1024,
 	): Promise<string> {
 		try {
 			const [leftHash, rightHash] = await Promise.all([
@@ -578,11 +592,16 @@ export class GitService {
 			if (!leftHash || !rightHash) return "";
 			const range = `${leftHash}...${rightHash}`;
 			const { stdout } = await execFileAsync(
-				"git",
+				currentGitExecutable(),
 				["diff", range, "--", filePath],
+				// maxBuffer 必须大于 maxBytes（同 getStagedDiff 惯例）：git 先完整输出，
+				// 截断在进程内做，防止大文件 diff（锁文件/打包产物，可达数十 MB）直达渲染层。
 				{ cwd, maxBuffer: 32 * 1024 * 1024 },
 			);
-			return stdout;
+			const limit = Math.max(1, Math.floor(maxBytes));
+			return stdout.length > limit
+				? stdout.slice(0, limit) + "\n\n... (diff truncated)"
+				: stdout;
 		} catch {
 			return "";
 		}
@@ -608,7 +627,7 @@ export class GitService {
 			const cached = this.readCommitDetailCache(cacheKey);
 			if (cached) return cached;
 			const { stdout } = await execFileAsync(
-				"git",
+				currentGitExecutable(),
 				["show", "-s", "--shortstat", `--format=${COMMIT_FORMAT}`, "-z", commitHash, "--"],
 				{ cwd, maxBuffer: 32 * 1024 * 1024 },
 			);
@@ -860,11 +879,13 @@ export class GitService {
 
 	/** Cherry-pick：将指定提交应用到当前分支 */
 	async cherryPick(cwd: string, hash: string): Promise<void> {
+		assertFullCommitHash(hash);
 		await this.git(["cherry-pick", hash], { cwd, timeoutMs: GIT_MUTATION_TIMEOUT_MS });
 	}
 
 	/** Revert：创建一个反向提交撤销指定提交的变更 */
 	async revertCommit(cwd: string, hash: string): Promise<void> {
+		assertFullCommitHash(hash);
 		await this.git(["revert", "--no-edit", hash], { cwd, timeoutMs: GIT_MUTATION_TIMEOUT_MS });
 	}
 
@@ -873,6 +894,11 @@ export class GitService {
 	 * @param mode soft｜mixed｜hard，默认 soft
 	 */
 	async resetToCommit(cwd: string, hash: string, mode: "soft" | "mixed" | "hard" = "soft"): Promise<void> {
+		assertFullCommitHash(hash);
+		// mode 经 IPC 边界以自由字符串传入（gitIpc 未做枚举校验），运行时白名单兜底
+		if (mode !== "soft" && mode !== "mixed" && mode !== "hard") {
+			throw new Error(`invalid reset mode: ${JSON.stringify(String(mode))}`);
+		}
 		await this.git(["reset", `--${mode}`, hash], { cwd, timeoutMs: GIT_MUTATION_TIMEOUT_MS });
 	}
 
@@ -881,6 +907,7 @@ export class GitService {
 	 * 注意：只能删除非 HEAD 的提交
 	 */
 	async dropCommit(cwd: string, hash: string): Promise<void> {
+		assertFullCommitHash(hash);
 		// 先获取 parent hash
 		const { stdout: parentHash } = await this.git(["rev-parse", `${hash}^`], { cwd, timeoutMs: GIT_MUTATION_TIMEOUT_MS });
 		await this.git(["rebase", "--onto", parentHash.trim(), hash], { cwd, timeoutMs: GIT_MUTATION_TIMEOUT_MS });
@@ -920,14 +947,14 @@ export class GitService {
 		try {
 			// 无上游时该命令失败（exit 128），直接视为无角标
 			const { stdout: upstreamRaw } = await execFileAsync(
-				"git", ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"],
+				currentGitExecutable(), ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"],
 				{ cwd, timeout: GIT_MUTATION_TIMEOUT_MS },
 			);
 			const upstream = upstreamRaw.trim();
 			if (!upstream) return null;
 			// --left-right --count 输出 "<left> <right>"：左=HEAD 独有（ahead），右=上游独有（behind）
 			const { stdout: countRaw } = await execFileAsync(
-				"git", ["rev-list", "--left-right", "--count", `HEAD...${upstream}`],
+				currentGitExecutable(), ["rev-list", "--left-right", "--count", `HEAD...${upstream}`],
 				{ cwd, timeout: GIT_MUTATION_TIMEOUT_MS },
 			);
 			const [left, right] = countRaw.trim().split(/\s+/);

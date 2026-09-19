@@ -26,9 +26,6 @@ Guidelines:
 - Use read to examine files instead of cat or sed.
 - Use edit for precise changes
 - Keep edits[].oldText as small as possible while still being unique
-- When mentioning a project file, use the workspace-relative path in inline code, e.g. `src/main/index.ts:42`.
-- Use a Markdown file link when inviting the user to open a file, e.g. `[open src/main/index.ts](src/main/index.ts:42)`.
-- Do not generate `file://`, `vscode://`, or other editor/file URI links.
 - Be concise in your responses
 - Show file paths clearly when working with files
 
