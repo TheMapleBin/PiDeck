@@ -195,6 +195,7 @@ import { SessionProxyDialog } from "./components/session/SessionProxyDialog";
 
 import { ImportOverlayHost } from "./components/overlays/ImportOverlayHost";
 import { EnvironmentOverlay } from "./components/overlays/EnvironmentOverlay";
+import { usePiEnvironmentGuide } from "./hooks/usePiEnvironmentGuide";
 import {
   EnvironmentDialog,
   FileContextMenu,
@@ -825,6 +826,14 @@ export function App() {
     api,
   });
   const { piStatus, piChecking, environmentDialog, setPiStatus, setEnvironmentDialog } = piUpdate;
+  // pi 环境引导（Node→npm→pi 三步）：弹窗打开时自动检测第一步，关闭时重置一次性状态。
+  // 依赖只取稳定的 checkNode（useCallback）；piGuide 对象每次渲染都是新引用，
+  // 直接依赖会因 checkNode 内部 setState → 重渲染 → effect 重跑而形成检测循环。
+  const piGuide = usePiEnvironmentGuide(api);
+  const { checkNode: checkGuideNode } = piGuide;
+  useEffect(() => {
+    if (environmentDialog) void checkGuideNode();
+  }, [environmentDialog, checkGuideNode]);
   // 抽屉宽度状态由 useWorkspacePanels 统一管理（全局 localStorage 持久化，键 pid:drawer-width），
   // AppShell 拖拽提交经 setDrawerWidth 回写；此处不再持有独立 useState，避免双份状态漂移。
   const drawerWidth = workspace.drawerWidth;
@@ -4385,6 +4394,7 @@ export function App() {
       <EnvironmentDialog
         status={piStatus}
         checking={piChecking}
+        guide={piGuide}
         onClose={() => {
           setEnvironmentDialog(false);
           piUpdate.setCustomPathResult(null);
@@ -4392,6 +4402,8 @@ export function App() {
           piUpdate.setInstallResult(null);
           piUpdate.setInstallCompleted(false);
           piUpdate.setNpmAvailable(null);
+          // 引导面板的一次性状态同样重置，下次打开重新检测
+          piGuide.resetGuide();
         }}
         onRecheck={() => {
           piUpdate.setCustomPathResult(null);
@@ -4400,6 +4412,8 @@ export function App() {
           piUpdate.setInstallResult(null);
           piUpdate.setInstallCompleted(false);
           piUpdate.setInstallUseMirror(false);
+          // 引导步骤在重新检测后需要刷新（安装结果可能已让环境就绪）
+          void piGuide.checkNode();
           piUpdate.checkPiInstall("manual");
         }}
         onOpenInstallDocs={() =>

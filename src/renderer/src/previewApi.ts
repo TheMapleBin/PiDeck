@@ -893,6 +893,24 @@ export function createPreviewApi(): PiDesktopApi {
 				available: true,
 				version: "preview",
 			}),
+			runtimeNodeCheck: async () => ({
+				installed: false,
+				systemNodeAvailable: true,
+				systemNodeVersion: "v24.13.0",
+				installSupported: true,
+			}),
+			runtimeNodeInstall: async () => ({
+				ok: true,
+				path: "preview",
+				version: "v24.13.0",
+				source: "preview",
+			}),
+			runtimePiInstall: async (_useMirror) => ({
+				success: true,
+				exitCode: 0,
+				stdout: "preview: runtime pi install output",
+				stderr: "",
+			}),
 		},
 		wsl: {
 			listDistros: async () => ["Ubuntu", "Debian"],

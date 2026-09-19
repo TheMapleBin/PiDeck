@@ -405,6 +405,12 @@ export const ipcChannels = {
 	piExecInstall: "pi:exec-install",
 	/** 检查 npm 是否可用 */
 	piCheckNpm: "pi:check-npm",
+	/** 环境引导：检测便携 Node 副本 + 系统 node 状态 */
+	piRuntimeNodeCheck: "pi:runtime-node-check",
+	/** 环境引导：安装便携 Node（镜像回退 + sha256 校验）到 userData */
+	piRuntimeNodeInstall: "pi:runtime-node-install",
+	/** 环境引导：用便携/系统 npm 全局安装 pi（--prefix 指向 pi-runtime，收紧通道由主进程拼命令） */
+	piRuntimePiInstall: "pi:runtime-pi-install",
 	appInfo: "app:info",
 	/** 获取当前机器的非回环 IPv4 网卡，供局域网 Web 服务二维码使用 */
 	appNetworkAddresses: "app:network-addresses",

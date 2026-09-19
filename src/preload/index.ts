@@ -135,6 +135,8 @@ import type {
 	PiInstallExecResult,
 	WslConnectionValidation,
 	NpmAvailabilityResult,
+	PiRuntimeNodeStatus,
+	PiRuntimeNodeInstallResult,
 	PasteFileWriteInput,
 	PasteFileWriteResult,
 	PiPromptTemplateListResult,
@@ -1286,6 +1288,15 @@ const api = {
 		/** 检查 npm 是否可用 */
 		checkNpm: () =>
 			ipcRenderer.invoke(ipcChannels.piCheckNpm) as Promise<NpmAvailabilityResult>,
+		/** 环境引导：检测便携 Node 副本 + 系统 node 状态 */
+		runtimeNodeCheck: () =>
+			ipcRenderer.invoke(ipcChannels.piRuntimeNodeCheck) as Promise<PiRuntimeNodeStatus>,
+		/** 环境引导：安装便携 Node 到 userData（镜像回退 + sha256 校验，主进程内完成） */
+		runtimeNodeInstall: () =>
+			ipcRenderer.invoke(ipcChannels.piRuntimeNodeInstall) as Promise<PiRuntimeNodeInstallResult>,
+		/** 环境引导：全局安装 pi（收紧通道：只传镜像布尔意图，命令由主进程拼接） */
+		runtimePiInstall: (useMirror: boolean) =>
+			ipcRenderer.invoke(ipcChannels.piRuntimePiInstall, useMirror === true) as Promise<PiInstallExecResult>,
 	},
 	/** WSL 相关操作（仅 Windows 有效） */
 	wsl: {

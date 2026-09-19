@@ -2995,6 +2995,14 @@ function registerIpc() {
 		appLogger,
 		rpcLogger,
 		sessionRuntimeCoordinator,
+		// pi 环境引导：便携 Node 安装器的真实 IO（下载/解压与 DSH runtime 同源，
+		// 测试里注入替身；未装配时引导安装入口降级不可用）。
+		piRuntimeNodeInstaller: {
+			download: createNetDownloader((scope, message, detail) => {
+				void appLogger.info(scope, message, detail);
+			}),
+			extract: createTarExtractor((scope, message, detail) => void appLogger.warn(scope, message, detail)),
+		},
 		// 「关于」面板读取启用中的 DSH 运行时版本
 		dshRuntimeManager: dshRuntimeManager ?? undefined,
 		// G17：RPC 日志按 backend 分流（DSH 走 DshAgentManager 领域调用记录）
