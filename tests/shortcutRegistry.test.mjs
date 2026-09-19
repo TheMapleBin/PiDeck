@@ -190,6 +190,8 @@ test("resolveShortcutBindings：覆盖 ∪ 默认；非法覆盖回退默认；�
 		openNewSession: "Ctrl+N",
 		openSearch: "Ctrl+F",
 		openCommandPalette: "Ctrl+P",
+		cycleModel: "Ctrl+M",
+		cycleThinking: "Ctrl+T",
 		toggleDevTools: "F12", // 非法裸键回退默认
 	});
 });
@@ -226,6 +228,8 @@ test("平台默认键列表完整（覆盖表之外不丢键）", () => {
 		openNewSession: "Ctrl+N",
 		openSearch: "Ctrl+F",
 		openCommandPalette: "Ctrl+P",
+		cycleModel: "Ctrl+M",
+		cycleThinking: "Ctrl+T",
 		toggleDevTools: "F12",
 	});
 	const mac = loadShortcuts({ platform: "darwin" });
@@ -234,6 +238,9 @@ test("平台默认键列表完整（覆盖表之外不丢键）", () => {
 		openNewSession: "Cmd+N",
 		openSearch: "Cmd+F",
 		openCommandPalette: "Cmd+P",
+		// macOS 避开 Cmd+M（最小化窗口）与 Cmd+T（新标签页惯例）
+		cycleModel: "Cmd+Alt+M",
+		cycleThinking: "Cmd+Alt+T",
 		toggleDevTools: "F12",
 	});
 });

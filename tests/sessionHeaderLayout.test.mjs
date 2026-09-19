@@ -66,10 +66,11 @@ test("model-picker restart must light the SessionView overlay via restartActiveA
     "src/renderer/src/hooks/useSessionRuntimeController.ts",
     "utf8",
   );
-  const picker = readFileSync(
-    "src/renderer/src/components/session/ComposerPickerHost.tsx",
-    "utf8",
-  );
+  // 重启入口在 controller（选择器与快捷键循环共用），组件只渲染确认框
+  const picker = [
+    readFileSync("src/renderer/src/hooks/useSessionPreferenceState.ts", "utf8"),
+    readFileSync("src/renderer/src/hooks/useSessionPreferenceController.ts", "utf8"),
+  ].join("\n");
   const surfaceStage = readFileSync(
     "src/renderer/src/components/session/SessionSurfaceStage.tsx",
     "utf8",

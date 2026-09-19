@@ -1831,6 +1831,18 @@ async function createWindow() {
 			mainWindow.webContents.send(ipcChannels.appShortcutTriggered, "openCommandPalette");
 			return;
 		}
+		// 模型/思考强度循环：目标是「当前聚焦会话」，由渲染层按聚焦栏定位会话并复用
+		// 模型选择器的应用链路（main 不持有会话上下文，也不复刻 pi 的 scoped models）。
+		if (isShortcutInput("cycleModel", input)) {
+			event.preventDefault();
+			mainWindow.webContents.send(ipcChannels.appShortcutTriggered, "cycleModel");
+			return;
+		}
+		if (isShortcutInput("cycleThinking", input)) {
+			event.preventDefault();
+			mainWindow.webContents.send(ipcChannels.appShortcutTriggered, "cycleThinking");
+			return;
+		}
 		if (isShortcutInput("toggleDevTools", input)) {
 			event.preventDefault();
 			toggleMainWindowDevTools(mainWindow);

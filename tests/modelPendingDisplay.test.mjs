@@ -87,10 +87,11 @@ test("契约: 运行中优先直接切换模型，后端 busy 时才排到下一
     "src/renderer/src/components/session/ComposerComponents.tsx",
     "utf8",
   );
-  const picker = readFileSync(
-    "src/renderer/src/components/session/ComposerPickerHost.tsx",
-    "utf8",
-  );
+  // 模型应用/pending 链路现由 controller 持有（选择器与 Ctrl+M 快捷键共用同一实现）
+  const picker = [
+    readFileSync("src/renderer/src/hooks/useSessionPreferenceState.ts", "utf8"),
+    readFileSync("src/renderer/src/hooks/useSessionPreferenceController.ts", "utf8"),
+  ].join("\n");
   const hook = readFileSync("src/renderer/src/hooks/usePendingModelApply.ts", "utf8");
   const ipc = readFileSync("src/shared/ipc.ts", "utf8");
   const sessionIpc = readFileSync("src/main/ipc/sessionIpc.ts", "utf8");

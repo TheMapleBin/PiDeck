@@ -11,13 +11,19 @@ const { toThinkingPickerLevels, resolveThinkingPickerLevels } = loadTsCommonJs(
 );
 
 const { readFile } = await import("node:fs/promises");
-const [pickerSource, ipcSource, sessionIpcSource, preloadSource, componentsSource] = await Promise.all([
+// 思考档位探测与应用逻辑现在分成两半：读侧（目录/档位解析/后台探测）在
+// useSessionPreferenceState，写侧（应用命令/pending）在 useSessionPreferenceController；
+// 二者与 Ctrl+M/Ctrl+T 快捷键共用同一条链路。pickerSource 取两份拼接，组件只验渲染接线。
+const [stateSource, controllerSource, pickerHostSource, ipcSource, sessionIpcSource, preloadSource, componentsSource] = await Promise.all([
+  readFile("src/renderer/src/hooks/useSessionPreferenceState.ts", "utf8"),
+  readFile("src/renderer/src/hooks/useSessionPreferenceController.ts", "utf8"),
   readFile("src/renderer/src/components/session/ComposerPickerHost.tsx", "utf8"),
   readFile("src/shared/ipc.ts", "utf8"),
   readFile("src/main/ipc/sessionIpc.ts", "utf8"),
   readFile("src/preload/index.ts", "utf8"),
   readFile("src/renderer/src/components/session/ComposerComponents.tsx", "utf8"),
 ]);
+const pickerSource = [stateSource, controllerSource].join("\n");
 
 test("Pi thinking RPC parses and de-duplicates authoritative levels", () => {
   assert.deepEqual(
@@ -81,7 +87,8 @@ test("Pi picker probes runtime levels only for an idle cache miss", () => {
   assert.match(pickerSource, /desktopApi\.sessions\.listRuntimeThinkingLevels\(\{/);
   assert.match(pickerSource, /resolvePiRuntimeThinkingLevels\(\{/);
   assert.match(pickerSource, /runtimePiLevels: runtimeLevels/);
-  assert.match(pickerSource, /props\.picker !== "thinking"/);
+  // 探测开关：思考选择器打开，或快捷键武装了档位循环（cycleArmed）
+  assert.match(pickerSource, /!\(options\.thinkingPickerOpen \|\| options\.cycleArmed\)/);
   assert.match(pickerSource, /runtime\?\.status !== "idle"/);
   assert.match(pickerSource, /report === null/);
   assert.match(pickerSource, /cachedModel\?\.thinkingLevels !== undefined/);
@@ -115,7 +122,7 @@ test("DSH missing reasoning metadata falls back to selectable full levels", () =
   assert.match(pickerSource, /resolveThinkingPickerLevels\(/);
   // 弹窗 loading 现在只反映「模型目录首屏加载」（catalogLoading → ModelPicker.loading），
   // 与思考档位探测解耦：探测仍只在 idle 且无缓存时后台进行，不会把面板卡成 loading。
-  assert.match(pickerSource, /loading=\{catalogLoading\}/);
+  assert.match(pickerHostSource, /loading=\{preference\.catalogLoading\}/);
   assert.match(componentsSource, /loading\?: boolean/);
   assert.match(componentsSource, /resolveModelPickerBody\(\{/);
   assert.match(componentsSource, /loading: props\.loading,/);
