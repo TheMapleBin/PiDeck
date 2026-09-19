@@ -100,3 +100,41 @@ test("segmented bar and floating popover are removed; strip cards replaced them"
   );
   assert.doesNotMatch(stage, /SessionWidgetsPopover/);
 });
+
+test("glyph circles widen canvas to 16x16 with 6.4 radius and overflow-visible to prevent clipping without shrinking", () => {
+  const strip = stripSource();
+  const subagents = readFileSync(
+    "src/renderer/src/components/session/SessionSubagentsStrip.tsx",
+    "utf8",
+  );
+
+  // 画板放宽至 16x16（viewBox -1 -1 16 16），r 保持 6.4（外径 14px 不变小）；
+  // 左右各留 1px 安全边距，并带 overflow-visible 避免 Windows 125%/150% 等 DPI 缩放下右侧被裁切。
+  for (const source of [strip, subagents]) {
+    assert.match(
+      source,
+      /<svg[^>]*width=\{16\}[^>]*height=\{16\}[^>]*viewBox="-1 -1 16 16"[^>]*className="[^"]*overflow-visible[^"]*text-\[var\(--color-success\)\]"[^>]*>/,
+      "CompletedGlyph must have 16x16 canvas, overflow-visible and success color class",
+    );
+    assert.match(
+      source,
+      /<circle cx="7" cy="7" r="6\.4" stroke="currentColor" strokeWidth="1\.2" \/>/,
+      "CompletedGlyph circle radius must stay at 6.4 to keep full 14px diameter",
+    );
+  }
+
+  // SessionTodoStrip 的进行中与待办环也必须保持 16x16 画板、原生 6.4 半径与 overflow-visible
+  assert.match(
+    strip,
+    /<svg[^>]*width=\{16\}[^>]*height=\{16\}[^>]*viewBox="-1 -1 16 16"[^>]*className="[^"]*overflow-visible[^"]*animate-pideck-spin/,
+  );
+  assert.match(strip, /<circle cx="7" cy="7" r="6\.4" stroke=\{`url\(#\$\{gradientId\}\)`\} strokeWidth="1\.2"/);
+  assert.match(
+    strip,
+    /<svg[^>]*width=\{16\}[^>]*height=\{16\}[^>]*viewBox="-1 -1 16 16"[^>]*className="[^"]*overflow-visible[^"]*text-text-tertiary"/,
+  );
+  assert.match(
+    strip,
+    /<circle cx="7" cy="7" r="6\.4" stroke="currentColor" strokeWidth="1\.2" strokeDasharray="2\.4 2\.4"/,
+  );
+});

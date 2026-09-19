@@ -110,10 +110,12 @@ function loadDismissedWidgets(): DismissedWidgets {
 }
 
 /** 状态字形：completed=实心勾圈（成功色）、in_progress=渐变环旋转（品牌色）、
- *  pending=虚线环（弱化色）。svg 逐字节对应 dsh TodoPanel（figma 14×14 画板）。 */
+ *  pending=虚线环（弱化色）。画板放宽至 16×16（viewBox -1 -1 16 16），
+ *  半径保持 6.4 原生大小（外径 14px 绝对不缩小），四周（尤其是右侧）自然留出
+ *  1px 防裁切安全边距，并配 overflow-visible，彻底根除高分屏/DPI 缩放下右侧被截断。 */
 function CompletedGlyph() {
 	return (
-		<svg width={14} height={14} viewBox="0 0 14 14" fill="none" aria-hidden="true" className="text-[var(--color-success)]">
+		<svg width={16} height={16} viewBox="-1 -1 16 16" fill="none" aria-hidden="true" className="overflow-visible text-[var(--color-success)]">
 			<circle cx="7" cy="7" r="6.4" stroke="currentColor" strokeWidth="1.2" />
 			<path
 				d="M10.9631 5.71411L7.70154 8.97571C7.48011 9.19714 7.27736 9.40099 7.09229 9.54993C6.89742 9.70669 6.66314 9.85279 6.3634 9.90027C6.2049 9.92534 6.04339 9.92534 5.88489 9.90027C5.58515 9.85279 5.35087 9.70669 5.15601 9.54993C4.97093 9.40099 4.76818 9.19714 4.54675 8.97571L3.03516 7.46411L3.96313 6.53613L5.47473 8.04773C5.7169 8.28989 5.86196 8.43389 5.97888 8.52795C6.08597 8.61409 6.10875 8.60701 6.08997 8.604C6.11259 8.60758 6.13571 8.60758 6.15833 8.604C6.13954 8.60701 6.16232 8.61409 6.26941 8.52795C6.38633 8.43389 6.53139 8.28989 6.77356 8.04773L10.0352 4.78613L10.9631 5.71411Z"
@@ -127,7 +129,7 @@ function CompletedGlyph() {
 function ProgressGlyph() {
 	const gradientId = useId();
 	return (
-		<svg width={14} height={14} viewBox="0 0 14 14" fill="none" aria-hidden="true" className="animate-pideck-spin text-[var(--color-accent)] [animation-duration:1s]">
+		<svg width={16} height={16} viewBox="-1 -1 16 16" fill="none" aria-hidden="true" className="overflow-visible animate-pideck-spin text-[var(--color-accent)] [animation-duration:1s]">
 			<defs>
 				<linearGradient id={gradientId} x1="2.5" y1="12" x2="10.5" y2="3.5" gradientUnits="userSpaceOnUse">
 					<stop stopColor="currentColor" />
@@ -142,7 +144,7 @@ function ProgressGlyph() {
 /** 待处理：虚线未开始环。 */
 function PendingGlyph() {
 	return (
-		<svg width={14} height={14} viewBox="0 0 14 14" fill="none" aria-hidden="true" className="text-text-tertiary">
+		<svg width={16} height={16} viewBox="-1 -1 16 16" fill="none" aria-hidden="true" className="overflow-visible text-text-tertiary">
 			<circle cx="7" cy="7" r="6.4" stroke="currentColor" strokeWidth="1.2" strokeDasharray="2.4 2.4" />
 		</svg>
 	);
