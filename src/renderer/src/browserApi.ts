@@ -18,6 +18,15 @@ type WebState = {
 };
 
 const base = createPreviewApi();
+
+// Web 服务令牌：从二维码/分享链接的 ?token= 读取一次并持久化到 localStorage，
+// 之后所有 /api 请求统一带 Authorization: Bearer。环回绑定服务端不校验，无令牌时照常工作。
+const WEB_TOKEN_STORAGE_KEY = "pideck-web-token";
+const tokenFromUrl = new URLSearchParams(window.location.search).get("token");
+if (tokenFromUrl)
+	window.localStorage.setItem(WEB_TOKEN_STORAGE_KEY, tokenFromUrl);
+const webToken = window.localStorage.getItem(WEB_TOKEN_STORAGE_KEY);
+
 let state: WebState = {
 	projects: [],
 	sessions: [],
@@ -48,7 +57,10 @@ function isWebState(value: unknown): value is WebState {
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
 	const response = await fetch(path, {
-		headers: { "content-type": "application/json" },
+		headers: {
+			"content-type": "application/json",
+			...(webToken ? { authorization: `Bearer ${webToken}` } : {}),
+		},
 		...init,
 	});
 	let data: unknown;

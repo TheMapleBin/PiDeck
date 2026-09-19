@@ -34,6 +34,13 @@ function loadBrowserApi(fetchImpl) {
 		window: {
 			setInterval: () => 1,
 			clearInterval: () => undefined,
+			// browserApi 启动时从 window.location.search 读 ?token= 并写 localStorage，
+			// 沙箱必须补齐这两个桩，否则真实代码在 vm 里取不到 location 直接抛错。
+			location: { search: "" },
+			localStorage: {
+				getItem: () => null,
+				setItem: () => undefined,
+			},
 		},
 		require: (specifier) => {
 			if (specifier === "./i18n") return { t: (key) => key };

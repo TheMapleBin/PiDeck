@@ -31,6 +31,7 @@ import type {
 	PiInstallStatus,
 	PiRuntimeNodeInstallResult,
 	PiRuntimeNodeStatus,
+	WebServiceStatusInfo,
 } from "../../shared/types";
 import type {
 	AppInfo,
@@ -259,8 +260,8 @@ export type SystemIpcDeps = {
 		checkPiUpdate: () => Promise<import("../../shared/types").PiUpdateCheckResult>;
 		updatePi: () => Promise<import("../../shared/types").PiCliUpdateResult>;
 	};
-	/** Web service manager for restart */
-	webServiceManager?: { stop: () => Promise<void> };
+	/** Web service manager for restart / 运行状态查询 */
+	webServiceManager?: { stop: () => Promise<void>; getStatus: () => WebServiceStatusInfo };
 	/** Terminal manager for restart */
 	terminalManager?: { closeAll: () => void };
 	/** Is quitting flag (for restart) */
@@ -1672,6 +1673,19 @@ export function registerSystemIpc(deps: SystemIpcDeps): void {
 	ipcMain.handle(ipcChannels.settingsRestartWebService, async () => {
 		if (!restartWebService) throw new Error("restartWebService not available");
 		await restartWebService(settingsStore.get());
+	});
+
+	ipcMain.handle(ipcChannels.webServiceStatus, () => {
+		if (!webServiceManager) {
+			return {
+				running: false,
+				host: "",
+				port: 0,
+				token: "",
+				requiresAuth: false,
+			} satisfies WebServiceStatusInfo;
+		}
+		return webServiceManager.getStatus();
 	});
 
 	ipcMain.handle(ipcChannels.settingsTestPiProxy, async () => {

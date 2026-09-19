@@ -1,4 +1,5 @@
 import { createServer, request as httpRequest, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { randomUUID } from "node:crypto";
 import { Readable } from "node:stream";
 import type { AddressInfo } from "node:net";
 import { existsSync } from "node:fs";
@@ -31,6 +32,7 @@ import type {
 	SessionTargetedValue,
 	SessionUiResponseInput,
 	UpdateSessionRecordInput,
+	WebServiceStatusInfo,
 } from "../../shared/types";
 import type { PendingUiRequestSnapshot } from "../sessions/SessionRuntimeCoordinator";
 import { replaceExpandedRefBlocksWithLabels } from "../../shared/expandedRefBlocks";
@@ -230,7 +232,16 @@ function serializePublicWebPayload(body: unknown): string {
 
 export class WebServiceManager {
 	private server: Server | null = null;
-	private current: { host: string; port: number } | null = null;
+	private current: {
+		host: string;
+		port: number;
+		token: string;
+		requiresAuth: boolean;
+	} | null = null;
+	/** 访问令牌：每次启动随机重生成，泄露的旧令牌在服务重启后即失效。 */
+	private authToken = "";
+	/** 非环回绑定（暴露到网卡）时为 true，此时所有 /api/*（/api/health 除外）强制令牌。 */
+	private requiresAuth = false;
 	/** dev 模式渲染层 dev server 基址（无尾斜杠）；空串表示走构建产物。 */
 	private readonly devRendererUrl: string;
 	private readonly rendererRoot = join(__dirname, "../renderer");
@@ -250,7 +261,7 @@ export class WebServiceManager {
 			return;
 		}
 
-		const host = settings.webServiceHost.trim() || "0.0.0.0";
+		const host = settings.webServiceHost.trim() || "127.0.0.1";
 		const port = this.normalizePort(settings.webServicePort);
 		if (this.server && this.current?.host === host && this.current.port === port) return;
 		await this.stop();
@@ -263,10 +274,18 @@ export class WebServiceManager {
 	 */
 	async restart(settings: WebServiceSettings) {
 		if (!settings.webServiceEnabled) return;
-		const host = settings.webServiceHost.trim() || "0.0.0.0";
+		const host = settings.webServiceHost.trim() || "127.0.0.1";
 		const port = this.normalizePort(settings.webServicePort);
 		await this.stop();
 		await this.start(host, port);
+	}
+
+	/** 渲染层展示二维码/令牌用；未运行时返回空形状（running=false） */
+	getStatus(): WebServiceStatusInfo {
+		if (this.current) {
+			return { running: true, ...this.current };
+		}
+		return { running: false, host: "", port: 0, token: "", requiresAuth: false };
 	}
 
 	async stop() {
@@ -334,7 +353,15 @@ export class WebServiceManager {
 			});
 		});
 		this.server = server;
-		this.current = { host, port: this.getPort(server, port) };
+		// 令牌每次启动随机重生成：泄露的旧令牌在服务重启后即失效。
+		this.authToken = randomUUID();
+		this.requiresAuth = !LOOPBACK_HOSTS.has(host);
+		this.current = {
+			host,
+			port: this.getPort(server, port),
+			token: this.authToken,
+			requiresAuth: this.requiresAuth,
+		};
 	}
 
 	private async handleRequest(
@@ -357,6 +384,22 @@ export class WebServiceManager {
 					host,
 					port: this.getPort(server, port),
 				});
+				return;
+			}
+
+			// 非环回绑定（0.0.0.0 / 局域网 IP）时强制令牌；环回绑定豁免保持本机/测试零摩擦。
+			// GET 与 SSE 允许 ?token= 查询参数（浏览器 EventSource 无法携带 header），其余走 Authorization: Bearer。
+			if (
+				this.requiresAuth &&
+				url.pathname.startsWith("/api/") &&
+				!this.isAuthorized(request, url)
+			) {
+				this.sendError(
+					response,
+					401,
+					"webError.unauthorized",
+					"A valid web service token is required",
+				);
 				return;
 			}
 			if (url.pathname === "/api/state") {
@@ -1705,6 +1748,16 @@ export class WebServiceManager {
 		} catch {
 			// 连接已失效则忽略
 		}
+	}
+
+	/**
+	 * 鉴权：Authorization: Bearer 对所有方法生效；?token= 查询参数仅限 GET/SSE
+	 * （EventSource 无法携带 header），写操作必须走 Bearer，避免令牌进代理/访问日志。
+	 */
+	private isAuthorized(request: IncomingMessage, url: URL): boolean {
+		if (request.headers.authorization === `Bearer ${this.authToken}`) return true;
+		if (request.method !== "GET") return false;
+		return url.searchParams.get("token") === this.authToken;
 	}
 
 	private sendError(

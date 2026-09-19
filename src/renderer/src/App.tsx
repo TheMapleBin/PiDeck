@@ -713,7 +713,7 @@ export function App() {
     wslUser: "root",
     telemetryEnabled: true,
     webServiceEnabled: false,
-    webServiceHost: "0.0.0.0",
+    webServiceHost: "127.0.0.1",
     webServicePort: 8765,
     rpcTimeout: 600_000,
     linkOpenMode: "external",

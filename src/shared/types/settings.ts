@@ -239,7 +239,10 @@ export type AppSettings = {
 	telemetryEnabled: boolean;
 	/** 是否开启局域网 Web 服务 */
 	webServiceEnabled: boolean;
-	/** Web 服务监听地址，默认 0.0.0.0 允许局域网访问 */
+	/**
+	 * Web 服务监听地址。默认 127.0.0.1（仅本机）：绑定到网卡（0.0.0.0/局域网 IP）
+	 * 会让同网段任意主机访问本机的会话/文件，因此默认不对外暴露，需用户显式改。
+	 */
 	webServiceHost: string;
 	/** Web 服务监听端口 */
 	webServicePort: number;
@@ -564,8 +567,19 @@ export type AppSettings = {
 
 };
 
-// ── 桌面宠物类型 ──
+/**
+ * Web 服务运行时状态；token 每次 start 随机重生成，requiresAuth 仅在非环回绑定时为 true。
+ * 渲染层设置页二维码/令牌提示据此附上访问令牌。
+ */
+export type WebServiceStatusInfo = {
+	running: boolean;
+	host: string;
+	port: number;
+	token: string;
+	requiresAuth: boolean;
+};
 
+// ── 桌面宠物类型 ──
 /** 宠物聚合动画状态；映射到 spritesheet 的行号。
  *  前 7 个为业务态（由 PetStateBridge 聚合 Agent 状态产出）；
  *  running-right / running-left / review 为本期启用的预留行——
