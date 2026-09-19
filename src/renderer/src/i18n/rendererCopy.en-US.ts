@@ -2412,6 +2412,7 @@ export const enUS: Record<TranslationKey, string> = {
   // Installed list: one-line description per built-in extension (ExtensionTableRow maps source -> builtInExtDesc.*)
   "config.builtInExtDesc.pi-deck-request-size-recovery": "Request-size recovery: detects gateway 413/request-too-large errors and, with your consent, temporarily switches to a higher-limit model to compact the session, then switches back to unblock sending.",
   "config.builtInExtDesc.pi-deck-ask-question": "Registers the ask_question tool: the model can ask you questions through the desktop UI (select/input/confirm/batched question tabs) and receives your answers.",
+  "config.builtInExtDesc.pi-deck-file-links": "File-reference guidance: asks the model to use workspace-relative paths and path:line locations instead of file:// URIs, so the desktop can safely render clickable file links.",
   "config.builtInExtDesc.pi-deck-goal-mode": "Goal mode: keeps working toward one objective round after round until it is complete, blocked, paused, or the round limit is hit; state survives restarts.",
   "config.builtInExtDesc.pi-deck-nul-redirect-fix": "NUL redirect fix: rewrites Windows-style redirects like `> nul` to /dev/null before bash runs, preventing Git Bash from creating undeletable nul files.",
   "config.builtInExtDesc.pi-deck-plan-mode": "Plan mode: produces a numbered plan with a read-only toolset first; after you choose execute/stay/revise, write tools are restored and [DONE:n] markers drive the progress widget.",
