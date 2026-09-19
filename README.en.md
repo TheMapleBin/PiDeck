@@ -2,7 +2,9 @@
 
 [中文文档](README.md) · [English](README.en.md) · [LinuxDO 友链](https://linux.do)
 
-**An open-source desktop workbench for managing multiple [Pi](https://pi.dev) and [DSH](https://github.com/deepseek-ai/deepseek-harness) coding-agent sessions.**
+**An open-source desktop workbench ("pi desktop") for managing multiple [Pi](https://pi.dev) and [DSH](https://github.com/deepseek-ai/deepseek-harness) coding-agent sessions.**
+
+> PiDeck = **pi desktop**: the pi coding agent, in a desktop app. If you searched GitHub for "pi desktop", "pi GUI", or "pi client" — this is it.
 
 ![Status](https://img.shields.io/badge/status-experimental-orange)
 ![License](https://img.shields.io/badge/license-MIT-blue)

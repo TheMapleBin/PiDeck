@@ -1,3 +1,8 @@
+---
+title: 配置与 Skills | PiDeck pi 配置可视化管理
+description: PiDeck 可视化配置指南：models.json / auth.json 编辑、供应商与模型管理、技能（Skills）与扩展安装、代理设置——告别手改 JSON 的 pi desktop 配置方式。
+---
+
 # 配置与 Skills
 
 PiDeck 提供图形化配置入口，减少频繁查找和编辑 pi 配置文件的成本。
