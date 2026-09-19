@@ -400,3 +400,74 @@ test("缺失项目 MCP 文件仍会拒绝指向项目外的 .pi junction", async
 		rmSync(fixture, { recursive: true, force: true });
 	}
 });
+
+// ── 重命名回归：markdown 技能绝不能把 .pi/skills 根目录搬走（数据丢失事故） ──
+
+test("项目级 markdown 技能重命名只改文件名，不搬走 .pi/skills 根目录", async () => {
+	const root = mkdtempSync(join(tmpdir(), "pideck-prm-md-rename-"));
+	try {
+		const skillDir = join(root, ".pi", "skills");
+		mkdirSync(join(skillDir, "bar"), { recursive: true });
+		writeFileSync(join(skillDir, "foo.md"), "---\nname: foo\ndescription: md skill\n---\n\nbody\n", "utf8");
+		writeFileSync(join(skillDir, "bar", "SKILL.md"), "---\nname: bar\ndescription: dir skill\n---\n\nbody\n", "utf8");
+		const manager = managerFor({ id: "p1", name: "P1", path: root, lastOpenedAt: 1 });
+
+		const renamed = await manager.renameSkill("p1", join(skillDir, "foo.md"), "foo-renamed");
+
+		// 根目录原地不动，其他技能不受影响
+		assert.equal(existsSync(join(skillDir, "bar", "SKILL.md")), true);
+		assert.equal(existsSync(join(skillDir, "foo.md")), false);
+		assert.equal(existsSync(join(skillDir, "foo-renamed.md")), true);
+		// 旧实现会把整个 .pi/skills 改名搬走，此处必须不存在
+		assert.equal(existsSync(join(root, ".pi", "foo-renamed")), false);
+		assert.equal(renamed.name, "foo-renamed");
+		assert.equal(renamed.path, join(skillDir, "foo-renamed.md"));
+		// 回归：旧实现按不存在的 SKILL.md 回读，正文/描述为空
+		assert.match(readFileSync(renamed.path, "utf8"), /name: foo-renamed/);
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("项目级禁用技能重命名后同步 .pi/settings.json 的 disabledSkills", async () => {
+	const root = mkdtempSync(join(tmpdir(), "pideck-prm-rename-disabled-"));
+	try {
+		const skillDir = join(root, ".pi", "skills");
+		mkdirSync(join(skillDir, "mykit"), { recursive: true });
+		writeFileSync(join(skillDir, "mykit", "SKILL.md"), "---\nname: MyKit\ndescription: kit\n---\n\n# MyKit\n", "utf8");
+		const manager = managerFor({ id: "p1", name: "P1", path: root, lastOpenedAt: 1 });
+		const skillPath = join(skillDir, "mykit", "SKILL.md");
+
+		await manager.toggleSkill("p1", skillPath, false);
+		assert.deepEqual(JSON.parse(readFileSync(join(root, ".pi", "settings.json"), "utf8")).disabledSkills, ["MyKit"]);
+
+		const renamed = await manager.renameSkill("p1", skillPath, "renamed-kit");
+		// 旧名条目被新名替换，不残留孤儿数据；禁用状态保持
+		assert.deepEqual(JSON.parse(readFileSync(join(root, ".pi", "settings.json"), "utf8")).disabledSkills, ["renamed-kit"]);
+		assert.equal(renamed.enabled, false);
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("项目级 markdown 技能无 name 时回退为文件名且重命名时自动补全 name", async () => {
+	const root = mkdtempSync(join(tmpdir(), "pideck-prm-bare-md-"));
+	try {
+		const skillDir = join(root, ".pi", "skills");
+		mkdirSync(skillDir, { recursive: true });
+		writeFileSync(join(skillDir, "tool.md"), "---\ndescription: bare tool\n---\n\nbody\n", "utf8");
+		const manager = managerFor({ id: "p1", name: "P1", path: root, lastOpenedAt: 1 });
+
+		const list = await manager.list("p1");
+		const tool = list.skills.find((s) => s.path === join(skillDir, "tool.md"));
+		assert.ok(tool);
+		// 回退名取文件名而非「skills」
+		assert.equal(tool.name, "tool");
+
+		const renamed = await manager.renameSkill("p1", tool.path, "tool-v2");
+		assert.equal(renamed.name, "tool-v2");
+		assert.match(readFileSync(renamed.path, "utf8"), /name: tool-v2/);
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
