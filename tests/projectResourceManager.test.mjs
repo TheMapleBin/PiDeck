@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, symlinkSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -404,7 +404,8 @@ test("缺失项目 MCP 文件仍会拒绝指向项目外的 .pi junction", async
 // ── 重命名回归：markdown 技能绝不能把 .pi/skills 根目录搬走（数据丢失事故） ──
 
 test("项目级 markdown 技能重命名只改文件名，不搬走 .pi/skills 根目录", async () => {
-	const root = mkdtempSync(join(tmpdir(), "pideck-prm-md-rename-"));
+	const rawRoot = mkdtempSync(join(tmpdir(), "pideck-prm-md-rename-"));
+	const root = realpathSync.native ? realpathSync.native(rawRoot) : realpathSync(rawRoot);
 	try {
 		const skillDir = join(root, ".pi", "skills");
 		mkdirSync(join(skillDir, "bar"), { recursive: true });
@@ -451,7 +452,8 @@ test("项目级禁用技能重命名后同步 .pi/settings.json 的 disabledSkil
 });
 
 test("项目级 markdown 技能无 name 时回退为文件名且重命名时自动补全 name", async () => {
-	const root = mkdtempSync(join(tmpdir(), "pideck-prm-bare-md-"));
+	const rawRoot = mkdtempSync(join(tmpdir(), "pideck-prm-bare-md-"));
+	const root = realpathSync.native ? realpathSync.native(rawRoot) : realpathSync(rawRoot);
 	try {
 		const skillDir = join(root, ".pi", "skills");
 		mkdirSync(skillDir, { recursive: true });

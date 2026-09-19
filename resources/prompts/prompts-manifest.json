@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "version": "1.0.0",
-  "bundleSha256": "c4bb27f61b810db82bbca3b11d20355958a7d3aa77cedbd9629545f45cd28e73",
+  "bundleSha256": "3190f532996bb8018de739d20ede28f796a4e4a624287533066df57ebb3b091a",
   "fileCount": 13,
   "files": [
     {
@@ -46,8 +46,8 @@
     },
     {
       "name": "pi-system.md",
-      "sha256": "fc3271fd980b9d938f4199ec429f236d6ec0a8335eb4340811af069cd6366531",
-      "bytes": 1773
+      "sha256": "cb19ab93a8c387df4a551ce31292ba29c66830efc11b8c931a70aa1e1c033d10",
+      "bytes": 1467
     },
     {
       "name": "refactor.md",

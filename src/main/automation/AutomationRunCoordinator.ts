@@ -88,6 +88,16 @@ export class AutomationRunCoordinator {
 	 */
 	private readonly finalizing = new Set<string>();
 	private draining = false;
+	/**
+	 * 已 dispose（应用退出路径）。置位后不再启动新 run、不再建会话、不再派发提示词、不再落库：
+	 * 退出时 store / catalog / 临时目录可能已被拆除，继续写会抛 ENOENT 之类的错误，
+	 * 并以 unhandledRejection 的形式冒出来（主进程日志里的「异步活动泄漏」，
+	 * 测试里的文件级偶发失败）。
+	 *
+	 * 停在 starting/running 的 run 不需要在此收尾：AutomationStore.load() 在下次启动时
+	 * 会把所有非终态 run 统一改判为 interrupted。
+	 */
+	private disposed = false;
 
 	constructor(deps: AutomationRunCoordinatorDeps) {
 		this.store = deps.store;
@@ -125,7 +135,7 @@ export class AutomationRunCoordinator {
 			status: "queued",
 		}, now);
 
-		void this.drainQueue();
+		this.detach("drainQueue", this.drainQueue());
 		return run;
 	}
 
@@ -170,7 +180,7 @@ export class AutomationRunCoordinator {
 	}
 
 	async drainQueue(): Promise<void> {
-		if (this.draining) return;
+		if (this.draining || this.disposed) return;
 		this.draining = true;
 		try {
 			const snapshot = this.store.getSnapshot();
@@ -203,7 +213,7 @@ export class AutomationRunCoordinator {
 					continue;
 				}
 
-				void this.executeRun(run, task);
+				this.detach("executeRun", this.executeRun(run, task));
 			}
 		} finally {
 			this.draining = false;
@@ -211,10 +221,27 @@ export class AutomationRunCoordinator {
 	}
 
 	dispose(): void {
+		this.disposed = true;
 		for (const tracker of this.activeTrackers.values()) {
 			if (tracker.timeoutHandle) clearTimeout(tracker.timeoutHandle);
 		}
 		this.activeTrackers.clear();
+	}
+
+	/**
+	 * fire-and-forget 后台链路统一兜底。
+	 *
+	 * 这些调用刻意不 await（不阻塞调用方），但**必须**挂 catch：存储/运行时在应用退出、
+	 * 磁盘异常、工作目录被拆除时都会抛错，裸 `void promise` 会直接变成 unhandledRejection
+	 * ——在 Electron 主进程里这是一类很难定位的崩溃级噪音（历史上表现为定时任务
+	 * 退出后偶发的 ENOENT）。这里统一收敛成一条 warn，不改变任何正常路径行为。
+	 */
+	private detach(label: string, work: Promise<unknown>): void {
+		void work.catch((error: unknown) => {
+			void this.logger?.warn("automation", `Detached task failed: ${label}`, {
+				error: error instanceof Error ? error.message : String(error),
+			});
+		});
 	}
 
 	private async executeRun(run: AutomationRun, task: AutomationTask): Promise<void> {
@@ -237,6 +264,9 @@ export class AutomationRunCoordinator {
 		};
 		this.activeTrackers.set(runId, tracker);
 
+		// dispose 后不再落库（见 disposed 字段注释）。
+		if (this.disposed) return;
+
 		await this.store.updateRun(runId, {
 			status: "starting",
 			startedAt: now,
@@ -255,6 +285,9 @@ export class AutomationRunCoordinator {
 
 		let sessionDraft: import("../../shared/types").SessionRecord;
 		try {
+			// 建草稿会写 catalog：dispose 后必须停在这里，否则会留下「进程已退出但会话多出来」
+			// 的孤儿条目（比 unhandledRejection 更难排查）。
+			if (this.disposed) return;
 			sessionDraft = await this.catalog.createDraft({
 				projectId: project.id,
 				title,
@@ -271,6 +304,7 @@ export class AutomationRunCoordinator {
 		}
 
 		const sessionId = sessionDraft.id;
+		if (this.disposed) return;
 		// 新 draft 已落 catalog：广播刷新让侧栏立即出现会话行（catalog 无内部广播机制，
 		// 不广播的话渲染层要等下一次交互才会拉到，且期间 DSH agent 行会先落成孤儿条目）。
 		this.notifySessionCatalogChanged?.(project.id);
@@ -283,7 +317,7 @@ export class AutomationRunCoordinator {
 		// 若对 undefined 直接 setTimeout，事件循环按 0ms 立即触发，会把运行误杀成 timed-out。
 		if (tracker.timeoutMs !== undefined && tracker.timeoutMs > 0) {
 			tracker.timeoutHandle = setTimeout(() => {
-				void this.handleTimeout(runId);
+				this.detach("handleTimeout", this.handleTimeout(runId));
 			}, tracker.timeoutMs);
 			if (typeof tracker.timeoutHandle.unref === "function") {
 				tracker.timeoutHandle.unref();
@@ -292,6 +326,9 @@ export class AutomationRunCoordinator {
 
 		const requestId = randomUUID();
 		try {
+			// dispose 后不再派发：send 会拉起 pi/DSH 子进程，退出路径上再起进程
+			// 会变成没有任何人回收的孤儿进程。
+			if (this.disposed) return;
 			// message 是用户可见原文（会话气泡），agentMessage 是实际发给 pi 的载荷。
 			// AgentManager.sendPrompt 里 agentMessage 非空时会**整体替换** message，
 			// 所以宿主指令必须与任务提示词拼接，不能只放指令——否则定时任务的提示词
@@ -332,6 +369,7 @@ export class AutomationRunCoordinator {
 					agentId: result.agentId,
 					runtimeGeneration: result.runtimeGeneration,
 				};
+				if (this.disposed) return;
 				// dispatch 已接受、attachRuntime 在 sendOnce 内异步回写 dshSessionId：
 				// 再广播一次，让渲染层重拉到 promoteToActive 后的会话状态。
 				this.notifySessionCatalogChanged?.(project.id);
@@ -346,6 +384,7 @@ export class AutomationRunCoordinator {
 				const target = this.sessionRuntimeCoordinator.getTarget(sessionId);
 				if (target) {
 					tracker.target = target;
+					if (this.disposed) return;
 					this.notifySessionCatalogChanged?.(project.id);
 					await this.store.updateRun(runId, {
 						status: "running",
@@ -446,15 +485,15 @@ export class AutomationRunCoordinator {
 		// 预算校验：仅在有真实值时评估，避免 0 值误触发。
 		const totalTokens = (inputTokens ?? 0) + (outputTokens ?? 0);
 		if (tracker.maxTokens && inputTokens !== undefined && outputTokens !== undefined && totalTokens >= tracker.maxTokens) {
-			void this.handleBudgetExhausted(runId, "tokens", `Exceeded token budget (${totalTokens} >= ${tracker.maxTokens})`);
+			this.detach("handleBudgetExhausted:tokens", this.handleBudgetExhausted(runId, "tokens", `Exceeded token budget (${totalTokens} >= ${tracker.maxTokens})`));
 			return;
 		}
 		if (tracker.maxCostUsd && costUsd !== undefined && costUsd >= tracker.maxCostUsd) {
-			void this.handleBudgetExhausted(runId, "cost", `Exceeded cost budget ($${costUsd} >= $${tracker.maxCostUsd})`);
+			this.detach("handleBudgetExhausted:cost", this.handleBudgetExhausted(runId, "cost", `Exceeded cost budget ($${costUsd} >= $${tracker.maxCostUsd})`));
 			return;
 		}
 		if (tracker.maxSteps && tracker.stepCount >= tracker.maxSteps) {
-			void this.handleBudgetExhausted(runId, "steps", `Exceeded tool step budget (${tracker.stepCount} >= ${tracker.maxSteps})`);
+			this.detach("handleBudgetExhausted:steps", this.handleBudgetExhausted(runId, "steps", `Exceeded tool step budget (${tracker.stepCount} >= ${tracker.maxSteps})`));
 			return;
 		}
 
@@ -464,13 +503,13 @@ export class AutomationRunCoordinator {
 		if (now - tracker.lastMetricUpdate >= RUNTIME_METRIC_THROTTLE_MS && (hasMetrics || stepChanged)) {
 			tracker.lastMetricUpdate = now;
 			tracker.persistedStepCount = tracker.stepCount;
-			void this.store.updateRun(runId, {
+			this.detach("persist-run-metrics", this.store.updateRun(runId, {
 				...(inputTokens !== undefined ? { inputTokens } : {}),
 				...(outputTokens !== undefined ? { outputTokens } : {}),
 				...(costUsd !== undefined ? { costUsd } : {}),
 				stepCount: tracker.stepCount,
 				updatedAt: now,
-			});
+			}));
 		}
 	}
 
@@ -558,6 +597,9 @@ export class AutomationRunCoordinator {
 			stepCount?: number;
 		},
 	): Promise<void> {
+		// dispose 之后不再写终态：退出路径上存储可能已拆，且此后的落库对用户毫无意义
+		// （下次启动 AutomationStore.load() 会把非终态 run 改判为 interrupted）。
+		if (this.disposed) return;
 		// 并发终态互斥：finalizeRun 内部有多个 await，两个入口同时进入会双重落库 + 双重通知
 		if (this.finalizing.has(runId)) return;
 		this.finalizing.add(runId);
@@ -630,7 +672,7 @@ export class AutomationRunCoordinator {
 			this.finalizing.delete(runId);
 		}
 
-		void this.drainQueue();
+		this.detach("drainQueue", this.drainQueue());
 	}
 }
 

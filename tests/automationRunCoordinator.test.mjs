@@ -117,6 +117,18 @@ async function waitFor(condition, { timeoutMs = 2_000, stepMs = 5 } = {}) {
 	return condition();
 }
 
+/**
+ * 清理夹具目录。
+ *
+ * Windows 上 `rm -rf` 与「in-flight 落库的原子写（临时文件 + rename）」并发时会偶发
+ * ENOTEMPTY/EPERM：目录刚被判空、又被写入一个文件。node:fs 的 maxRetries 正是为这类
+ * 瞬时错误设计的线性退避重试（仅 recursive:true 时生效），不是「放宽断言」——
+ * 断言仍会真实执行，只是不再被操作系统的瞬时错误拖成假失败。
+ */
+async function removeFixtureDir(dir) {
+	await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+}
+
 async function createStartedCoordinator(store, taskOverrides = {}) {
 	const task = await store.createTask({
 		name: "Nightly Health Check",
@@ -189,7 +201,7 @@ test("AutomationRunCoordinator marks success only on agents:state idle, not on s
 
 		coordinator.dispose();
 	} finally {
-		await rm(dir, { recursive: true, force: true });
+		await removeFixtureDir(dir);
 	}
 });
 
@@ -230,7 +242,7 @@ test("AutomationRunCoordinator marks failed on error even after isTurnActive=fal
 
 		coordinator.dispose();
 	} finally {
-		await rm(dir, { recursive: true, force: true });
+		await removeFixtureDir(dir);
 	}
 });
 
@@ -261,7 +273,7 @@ test("AutomationRunCoordinator ignores idle snapshot before the turn starts", as
 
 		coordinator.dispose();
 	} finally {
-		await rm(dir, { recursive: true, force: true });
+		await removeFixtureDir(dir);
 	}
 });
 
@@ -287,7 +299,7 @@ test("AutomationRunCoordinator marks failed when runtime closes before finishing
 
 		coordinator.dispose();
 	} finally {
-		await rm(dir, { recursive: true, force: true });
+		await removeFixtureDir(dir);
 	}
 });
 
@@ -336,7 +348,7 @@ test("AutomationRunCoordinator preserves token metrics when metric-less patches 
 
 		coordinator.dispose();
 	} finally {
-		await rm(dir, { recursive: true, force: true });
+		await removeFixtureDir(dir);
 	}
 });
 
@@ -371,7 +383,7 @@ test("AutomationRunCoordinator enforces token budget and aborts runtime when bud
 
 		coordinator.dispose();
 	} finally {
-		await rm(dir, { recursive: true, force: true });
+		await removeFixtureDir(dir);
 	}
 });
 
@@ -398,7 +410,7 @@ test("AutomationRunCoordinator supports manual abortRun", async () => {
 
 		coordinator.dispose();
 	} finally {
-		await rm(dir, { recursive: true, force: true });
+		await removeFixtureDir(dir);
 	}
 });
 
@@ -439,7 +451,7 @@ test("dispatch carries the task prompt into agentMessage (not just the automatio
 
 		coordinator.dispose();
 	} finally {
-		await rm(dir, { recursive: true, force: true });
+		await removeFixtureDir(dir);
 	}
 });
 
@@ -504,7 +516,7 @@ test("dispatch applies the task working mode marker and always keeps the prompt"
 		assert.ok(goalSent.agentMessage.includes("把这个功能做到测试全绿"));
 		goalCoordinator.dispose();
 	} finally {
-		await rm(dir, { recursive: true, force: true });
+		await removeFixtureDir(dir);
 	}
 });
 
@@ -539,7 +551,7 @@ test("DSH dispatch sends the raw prompt without agentMessage (no pi-only host in
 
 		coordinator.dispose();
 	} finally {
-		await rm(dir, { recursive: true, force: true });
+		await removeFixtureDir(dir);
 	}
 });
 
@@ -588,7 +600,7 @@ test("DSH run succeeds via agents:state running then idle without isTurnActive",
 
 		coordinator.dispose();
 	} finally {
-		await rm(dir, { recursive: true, force: true });
+		await removeFixtureDir(dir);
 	}
 });
 
@@ -624,7 +636,7 @@ test("AutomationRunCoordinator 预算全留空（不限）不误杀：run 正常
 
 		coordinator.dispose();
 	} finally {
-		await rm(dir, { recursive: true, force: true });
+		await removeFixtureDir(dir);
 	}
 });
 
@@ -664,8 +676,115 @@ test("each automation run creates a fresh session while retaining task linkage",
 		assert.equal(persistedSecondRun.projectId, task.projectId);
 		assert.equal(persistedSecondRun.sessionId, secondSessionId);
 
+		// 第二个 run 此时还在飞行中。必须等它真的进入 running（= send 已返回、
+		// tracker.target 已绑定）再收尾，两个理由：
+		//   1. observeRuntimeEvent 按 tracker.target.sessionId 匹配；target 未绑定时
+		//      发终态事件会直接落空，run 永远不 settle；
+		//   2. executeRun 在终态之后还会继续 updateRun 写 automation.json，若此时 finally
+		//      已删掉临时目录，就会产生 ENOENT 的 unhandledRejection（文件级偶发失败）。
+		assert.equal(
+			await waitFor(() => store.getRun(secondRun.id)?.status === "running"),
+			true,
+			"the second occurrence should reach running before terminal events are sent",
+		);
+		coordinator.observeRuntimeEvent(runtimeStateEvent(secondSessionId, {
+			isTurnActive: true,
+			isExecutingTool: false,
+		}));
+		coordinator.observeRuntimeEvent(tabStateEvent(secondSessionId, "idle"));
+		assert.equal(
+			await waitFor(() => store.getRun(secondRun.id)?.status === "succeeded"),
+			true,
+			"the second run should settle before the fixture directory is removed",
+		);
+
 		coordinator.dispose();
 	} finally {
-		await rm(dir, { recursive: true, force: true });
+		await removeFixtureDir(dir);
+	}
+});
+// ── dispose 回归：退出路径上在飞 run 不得继续落库 ──
+
+test("dispose() stops an in-flight run from writing to the store", async () => {
+	const dir = await mkdtemp(join(tmpdir(), "pideck-coord-dispose-"));
+	const storePath = join(dir, "automation.json");
+	try {
+		const store = new AutomationStore(storePath);
+		await store.load(1_000);
+		const task = await store.createTask({
+			name: "Dispose Mid-Flight",
+			projectId: "p1",
+			prompt: "Check repo status",
+			schedule: { type: "cron", expression: "0 0 * * *" },
+			budget: { timeoutMs: 60_000, maxTokens: 10_000 },
+		}, 1_000);
+
+		const deps = createMockDeps(store);
+		// dispatch 挂起在 await 里：run 停在 send()，精确覆盖「dispose 落在 await 中间」
+		// 这个退出路径上最常见的窗口（也是临时目录被拆除后仍被写入的成因）。
+		let releaseSend;
+		const sendGate = new Promise((resolve) => {
+			releaseSend = resolve;
+		});
+		const realSend = deps.sessionRuntimeCoordinator.send;
+		deps.sessionRuntimeCoordinator.send = async (payload) => {
+			await sendGate;
+			return realSend(payload);
+		};
+
+		const coordinator = new AutomationRunCoordinator(deps);
+		const run = await coordinator.enqueueRun(task, undefined, "manual", 1_050);
+		assert.equal(
+			await waitFor(() => store.getRun(run.id)?.status === "starting"),
+			true,
+			"the run should reach starting before dispose",
+		);
+
+		// dispose 之后统计落库：退出时 store 目录可能已被拆除，任何写入都会变成
+		// ENOENT 的 unhandledRejection（旧实现的偶发失败形态）。
+		const writesAfterDispose = [];
+		const realUpdateRun = store.updateRun.bind(store);
+		store.updateRun = async (...args) => {
+			writesAfterDispose.push(args[0]);
+			return realUpdateRun(...args);
+		};
+
+		coordinator.dispose();
+		releaseSend();
+		await new Promise((r) => setTimeout(r, 50));
+
+		assert.deepEqual(writesAfterDispose, [], "dispose 之后不得再落库");
+		assert.equal(store.getRun(run.id).status, "starting", "in-flight run 不得被推进到 running");
+	} finally {
+		await removeFixtureDir(dir);
+	}
+});
+
+test("dispose() blocks new work from being enqueued or dispatched", async () => {
+	const dir = await mkdtemp(join(tmpdir(), "pideck-coord-dispose-idle-"));
+	const storePath = join(dir, "automation.json");
+	try {
+		const store = new AutomationStore(storePath);
+		await store.load(1_000);
+		const task = await store.createTask({
+			name: "After Dispose",
+			projectId: "p1",
+			prompt: "Check repo status",
+			schedule: { type: "cron", expression: "0 0 * * *" },
+			budget: { timeoutMs: 60_000, maxTokens: 10_000 },
+		}, 1_000);
+
+		const deps = createMockDeps(store);
+		const coordinator = new AutomationRunCoordinator(deps);
+		coordinator.dispose();
+
+		await coordinator.enqueueRun(task, undefined, "manual", 1_050);
+		await new Promise((r) => setTimeout(r, 50));
+
+		// 队列不再 drain：既不能建会话，也不能派发提示词
+		assert.equal(deps.createdSessions.length, 0, "dispose 之后不得再建会话");
+		assert.equal(deps.sentPrompts.length, 0, "dispose 之后不得再派发提示词");
+	} finally {
+		await removeFixtureDir(dir);
 	}
 });
