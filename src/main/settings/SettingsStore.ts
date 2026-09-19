@@ -206,6 +206,7 @@ Gitmoji 对应关系：
   // 提供商与模型显示开关默认全显示：隐藏列表为空 = 不隐藏任何提供商/模型
   hiddenProviders: [],
   hiddenModels: [],
+  hiddenAuthProviders: [],
 
   // ── 扩展管理 ──
   /** 用户手动移除的内置扩展，启动时跳过自动部署 */

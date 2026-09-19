@@ -119,4 +119,11 @@ test("契约完整性：ComposerComponents 与 ComposerPickerHost 支持 hiddenM
   assert.ok(modelsTab.includes("onMoveModel"));
   assert.ok(modelsTab.includes("hiddenModelsInProvider"));
   assert.ok(configModal.includes("handleToggleHiddenModel"));
+  assert.ok(configModal.includes("handleToggleHiddenAuthProvider"));
+
+  // 认证 Tab 各自独立隐藏管理
+  const authTab = readFileSync("src/renderer/src/config/AuthTab.tsx", "utf8");
+  assert.ok(authTab.includes("hiddenAuthProviders"));
+  assert.ok(authTab.includes("onToggleHiddenAuthProvider"));
+  assert.ok(authTab.includes("hiddenAuths"));
 });

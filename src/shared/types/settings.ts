@@ -319,6 +319,12 @@ export type AppSettings = {
 	 * 配置本身不删除，恢复显示即可继续使用。可选以兼容旧 settings.json。
 	 */
 	hiddenModels?: string[];
+	/**
+	 * 用户主动隐藏的认证供应商 key 列表（与 auth.json 的 provider key 一致）。
+	 * 隐藏后：Pi 认证页卡片移入页面底部「已隐藏」折叠区；
+	 * 配置本身不删除（仍正常保存于 auth.json 并供 pi 加载），恢复显示即可继续展开编辑。可选以兼容旧 settings.json。
+	 */
+	hiddenAuthProviders?: string[];
 
 	// ── 模型选择器分组排序：记录最近使用的供应商 ──
 	/**

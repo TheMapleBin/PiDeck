@@ -699,6 +699,8 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 	const [hiddenProviders, setHiddenProviders] = useState<string[]>([]);
 	/** 用户隐藏的模型列表（格式："provider/modelId"，持久化到 AppSettings.hiddenModels）。 */
 	const [hiddenModels, setHiddenModels] = useState<string[]>([]);
+	/** 用户隐藏的认证供应商列表（持久化到 AppSettings.hiddenAuthProviders）。 */
+	const [hiddenAuthProviders, setHiddenAuthProviders] = useState<string[]>([]);
 	/** 切换供应商隐藏状态：本地立即生效 + 持久化到 AppSettings（不影响 models.json 配置本身）。 */
 	const handleToggleHiddenProvider = useCallback((name: string) => {
 		setHiddenProviders((prev) => {
@@ -716,7 +718,15 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 			return next;
 		});
 	}, []);
-	// 打开配置页时读取 AppSettings.hiddenProviders 与 AppSettings.hiddenModels
+	/** 切换认证供应商隐藏状态：本地立即生效 + 持久化到 AppSettings（auth.json 保留不变供运行时读取）。 */
+	const handleToggleHiddenAuthProvider = useCallback((name: string) => {
+		setHiddenAuthProviders((prev) => {
+			const next = prev.includes(name) ? prev.filter((item) => item !== name) : [...prev, name];
+			void api.settings.update({ hiddenAuthProviders: next }).catch(() => undefined);
+			return next;
+		});
+	}, []);
+	// 打开配置页时读取 AppSettings.hiddenProviders、hiddenModels 与 hiddenAuthProviders
 	useEffect(() => {
 		let cancelled = false;
 		void api.settings
@@ -725,6 +735,7 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 				if (!cancelled) {
 					setHiddenProviders(settings.hiddenProviders ?? []);
 					setHiddenModels(settings.hiddenModels ?? []);
+					setHiddenAuthProviders(settings.hiddenAuthProviders ?? []);
 				}
 			})
 			.catch(() => undefined);
@@ -2772,6 +2783,8 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 							newAuthName={newAuthName}
 							saving={saving}
 							modelsData={modelsData}
+							hiddenAuthProviders={hiddenAuthProviders}
+							onToggleHiddenAuthProvider={handleToggleHiddenAuthProvider}
 							onToggleAuth={(name) =>
 								setExpandedAuth(expandedAuth === name ? null : name)
 							}

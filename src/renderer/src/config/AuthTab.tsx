@@ -1,6 +1,6 @@
 import { Button } from "../components/ui-shadcn/button";
 import { useEffect, useState } from "react";
-import { ChevronDown, ChevronRight, Copy, ExternalLink, Trash2 } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Copy, ExternalLink, Eye, EyeOff, Trash2 } from "lucide-react";
 import { t } from "../i18n";
 import type { AuthFile, ModelsFile } from "./configTypes";
 import { ConfigSelect, openDocsInSystemBrowser, SecretInput } from "./ConfigShared";
@@ -62,6 +62,10 @@ export function AuthTab(props: {
 	saving: boolean;
 	/** 已配置的模型/服务商数据，用于 provider / model 下拉选项 */
 	modelsData?: ModelsFile;
+	/** 用户隐藏的认证供应商列表 */
+	hiddenAuthProviders?: string[];
+	/** 切换认证供应商隐藏状态 */
+	onToggleHiddenAuthProvider?: (name: string) => void;
 	onToggleAuth: (name: string) => void;
 	onStartAddAuth: () => void;
 	onCancelAddAuth: () => void;
@@ -75,8 +79,13 @@ export function AuthTab(props: {
 	/** 打开用量查询配置弹窗（与模型页共用同一个 per-provider 弹窗；认证展开区的探查设置入口）。 */
 	onOpenUsageProbeDialog: (providerName: string) => void;
 }) {
-	const { data, expandedAuth, saving } = props;
-	const providers = Object.keys(data);
+	const { data, expandedAuth, saving, hiddenAuthProviders = [], onToggleHiddenAuthProvider } = props;
+	const allProviders = Object.keys(data);
+	const hiddenAuthSet = new Set(hiddenAuthProviders);
+	const visibleProviders = allProviders.filter((name) => !hiddenAuthSet.has(name));
+	const hiddenProviderNames = allProviders.filter((name) => hiddenAuthSet.has(name));
+
+	const [hiddenSectionOpen, setHiddenSectionOpen] = useState(false);
 	const [selectingProvider, setSelectingProvider] = useState(false);
 	const [selectedProvider, setSelectedProvider] = useState("");
 	const [customProviderName, setCustomProviderName] = useState("");
@@ -92,7 +101,7 @@ export function AuthTab(props: {
 		<div className="config-auth-tab">
 			<div className="mb-3 flex items-center justify-between gap-3">
 				<span className="font-mono text-xs tabular-nums text-text-tertiary">
-					{t("config.count.auth", { count: providers.length })}
+					{t("config.count.auth", { count: allProviders.length })}
 				</span>
 				<div className="flex min-w-0 items-center gap-1.5">
 					<Button size="sm" variant="outline"
@@ -121,7 +130,7 @@ export function AuthTab(props: {
 								setBatchMode(true);
 							}
 						}}
-						disabled={saving || providers.length === 0}
+						disabled={saving || allProviders.length === 0}
 					>
 						{batchMode ? t("common.cancel") : t("common.deleteBatch")}
 					</Button>
@@ -179,19 +188,35 @@ export function AuthTab(props: {
 					</div>
 					<div className="grid max-h-[320px] grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-1.5 overflow-y-auto">
 						{PRESET_PROVIDERS.map((provider) => {
-							const alreadyConfigured = providers.includes(provider.value);
+							const alreadyConfigured = allProviders.includes(provider.value);
+							const isSelected = selectedProvider === provider.value;
 							return (
 								<button
 									key={provider.value}
-									className={`flex cursor-pointer flex-col items-start rounded-md border border-border-subtle bg-bg-muted px-3 py-2.5 text-left text-xs transition-all duration-150 hover:border-[var(--color-accent)] hover:bg-[color:color-mix(in_srgb,var(--color-accent)_5%,var(--color-bg-panel))]${selectedProvider === provider.value ? " border-[var(--color-accent)] font-medium" : ""}${alreadyConfigured ? " opacity-60" : ""}`}
+									type="button"
+									className={`group relative flex cursor-pointer flex-col items-start rounded-md border p-3 text-left text-xs transition-all duration-150 ${
+										isSelected
+											? "border-[var(--color-accent)] bg-[color:color-mix(in_srgb,var(--color-accent)_12%,var(--color-bg-panel))] shadow-[0_0_0_1px_var(--color-accent)]"
+											: "border-border-subtle bg-bg-muted hover:border-[var(--color-accent)] hover:bg-[color:color-mix(in_srgb,var(--color-accent)_5%,var(--color-bg-panel))]"
+									}${alreadyConfigured ? " opacity-75" : ""}`}
 									onClick={() => {
 										setSelectedProvider(provider.value);
+										setCustomProviderName("");
 									}}
 								>
-									<span className="font-medium text-text-primary">{provider.label}</span>
+									<div className="flex w-full items-center justify-between gap-1.5">
+										<span className={`font-medium ${isSelected ? "text-[color:var(--color-accent)]" : "text-text-primary"}`}>
+											{provider.label}
+										</span>
+										{isSelected && (
+											<span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-[color:var(--color-accent)] text-white">
+												<Check size={11} strokeWidth={3} aria-hidden="true" />
+											</span>
+										)}
+									</div>
 									<span className="mt-0.5 font-mono text-[11px] text-text-tertiary">{provider.value}</span>
 									{alreadyConfigured && (
-										<span className="mt-1 rounded-[4px] bg-[color:color-mix(in_srgb,var(--color-accent)_10%,transparent)] px-1.5 py-px text-[11px] text-[color:var(--color-accent)]">{t("config.configured")}</span>
+										<span className="mt-1.5 rounded-[4px] bg-[color:color-mix(in_srgb,var(--color-accent)_10%,transparent)] px-1.5 py-px text-[11px] text-[color:var(--color-accent)]">{t("config.configured")}</span>
 									)}
 								</button>
 							);
@@ -199,25 +224,41 @@ export function AuthTab(props: {
 						{/* 从 models.json 读取已配置的服务商 */}
 						{props.modelsData && Object.keys(props.modelsData.providers).length > 0 && (
 							<>
-								<div className="flex items-center gap-2 text-xs text-text-tertiary">
+								<div className="col-span-full my-1 flex items-center gap-2 text-xs text-text-tertiary">
 									<span className="h-px flex-1 bg-border-subtle" aria-hidden="true" />
 									<span>{t("config.authFromModels")}</span>
 									<span className="h-px flex-1 bg-border-subtle" aria-hidden="true" />
 								</div>
 								{Object.keys(props.modelsData.providers).map((providerName) => {
-									const alreadyConfigured = providers.includes(providerName);
+									const alreadyConfigured = allProviders.includes(providerName);
+									const isSelected = selectedProvider === providerName;
 									return (
 										<button
 											key={providerName}
-											className={`flex cursor-pointer flex-col items-start rounded-md border border-border-subtle bg-bg-muted px-3 py-2.5 text-left text-xs transition-all duration-150 hover:border-[var(--color-accent)] hover:bg-[color:color-mix(in_srgb,var(--color-accent)_5%,var(--color-bg-panel))]${selectedProvider === providerName ? " border-[var(--color-accent)] font-medium" : ""}${alreadyConfigured ? " opacity-60" : ""}`}
+											type="button"
+											className={`group relative flex cursor-pointer flex-col items-start rounded-md border p-3 text-left text-xs transition-all duration-150 ${
+												isSelected
+													? "border-[var(--color-accent)] bg-[color:color-mix(in_srgb,var(--color-accent)_12%,var(--color-bg-panel))] shadow-[0_0_0_1px_var(--color-accent)]"
+													: "border-border-subtle bg-bg-muted hover:border-[var(--color-accent)] hover:bg-[color:color-mix(in_srgb,var(--color-accent)_5%,var(--color-bg-panel))]"
+											}${alreadyConfigured ? " opacity-75" : ""}`}
 											onClick={() => {
 												setSelectedProvider(providerName);
+												setCustomProviderName("");
 											}}
 										>
-											<span className="font-medium text-text-primary">{providerName}</span>
+											<div className="flex w-full items-center justify-between gap-1.5">
+												<span className={`font-medium ${isSelected ? "text-[color:var(--color-accent)]" : "text-text-primary"}`}>
+													{providerName}
+												</span>
+												{isSelected && (
+													<span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-[color:var(--color-accent)] text-white">
+														<Check size={11} strokeWidth={3} aria-hidden="true" />
+													</span>
+												)}
+											</div>
 											<span className="mt-0.5 font-mono text-[11px] text-text-tertiary">{t("config.fromModels")}</span>
 											{alreadyConfigured && (
-												<span className="mt-1 rounded-[4px] bg-[color:color-mix(in_srgb,var(--color-accent)_10%,transparent)] px-1.5 py-px text-[11px] text-[color:var(--color-accent)]">{t("config.configured")}</span>
+												<span className="mt-1.5 rounded-[4px] bg-[color:color-mix(in_srgb,var(--color-accent)_10%,transparent)] px-1.5 py-px text-[11px] text-[color:var(--color-accent)]">{t("config.configured")}</span>
 											)}
 										</button>
 									);
@@ -283,7 +324,7 @@ export function AuthTab(props: {
 			)}
 
 			<div className="flex flex-col gap-2.5">
-				{providers.map((name) => {
+				{visibleProviders.map((name) => {
 					const auth = data[name];
 					const isExpanded = expandedAuth === name;
 					return (
@@ -331,6 +372,17 @@ export function AuthTab(props: {
 										provider={name}
 										onOpen={() => props.onOpenUsageProbeDialog(name)}
 									/>
+									{onToggleHiddenAuthProvider && (
+										<Button variant="ghost" size="icon-sm" className="size-7"
+											onClick={(e) => {
+												e.stopPropagation();
+												onToggleHiddenAuthProvider(name);
+											}}
+											title={t("config.hideAuth")}
+										>
+											<EyeOff size={14} className="text-muted-foreground" />
+										</Button>
+									)}
 									<Button variant="ghost" size="icon-sm" className="size-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
 										onClick={(e) => {
 											e.stopPropagation();
@@ -373,7 +425,53 @@ export function AuthTab(props: {
 						</div>
 					);
 				})}
-				{providers.length === 0 && (
+
+				{/* 已隐藏的认证供应商折叠区：眼睛按钮隐藏后移入此折叠区，可随时点击恢复显示 */}
+				{hiddenProviderNames.length > 0 && (
+					<div className="overflow-hidden rounded-lg border border-border-subtle bg-bg-panel">
+						<button
+							type="button"
+							className="flex w-full cursor-pointer items-center gap-2 px-3.5 py-2 text-left transition-colors duration-150 hover:bg-bg-hover"
+							onClick={() => setHiddenSectionOpen((prev) => !prev)}
+						>
+							{hiddenSectionOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+							<EyeOff size={14} className="text-muted-foreground" aria-hidden="true" />
+							<span className="text-control font-semibold text-text-primary">
+								{t("config.hiddenAuths", { count: hiddenProviderNames.length })}
+							</span>
+						</button>
+						{hiddenSectionOpen && (
+							<div className="border-t border-border-subtle px-3.5 py-2">
+								<p className="mb-2 text-[11px] leading-relaxed text-text-tertiary">
+									{t("config.hiddenAuthsHint")}
+								</p>
+								<div className="flex flex-col gap-1">
+									{hiddenProviderNames.map((hiddenName) => (
+										<div
+											key={hiddenName}
+											className="flex items-center justify-between gap-2 rounded-sm bg-bg-muted px-2.5 py-1.5"
+										>
+											<span className="min-w-0 truncate font-mono text-control text-text-primary">
+												{hiddenName}
+											</span>
+											<Button
+												variant="ghost"
+												size="icon-sm"
+												className="size-7 shrink-0"
+												onClick={() => onToggleHiddenAuthProvider?.(hiddenName)}
+												title={t("config.showAuth")}
+											>
+												<Eye size={14} />
+											</Button>
+										</div>
+									))}
+								</div>
+							</div>
+						)}
+					</div>
+				)}
+
+				{visibleProviders.length === 0 && hiddenProviderNames.length === 0 && (
 					<div className="py-12 text-center text-control text-text-tertiary">{t("config.authEmpty")}</div>
 				)}
 			</div>
