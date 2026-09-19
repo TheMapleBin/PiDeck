@@ -12,7 +12,7 @@ import {
 	stat,
 	writeFile,
 } from "node:fs/promises";
-import { dirname, join, relative, resolve } from "node:path";
+import { basename, dirname, extname, join, relative, resolve } from "node:path";
 import { homedir } from "node:os";
 import { randomUUID } from "node:crypto";
 import { trashPath } from "../fs/trash";
@@ -486,10 +486,10 @@ export class SkillManager {
 		const warnings = this.validateSkill(name, description);
 		return {
 			id: `${location.id}:${skillPath}`,
-			name: name || dirname(skillPath).split(/[\\/]/).pop() || this.translate("mainSkill.unnamed"),
+			name: name || this.fallbackSkillName(skillPath, type) || this.translate("mainSkill.unnamed"),
 			description,
 			path: skillPath,
-			dir: type === "directory" ? dirname(skillPath) : dirname(skillPath),
+			dir: dirname(skillPath),
 			sourceId: location.id,
 			sourceLabel: location.label,
 			type,
@@ -553,31 +553,46 @@ export class SkillManager {
 		return warnings;
 	}
 
-	/** 重命名 Skill：重命名目录并更新 SKILL.md 中的 name 字段 */
+	/** frontmatter 缺 name 时的回退名：markdown 取文件名（去扩展名），目录取目录名。
+	 *  不能直接用 dirname().pop()——markdown 技能会显示成父目录名「skills」。 */
+	private fallbackSkillName(skillPath: string, type: PiSkillSummary["type"]): string {
+		return type === "markdown"
+			? basename(skillPath, extname(skillPath))
+			: basename(dirname(skillPath));
+	}
+
+	/** 重命名 Skill：按类型分流——目录技能重命名技能目录，markdown 技能只重命名单个文件。
+	 *  markdown 技能的 skill.dir 是技能根目录（如 ~/.pi/agent/skills），绝不能当重命名
+	 *  目标，否则整个技能根目录会被改名搬走，其余技能全部从列表消失（数据丢失事故）。 */
 	async rename(skillPath: string, newName: string): Promise<PiSkillSummary> {
 		const skill = await this.findByPath(skillPath);
 		const normalizedNew = this.normalizeSkillName(newName);
 		if (!normalizedNew) throw new Error(this.translate("mainSkill.nameRequired"));
 
 		const displayName = newName.trim();
-		const oldDir = skill.dir;
-		const parentDir = skill.dir.split(/[\\/]/).slice(0, -1).join("\\");
-		const newDir = join(parentDir, normalizedNew);
+		const isDirectory = skill.type === "directory";
+		// 目录技能目标 = 技能自身目录；markdown 技能目标 = 同目录下的 <新名>.md 单文件。
+		// parentDir 用标准库 dirname 计算，禁止手写路径分隔符拼接（POSIX 下会拼出非法路径）。
+		const oldTarget = isDirectory ? skill.dir : skill.path;
+		const parentDir = dirname(oldTarget);
+		const newTarget = isDirectory
+			? join(parentDir, normalizedNew)
+			: join(parentDir, `${normalizedNew}${extname(skill.path)}`);
 
-		if (oldDir === newDir) throw new Error(this.translate("mainSkill.sameName"));
-		if (existsSync(newDir)) throw new Error(this.translate("mainSkill.alreadyExists", { name: normalizedNew }));
+		if (oldTarget === newTarget) throw new Error(this.translate("mainSkill.sameName"));
+		if (existsSync(newTarget)) throw new Error(this.translate("mainSkill.alreadyExists", { name: normalizedNew }));
 
-		// 更新 SKILL.md 中的 name frontmatter
+		// 先在旧位置读原文，rename 成功后再把 frontmatter 写到新位置：
+		// 中途失败不会留下「frontmatter 已改名、文件/目录还在原地」的部分变更。
 		const raw = await readFile(skill.path, "utf8");
-		const updated = this.setFrontmatterName(raw, displayName);
-		await writeFile(skill.path, updated, "utf8");
+		await rename(oldTarget, newTarget);
+		const newSkillPath = isDirectory ? join(newTarget, SKILL_FILE) : newTarget;
+		await writeFile(newSkillPath, this.setFrontmatterName(raw, displayName), "utf8");
 
-		await rename(oldDir, newDir);
+		// 禁用列表同步迁移：旧名条目替换为新名，避免孤儿数据与白名单双源漂移
+		await this.migrateDisabledSkillName(skill.name, displayName);
 
-		// 重命名后路径变为新路径
-		const newSkillPath = join(newDir, skill.path.split(/[\\/]/).pop()!);
 		// 找对应的 location（搜索所有 locations）
-		const { skills } = await this.list();
 		const reloaded = await this.readSkill(
 			newSkillPath,
 			this.locations.find((l) => newSkillPath.startsWith(l.path)) ?? this.locations[0],
@@ -586,15 +601,36 @@ export class SkillManager {
 		return reloaded;
 	}
 
-	/** 更新 frontmatter 中的 name 字段 */
+	/** 重命名后同步 PiDeck settings 禁用列表：旧名条目替换为新名（大小写不敏感比较）。
+	 *  未配置 settings 或旧名不在列表时静默跳过，不产生空写。 */
+	private async migrateDisabledSkillName(oldName: string, newDisplayName: string): Promise<void> {
+		if (!this.settingsProvider || !this.settingsPatcher) return;
+		const oldKey = oldName.toLowerCase();
+		const newKey = newDisplayName.toLowerCase();
+		if (oldKey === newKey) return;
+		const current = this.settingsProvider().disabledSkills ?? [];
+		if (!current.some((name) => name.toLowerCase() === oldKey)) return;
+		const nextList = current
+			.filter((name) => name.toLowerCase() !== oldKey)
+			.filter((name) => name.toLowerCase() !== newKey);
+		nextList.push(newDisplayName);
+		await this.settingsPatcher({ disabledSkills: nextList });
+	}
+
+	/** 更新 frontmatter 中的 name 字段；若原 frontmatter 缺 name: 则置顶补全 */
 	private setFrontmatterName(raw: string, name: string): string {
 		const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---/);
 		if (!match) return `---\nname: ${name}\n---\n\n${raw}`;
 		const lines = match[1].split(/\r?\n/);
+		let changed = false;
 		const nextLines = lines.map((line) => {
-			if (line.trim().startsWith("name:")) return `name: ${name}`;
+			if (line.trim().startsWith("name:")) {
+				changed = true;
+				return `name: ${name}`;
+			}
 			return line;
 		});
+		if (!changed) nextLines.unshift(`name: ${name}`);
 		return raw.replace(match[0], `---\n${nextLines.join("\n")}\n---`);
 	}
 
