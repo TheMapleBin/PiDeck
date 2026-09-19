@@ -36,6 +36,23 @@ test("typed toast icons carry semantic colors", () => {
   assert.match(card, /text-info/);
 });
 
+// Ask（等待回答）不能借用 warning 的黄三角：用户会误读成「会话出错」。
+test("ask toast uses the dedicated question kind, not warning", () => {
+  const runtimeController = readFileSync(
+    "src/renderer/src/hooks/useSessionRuntimeController.ts",
+    "utf8",
+  );
+  // 背景 Ask 提醒走 question 档
+  assert.match(runtimeController, /showNotice\(message, Number\.POSITIVE_INFINITY, "question"/);
+  // question 档有独立图标（问号气泡）与身份色（--color-tool，跟会话内 ask 工具卡一致），
+  // 既不是 warning 黄也不是主题强调色，避免「Ask = 出错」的误读
+  assert.match(card, /question:\s*\{ Icon: MessageCircleQuestion/);
+  assert.match(card, /question:.*--color-tool/);
+  assert.match(notice, /question:\s*"var\(--color-tool\)"/);
+  // 卡片与 DOM 兜底的 kind 联合类型同步包含 question
+  assert.match(notice, /export type NoticeKind = "info" \| "error" \| "warning" \| "question"/);
+});
+
 test("dialogs ignore outside interactions coming from the toast region", () => {
   // Radix DismissableLayer 会把点 toast 关闭按钮误判为「点击弹框外部」而连带关弹框，
   // dialog 包装层必须组合 guard；AlertDialog 原生就不响应外部点击，无需处理

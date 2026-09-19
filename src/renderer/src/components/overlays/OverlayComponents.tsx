@@ -13,6 +13,8 @@ import {
 import type { AppInfo, Project, PiInstallStatus, PiInstallExecResult } from "../../../../shared/types";
 import { Input } from "../ui-shadcn/input";
 import { Label } from "../../components/ui-shadcn/label";
+import { EnvironmentGuidePanel } from "./EnvironmentGuidePanel";
+import type { PiEnvironmentGuide } from "../../hooks/usePiEnvironmentGuide";
 
 
 export function EnvironmentDialog(props: {
@@ -21,6 +23,8 @@ export function EnvironmentDialog(props: {
 	onClose: () => void;
 	onRecheck: () => void;
 	onOpenInstallDocs: () => void;
+	/** pi 环境引导（Node→npm→pi 三步）的域状态与命令；未传 = 不展示引导面板（旧调用方兼容） */
+	guide?: PiEnvironmentGuide;
 	/** 用户手动输入的 pi 路径 */
 	customPath: string;
 	/** 正在校验自定义路径 */
@@ -116,6 +120,12 @@ export function EnvironmentDialog(props: {
 
 					{!props.checking && !installed && (
 						<>
+							{/* 置顶提示：已装 pi 的用户直接配路径即可，不要重复走安装流程 */}
+							<div className="env-card env-already-installed-card">
+								<strong>{t("environment.guideAlreadyInstalledTitle")}</strong>
+								<small>{t("environment.guideAlreadyInstalledDesc")}</small>
+							</div>
+
 							{/* 状态说明卡片 */}
 							<div className="env-card env-status-card">
 								<strong>{t("environment.notFoundTitle")}</strong>
@@ -130,7 +140,59 @@ export function EnvironmentDialog(props: {
 								</div>
 							)}
 
-							{/* npm 安装 pi 卡片（合并了安装指引） */}
+							{/* 手动输入 pi 路径卡片：已装用户的主路径，提前到安装引导之前 */}
+							<div className="env-card env-custom-card">
+								<strong>{t("environment.customPathTitle")}</strong>
+								<small>{t("environment.customPathDesc")}</small>
+								<div className="ref-commands">
+									<div className="ref-command-item">
+										<span className="ref-label">{t("environment.commandLabel")}</span>
+										<code>{refCmd}</code>
+									</div>
+
+								</div>
+								<div className="custom-path-input-row">
+									<Input
+										type="text"
+										placeholder="D:\\mise-data\\installs\\node\\24 13 0\\pi.cmd"
+										value={props.customPath}
+										onChange={(e) =>
+											props.onCustomPathChange(e.target.value)
+										}
+										disabled={props.customPathValidating}
+									/>
+									<Button
+										variant="default"
+										size="sm"
+										className="env-card-btn primary env-card-btn h-auto rounded-[6px] px-4 py-[7px] text-xs shadow-none"
+										onClick={props.onValidateCustomPath}
+										disabled={
+											!props.customPath.trim() ||
+											props.customPathValidating
+										}
+									>
+										{props.customPathValidating
+											? t("environment.validatingPath")
+											: t("environment.validatePath")}
+									</Button>
+								</div>
+								{props.customPathResult && (
+									<div
+										className={`custom-path-result ${props.customPathResult.installed ? "success" : "error"}`}
+									>
+										{props.customPathResult.installed
+											? `✓ ${t("environment.validatePassed", { value: props.customPathResult.version ?? "pi" })}`
+											: `✗ ${t("environment.validateFailed", { value: props.customPathResult.error ?? t("environment.unableToRun") })}`}
+									</div>
+								)}
+							</div>
+
+							{/* pi 环境引导：Node→npm→pi 三步；guide 未传时退回旧的 npm 安装卡片 */}
+							{props.guide ? (
+								<div className="env-card env-guide-card">
+									<EnvironmentGuidePanel guide={props.guide} />
+								</div>
+							) : (
 							<div className="env-card env-npm-install-card">
 								<strong>{t("environment.installCardTitle")}</strong>
 								<small>{t("environment.installCardDesc")}</small>
@@ -288,53 +350,7 @@ export function EnvironmentDialog(props: {
 									</div>
 								)}
 							</div>
-
-							{/* 手动输入 pi 路径卡片 */}
-							<div className="env-card env-custom-card">
-								<strong>{t("environment.customPathTitle")}</strong>
-								<small>{t("environment.customPathDesc")}</small>
-								<div className="ref-commands">
-									<div className="ref-command-item">
-										<span className="ref-label">{t("environment.commandLabel")}</span>
-										<code>{refCmd}</code>
-									</div>
-
-								</div>
-								<div className="custom-path-input-row">
-									<Input
-										type="text"
-										placeholder="D:\\mise-data\\installs\\node\\24 13 0\\pi.cmd"
-										value={props.customPath}
-										onChange={(e) =>
-											props.onCustomPathChange(e.target.value)
-										}
-										disabled={props.customPathValidating}
-									/>
-									<Button
-										variant="default"
-										size="sm"
-										className="env-card-btn primary env-card-btn h-auto rounded-[6px] px-4 py-[7px] text-xs shadow-none"
-										onClick={props.onValidateCustomPath}
-										disabled={
-											!props.customPath.trim() ||
-											props.customPathValidating
-										}
-									>
-										{props.customPathValidating
-											? t("environment.validatingPath")
-											: t("environment.validatePath")}
-									</Button>
-								</div>
-								{props.customPathResult && (
-									<div
-										className={`custom-path-result ${props.customPathResult.installed ? "success" : "error"}`}
-									>
-										{props.customPathResult.installed
-											? `✓ ${t("environment.validatePassed", { value: props.customPathResult.version ?? "pi" })}`
-											: `✗ ${t("environment.validateFailed", { value: props.customPathResult.error ?? t("environment.unableToRun") })}`}
-									</div>
-								)}
-							</div>
+							)}
 
 							{/* 检测路径卡片 */}
 							{searchedDirs.length > 0 && (

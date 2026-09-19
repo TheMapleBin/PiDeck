@@ -8,7 +8,7 @@ import {
 } from "react";
 import type { AgentTab, AgentUiResponse, ChatMessage, GitBranchInfo, ImageContent, Project } from "../../../../shared/types";
 import type { QueuedPrompt } from "../../hooks/useQueuedPrompt";
-import type { NoticeId } from "../../utils/notice";
+import type { NoticeId, NoticeKind } from "../../utils/notice";
 import type { TerminalDockStateByOwner } from "../../terminalDockState";
 
 /** 打开会话文件时由栏级 injector 绑定的解析与授权上下文。 */
@@ -82,7 +82,7 @@ export type SessionPaneServices = {
   showNotice: (
     msg: string,
     dur?: number,
-    kind?: "info" | "warning" | "error",
+    kind?: NoticeKind,
   ) => NoticeId | undefined;
   api: {
     sessions: {

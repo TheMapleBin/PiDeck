@@ -4,6 +4,9 @@
  */
 
 import { app, dialog, ipcMain, shell } from "electron";
+import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
+import { dirname } from "node:path";
 import { ipcChannels } from "../../shared/ipc";
 import { UPDATE_REPO, UPDATE_REPO_OWNER } from "../update/releaseRepo";
 import { probeAllMirrors, type MirrorHealthResult } from "../update/mirrorHealth";
@@ -13,8 +16,22 @@ import type { RpcLogEntry } from "../../shared/types/rpcLog";
 import { DSH_BUNDLED_RUNTIME_DIRNAME, readBundledRuntime, readDeclaredDshVersion } from "../dsh/runtime/DshRuntimeManager";
 import { resolveAppTimes } from "../utils/appInfoTimes";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import {
+	installPiRuntimeNode,
+	piRuntimeNodeExePath,
+	probeNodeVersion,
+	detectPiRuntimeNode,
+} from "../pi/runtimeNodeInstall";
+import type {
+	NpmAvailabilityResult,
+	PiInstallExecResult,
+	PiInstallStatus,
+	PiRuntimeNodeInstallResult,
+	PiRuntimeNodeStatus,
+} from "../../shared/types";
 import type {
 	AppInfo,
 	AppLogLevel,
@@ -142,6 +159,8 @@ export type SystemIpcDeps = {
 	appLogger: AppLogger;
 	rpcLogger: RpcLogger;
 	sessionRuntimeCoordinator: SessionRuntimeCoordinator;
+	/** pi 环境引导：便携 Node 安装器（下载/解压 IO 由 index.ts 装配 DSH 同源实现）；未装配 = 引导入口降级不可用。 */
+	piRuntimeNodeInstaller?: import("../pi/runtimeNodeInstall").RuntimeNodeInstallerDeps;
 	/** DSH 后端判定（G17：RPC 日志按 backend 分流）。 */
 	isDshAgent?: (agentId: string) => boolean;
 	/** DSH RPC 日志开关（G17；未装配 = 无 DSH 后端）。 */
@@ -160,8 +179,6 @@ export type SystemIpcDeps = {
 	listDshMonitorSessions?: () => Array<{ title?: string }>;
 	/** 停止 DSH host：先卸会话再 dispose，不能走 pi stopAgentById。 */
 	stopDshHostFromMonitor?: () => Promise<SessionCommandResult<undefined>>;
-	/** runtime 已安装时进程监控展示 DSH host 停止行/启动入口。 */
-	dshHostMonitorAvailable?: () => boolean;
 	/** 单供应商 pi↔DSH 互迁（不为此拉起 host）。 */
 	providerMigration?: ProviderMigrationDeps;
 	/** 全局 Pi 模型 capability snapshot（启动/配置变更时 hydration，picker 只读）。 */
@@ -279,6 +296,54 @@ function asConfigProxyMode(raw: unknown): ConfigProxyMode {
  */
 function isWslName(value: string): boolean {
 	return /^[A-Za-z0-9._][A-Za-z0-9._-]{0,63}$/.test(value);
+}
+
+/**
+ * 探测系统 PATH 上的 node 版本（不含便携副本）。
+ * 复用 piCheckNpm 的思路：cmd /d /s /c 走 Windows shim 解析；env 前置 PiLocator
+ * 搜索目录，覆盖版本管理器动态目录。找不到/不可执行返回 undefined，不抛错。
+ */
+async function probeSystemNodeVersion(piLocator: PiLocator): Promise<string | undefined> {
+	try {
+		if (process.platform === "win32") {
+			const { stdout } = await promisify(execFile)(
+				process.env.ComSpec || "cmd.exe",
+				["/d", "/s", "/c", "node -v"],
+				{ env: piLocator.createProcessEnv(), timeout: 10_000, encoding: "utf8", windowsHide: true, shell: false },
+			);
+			const version = stdout.trim();
+			return /^v\d+\.\d+\.\d+$/.test(version) ? version : undefined;
+		}
+		return await probeNodeVersion("node");
+	} catch {
+		return undefined;
+	}
+}
+
+/** 探测系统 npm 可用性（结构与 piCheckNpm 返回一致，供 pi 安装前置检查复用）。 */
+async function probeSystemNpmVersion(piLocator: PiLocator): Promise<NpmAvailabilityResult> {
+	try {
+		const run = async () => {
+			if (process.platform === "win32") {
+				const { stdout } = await promisify(execFile)(
+					process.env.ComSpec || "cmd.exe",
+					["/d", "/s", "/c", "npm --version"],
+					{ env: piLocator.createProcessEnv(), timeout: 10_000, encoding: "utf8", windowsHide: true, shell: false },
+				);
+				return stdout.trim();
+			}
+			const { stdout } = await promisify(execFile)("npm", ["--version"], {
+				env: piLocator.createProcessEnv(),
+				timeout: 10_000,
+				encoding: "utf8",
+			});
+			return stdout.trim();
+		};
+		const version = await run();
+		return version ? { available: true, version } : { available: false };
+	} catch (error) {
+		return { available: false, error: error instanceof Error ? error.message : String(error) };
+	}
 }
 
 /**
@@ -791,6 +856,142 @@ export function registerSystemIpc(deps: SystemIpcDeps): void {
 		}
 	});
 
+	// ── pi 环境引导：便携 Node / npm / pi 安装 ────────────────────
+
+	/**
+	 * 引导步骤 1：检测便携 Node 副本 + 系统 node。
+	 * 渲染层据此决定三步引导从哪一步开始（有系统 node 可直接跳到装 pi）。
+	 */
+	ipcMain.handle(ipcChannels.piRuntimeNodeCheck, async (): Promise<PiRuntimeNodeStatus> => {
+		try {
+			// 系统 node 探测复用 piCheckNpm 的搜索目录链路：直接找 node 而不是 npm，
+			// 因为引导的入口问题是「有没有 node」，npm 在便携包里随 node 一起出现。
+			const systemNodeVersion = await probeSystemNodeVersion(piLocator);
+			return await detectPiRuntimeNode(app.getPath("userData"), systemNodeVersion);
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			void appLogger.warn("pi", "Runtime node check failed", { error: message });
+			return { installed: false, systemNodeAvailable: false, installSupported: true, error: message };
+		}
+	});
+
+	/**
+	 * 引导步骤 2：安装便携 Node 到 <userData>/pi-runtime/node。
+	 * 镜像回退 + sha256 校验在 installPiRuntimeNode 内部完成；失败不抛 IPC 裸异常，
+		* 返回结构化 error 让弹窗内联展示。
+	 */
+	ipcMain.handle(ipcChannels.piRuntimeNodeInstall, async (): Promise<PiRuntimeNodeInstallResult> => {
+		if (!deps.piRuntimeNodeInstaller) {
+			return { ok: false, error: "installer not available" };
+		}
+		try {
+			const result = await installPiRuntimeNode(
+				{
+					userDataPath: app.getPath("userData"),
+					log: (message, detail) => void appLogger.info("pi", message, { detail: detail ?? null }),
+				},
+				deps.piRuntimeNodeInstaller,
+			);
+			void appLogger.info("pi", "Runtime node install completed", {
+				ok: result.ok,
+				source: result.source,
+				version: result.version,
+				error: result.error,
+			});
+			return result;
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			void appLogger.error("pi", "Runtime node install threw", { error: message });
+			return { ok: false, error: message };
+		}
+	});
+
+	/**
+	 * 引导步骤 3：全局安装 pi。收紧通道：渲染层只传「是否用国内镜像」布尔意图，
+	 * 命令由主进程拼接 —— 渲染层不可再注入任意 shell 字符串。
+	 * npm 源优先用便携 node 自带的 npm；没有系统 node/npm 时拒绝执行（前面步骤未完成）。
+	 */
+	ipcMain.handle(
+		ipcChannels.piRuntimePiInstall,
+		async (_event, useMirror: unknown): Promise<PiInstallExecResult> => {
+			// 边界校验：只认布尔；其他类型一律按 false（官方源）处理，不回退猜默认。
+			const mirrorArg = useMirror === true;
+			try {
+				const userData = app.getPath("userData");
+				const portableNode = piRuntimeNodeExePath(userData);
+				// npm 解析顺序：便携 node 同目录 npm（引导链路主路径）→ 系统 npm。
+				// 便携包里 npm 与 node 同目录（bin/npm 或 npm.cmd），同一 PATH 前缀即可解析。
+				const portableBinDir = dirname(portableNode);
+				const portableNpm = join(
+					portableBinDir,
+					process.platform === "win32" ? "npm.cmd" : "npm",
+				);
+				const usePortable = existsSync(portableNpm);
+				if (!usePortable) {
+					const systemNpm = await probeSystemNpmVersion(piLocator);
+					if (!systemNpm.available) {
+						return {
+							success: false,
+							exitCode: null,
+							stdout: "",
+							stderr: "npm is not available; complete the node install step first",
+						};
+					}
+				}
+				const npmCommand = usePortable ? portableNpm : "npm";
+				const npmArgs = ["install", "-g", "@earendil-works/pi-coding-agent"];
+				if (mirrorArg) {
+					// 国内镜像：只追加 --registry 参数，不改全局配置，用户终端环境零污染。
+					npmArgs.push("--registry=https://registry.npmmirror.com");
+				}
+				// --prefix：pi 装进 <userData>/pi-runtime/pi-global，不写系统 npm 全局目录，
+				// 无需提权（mac/Linux 免 sudo）；PiLocator 搜索目录已包含该路径，装完即可检测到。
+				const prefixArg = `--prefix=${join(userData, "pi-runtime", "pi-global")}`;
+				void appLogger.info("pi", "Runtime pi install started", {
+					npm: npmCommand,
+					useMirror: mirrorArg,
+					prefix: prefixArg,
+				});
+				// 数组形式传参（安全约束）：不经 shell 拼接，用户输入无法注入命令。
+				const result = await new Promise<PiInstallExecResult>((resolve) => {
+					execFile(
+						npmCommand,
+						[...npmArgs, prefixArg],
+						{
+							// PATH 前置搜索目录：便携 bin + PiLocator 扫描目录，保证便携 npm
+							// 能解析到同目录 node；便携 npm 跑脚本时也要能找到 node。
+							env: piLocator.createProcessEnv(),
+							cwd: app.getPath("home"),
+							timeout: 300_000,
+							encoding: "utf8",
+							windowsHide: true,
+						},
+						(error: unknown, stdout: string, stderr: string) => {
+							const execError = error as { code?: number | string } | null;
+							resolve({
+								success: !error,
+								exitCode: typeof execError?.code === "number" ? execError.code : execError ? -1 : 0,
+								stdout: stdout || "",
+								stderr: stderr || "",
+							});
+						},
+					);
+				});
+				void appLogger.info("pi", "Runtime pi install completed", {
+					success: result.success,
+					exitCode: result.exitCode,
+					stdoutLength: result.stdout.length,
+					stderrLength: result.stderr.length,
+				});
+				return result;
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
+				void appLogger.error("pi", "Runtime pi install threw", { error: message });
+				return { success: false, exitCode: null, stdout: "", stderr: message };
+			}
+		},
+	);
+
 	// ── Pi 更新 ──────────────────────────────────────────────────────
 
 	if (extensionManager) {
@@ -943,12 +1144,7 @@ export function registerSystemIpc(deps: SystemIpcDeps): void {
 				sessions: deps.listDshMonitorSessions?.() ?? [],
 			}));
 		}
-		const snapshot = await getProcessSnapshot(agents);
-		// runtime 已装但 host 未 fork：给进程监控一个「启动」入口，而不是假装没有 DSH。
-		if (!dshPid && deps.dshHostMonitorAvailable?.()) {
-			return { ...snapshot, dshHostIdle: true };
-		}
-		return snapshot;
+		return getProcessSnapshot(agents);
 	});
 
 	ipcMain.handle(ipcChannels.stopAgent, async (_event, agentId: unknown) => {

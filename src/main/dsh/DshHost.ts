@@ -9,6 +9,8 @@ import { DshHostProcess, resolveHostEntryPath } from "./DshHostProcess";
 import { DSH_RUNNER_NODE_ENV } from "./dshRunnerNodeSidecar";
 import { resolveDshRunnerNodePath } from "./dshRunnerNode";
 import { DshApiClient, type DshFetchTransport } from "./DshApiClient";
+import { dshManuallyStoppedError } from "./dshManualStop";
+import { applyDshBillBackfillPatch } from "./dshBillBackfillPatch";
 import { DshRemoteClient } from "./dshRemoteClient";
 import { toDshAvailableModels, toDshFetchedModels, unwrapDshDiscoveryModels } from "./dshModels";
 import { parseAgentDefaultModel } from "./dshDefaultModel";
@@ -30,11 +32,6 @@ import { PIDECK_PLUGIN_BRIDGE_PATH } from "./pideckPluginBridge";
 import { classifyStaticPlugins, isUserPluginEntry, nearestPackageDir, readUserPatchRows, removeUserPatchRow, resolveManagedPluginDir, USER_PATCH_FILENAME } from "./dshUserPlugins";
 import { PIDECK_COMMANDS_BRIDGE_PATH } from "./pideckCommandsBridge";
 import { PIDECK_SESSION_BRIDGE_PATH } from "./pideckSessionBridge";
-import {
-	decideDshHostStart,
-	dshHostStartClearsUserStop,
-	type DshHostStartReason,
-} from "./dshHostStartGate";
 import type { DshFetchMessage } from "./dshHostBridge";
 import type {
 	DshCommandView,
@@ -61,8 +58,7 @@ import type {
  * - host 在 utilityProcess 里 boot（无 web/无 HTTP/无端口），原生 ABI 与崩溃面
  *   不污染主进程；hostEntry 产物经 electron-vite 多入口打包到 out/main/。
  * - 按需启动：默认后端为 dsh 时窗口首帧后后台预热；纯 pi 用户不 fork host。
- *   发送/历史浏览走 ensureStarted({ reason: "session" })；配置只读查询不 fork。
- *   进程监控手动停止后记 userStopped，预热/隐式启动不再拉起（issue #223）。
+ *   发送/历史/配置链路调用 ensureStarted() 幂等兜底。
  * - 桥协议：dshHostBridge.ts（fetch-request/response/chunk/end/error）。
  *
  * DSH_HOME：直接使用用户真实 ~/.dsh（与 dsh CLI 行为一致，配置/凭证/会话
@@ -83,11 +79,6 @@ export class DshHost {
 	/** DSH_HOME 并发锁（B6）：锁文件路径与是否由本实例持有。 */
 	private hostLockPath = "";
 	private ownsHostLock = false;
-	/**
-	 * 用户在进程监控里主动停过 host。只读/预热不得再 fork；
-	 * 显式启动或打开 DSH 会话时清掉（见 dshHostStartGate）。
-	 */
-	private userStopped = false;
 
 	constructor(
 		private readonly getUserDataDir: () => string,
@@ -119,6 +110,13 @@ export class DshHost {
 		 * 改路径后需重启 host 才写入 fork env。
 		 */
 		private readonly getDshRunnerNodePath: () => string | undefined = () => undefined,
+		/**
+		 * 用户是否手动停止了 DSH host（设置项 dshManualStopped，持久化跨重启）。
+		 * 为真时所有「自动拉起」路径（ensureStarted 按需兜底 / 后台预热 / 崩溃自动重启 /
+		 * runtime 磁盘操作后恢复）一律不 fork，只有用户显式调用 startManually() 才放行。
+		 * 缺省 false = 保持按需自动启动的历史语义。
+		 */
+		private readonly isManualStopped: () => boolean = () => false,
 	) {}
 
 	/** 订阅 host-ready（首次启动与崩溃自动重启；E4：崩溃后恢复运行时状态）。 */
@@ -149,16 +147,23 @@ export class DshHost {
 		return this.hostProcess?.pid;
 	}
 
-	/** 启动/按需兜底（幂等）：fork host 并建立桥接客户端。 */
-	ensureStarted(options?: { reason?: DshHostStartReason }): Promise<void> {
+	/** 是否处于「用户手动停止」状态（不想让它运行；自动拉起路径据此拒绝 fork）。 */
+	isManuallyStopped(): boolean {
+		return this.isManualStopped();
+	}
+
+	/**
+	 * 启动/按需兜底（幂等）：fork host 并建立桥接客户端。
+	 *
+	 * 手动停止优先：用户显式停过之后，所有自动路径（发送/历史/配置读取的兜底、
+	 * 后台预热、崩溃重启）都不再拉起——否则「停了一次又被某某后台任务悄悄拉回来」，
+	 * 用户会认为停止没生效。想恢复必须由用户在配置页点「启动」（走 startManually）。
+	 */
+	ensureStarted(): Promise<void> {
 		if (this.client) return Promise.resolve();
-		const decision = decideDshHostStart({
-			isRunning: false,
-			userStopped: this.userStopped,
-			reason: options?.reason,
-		});
-		if (decision === "skip-user-stopped") return Promise.resolve();
-		if (dshHostStartClearsUserStop(options?.reason)) this.userStopped = false;
+		if (this.isManualStopped()) {
+			return Promise.reject(dshManuallyStoppedError());
+		}
 		this.startPromise ??= this.start().catch((error) => {
 			this.startPromise = null;
 			throw error;
@@ -167,11 +172,19 @@ export class DshHost {
 	}
 
 	/**
-	 * 进程监控「停止 DSH host」：记下用户意图，后续隐式 ensureStarted 不得再 fork。
-	 * 必须在 dispose 之前调用，避免停止过程中的只读查询把进程拉回来。
+	 * 用户显式启动（清除手动停止语义后 boot）：配置页「启动」按钮走这里。
+	 * 必须由上层先把 settings.dshManualStopped 写成 false 再调用——本方法只负责 boot，
+	 * 不改 persisted 状态（DshHost 不持有 SettingsStore 写权限，保持单向依赖）。
 	 */
-	markUserStopped(): void {
-		this.userStopped = true;
+	async startManually(): Promise<boolean> {
+		// 已在跑就直接返回成功（重复点「启动」不该 dispose 重建）。
+		if (this.isStarted() && this.isHostProcessRunning() && this.isHostReady()) return true;
+		try {
+			await this.ensureStarted();
+		} catch {
+			return false;
+		}
+		return this.isHostProcessRunning() && this.isHostReady();
 	}
 
 	/** 已启动时返回领域客户端（未启动返回 null）。 */
@@ -197,7 +210,7 @@ export class DshHost {
 			schema: unknown;
 		}>;
 	}> {
-		// 只读：配置页 forceMount 也会走到这里，未运行时不得 fork（issue #223）。
+		await this.ensureStarted();
 		const client = this.client;
 		if (!client) {
 			return { writable: false, hasDocument: false, namespaces: [] };
@@ -317,6 +330,7 @@ export class DshHost {
 		source?: string;
 		writable: boolean;
 	}>> {
+		await this.ensureStarted();
 		const client = this.client;
 		if (!client) return {};
 		const described = await client.credentialsDescribe({ refs });
@@ -394,6 +408,8 @@ export class DshHost {
 		bootError?: string | null;
 		/** DSH_HOME 共享/冲突状态（issue #189 问题 1：与 dsh CLI 共用目录会互相覆盖状态）。 */
 		sharing: DshHomeSharingState;
+		/** 用户是否手动停止了 host（true 时不会自动启动，只有显式「启动」才拉起）。 */
+		manuallyStopped: boolean;
 	}> {
 		// E14：started 语义 = host 进程存活且 boot 完成（client 非 null 可能在崩溃重启
 		// 超限放弃后仍是陈旧引用，UI 会误显示「已启动」）。
@@ -404,6 +420,7 @@ export class DshHost {
 			homeDir,
 			// boot 失败详情透给渲染层：即使 describe 抛错，概览页也能拿到真实原因。
 			bootError: this.hostProcess?.getLastBootError() ?? null,
+			manuallyStopped: this.isManualStopped(),
 			sharing: {
 				...resolveDshHomeSharing({
 					dshHome: homeDir,
@@ -440,11 +457,12 @@ export class DshHost {
 
 	/**
 	 * Host 级模型目录（llm.models），不依赖已创建的 DSH 会话。
-	 * 给草稿/未启动会话的模型下拉用；host 未运行时返回空列表，不 fork。
+	 * 给草稿/未启动会话的模型下拉用；首次调用会懒 boot。
 	 * 与会话级 session.models 同一目录数据，透传每模型支持的思考档位
 	 * （reasoningEfforts），思考选择器按当前模型过滤档位。
 	 */
 	async listModels(): Promise<import("../../shared/types").AvailableModel[]> {
+		await this.ensureStarted();
 		const client = this.client;
 		if (!client) return [];
 		const listed = await client.sessionsModelCatalog();
@@ -633,16 +651,14 @@ export class DshHost {
 		return this.bridgeRpc(PIDECK_PLUGIN_BRIDGE_PATH, method, params);
 	}
 
-	/** 动态插件清单（进程内全部会话的临时扩展；重启即失）。host 未运行返回空，不 fork。 */
+	/** 动态插件清单（进程内全部会话的临时扩展；重启即失）。 */
 	async listDynamicPlugins(): Promise<DshPluginView[]> {
-		if (!this.client) return [];
 		const value = await this.pluginRpc("inventory", undefined);
 		return Array.isArray(value) ? (value as DshPluginView[]) : [];
 	}
 
 	/** 静态 Loader 条目清单（origin 标注来源：user = 用户补丁层 / builtin = 官方与 PiDeck 组合）。 */
 	async listStaticPlugins(): Promise<DshStaticPluginView[]> {
-		if (!this.client) return [];
 		const value = await this.pluginRpc("staticInventory", undefined);
 		const views = Array.isArray(value) ? (value as DshStaticPluginView[]) : [];
 		try {
@@ -779,6 +795,7 @@ export class DshHost {
 	async searchSessions(query: string): Promise<Array<{ sessionId: string; snippet: string }>> {
 		const trimmed = query.trim();
 		if (!trimmed) return [];
+		await this.ensureStarted();
 		const client = this.client;
 		if (!client) return [];
 		const searched = await client.sessionsSearch({ query: trimmed }, new AbortController().signal);
@@ -833,7 +850,7 @@ export class DshHost {
 	/**
 	 * 可配置提供方目录（llm.providers）：内置 catalog（declared，未配置）+
 	 * 已注册路由（active）。模型页「添加提供方」从 declared 未激活行中选择，
-	 * 与 dsh-web 的休眠目录选择同源。host 未运行时返回空列表，不 fork。
+	 * 与 dsh-web 的休眠目录选择同源。首次调用会懒 boot。
 	 */
 	async listProviders(): Promise<Array<{
 		provider: string;
@@ -841,6 +858,7 @@ export class DshHost {
 		active: boolean;
 		declared?: boolean;
 	}>> {
+		await this.ensureStarted();
 		const client = this.client;
 		if (!client) return [];
 		const listed = await client.llmProviders();
@@ -865,6 +883,7 @@ export class DshHost {
 		description?: string;
 		broken?: string;
 	}>> {
+		await this.ensureStarted();
 		const client = this.client;
 		if (!client) return [];
 		const listed = await client.agentPresetsList();
@@ -968,6 +987,9 @@ export class DshHost {
 	}
 
 	private async start(): Promise<void> {
+		// 门控在读到这里时才判定（而非只在 ensureStarted 入口）：startPromise 可能在
+		// 用户点「停止」之前就已建好，晚到的 await 不该越过刚刚生效的停止决定。
+		if (this.isManualStopped()) throw dshManuallyStoppedError();
 		const userData = this.getUserDataDir();
 		const override = this.getDshHomeOverride()?.trim();
 		// DSH_HOME 解析：设置覆盖 > ~/.dsh（统一入口，新用户也用 ~/.dsh，不另起炉灶）。
@@ -996,6 +1018,18 @@ export class DshHost {
 		const require = createRequire(join(runtimeRoot, "package.json"));
 		const appRoot = dirname(dirname(dirname(require.resolve("@deepseek-ai/dsh-base/package.json"))));
 		const hostEntryPath = resolveHostEntryPath(this.getAppPath());
+
+		// dsh-bill 启动回填默认关（CPU 修复）：必须在 fork 前对 host 实际加载的那份
+		// dsh-bill 应用文件补丁——require 锚点与 hostEntry 的 require.resolve 同源
+		//（runtimeRoot），dev / 打包内置 / userData 安装的 runtime 三种形态都命中。
+		// 失败不阻断 boot（fail-open：保持官方行为，只是 CPU 问题仍在）。
+		try {
+			applyDshBillBackfillPatch(require.resolve("dsh-bill"), (message, detail) =>
+				this.log("dsh-host", message, detail),
+			);
+		} catch (error) {
+			this.log("dsh-host", "dsh-bill 回填补丁异常（继续启动）", { error: String(error) });
+		}
 
 		// 会话级代理覆盖（DSH 降级方案）：DSH 是单一共享 host，无法按会话注入，
 		// 只能聚合所有 DSH 会话的开关应用到 host（off 优先于 on，见 sessionProxyPolicy）。
@@ -1034,6 +1068,8 @@ export class DshHost {
 			// （ELECTRON_*/NODE_OPTIONS），避免污染 DSH 子进程树。
 			forkEnv,
 			(scope, message, detail) => this.log(scope, message, detail),
+			// 崩溃自动重启不经过 DshHost.start，必须把手动停止门控透传到进程层。
+			() => this.isManualStopped(),
 		);
 		this.hostProcess = hostProcess;
 		// 崩溃联动：host 进程退出（运行中崩溃）时中断全部在途桥 fetch（mux 长连接），

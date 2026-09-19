@@ -103,6 +103,31 @@ export function isUnknownCliOption(message: string): boolean {
 	return /unknown option|unrecognized option|unexpected argument/i.test(message);
 }
 
+/**
+ * 端点被 WAF / 人机验证拦截的判定（纯函数，可单测）。
+ *
+ * 判据来自真实故障：网关（Cloudflare / 阿里云 WAF 等）返回 HTTP **200**，正文却是
+ * JS 挑战页 HTML；pi 侧解析 JSON 失败后抛出的信息是 `Unexpected token '<'` 之类，
+ * 看起来像「配置损坏」，实际是**被拦了**。两种失败的可操作动作完全不同：
+ * 前者要改配置，后者要换代理 / 配 UA，混在一起会把用户引向错误方向。
+ * 因此单独分出一类，并在渲染层给出对应引导。
+ */
+export function isWafBlockedSignal(message: string): boolean {
+	if (!message) return false;
+	return (
+		// JSON 解析撞上 HTML：挑战页最典型的落地形态
+		/Unexpected token '<'|Unexpected token <|is not valid JSON|not valid JSON/i.test(
+			message,
+		) ||
+		// 网关直接表明身份 / 拦截动作
+		/\bWAF\b|Access Denied|attention required|Just a moment|cf-browser-verification|captcha|challenge|you have been blocked/i.test(
+			message,
+		) ||
+		// 服务端明确拒绝但链路是通的（403/429 常见于按 UA 或出口 IP 拦截）
+		/HTTP\s+403|status\s+403|HTTP\s+429|status\s+429/i.test(message)
+	);
+}
+
 function isYesNo(token: string): boolean {
 	return /^(yes|no)$/i.test(token);
 }
@@ -274,6 +299,13 @@ export function classifyModelListFailure(
 			reason: "config-invalid",
 			detail: clip(`${d.fileName} parse failed${position}: ${d.message}`),
 		};
+	}
+	// WAF / 反爬拦截必须排在通用 config 正则之前：
+	// 挑战页导致的报错常带 json / parse 字样（例如 Unexpected token '<'），
+	// 若先按 /config|parse/ 归类会误判成「配置损坏」，把用户引向改配置，
+	// 而真正可操作的动作是换代理或配一个能过白名单的 UA。
+	if (isWafBlockedSignal(first)) {
+		return { reason: "waf-blocked", detail: clip(first) };
 	}
 	if (isUnknownCliOption(first)) {
 		return {

@@ -28,6 +28,8 @@ export default defineConfig({
       themeConfig: {
         nav: [
           { text: "首页", link: "/" },
+          { text: "全景指南", link: "/guide/ultimate-guide" },
+          { text: "原理解析", link: "/guide/architecture-deep-dive" },
           { text: "使用指南", link: "/guide/usage-guide" },
           { text: "功能手册", link: "/guide/feature-reference" },
           { text: "FAQ", link: "/guide/faq" },
@@ -48,6 +50,8 @@ export default defineConfig({
             {
               text: "指南",
               items: [
+                { text: "从零到精通终极全景指南", link: "/guide/ultimate-guide" },
+                { text: "核心原理解析与深度指南", link: "/guide/architecture-deep-dive" },
                 { text: "完整使用指南（新手向）", link: "/guide/usage-guide" },
                 { text: "快速开始", link: "/guide/getting-started" },
                 { text: "功能介绍", link: "/guide/features" },
@@ -88,6 +92,8 @@ export default defineConfig({
       themeConfig: {
         nav: [
           { text: "Home", link: "/en/" },
+          { text: "Ultimate Guide", link: "/guide/ultimate-guide" },
+          { text: "Deep Dive", link: "/guide/architecture-deep-dive" },
           { text: "Guide", link: "/en/guide/usage-guide" },
           { text: "Feature Reference", link: "/en/guide/feature-reference" },
           { text: "FAQ", link: "/en/guide/faq" },
@@ -108,6 +114,8 @@ export default defineConfig({
             {
               text: "Guide",
               items: [
+                { text: "Ultimate Guide (Zero to Hero)", link: "/guide/ultimate-guide" },
+                { text: "Architecture Deep Dive", link: "/guide/architecture-deep-dive" },
                 { text: "Usage Guide", link: "/en/guide/usage-guide" },
                 { text: "Quick Start", link: "/en/guide/getting-started" },
                 { text: "Features", link: "/en/guide/features" },

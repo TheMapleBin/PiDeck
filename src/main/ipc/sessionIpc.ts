@@ -186,10 +186,15 @@ export type DshBackendIpcDeps = {
 	readDshCredential?: (ref: string) => Promise<string | undefined>;
 	/** DSH settings.openDocument（平台打开配置文档）。 */
 	openDshDocument?: () => Promise<void>;
-	/** DSH host 启动（覆盖进程监控手动停止）；boot 失败返回 false。 */
-	startDshHost?: () => Promise<boolean>;
-	/** DSH host 重启；返回 false 表示 boot 失败。 */
+	/** DSH host 重启；返回 false 表示有活跃 DSH 会话被拒绝。 */
 	restartDshHost?: () => Promise<boolean>;
+	/**
+	 * DSH host 手动停止：停活跃 DSH 会话 + dispose host + 持久化手动停止标记。
+	 * 返回 stopAll/dispose 是否顺利完成（false 时标记仍会写入，保证「停止后不再自动启动」语义优先）。
+	 */
+	stopDshHost?: () => Promise<boolean>;
+	/** DSH host 显式启动：清除手动停止标记并 boot；返回 host 是否就绪。 */
+	startDshHost?: () => Promise<boolean>;
 	/** DSH 历史分页（session.history 事件流翻页）；未装配时返回空页。 */
 	readDshHistoryPage?: (
 		dshSessionId: string,
@@ -434,8 +439,9 @@ export function registerSessionIpc(deps: SessionIpcDeps): void {
 		unsetDshCredential,
 		readDshCredential,
 		openDshDocument,
-		startDshHost,
 		restartDshHost,
+		stopDshHost,
+		startDshHost,
 		readDshHistoryPage,
 		readDshProcessEvents,
 		readDshSystemPrompt,
@@ -1799,17 +1805,24 @@ export function registerSessionIpc(deps: SessionIpcDeps): void {
 		},
 	);
 	ipcMain.handle(
-		ipcChannels.dshStartHost,
-		async () => {
-			if (!startDshHost) throw new Error("DSH host start is not available");
-			return startDshHost();
-		},
-	);
-	ipcMain.handle(
 		ipcChannels.dshRestartHost,
 		async () => {
 			if (!restartDshHost) throw new Error("DSH host restart is not available");
 			return restartDshHost();
+		},
+	);
+	ipcMain.handle(
+		ipcChannels.dshStopHost,
+		async () => {
+			if (!stopDshHost) throw new Error("DSH host stop is not available");
+			return stopDshHost();
+		},
+	);
+	ipcMain.handle(
+		ipcChannels.dshStartHost,
+		async () => {
+			if (!startDshHost) throw new Error("DSH host start is not available");
+			return startDshHost();
 		},
 	);
 	ipcMain.handle(

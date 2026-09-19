@@ -226,10 +226,16 @@ export const ipcChannels = {
 	dshConfigMutate: "dsh:config-mutate",
 	/** DSH settings.openDocument（把配置文档交给平台打开）。 */
 	dshOpenDocument: "dsh:open-document",
-	/** DSH host 启动（进程监控/配置概览；覆盖手动停止意图）。 */
-	dshStartHost: "dsh:start-host",
 	/** DSH host 重启（DSH_HOME 切换后立即生效；有活跃 DSH 会话时拒绝）。 */
 	dshRestartHost: "dsh:restart-host",
+	/**
+	 * DSH host 手动停止（用户不想让它运行）：停所有 DSH 会话 + dispose host，
+	 * 并把 dshManualStopped 持久化为 true——之后所有自动拉起路径都被门控，
+	 * 只有 dshStartHost（显式启动）才能恢复。
+	 */
+	dshStopHost: "dsh:stop-host",
+	/** DSH host 显式启动：清除手动停止标记并 boot；返回 host 是否就绪。 */
+	dshStartHost: "dsh:start-host",
 	/** DSH credentials.describe（configured/source/writable，无值）。 */
 	dshCredentialDescribe: "dsh:credential-describe",
 	/** DSH credentials.set（写凭证值）。 */
@@ -407,6 +413,12 @@ export const ipcChannels = {
 	piExecInstall: "pi:exec-install",
 	/** 检查 npm 是否可用 */
 	piCheckNpm: "pi:check-npm",
+	/** 环境引导：检测便携 Node 副本 + 系统 node 状态 */
+	piRuntimeNodeCheck: "pi:runtime-node-check",
+	/** 环境引导：安装便携 Node（镜像回退 + sha256 校验）到 userData */
+	piRuntimeNodeInstall: "pi:runtime-node-install",
+	/** 环境引导：用便携/系统 npm 全局安装 pi（--prefix 指向 pi-runtime，收紧通道由主进程拼命令） */
+	piRuntimePiInstall: "pi:runtime-pi-install",
 	appInfo: "app:info",
 	/** 获取当前机器的非回环 IPv4 网卡，供局域网 Web 服务二维码使用 */
 	appNetworkAddresses: "app:network-addresses",

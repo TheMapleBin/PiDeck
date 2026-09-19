@@ -83,12 +83,15 @@ export function useSessionPreferenceState(options: {
   const [recentProviders, setRecentProviders] = useState<string[]>([]);
   /** 用户隐藏的供应商（Pi 模型页眼睛开关）：Pi 后端模型选择器与循环按 provider 过滤。 */
   const [hiddenProviders, setHiddenProviders] = useState<string[]>([]);
+  /** 用户隐藏的模型（选择器内隐藏 / 已隐藏折叠区恢复）：循环候选同样排除。 */
+  const [hiddenModels, setHiddenModels] = useState<string[]>([]);
 
   useEffect(() => {
     void desktopApi.settings.get().then((settings) => {
       setFavoriteModels(settings.favoriteModels ?? []);
       setRecentProviders(settings.recentProviders ?? []);
       setHiddenProviders(settings.hiddenProviders ?? []);
+      setHiddenModels(settings.hiddenModels ?? []);
     }).catch(() => undefined).finally(() => setFavoritesLoaded(true));
   }, []);
 
@@ -306,6 +309,24 @@ export function useSessionPreferenceState(options: {
     }
   }
 
+  /**
+   * 模型隐藏开关（与收藏同构的 settings 写入）：隐藏后选择器不再列出，
+   * Ctrl+M 循环候选也一并排除（用户隐藏即不想用它）。
+   */
+  async function toggleHideModel(provider: string, modelId: string) {
+    const key = modelKey(provider, modelId);
+    const next = hiddenModels.includes(key)
+      ? hiddenModels.filter((item) => item !== key)
+      : [...hiddenModels, key];
+    setHiddenModels(next);
+    try {
+      await desktopApi.settings.update({ hiddenModels: next });
+    } catch (error) {
+      setHiddenModels(hiddenModels);
+      showNotice(error instanceof Error ? error.message : String(error), 4000);
+    }
+  }
+
   return {
     /** 会话记录 / runtime 快照：写侧判断「有没有 Agent、是否在生成、要不要降级」用 */
     record,
@@ -326,10 +347,12 @@ export function useSessionPreferenceState(options: {
     favoritesLoaded,
     recentProviders,
     hiddenProviders,
+    hiddenModels,
     modelPending,
     setModelPending,
     upsertSession,
     patchRuntimeState,
     toggleFavorite,
+    toggleHideModel,
   };
 }

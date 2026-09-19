@@ -816,30 +816,8 @@ async function stopDshHostFromMonitor(): Promise<SessionCommandResult<undefined>
 		if (result.value) emitSessionRuntimeDetach(result.value);
 	}
 	await dshAgentManager.stopAll();
-	// 先记用户停止意图，再 dispose：设置页 forceMount 的只读查询不得把 host 拉回来。
-	dshHost.markUserStopped();
 	await dshHost.dispose();
 	return { ok: true, value: undefined };
-}
-
-/** 进程监控 / 配置概览「启动」：清掉手动停止标记并 fork。 */
-async function startDshHostExplicit(): Promise<boolean> {
-	try {
-		await dshHost.ensureStarted({ reason: "explicit" });
-		return dshHost.isHostProcessRunning() && dshHost.isHostReady();
-	} catch {
-		return false;
-	}
-}
-
-/**
- * DSH_HOME 切换 / 配置概览「重启」：先停会话再重新 fork。
- * 走 explicit，覆盖进程监控里的手动停止。
- */
-async function restartDshHostExplicit(): Promise<boolean> {
-	await dshAgentManager.stopAll();
-	await dshHost.restart();
-	return startDshHostExplicit();
 }
 
 function emitReplacementState(binding: SessionRuntimeBinding, includeMessages: boolean): void {
@@ -1987,15 +1965,55 @@ async function stopDshHostForRuntimeDiskOperation(): Promise<boolean> {
 }
 
 /**
- * 磁盘操作后按需把 host 拉回来（仅当操作前 host 在跑）。
- * 为什么必须重启而不是继续用旧 host：host 的 runtime 路径在 fork 时经
- * `--dsh-node-modules` 固化，替换 runtime 后旧进程仍指向旧路径；ensureStarted
- * 会用新 runtime 重新 fork。host 没在跑就不白起（下次用时自动 fork）。
+ * DSH 后台预热是否允许：默认后端是 dsh、runtime 可用，且用户没有手动停止过 host。
+ * 手动停止优先级最高——即使用户把默认后端切成 dsh，也不该把用户明确停掉的 host
+ * 又悄悄拉起来（预热失败只记日志，用户无感，所以这里必须直接不开）。
  */
+function dshWarmupEnabled(): boolean {
+	return (
+		settingsStore.get().defaultAgentBackend === "dsh" &&
+		dshRuntimeStatus.canCreateDshSession() &&
+		settingsStore.get().dshManualStopped !== true
+	);
+}
+
+/**
+ * DSH host 手动停止（用户显式动作，IPC dsh:stop-host）：
+ * 1. 先写 settings.dshManualStopped = true 再停——顺序保证「停止意图」优先落地：
+ *    即使 stopAll/dispose 中途失败，自动拉起路径也已经全部被门控住；
+ * 2. 停掉所有活跃 DSH 会话（与 DSH_HOME 切换同一链路，避免旧 mux 悬挂）；
+ * 3. dispose host（utilityProcess 退出，释放 ~200MB 与 DSH_HOME 文件锁）。
+ * 返回停进程是否顺利完成（标记写入与否不影响返回值语义——门控已生效）。
+ */
+async function stopDshHostManually(): Promise<boolean> {
+	// 先持久化停止意图：后续任何 ensureStarted（含并发在途调用）都会被拒。
+	await settingsStore.update({ dshManualStopped: true });
+	try {
+		if (dshHost.isStarted()) await dshAgentManager.stopAll();
+		await dshHost.restart();
+		return true;
+	} catch (error) {
+		void appLogger?.warn("dsh-host", "manual stop: stopAll/dispose failed", {
+			error: error instanceof Error ? error.message : String(error),
+		});
+		return false;
+	}
+}
+
+/**
+ * DSH host 显式启动（用户显式动作，IPC dsh:start-host）：清除手动停止标记后 boot。
+ * 必须先清标记再 boot——DshHost 的启动门控按 settings 实时读取。
+ * 返回 host 是否真正就绪（boot 完成），渲染层据此刷新状态徽标。
+ */
+async function startDshHostManually(): Promise<boolean> {
+	await settingsStore.update({ dshManualStopped: false });
+	return dshHost.startManually();
+}
+
 async function startDshHostAfterRuntimeDiskOperation(wasRunning: boolean): Promise<void> {
 	if (!wasRunning) return;
 	try {
-		await dshHost.ensureStarted({ reason: "explicit" });
+		await dshHost.ensureStarted();
 	} catch (error) {
 		void appLogger?.warn("dsh-runtime", "restart host after runtime disk operation failed", {
 			error: error instanceof Error ? error.message : String(error),
@@ -2771,8 +2789,22 @@ function registerIpc() {
 			unsetDshCredential: (ref) => dshHost.unsetCredential(ref),
 			readDshCredential: (ref) => dshHost.readCredentialValue(ref),
 			openDshDocument: () => dshHost.openDocument(),
-			startDshHost: () => startDshHostExplicit(),
-			restartDshHost: () => restartDshHostExplicit(),
+			stopDshHost: () => stopDshHostManually(),
+			startDshHost: () => startDshHostManually(),
+			restartDshHost: async () => {
+				// 切换 DSH_HOME 前先停掉全部活跃 DSH 会话（host 侧会话仍在 $DSH_HOME
+				// 持久化，catalog 保留 dshSessionId，重新打开会话时 attach 恢复），
+				// 避免旧目录的 mux 悬挂在已 dispose 的 transport 上；再重启 host。
+				// D16：restart 后校验 host 真正拉起（boot 完成），失败返回 false 而非恒 true。
+				await dshAgentManager.stopAll();
+				await dshHost.restart();
+				try {
+					await dshHost.ensureStarted();
+					return dshHost.isHostProcessRunning() && dshHost.isHostReady();
+				} catch {
+					return false;
+				}
+			},
 			readDshHistoryPage: (dshSessionId, beforeSeq, pageSize) =>
 				dshAgentManager.readHistoryPage(dshSessionId, beforeSeq, pageSize),
 			readDshProcessEvents: (agentId, dshSessionId) =>
@@ -3017,6 +3049,14 @@ function registerIpc() {
 		appLogger,
 		rpcLogger,
 		sessionRuntimeCoordinator,
+		// pi 环境引导：便携 Node 安装器的真实 IO（下载/解压与 DSH runtime 同源，
+		// 测试里注入替身；未装配时引导安装入口降级不可用）。
+		piRuntimeNodeInstaller: {
+			download: createNetDownloader((scope, message, detail) => {
+				void appLogger.info(scope, message, detail);
+			}),
+			extract: createTarExtractor((scope, message, detail) => void appLogger.warn(scope, message, detail)),
+		},
 		// 「关于」面板读取启用中的 DSH 运行时版本
 		dshRuntimeManager: dshRuntimeManager ?? undefined,
 		// G17：RPC 日志按 backend 分流（DSH 走 DshAgentManager 领域调用记录）
@@ -3030,8 +3070,16 @@ function registerIpc() {
 		// 进程监控停止 agent：按 agentId 走完整会话停止链路（含 detach 推送）
 		stopAgentFromMonitor,
 		getDshHostPid: () => dshHost.getHostPid(),
-		dshHostMonitorAvailable: () => dshRuntimeStatus.canCreateDshSession(),
-		restartDshHost: () => restartDshHostExplicit(),
+		restartDshHost: async () => {
+			await dshAgentManager.stopAll();
+			await dshHost.restart();
+			try {
+				await dshHost.ensureStarted();
+				return dshHost.isHostProcessRunning() && dshHost.isHostReady();
+			} catch {
+				return false;
+			}
+		},
 		dshHostIsStarted: () => dshHost.isStarted(),
 		providerMigration: {
 			configManager,
@@ -3645,6 +3693,8 @@ app.whenReady().then(async () => {
 		// 永久删除归档目录：统一走系统回收站（与 pi 会话删除同语义，可恢复；拒绝静默硬删）。
 		async (path) => { await shell.trashItem(path); },
 		() => settingsStore.get().dshRunnerNodePath ?? "",
+		// 手动停止标记（持久化）：为真时 ensureStarted 拒绝自动拉起，只有用户显式启动才 boot。
+		() => settingsStore.get().dshManualStopped === true,
 	);
 	dshAgentManager = new DshAgentManager(
 		dshHost,
@@ -4197,8 +4247,7 @@ app.whenReady().then(async () => {
 		// 自动更新完成前 warmup 因 outdated 被跳过：装好且默认后端是 dsh 时补一次预热。
 		onRuntimeReady: () => {
 			startDshHostInBackground(dshHost, appLogger, {
-				enabled:
-					settingsStore.get().defaultAgentBackend === "dsh" && dshRuntimeStatus.canCreateDshSession(),
+				enabled: dshWarmupEnabled(),
 			});
 		},
 		log: (scope, message, detail) => void appLogger.info(scope, message, detail),
@@ -4210,10 +4259,10 @@ app.whenReady().then(async () => {
 
 	// 窗口已可用后再按需预热 DSH：默认后端是 dsh 且 runtime 可用才后台 boot，
 	// 避免纯 pi 用户空转 utilityProcess（约 200MB），也避免 runtime 不在时 boot 必然失败。
+	// 用户手动停止过 DSH（dshManualStopped）时也跳过——不弹错误，用户下次显式启动即可。
 	// 发送/历史/配置路径仍由 ensureStarted 兜底。
 	startDshHostInBackground(dshHost, appLogger, {
-		enabled:
-			settingsStore.get().defaultAgentBackend === "dsh" && dshRuntimeStatus.canCreateDshSession(),
+		enabled: dshWarmupEnabled(),
 	});
 
 	// 模型 capability cache 的 hydration 在 syncWslConfig 后启动，确保它与 PiProcess

@@ -33,6 +33,7 @@ export * from "./types/dshHome";
 export * from "./types/dshRuntimeManifest";
 export * from "./types/dshRunnerNode";
 export * from "./types/dshRunnerNodeRelease";
+export * from "./types/piRuntimeNode";
 export * from "./types/providerMigration";
 export * from "./types/announcement";
 export * from "./types/providerUsage";

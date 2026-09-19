@@ -1,130 +1,39 @@
 name: Post-release sidecars
 
-# 发版链路自动化：应用 Release 发布后自动补齐两份必须「原生 runner」打包的 DSH runtime
-# tgz，然后触发 sync-atomgit 镜像同步。至此 push tag → 安装包 → sidecar → AtomGit 全链
-# 无人值守。
+# 发版收尾链路（2026-09 起简化）：应用 Release 发布后触发 AtomGit 镜像同步。
 #
-# 为什么只补两个平台：
-# - release.yml 的 5 个构建 job 各自上传本机平台 runtime tgz（npm run build 的
-#   runtime:pack），覆盖 win32-x64 / darwin-arm64 / linux-x64 / linux-arm64；
-# - win32-arm64：Windows 没有 arm64 app 构建 job，天然缺口；
-# - darwin-x64：macOS x64 构建跑在 macos-latest（arm64 runner）上，runtime:pack 用
-#   process.arch 取平台，产出的是 darwin-arm64 而非 darwin-x64，且原生 prebuild
-#   （koffi / sharp / node-pty）不能交叉打包，必须在 macos-15-intel 上原生打包。
-# runner-node zip（x64/arm64）由 release.yml 的 windows 构建 job 直接上传，无需这里补。
+# 历史职责变更：本 workflow 原本还要「原生补齐 win32-arm64 / darwin-x64 两份
+# runtime tgz」（release.yml 的 5 个构建 job 只能产出本机平台 runtime，macOS x64
+# 构建 job 跑在 arm64 runner 上、Windows 没有 arm64 构建 job，这两个平台天然缺口，
+# 且原生 prebuild 不能交叉打包）。runtime 打包改为 lock 驱动的交叉解析后（
+# scripts/pack-dsh-runtime 脚本的 --target-os/--target-arch 模式，WSL 真机 boot 验证见
+# docs/dsh-runtime-cross-pack.md），release.yml 内的交叉打包 job 在一个
+# ubuntu runner 上即可产出全部 6 份归档，本 workflow 的补发职责移除，只保留
+# sync-atomgit 触发兜底。
 #
-# 事件模型：release.yml 用 RELEASE_PAT 发布 Release（GITHUB_TOKEN 发布不会广播
+# 事件模型：release.yml 用 RELEASE_PAT 发布 Release（GITHUB_TOKEN 发布不广播
 # release: published，防递归），因此本 workflow 能被触发。release 事件使用「默认分支」
 # 上的 workflow 文件——本文件必须先合入 main，才会对之后的发布生效。
+# 交叉打包 job 也用 PAT 上传资产，但它不触发本 workflow（上传只产生
+# release: edited 事件），因此这里保留 release: published 直接触发 sync-atomgit。
+# 上传目标限定 v*（禁止 sidecar tag 抢 /releases/latest，同 ^v[0-9] 契约）。
 
 on:
   release:
     types: [published]
 
 permissions:
-  contents: write
+  contents: read
 
-# 同一 Release 的补传不并发（两个 matrix job 并发上传靠 gh release upload 重试兜底，
-# 这里只防同事件重复排队）。
+# 同一 Release 的同步不并发（与 release: published 直接触发的 sync-atomgit
+# 互不冲突：同名同大小资产自动跳过；这里防同事件重复排队）。
 concurrency:
   group: post-release-sidecars-${{ github.event.release.tag_name }}
   cancel-in-progress: false
 
 jobs:
-  pack-missing-runtime:
-    name: Pack ${{ matrix.name }} runtime tgz
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: Windows arm64
-            os: windows-11-arm
-            platform: win32
-            arch: arm64
-          - name: macOS x64
-            os: macos-15-intel
-            platform: darwin
-            arch: x64
-
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24.13.0
-          cache: npm
-
-      # 与 publish-dsh-runtime.yml 同款 node_modules 缓存：windows-11-arm 上 npm ci
-      # 要 10+ 分钟，lockfile 未变时直接命中缓存跳过。
-      - name: Cache node_modules
-        id: nm-cache
-        uses: actions/cache@v4
-        with:
-          path: node_modules
-          key: dsh-pack-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
-
-      - name: Install dependencies
-        if: steps.nm-cache.outputs.cache-hit != 'true'
-        run: npm ci
-        env:
-          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
-          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
-
-      - name: Pack DSH runtime
-        run: node scripts/pack-dsh-runtime.mjs
-
-      - name: Check runtime archive
-        run: node scripts/check-dsh-asar.mjs
-
-      - name: Upload onto the Release
-        env:
-          GH_TOKEN: ${{ secrets.RELEASE_PAT }}
-        shell: bash
-        run: |
-          ARCHIVE="dsh-runtime-${{ matrix.platform }}-${{ matrix.arch }}.tgz"
-          INDEX="dsh-runtime-${{ matrix.platform }}-${{ matrix.arch }}-releases.json"
-          # release 事件自带目标 tag，无需再解析 latest（避免 beta 等场景指错 Release）。
-          TAG="${{ github.event.release.tag_name }}"
-          TAG="$(echo "$TAG" | xargs)"
-          if [[ ! "$TAG" =~ ^v[0-9] ]]; then
-            echo "::error::目标不是应用版本 tag（got ${TAG}）。拒绝挂到非 v* Release。"
-            exit 1
-          fi
-          if [ ! -f "dist-runtime/${ARCHIVE}" ] || [ ! -f "dist-runtime/${INDEX}" ]; then
-            echo "::error::缺少产物 dist-runtime/${ARCHIVE} 或 ${INDEX}"
-            ls -la dist-runtime || true
-            exit 1
-          fi
-          echo "Uploading ${ARCHIVE} onto ${TAG}"
-          # 与 publish-dsh-runtime.yml 相同：并发追加偶发 422，短回退重试。
-          for i in 1 2 3 4 5; do
-            if gh release upload "$TAG" \
-              "dist-runtime/${ARCHIVE}" \
-              "dist-runtime/${INDEX}" \
-              --clobber \
-              --repo "${{ github.repository }}"; then
-              exit 0
-            fi
-            echo "upload failed, retry ${i}/5"
-            sleep $((i * 5))
-          done
-          echo "::error::上传 ${ARCHIVE} 到 ${TAG} 失败"
-          exit 1
-
-  # 收尾：触发 AtomGit 镜像同步。必须用 PAT——GITHUB_TOKEN 制造的 workflow_dispatch
-  # 事件不会再触发下游 workflow（GitHub 防递归），PAT 需含 repo（含 actions:write）。
-  # if: always()：个别 runtime 打包失败时仍同步已上传的资产（sync 幂等，可手动补跑）。
-  # sync-atomgit 侧有 concurrency 串行 + 资产静默窗口，与 release:published 直接触发的
-  # 那次同步互不冲突（同名同大小资产自动跳过）。
   trigger-atomgit-sync:
     name: Trigger sync-atomgit
-    needs: pack-missing-runtime
-    if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

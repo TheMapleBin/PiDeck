@@ -8,6 +8,7 @@ import {
 	ChevronRight,
 	CornerDownLeft,
 	Eye,
+	EyeOff,
 	FileText,
 	GitBranch,
 	ImageIcon,
@@ -851,6 +852,7 @@ const MODEL_LIST_FAILURE_REASON_TEXT: Record<ModelListFailReason, TranslationKey
 	"version-too-old": "app.modelListFailVersionTooOld",
 	"config-invalid": "app.modelListFailConfigInvalid",
 	"cli-failed": "app.modelListFailCliFailed",
+	"waf-blocked": "app.modelListFailWafBlocked",
 	"empty": "app.modelListFailEmpty",
 };
 
@@ -936,19 +938,34 @@ export function ModelPicker(props: {
 	recentProviders?: string[];
 	/** 用户隐藏的供应商 key 列表（Pi 模型页眼睛开关）；Pi 后端按 provider 过滤，DSH 不生效。 */
 	hiddenProviders?: string[];
+	/** 用户隐藏的模型列表（格式："provider/modelId"）；Pi 后端过滤单个模型。 */
+	hiddenModels?: string[];
+	/** 切换模型隐藏状态（可直接在模型选择器中隐藏模型，也可在折叠区恢复显示）。 */
+	onToggleHideModel?: (provider: string, modelId: string) => void;
 }) {
 	const currentModelKey = props.current?.provider && props.current?.modelId
 		? `${props.current.provider}/${props.current.modelId}`
 		: undefined;
 	const favoritesSet = new Set(props.favoriteModels ?? []);
-	// 隐藏开关：Pi 后端按 provider 过滤（DSH 的 route 名不参与隐藏列表）；
-	// 过滤后收藏/分组/搜索都基于可见模型，隐藏供应商的模型完全不出现在选择器里。
-	const hiddenSet = new Set(
+	// 隐藏开关：Pi 后端按 provider 与 model 过滤（DSH 的 route 名不参与隐藏列表）；
+	// 过滤后收藏/分组/搜索都基于可见模型，隐藏供应商与隐藏模型不出现在主选择区。
+	const hiddenProviderSet = new Set(
 		props.backend === "dsh" ? [] : (props.hiddenProviders ?? []),
 	);
-	const visibleModels = props.models.filter(
-		(model) => !hiddenSet.has(model.provider),
+	const hiddenModelSet = new Set(
+		props.backend === "dsh" ? [] : (props.hiddenModels ?? []),
 	);
+	const visibleModels: AvailableModel[] = [];
+	const hiddenModelList: AvailableModel[] = [];
+	for (const model of props.models) {
+		if (hiddenProviderSet.has(model.provider)) continue;
+		const key = `${model.provider}/${model.id}`;
+		if (hiddenModelSet.has(key)) {
+			hiddenModelList.push(model);
+		} else {
+			visibleModels.push(model);
+		}
+	}
 
 	// 收藏列表（从全部模型中提取，不移除原供应商分组下的显示）
 	const favorites: AvailableModel[] = visibleModels.filter((model) =>
@@ -1027,6 +1044,21 @@ export function ModelPicker(props: {
 				<span className="min-w-0 flex-1 truncate font-mono text-control font-medium text-foreground" title={model.name ? `${model.name} · ${modelKey}` : modelKey}>
 					{modelKey}
 				</span>
+				{/* 隐藏模型操作按钮：悬停时显示，点击将模型放入隐藏列表 */}
+				{props.onToggleHideModel && !favorited && (
+					<button
+						type="button"
+						className="invisible grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground opacity-60 transition-colors hover:bg-accent hover:text-foreground hover:opacity-100 group-hover:visible"
+						title={t("app.modelHide")}
+						aria-label={t("app.modelHide")}
+						onClick={(e) => {
+							e.stopPropagation();
+							props.onToggleHideModel?.(model.provider, model.id);
+						}}
+					>
+						<EyeOff size={13} strokeWidth={1.8} />
+					</button>
+				)}
 				{selected ? <Check size={15} className="ml-auto shrink-0 text-primary" aria-hidden="true" /> : null}
 			</CommandItem>
 		);
@@ -1089,6 +1121,44 @@ export function ModelPicker(props: {
 							{groupedModels[provider].map((model) => renderModelRow(model))}
 						</CommandPickerGroup>
 					))}
+					{hiddenModelList.length > 0 && props.onToggleHideModel && (
+						<CommandPickerGroup
+							id="hidden-models"
+							label={t("app.modelHiddenSection")}
+							count={hiddenModelList.length}
+							countText={t("app.modelHiddenCount", { count: hiddenModelList.length })}
+						>
+							{hiddenModelList.map((model) => {
+								const modelKey = `${model.provider}/${model.id}`;
+								return (
+									<CommandItem
+										key={`hidden/${modelKey}`}
+										value={`hidden/${modelKey}`}
+										data-picker-value={modelKey}
+										keywords={[model.name ?? "", model.id, model.provider, modelKey]}
+										className="group min-h-9 items-center gap-2 rounded-md px-2.5 py-1 text-muted-foreground"
+										onSelect={() => props.onPick(model)}
+									>
+										<span className="min-w-0 flex-1 truncate font-mono text-control opacity-70" title={modelKey}>
+											{modelKey}
+										</span>
+										<button
+											type="button"
+											className="grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+											title={t("app.modelHiddenRestore")}
+											aria-label={t("app.modelHiddenRestore")}
+											onClick={(e) => {
+												e.stopPropagation();
+												props.onToggleHideModel?.(model.provider, model.id);
+											}}
+										>
+											<Eye size={14} strokeWidth={1.8} />
+										</button>
+									</CommandItem>
+								);
+							})}
+						</CommandPickerGroup>
+					)}
 				</>
 			)}
 		</CommandPickerDialog>

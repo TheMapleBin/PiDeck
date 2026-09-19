@@ -49,8 +49,7 @@ test("resolveFavoriteCycleCandidates：重复收藏去重，空串与空白忽�
   );
 });
 
-test("resolveFavoriteCycleCandidates：pi 过滤被隐藏的供应商，DSH 不过滤", () => {
-  const favorites = ["deepseek/deepseek-v4-pro", "openai/gpt-5.6"];
+test("resolveFavoriteCycleCandidates：pi 过滤被隐藏的供应商，DSH 不过滤", () => {  const favorites = ["deepseek/deepseek-v4-pro", "openai/gpt-5.6"];
   const pi = cycle.resolveFavoriteCycleCandidates({
     favorites,
     models: MODELS,
@@ -62,6 +61,25 @@ test("resolveFavoriteCycleCandidates：pi 过滤被隐藏的供应商，DSH 不�
     favorites,
     models: MODELS,
     hiddenProviders: ["deepseek"],
+    backend: "dsh",
+  });
+  assert.equal(dsh.length, 2);
+});
+
+test("resolveFavoriteCycleCandidates：过滤用户单独隐藏的模型（Ctrl+M 不切到隐藏模型）", () => {
+  const favorites = ["deepseek/deepseek-v4-pro", "openai/gpt-5.6"];
+  const pi = cycle.resolveFavoriteCycleCandidates({
+    favorites,
+    models: MODELS,
+    hiddenModels: ["openai/gpt-5.6"],
+    backend: "pi",
+  });
+  assert.deepEqual(plain(pi.map((item) => `${item.provider}/${item.id}`)), ["deepseek/deepseek-v4-pro"]);
+  // DSH 没有「隐藏模型」概念（目录由 host 给），不应因此被过滤
+  const dsh = cycle.resolveFavoriteCycleCandidates({
+    favorites,
+    models: MODELS,
+    hiddenModels: ["openai/gpt-5.6"],
     backend: "dsh",
   });
   assert.equal(dsh.length, 2);

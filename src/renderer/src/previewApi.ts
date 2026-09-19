@@ -182,8 +182,9 @@ let previewSettings: AppSettings = {
 	idleAgentKeepCount: 5,
 	idleAgentTimeoutMin: 60,
 	favoriteModels: [],
-	// 提供商显示开关：与 SettingsStore 默认一致，预览壳默认全显示
+	// 提供商与模型显示开关：与 SettingsStore 默认一致，预览壳默认全显示
 	hiddenProviders: [],
+	hiddenModels: [],
 
 	fontSize: "default",
 	uiFontSize: null,
@@ -684,7 +685,9 @@ export function createPreviewApi(): PiDesktopApi {
 			unsetDshCredential: async () => undefined,
 			readDshCredential: async () => undefined,
 			openDshDocument: async () => undefined,
-			startDshHost: async () => false,
+			// 预览模式无 host：stop/start 直接返回成功满足接口契约（UI 不渲染错误）。
+			stopDshHost: async () => true,
+			startDshHost: async () => true,
 			restartDshHost: async () => true,
 			setFocusedSession: async () => undefined,
 			getRuntimeState: async (target) => ({
@@ -893,6 +896,24 @@ export function createPreviewApi(): PiDesktopApi {
 			checkNpm: async () => ({
 				available: true,
 				version: "preview",
+			}),
+			runtimeNodeCheck: async () => ({
+				installed: false,
+				systemNodeAvailable: true,
+				systemNodeVersion: "v24.13.0",
+				installSupported: true,
+			}),
+			runtimeNodeInstall: async () => ({
+				ok: true,
+				path: "preview",
+				version: "v24.13.0",
+				source: "preview",
+			}),
+			runtimePiInstall: async (_useMirror) => ({
+				success: true,
+				exitCode: 0,
+				stdout: "preview: runtime pi install output",
+				stderr: "",
 			}),
 		},
 		wsl: {

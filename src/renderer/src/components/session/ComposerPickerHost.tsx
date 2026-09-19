@@ -71,7 +71,7 @@ export function ComposerPickerHost(props: ComposerPickerHostProps) {
     // DSH 会话的模型归属 host（agent-default-model），不读 pi 的欢迎页偏好：
     // 否则 localStorage 里的 pi 模型会被当成「当前模型」高亮，误导用户以为已选中。
     // 草稿期用部署默认模型（settings.yaml agent-default-model）作当前值。
-    // 目录加载与收藏状态由 controller 统一持有（快捷键循环共用同一份）。
+    // 目录/收藏/隐藏状态由 controller 统一持有（快捷键循环共用同一份）。
     return (
       <ModelPicker
         models={preference.models}
@@ -86,6 +86,8 @@ export function ComposerPickerHost(props: ComposerPickerHostProps) {
         onToggleFavorite={(provider, modelId) => void preference.toggleFavorite(provider, modelId)}
         recentProviders={preference.recentProviders}
         hiddenProviders={preference.hiddenProviders}
+        hiddenModels={preference.hiddenModels}
+        onToggleHideModel={(provider, modelId) => void preference.toggleHideModel(provider, modelId)}
         // 用量查询链路随会话后端：DSH 目录的 provider 是 route 名，配置/凭据走 dsh 链路
         backend={preference.isDshSession ? "dsh" : "pi"}
       />

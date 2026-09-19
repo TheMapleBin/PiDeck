@@ -88,7 +88,11 @@ test("git IPC and preload accept an optional repoPath without changing init/work
   assert.match(preload, /branches: \(projectId: string, repoPath\?: string\)/);
   assert.match(gitIpc, /resolveGitCwd/);
   assert.match(gitIpc, /listGitRepos\(projectHostPath\(project\)\)/);
-  // git init 走 currentGitExecutable()（用户可在设置页指定路径），root 仍是项目宿主路径、不随 repoPath 变
-  assert.match(gitIpc, /currentGitExecutable\(\), \["init"\], \{ cwd: projectHostPath\(project\) \}\)/);
+  // git init 走 currentGitExecutable()（用户可在设置页指定路径），root 仍是项目宿主路径、不随 repoPath 变；
+  // windowsHide 是 Windows 启动闪窗修复加的（见 allocHiddenConsole），不改变 cwd 语义。
+  assert.match(
+    gitIpc,
+    /currentGitExecutable\(\), \["init"\], \{[\s\S]{0,60}?cwd: projectHostPath\(project\),[\s\S]{0,60}?\}\)/,
+  );
   assert.match(gitIpc, /worktreeService\.list\(projectHostPath\(project\)\)/);
 });

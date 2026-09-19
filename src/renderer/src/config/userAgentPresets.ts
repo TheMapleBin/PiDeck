@@ -111,3 +111,21 @@ export function isValidUserAgent(value: string): boolean {
 	// eslint-disable-next-line no-control-regex
 	return !/[\x00-\x1f\x7f]/.test(value);
 }
+
+/** 会无条件覆盖用户 User-Agent 的 provider api 类型。 */
+const UA_OVERRIDING_API_TYPES = new Set(["openai-codex-responses"]);
+
+/**
+ * 该 api 类型下，用户配置的 User-Agent 是否会被 pi 冲掉。
+ *
+ * pi 的 `openai-codex-responses` 实现在发请求前执行 `headers.set("User-Agent", getPiUserAgent())`，
+ * 无条件覆盖 models.json 里 provider.headers 的 User-Agent。结果是「配了 UA 也无效」——
+ * 用户会以为是中转站不认这个 UA，实际是 pi 根本没把它发出去。
+ * 这类 api 类型必须在表单里显式提示，并引导改用不覆盖 UA 的 openai-responses。
+ *
+ * 这里只返回布尔、不拼文案：文案走 i18n，判定逻辑保持可单测。
+ */
+export function isUserAgentOverriddenByApiType(apiType: string | undefined): boolean {
+	const normalized = apiType?.trim().toLowerCase();
+	return normalized ? UA_OVERRIDING_API_TYPES.has(normalized) : false;
+}

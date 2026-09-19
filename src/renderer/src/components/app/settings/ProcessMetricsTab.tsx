@@ -1,4 +1,4 @@
-import { Activity, CircleStop, Info, Play, RefreshCw } from "lucide-react";
+import { Activity, CircleStop, Info, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import type { AgentProcessMetric, ProcessMetricsSnapshot } from "../../../../../shared/types";
 import { DSH_HOST_MONITOR_ID } from "../../../../../shared/types/processMetrics";
@@ -70,25 +70,6 @@ export function ProcessMetricsTab() {
     }
   }, [refresh]);
 
-  const startDshHost = useCallback(async () => {
-    const label = t("config.process.dshHost");
-    try {
-      const started = await window.piDesktop.sessions.startDshHost();
-      if (!started) {
-        showNotice(t("config.process.startFailed", { agent: label }), 4000, "error");
-        return;
-      }
-      showNotice(t("config.process.started", { agent: label }), 2000, "info");
-      await refresh();
-    } catch (error) {
-      showNotice(
-        t("config.process.startFailed", { agent: label }) + (error instanceof Error ? `：${error.message}` : ""),
-        4000,
-        "error",
-      );
-    }
-  }, [refresh]);
-
   const agents = snapshot?.agents ?? [];
   const agentTotal = snapshot?.totalAgentBytes ?? 0;
 
@@ -131,31 +112,6 @@ export function ProcessMetricsTab() {
             <Info className="mt-px size-3 shrink-0" aria-hidden="true" />
             <span>{t("config.process.memoryHint")}</span>
           </div>
-
-          {snapshot.dshHostIdle ? (
-            <div className="flex items-center justify-between gap-3 rounded-lg border border-border-subtle bg-bg-panel px-3 py-2.5">
-              <div className="grid min-w-0 gap-0.5">
-                <span className="text-sm font-medium text-foreground">
-                  {t("config.process.dshHost")}
-                  <span className="ml-2 text-caption font-normal text-muted-foreground">
-                    {t("config.process.dshHostStopped")}
-                  </span>
-                </span>
-                <p className="text-micro text-muted-foreground">{t("config.process.dshHostIdleHint")}</p>
-              </div>
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                className="shrink-0 gap-1"
-                disabled={loading}
-                onClick={() => void startDshHost()}
-              >
-                <Play className="size-3.5" aria-hidden="true" />
-                {t("config.process.start")}
-              </Button>
-            </div>
-          ) : null}
 
           <div className="overflow-hidden rounded-lg border border-border-subtle bg-bg-panel">
             <div className="flex items-center gap-1.5 border-b border-border-subtle px-3 py-2">

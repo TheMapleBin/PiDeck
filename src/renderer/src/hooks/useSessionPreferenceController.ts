@@ -43,14 +43,16 @@ export type SessionPreferenceController = {
   thinkingLevels: ThinkingPickerLevel[];
   /** 当前生效档位（live 优先） */
   currentThinkingLevel: string | undefined;
-  /** 收藏 / 最近 / 隐藏供应商：选择器展示 + 循环候选 */
+  /** 收藏 / 最近 / 隐藏供应商 / 隐藏模型：选择器展示 + 循环候选 */
   favoriteModels: string[];
   recentProviders: string[];
   hiddenProviders: string[];
+  hiddenModels: string[];
   /** 技能选择器需要的会话身份（避免组件再订一次 record/runtime 原子） */
   projectId: string | undefined;
   agentId: string | undefined;
   toggleFavorite: (provider: string, modelId: string) => Promise<void>;
+  toggleHideModel: (provider: string, modelId: string) => Promise<void>;
   /** 选择器选中：应用模型（含 busy 排队 / 需重启引导 / 降级写记录） */
   applyModel: (model: AvailableModel) => Promise<void>;
   /** 选择器选中：应用思考档位 */
@@ -115,6 +117,7 @@ export function useSessionPreferenceController(options: {
     favoriteModels,
     favoritesLoaded,
     hiddenProviders,
+    hiddenModels,
     modelPending,
     currentModel: resolvedLiveModel,
     thinkingLevels,
@@ -359,6 +362,7 @@ export function useSessionPreferenceController(options: {
       favorites: favoriteModels,
       models,
       hiddenProviders,
+      hiddenModels,
       backend: isDshSession ? "dsh" : "pi",
     });
     if (candidates.length === 0) {
@@ -375,7 +379,7 @@ export function useSessionPreferenceController(options: {
     }
     const target = pickCycleModel({ candidates, currentKey, direction });
     if (target) await applyModelRef.current(target);
-  }, [resolvedLiveModel.provider, resolvedLiveModel.modelId, favoriteModels, models, hiddenProviders, isDshSession]);
+  }, [resolvedLiveModel.provider, resolvedLiveModel.modelId, favoriteModels, models, hiddenProviders, hiddenModels, isDshSession]);
 
   /**
    * 快捷键循环：在当前模型可用档位里环绕（档位表与思考选择器同源）。
@@ -477,9 +481,11 @@ export function useSessionPreferenceController(options: {
     favoriteModels,
     recentProviders: state.recentProviders,
     hiddenProviders,
+    hiddenModels,
     projectId: state.projectId,
     agentId: state.agentId,
     toggleFavorite: state.toggleFavorite,
+    toggleHideModel: state.toggleHideModel,
     applyModel: (model) => applyModelRef.current(model),
     applyThinking: (level) => applyThinkingRef.current(level),
     cycleModel,

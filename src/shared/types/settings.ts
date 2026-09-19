@@ -306,13 +306,25 @@ export type AppSettings = {
 	/** 收藏的模型 ID 列表 */
 	favoriteModels: string[];
 
-	// ── 提供商显示开关：隐藏后模型页卡片列表与模型选择器都不再展示该供应商 ──
+	// ── 提供商与模型显示开关：隐藏后模型页卡片列表与模型选择器都不再展示 ──
 	/**
 	 * 用户主动隐藏的提供商 key 列表（与 models.json 的 provider key 一致）。
 	 * 隐藏后：Pi 模型页卡片移入页面底部「已隐藏」折叠区，模型选择器不再显示其模型；
 	 * 配置本身不删除，恢复显示即可继续使用。可选以兼容旧 settings.json。
 	 */
 	hiddenProviders?: string[];
+	/**
+	 * 用户主动隐藏的模型标识列表（格式为 "provider/modelId"）。
+	 * 隐藏后：配置页移入该 provider 下的「已隐藏模型」折叠区，模型选择器不再显示；
+	 * 配置本身不删除，恢复显示即可继续使用。可选以兼容旧 settings.json。
+	 */
+	hiddenModels?: string[];
+	/**
+	 * 用户主动隐藏的认证供应商 key 列表（与 auth.json 的 provider key 一致）。
+	 * 隐藏后：Pi 认证页卡片移入页面底部「已隐藏」折叠区；
+	 * 配置本身不删除（仍正常保存于 auth.json 并供 pi 加载），恢复显示即可继续展开编辑。可选以兼容旧 settings.json。
+	 */
+	hiddenAuthProviders?: string[];
 
 	// ── 模型选择器分组排序：记录最近使用的供应商 ──
 	/**
@@ -538,6 +550,17 @@ export type AppSettings = {
 	 * 关闭后不再把外部会话写入侧栏（无手动导入入口）。
 	 */
 	dshAutoImportSessions?: boolean;
+
+	/**
+	 * DSH host 是否被用户手动停止（不想让它运行）。
+	 *
+	 * 持久化跨应用重启：标记为真后，预热（startDshHostInBackground）、按需兜底
+	 * （ensureStarted）、崩溃自动重启（DshHostProcess.restartAfterCrash）、runtime
+	 * 磁盘操作后的 host 恢复等所有非用户显式发起的路径都不再 fork host。
+	 * 只有用户在 DSH 配置页点「启动」才清除标记并重新 boot。
+	 * 缺省 undefined/false：保持按需自动启动的历史语义。
+	 */
+	dshManualStopped?: boolean;
 
 };
 

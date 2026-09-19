@@ -1,8 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Brain, Coins, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Brain, Coins, EyeOff, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { t } from "../i18n";
 import type { ModelItem } from "./configTypes";
-import { ConfigSelect, openDocsInSystemBrowser } from "./ConfigShared";
+import { ConfigSelect, ConfigComboboxInput, openDocsInSystemBrowser } from "./ConfigShared";
+import { getUserAgentOptions } from "./userAgentPresets";
 import { emptyTierDraft, normalizeTiers, toTierDrafts, type CostTierDraft } from "./modelCostTiers";
 import {
 	countSelectedModelIndexes,
@@ -36,6 +37,18 @@ export type ModelsTableProps = {
 	models: ModelItem[];
 	/** 行编辑回调（index 定位，不再带 providerName）。 */
 	onUpdateModel: (index: number, field: string, value: unknown) => void;
+	/**
+	 * 逐模型 User-Agent 覆盖（可选）：落到 provider.modelOverrides[modelId].headers["User-Agent"]。
+	 *
+	 * 为什么不走 onUpdateModel 的 field：modelOverrides 是 **provider 级、按模型 id 建键**的
+	 * 结构（`{ [modelId]: { headers?: Record<string,string> } }`），不是模型行内的字段，
+	 * index 定位写不进去。已按 pi 源码核实：core/provider-composer.js 的 rawModelHeaders
+	 * 把 `modelOverrides[id].headers` 展开在 **最后**（优先级高于 provider.headers），
+	 * 且 model-config.d.ts 里 headers 是该对象合法的 TypeBox 字段（非自定义字段）。
+	 */
+	onUpdateModelUserAgent?: (index: number, value: string) => void;
+	/** 读取该行当前的逐模型 UA 覆盖（可选；不传则不渲染该列）。 */
+	getModelUserAgentOverride?: (index: number) => string;
 	onUpdateModelThinkingLevel: (
 		index: number,
 		key: "xhigh" | "max",
@@ -60,6 +73,10 @@ export type ModelsTableProps = {
 	focusModelKey?: string | null;
 	/** 聚焦完成后清理（可选；对应 ModelsTab 的 pendingModelFocusKey 清空）。 */
 	onFocusHandled?: () => void;
+	/** 上移/下移模型（改变该 provider 下模型的实际顺序） */
+	onMoveModel?: (index: number, direction: "up" | "down") => void;
+	/** 隐藏模型回调（加入 hiddenModels 列表） */
+	onHideModel?: (index: number) => void;
 };
 
 /**
@@ -70,6 +87,10 @@ export type ModelsTableProps = {
  */
 export function ModelsTable(props: ModelsTableProps) {
 	const { models, batchMode = false, selectedIndexes } = props;
+	// UA 预设在渲染期取一次即可（只依赖 i18n，models 变化不会让它失效）。
+	const modelUserAgentOptions = getUserAgentOptions();
+	// 逐模型 UA 列按需渲染：两个回调都给了才有意义（只给一半等于点了没反应）。
+	const showUaColumn = Boolean(props.onUpdateModelUserAgent && props.getModelUserAgentOverride);
 	const getRowKey = props.getRowKey ?? ((index: number) => String(index));
 	const modelIdInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 	// 计费弹框：打开中的行 index（null = 关闭）
@@ -137,6 +158,7 @@ export function ModelsTable(props: ModelsTableProps) {
 						<TableHead className="w-24">{t("config.maxTokens")}</TableHead>
 						<TableHead className="w-24">{t("config.thinkingLevels")}</TableHead>
 						<TableHead className="w-24">{t("config.capabilities")}</TableHead>
+						{showUaColumn && <TableHead className="w-40">{t("config.modelUserAgent")}</TableHead>}
 						<TableHead className="w-20 text-right pr-3">{t("config.actions")}</TableHead>
 					</TableRow>
 				</TableHeader>
@@ -312,9 +334,56 @@ export function ModelsTable(props: ModelsTableProps) {
 											</Label>
 										</div>
 									</TableCell>
-									{/* 操作列：重置为自适应（显式刷 endpoint）+ 计费（Dialog）+ 删除 */}
+									{/* 逐模型 UA：留空 = 继承 provider 级 UA（modelOverrides 不写该键）。
+									    写了则由 pi 覆盖 provider.headers 的同名键（优先级更高）。 */}
+									{showUaColumn && (
+										<TableCell className="p-2">
+											<ConfigComboboxInput
+												value={props.getModelUserAgentOverride!(i)}
+												options={modelUserAgentOptions}
+												onChange={(value) => props.onUpdateModelUserAgent!(i, value)}
+												placeholder={t("config.modelUserAgentInherit")}
+											/>
+										</TableCell>
+									)}
+									{/* 操作列：排序（上移/下移）+ 隐藏 + 重置为自适应 + 计费（Dialog）+ 删除 */}
 									<TableCell className="p-2">
 										<div className="flex items-center justify-end gap-0.5">
+											{props.onMoveModel && (
+												<>
+													<Button
+														variant="ghost"
+														size="icon-sm"
+														className="size-7"
+														onClick={() => props.onMoveModel!(i, "up")}
+														disabled={i === 0}
+														title={t("config.moveModelUp")}
+													>
+														<ArrowUp className="size-3.5" aria-hidden="true" />
+													</Button>
+													<Button
+														variant="ghost"
+														size="icon-sm"
+														className="size-7"
+														onClick={() => props.onMoveModel!(i, "down")}
+														disabled={i === models.length - 1}
+														title={t("config.moveModelDown")}
+													>
+														<ArrowDown className="size-3.5" aria-hidden="true" />
+													</Button>
+												</>
+											)}
+											{props.onHideModel && (
+												<Button
+													variant="ghost"
+													size="icon-sm"
+													className="size-7"
+													onClick={() => props.onHideModel!(i)}
+													title={t("config.hideModel")}
+												>
+													<EyeOff className="size-3.5" aria-hidden="true" />
+												</Button>
+											)}
 											{props.onResetModel && (
 												<Button variant="ghost" size="icon-sm" className="size-7" onClick={() => props.onResetModel!(i)} disabled={props.resettingModelKey === rowKey} title={t("config.modelResetAdaptive")}>
 													<RotateCcw className="size-3.5" aria-hidden="true" />

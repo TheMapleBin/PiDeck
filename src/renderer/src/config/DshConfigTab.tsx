@@ -8,7 +8,8 @@ FileCode2,
 FolderOpen,
 LayoutDashboard,
 LoaderCircle,
-Play,
+Power,
+PowerOff,
 Puzzle,
 RefreshCw,
 ShieldCheck,
@@ -53,6 +54,8 @@ type DshStatus = {
 	bootError?: string | null;
 	/** DSH_HOME 共享/冲突状态（issue #189）；旧主进程未回传时缺省。 */
 	sharing?: DshHomeSharingState;
+	/** 用户是否手动停止了 host（true 时不会自动启动）；旧主进程未回传时缺省。 */
+	manuallyStopped?: boolean;
 };
 type CredentialState = {
 	configured: boolean;
@@ -233,18 +236,6 @@ export const DshConfigTab = forwardRef<DshConfigTabHandle, {
 				setError(null);
 				return [];
 			}
-			const statusResult = await desktopApi.sessions.getDshStatus();
-			setStatus(statusResult);
-			// host 未运行：只展示概览上的启动入口，describe 不得为了填表单去 fork（issue #223）。
-			if (!statusResult.started) {
-				setNamespaces([]);
-				setWritable(false);
-				setHasDocument(false);
-				setModelCatalog({});
-				setProviderDirectory([]);
-				setError(null);
-				return [];
-			}
 			const settingsResult = await desktopApi.sessions.describeDshSettings();
 			setNamespaces(settingsResult.namespaces);
 			setWritable(settingsResult.writable);
@@ -362,10 +353,8 @@ export const DshConfigTab = forwardRef<DshConfigTabHandle, {
 	// 把导航钳制到概览页，保证用户一进来看到的就是安装引导。
 	// describe 失败（host boot 失败）时同理：配置分区无数据可渲染，留在概览页看错误原因。
 	useEffect(() => {
-		if ((!runtimeInstalled || error || status?.started === false) && activeTab !== "overview") {
-			selectTab("overview");
-		}
-	}, [runtimeInstalled, error, status?.started, activeTab, selectTab]);
+		if ((!runtimeInstalled || error) && activeTab !== "overview") selectTab("overview");
+	}, [runtimeInstalled, error, activeTab, selectTab]);
 
 	useEffect(() => {
 		const onMigrated = () => {
@@ -448,7 +437,7 @@ export const DshConfigTab = forwardRef<DshConfigTabHandle, {
 						{t("common.loading")}
 					</div>
 				)}
-				{!loading && error && (
+				{!loading && error && status?.manuallyStopped !== true && (
 					<div className="m-4 rounded-sm border border-danger/20 bg-danger-soft px-3.5 py-2.5">
 						<p className="text-control font-medium text-danger">{t("config.dsh.bootFailedTitle")}</p>
 						<p className="mt-1 text-caption leading-relaxed text-danger/90">{t("config.dsh.bootFailedHint")}</p>
@@ -463,12 +452,19 @@ export const DshConfigTab = forwardRef<DshConfigTabHandle, {
 							<Button type="button" variant="secondary" size="sm" className="h-7" onClick={() => void load()}>
 								{t("config.dsh.retry")}
 							</Button>
-							{/* 一键恢复入口：重启 host 常能解决瞬时失败；下方概览区也有同款按钮 */}
+							{/* 一键恢复入口：重启 host 常能解决瞬时失败；下方概览区也有同款按钮。 */}
 							<Button type="button" variant="secondary" size="sm" className="h-7" onClick={() => void restartHostFromBanner()}>
 								<RefreshCw className="size-3.5" aria-hidden="true" />
 								{t("config.dsh.restartHost")}
 							</Button>
 						</div>
+					</div>
+				)}
+				{/* 手动停止态：describe 失败是预期（host 已被用户停掉），不报错；
+				    概览区的「已手动停止」徽标 + 「启动」按钮负责状态表达与恢复入口。 */}
+				{!loading && error && status?.manuallyStopped === true && (
+					<div className="m-4 rounded-sm border border-border-subtle bg-bg-panel px-3.5 py-2.5">
+						<p className="text-control text-muted-foreground">{t("config.dsh.manuallyStoppedDesc")}</p>
 					</div>
 				)}
 				{!loading && (
@@ -727,26 +723,6 @@ function Overview(props: {
 	};
 
 	/**
-	 * 手动启动 host：覆盖进程监控里的停止意图，不先杀会话（本来就没在跑）。
-	 */
-	const startHost = async () => {
-		if (switching) return;
-		setSwitching(true);
-		try {
-			const started = await desktopApi.sessions.startDshHost();
-			showNotice(
-				started ? t("config.dsh.hostStarted") : t("config.dsh.hostStartFailed"),
-				started ? 4000 : 6000,
-			);
-		} catch (error) {
-			showNotice(error instanceof Error ? error.message : String(error), 4000);
-		} finally {
-			setSwitching(false);
-			props.onChanged();
-		}
-	};
-
-	/**
 	 * 手动恢复 host：复用设置切换时的完整重启链路，确保先终止旧 mux，
 	 * 再等待新 host ready，不能只杀 utilityProcess 留下运行会话。
 	 */
@@ -767,6 +743,47 @@ function Overview(props: {
 		}
 	};
 
+	/**
+	 * 手动停止 host（用户不想让它运行）：主进程先停活跃 DSH 会话，再 dispose host，
+	 * 并持久化 dshManualStopped=true——之后预热/按需兕底/崩溃自动重启都不会再拉起，
+	 * 只有点「启动」才恢复。停止后配置读写（settings.describe 等）也会失败——这是
+	 * 预期行为，概览页会显示「已手动停止」徽标而不是错误态。
+	 */
+	const stopHost = async () => {
+		if (switching) return;
+		setSwitching(true);
+		try {
+			const stopped = await desktopApi.sessions.stopDshHost();
+			showNotice(
+				stopped ? t("config.dsh.hostStopped") : t("config.dsh.hostStopFailed"),
+				stopped ? 4000 : 6000,
+			);
+		} catch (error) {
+			showNotice(error instanceof Error ? error.message : String(error), 6000);
+		} finally {
+			setSwitching(false);
+			props.onChanged();
+		}
+	};
+
+	/** 手动启动 host（唯一能恢复运行的方式）：主进程清停止标记后 boot。 */
+	const startHost = async () => {
+		if (switching) return;
+		setSwitching(true);
+		try {
+			const started = await desktopApi.sessions.startDshHost();
+			showNotice(
+				started ? t("config.dsh.hostStarted") : t("config.dsh.hostStartFailed"),
+				started ? 4000 : 6000,
+			);
+		} catch (error) {
+			showNotice(error instanceof Error ? error.message : String(error), 6000);
+		} finally {
+			setSwitching(false);
+			props.onChanged();
+		}
+	};
+
 	return (
 		<div className="grid gap-4 p-4">
 			{/* DSH 后端运行时管理区块：未装→安装引导，已装→版本/目录/卸载/导入。 */}
@@ -781,22 +798,34 @@ function Overview(props: {
 						<span className="rounded-full border border-emerald-300/70 bg-emerald-500/10 px-2 py-0.5 text-micro font-medium text-emerald-700 dark:border-emerald-700/70 dark:text-emerald-300">
 							{t("config.dsh.started")}
 						</span>
+					) : status?.manuallyStopped ? (
+						// 手动停止是用户的主动选择，用中性徽标而非错误红：区别于 boot 失败。
+						<span className="rounded-full border border-border-subtle bg-bg-panel px-2 py-0.5 text-micro text-muted-foreground">
+							{t("config.dsh.manuallyStopped")}
+						</span>
 					) : (
 						<span className="rounded-full border border-border-subtle px-2 py-0.5 text-micro text-muted-foreground">
 							{t("config.dsh.notStarted")}
 						</span>
 					)}
-					<Button
-						type="button"
-						variant="secondary"
-						size="sm"
-						className="h-7 gap-1"
-						disabled={switching}
-						onClick={() => void (status?.started ? restartHost() : startHost())}
-					>
-						{switching ? <LoaderCircle className="size-3.5 animate-pideck-spin" aria-hidden="true" /> : status?.started ? <RefreshCw className="size-3.5" aria-hidden="true" /> : <Play className="size-3.5" aria-hidden="true" />}
-						{status?.started ? t("config.dsh.restartHost") : t("config.dsh.startHost")}
-					</Button>
+					{/* 停止/启动互斥：运行中→停止；已手动停止→启动（唯一恢复入口）。重启仅在运行中可用。 */}
+					{status?.started ? (
+						<Button type="button" variant="secondary" size="sm" className="h-7 gap-1" disabled={switching} onClick={() => void stopHost()}>
+							{switching ? <LoaderCircle className="size-3.5 animate-pideck-spin" aria-hidden="true" /> : <PowerOff className="size-3.5" aria-hidden="true" />}
+							{t("config.dsh.stopHost")}
+						</Button>
+					) : (
+						<Button type="button" variant="secondary" size="sm" className="h-7 gap-1" disabled={switching} onClick={() => void startHost()}>
+							{switching ? <LoaderCircle className="size-3.5 animate-pideck-spin" aria-hidden="true" /> : <Power className="size-3.5" aria-hidden="true" />}
+							{t("config.dsh.startHost")}
+						</Button>
+					)}
+					{status?.started ? (
+						<Button type="button" variant="secondary" size="sm" className="h-7 gap-1" disabled={switching} onClick={() => void restartHost()}>
+							<RefreshCw className="size-3.5" aria-hidden="true" />
+							{t("config.dsh.restartHost")}
+						</Button>
+					) : null}
 				</div>
 			</section>
 			{/* 跨工具兼容只留开关：开=启动只读扫盘入侧栏；关=不收录。不提供手动导入。 */}

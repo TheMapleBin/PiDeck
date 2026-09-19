@@ -77,6 +77,10 @@ export function ModelsTab(props: {
 	hiddenProviders: string[];
 	/** 切换供应商隐藏状态（父级持久化到 AppSettings.hiddenProviders）。 */
 	onToggleHiddenProvider: (name: string) => void;
+	/** 用户隐藏的模型标识列表（格式："provider/modelId"）。 */
+	hiddenModels?: string[];
+	/** 切换单个模型的隐藏状态（父级持久化到 AppSettings.hiddenModels）。 */
+	onToggleHiddenModel?: (provider: string, modelId: string) => void;
 	fetchingProvider: string | null;
 	fetchedModels: Record<string, FetchedModel[]>;
 	fetchModelsErrorByProvider: Record<string, string | undefined>;
@@ -121,6 +125,14 @@ export function ModelsTab(props: {
 		key: "xhigh" | "max",
 		value: "" | "xhigh" | "max",
 	) => void;
+	/** 逐模型 User-Agent 覆盖（落到 provider.modelOverrides），可选。 */
+	onUpdateModelUserAgent?: (
+		providerName: string,
+		index: number,
+		value: string,
+	) => void;
+	/** 读取某模型当前的 UA 覆盖值（可选；与上一个回调成对出现才渲染该列）。 */
+	getModelUserAgentOverride?: (providerName: string, index: number) => string;
 	onDeleteModel: (providerName: string, index: number) => void;
 	onDeleteModels: (providerName: string, indexes: number[]) => void;
 	/** 重置为自适应：显式刷新 endpoint /models 后按模板清空并重填能力字段。 */
@@ -680,10 +692,32 @@ export function ModelsTab(props: {
 											models={provider.models}
 											onUpdateModel={(i, field, value) => props.onUpdateModel(name, i, field, value)}
 											onUpdateModelThinkingLevel={(i, key, value) => props.onUpdateModelThinkingLevel(name, i, key, value)}
+											onUpdateModelUserAgent={
+												props.onUpdateModelUserAgent && props.getModelUserAgentOverride
+													? (i, value) => props.onUpdateModelUserAgent!(name, i, value)
+													: undefined
+											}
+											getModelUserAgentOverride={
+												props.onUpdateModelUserAgent && props.getModelUserAgentOverride
+													? (i) => props.getModelUserAgentOverride!(name, i)
+													: undefined
+											}
 											onDeleteModel={(i) => {
 												clearModelBatch();
 												props.onDeleteModel(name, i);
 											}}
+											onMoveModel={(i, direction) => {
+												const targetIndex = direction === "up" ? i - 1 : i + 1;
+												if (targetIndex < 0 || targetIndex >= provider.models.length) return;
+												const nextModels = [...provider.models];
+												const [removed] = nextModels.splice(i, 1);
+												nextModels.splice(targetIndex, 0, removed);
+												props.onChangeProvider(name, "models", nextModels);
+											}}
+											onHideModel={props.onToggleHiddenModel ? (i) => {
+												const model = provider.models[i];
+												if (model) props.onToggleHiddenModel!(name, model.id);
+											} : undefined}
 											onResetModel={(i) => props.onResetModel(name, i)}
 											resettingModelKey={props.resettingModelKey}
 											getRowKey={(i) => getModelInputKey(name, i)}
@@ -699,6 +733,41 @@ export function ModelsTab(props: {
 											focusModelKey={pendingModelFocusKey}
 											onFocusHandled={() => setPendingModelFocusKey(null)}
 										/>
+										{/* 隐藏模型折叠展示区：在当前 provider 下展示已隐藏的模型，可随时点眼睛恢复 */}
+										{(() => {
+											const hiddenModelsInProvider = provider.models.filter((m) =>
+												(props.hiddenModels ?? []).includes(`${name}/${m.id}`),
+											);
+											if (hiddenModelsInProvider.length === 0) return null;
+											return (
+												<div className="mt-2 rounded border border-border-subtle bg-bg-muted/40 p-2 text-xs">
+													<div className="mb-1 flex items-center gap-1.5 font-medium text-text-secondary">
+														<EyeOff size={13} className="text-muted-foreground" />
+														<span>{t("config.hiddenModels", { count: hiddenModelsInProvider.length })}</span>
+													</div>
+													<div className="flex flex-col gap-1">
+														{hiddenModelsInProvider.map((hiddenModel) => (
+															<div
+																key={hiddenModel.id}
+																className="flex items-center justify-between rounded bg-bg-panel px-2 py-1 text-control"
+															>
+																<span className="font-mono text-text-primary">
+																	{hiddenModel.name ? `${hiddenModel.name} (${hiddenModel.id})` : hiddenModel.id}
+																</span>
+																<Button
+																	variant="ghost"
+																	size="icon-xs"
+																	onClick={() => props.onToggleHiddenModel?.(name, hiddenModel.id)}
+																	title={t("config.showModel")}
+																>
+																	<Eye size={13} />
+																</Button>
+															</div>
+														))}
+													</div>
+												</div>
+											);
+										})()}
 									</div>
 								</div>
 							)}

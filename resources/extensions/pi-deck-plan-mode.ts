@@ -34,6 +34,17 @@ interface PlanModeState {
 	toolsBeforePlanMode?: string[];
 }
 
+/**
+ * plan 模式激活来源：
+ * - "composer"：桌面输入框计划 chip 发出的带标记消息（agentMessage 前缀隐藏标记）。
+ *   这种路径下 composer 切回普通后发出的下一条**无标记**消息是唯一的退出信号。
+ * - "command"：用户直接输入 /plan 命令激活。此时没有隐藏标记可依赖——
+ *   后续普通任务消息本身就是「只读分析」的请求，绝不能当作退出信号，
+ *   否则 /plan 刚开启、下一条消息立刻被禁用（2026-12 用户反馈：plan 模式貌似没法使用）。
+ *   命令流的退出路径：计划草案选单关闭 / 「开始执行」 / 显式 /plan off。
+ */
+type PlanModeActivationSource = "composer" | "command";
+
 const DESTRUCTIVE_PATTERNS = [
 	/\brm\b/i,
 	/\brmdir\b/i,
@@ -174,6 +185,7 @@ export default function piDeckPlanModeExtension(pi: ExtensionAPI): void {
 	let executionMode = false;
 	let todoItems: TodoItem[] = [];
 	let toolsBeforePlanMode: string[] | undefined;
+	let activationSource: PlanModeActivationSource | undefined;
 
 	function updateWidget(ctx: ExtensionContext): void {
 		// 规划阶段生成 Plan 后就应显示；以前只在 executionMode 才 setWidget，
@@ -225,10 +237,12 @@ export default function piDeckPlanModeExtension(pi: ExtensionAPI): void {
 		toolsBeforePlanMode = undefined;
 	}
 
-	function setPlanMode(ctx: ExtensionContext, enabled: boolean): void {
+	function setPlanMode(ctx: ExtensionContext, enabled: boolean, source?: PlanModeActivationSource): void {
 		planModeEnabled = enabled;
 		executionMode = false;
 		todoItems = [];
+		// 激活来源只在开启时登记，关闭时清掉：残留来源会让后续开启误用上一次的退出语义。
+		activationSource = enabled ? source : undefined;
 		if (enabled) {
 			enablePlanModeTools();
 			ctx.ui.notify("PiDeck 计划模式已启用。启用期间只能执行只读命令，不能修改文件。", "info");
@@ -244,9 +258,9 @@ export default function piDeckPlanModeExtension(pi: ExtensionAPI): void {
 		description: "切换 PiDeck 计划模式（只读探索，适用于复杂任务先做分析）",
 		handler: async (args, ctx) => {
 			const normalized = String(args ?? "").trim().toLowerCase();
-			if (["on", "enable", "enabled"].includes(normalized)) setPlanMode(ctx, true);
+			if (["on", "enable", "enabled"].includes(normalized)) setPlanMode(ctx, true, "command");
 			else if (["off", "disable", "disabled", "normal"].includes(normalized)) setPlanMode(ctx, false);
-			else setPlanMode(ctx, !planModeEnabled);
+			else setPlanMode(ctx, !planModeEnabled, "command");
 		},
 	});
 
@@ -266,10 +280,12 @@ export default function piDeckPlanModeExtension(pi: ExtensionAPI): void {
 
 	pi.on("input", async (event, ctx) => {
 		if (!event.text.startsWith(PI_DECK_PLAN_MODE_MARKER)) {
-			// 用户发了一条普通消息（无 plan 标记）：若仍处于 plan 模式且非执行中，
-			// 视为退出 plan——composer 切回 normal 发消息即退出只读模式。
-			// pi-desktop RPC 模式下 /plan 命令不路由，这里作为会话内退出的兜底。
-			if (planModeEnabled && !executionMode) {
+			// 无标记普通消息只在「composer 计划 chip」激活时才是退出信号：
+			// 用户把输入框切回普通模式再发消息，说明要离开只读计划模式。
+			// /plan 命令激活（source=command）时不能这么退出——普通任务消息本身就是
+			// 分析请求，退出会立刻关掉刚开启的只读模式并让任务带写权限执行
+			// （2026-12 用户反馈：/plan 后下一条消息直接提示已禁用）。
+			if (planModeEnabled && !executionMode && activationSource === "composer") {
 				setPlanMode(ctx, false);
 			}
 			return;
@@ -277,6 +293,7 @@ export default function piDeckPlanModeExtension(pi: ExtensionAPI): void {
 
 		// 由桌面输入框模式触发：隐藏标记只用于路由，必须在进入 LLM 前剥离。
 		planModeEnabled = true;
+		activationSource = "composer";
 		executionMode = false;
 		todoItems = [];
 		enablePlanModeTools();
@@ -403,6 +420,7 @@ export default function piDeckPlanModeExtension(pi: ExtensionAPI): void {
 			if (choice?.startsWith("开始执行")) {
 				planModeEnabled = false;
 				executionMode = true;
+				activationSource = undefined;
 				restoreNormalModeTools();
 				updateWidget(ctx);
 				persistState();
@@ -443,6 +461,8 @@ export default function piDeckPlanModeExtension(pi: ExtensionAPI): void {
 			toolsBeforePlanMode = planModeEntry.data.toolsBeforePlanMode ?? toolsBeforePlanMode;
 		}
 		planModeEnabled = false;
+		// 激活来源是运行时状态，不随会话恢复（plan 模式本身不跨会话），重置避免残留。
+		activationSource = undefined;
 		updateWidget(ctx);
 	});
 }

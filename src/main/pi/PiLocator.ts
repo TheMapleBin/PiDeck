@@ -307,6 +307,10 @@ export class PiLocator {
         : []),
       // Linux 常见全局 bin，同样覆盖“桌面启动 PATH 不完整”的场景。
       ...(process.platform === "linux" ? ["/usr/local/bin", "/usr/bin"] : []),
+      // PiDeck 自带引导装的便携 Node/pi 全局目录（<userData>/pi-runtime）：
+      // 引导安装不写系统 PATH，装完 pi.cmd/pi 可执行落在这两个目录，必须自行扫描。
+      join(app.getPath("userData"), "pi-runtime", "node"),
+      join(app.getPath("userData"), "pi-runtime", "pi-global"),
     ];
 
     // These directories only locate an existing pi installation; pi itself is not bundled yet.

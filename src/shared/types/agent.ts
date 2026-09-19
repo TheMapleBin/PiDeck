@@ -184,6 +184,12 @@ export type ModelListFailReason =
 	| "version-too-old"
 	| "config-invalid"
 	| "cli-failed"
+	/**
+	 * 端点可连通但返回了 WAF / 人机验证页（HTTP 200 但正文是 HTML 挑战页，或非 JSON）。
+	 * 与 config-invalid 的区别：配置本身没问题，是网关按 UA / 出口 IP 拦截了请求。
+	 * 可操作动作是换代理或配 UA，而不是改配置——混在一起会把用户引向错误方向。
+	 */
+	| "waf-blocked"
 	| "empty";
 
 /** 模型列表加载报告（projects:list-models-report）：模型数组 + 为空时的失败原因与详情。

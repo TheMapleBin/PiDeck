@@ -52,18 +52,21 @@ test("startup integration warms DSH after the main window only when default back
 	// 白起一个 utilityProcess（约 200MB）没有意义。
 	// 43f8b7c2 起 createWindow 与直连预热之间插入了 runtime 版本错配自动更新块
 	// （其 onRuntimeReady 也用同一门控补预热），窗口放宽到 2400 字符；
-	// 门控条件本身（default backend dsh + canCreateDshSession）不变。
+	// 门控条件收敛到 dshWarmupEnabled()：default backend dsh + canCreateDshSession
+	// + 未手动停止（dshManualStopped，见 tests/dshManualStopWiring.test.mjs）。
 	assert.match(
 		main,
-		/await createWindow\(\);[\s\S]{0,2400}startDshHostInBackground\(dshHost, appLogger, \{\s*enabled:\s*settingsStore\.get\(\)\.defaultAgentBackend === "dsh" && dshRuntimeStatus\.canCreateDshSession\(\),\s*\}\)/,
+		/await createWindow\(\);[\s\S]{0,2400}startDshHostInBackground\(dshHost, appLogger, \{\s*enabled:\s*dshWarmupEnabled\(\),\s*\}\)/,
 	);
+	assert.match(main, /function dshWarmupEnabled\(\): boolean[\s\S]{0,400}dshManualStopped !== true/);
 	assert.match(configTab, /const restartHost = async \(\) =>/);
 	assert.match(configTab, /desktopApi\.sessions\.restartDshHost\(\)/);
 	assert.match(configTab, /t\("config\.dsh\.restartHost"\)/);
 	assert.match(configTab, /const startHost = async \(\) =>/);
 	assert.match(configTab, /desktopApi\.sessions\.startDshHost\(\)/);
 	assert.match(configTab, /t\("config\.dsh\.startHost"\)/);
-	assert.match(configTab, /statusResult\.started/);
+	// 启动后回读状态：手动停止标记清除后徽标要变成「运行中」（不同步成 started 会停在已停止）
+	assert.match(configTab, /setStatus\(statusResult\)/);
 });
 
 test("startDshHostInBackground logs failures without surfacing an unhandled rejection", async () => {

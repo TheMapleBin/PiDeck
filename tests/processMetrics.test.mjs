@@ -159,8 +159,6 @@ test("IPC channel + systemIpc handler + preload exposure", () => {
 	assert.match(systemIpc, /getProcessSnapshot\(agents\)/);
 	assert.match(systemIpc, /getDshHostPid\?\.\(\)/);
 	assert.match(systemIpc, /buildDshHostMonitorRow/);
-	assert.match(systemIpc, /dshHostMonitorAvailable/);
-	assert.match(systemIpc, /dshHostIdle: true/);
 	assert.doesNotMatch(systemIpc, /getProcessSnapshot\(deps\.agentManager\.listAgentPids\(\)\)/);
 	assert.match(preload, /getProcessMetrics: \(\) =>/);
 	assert.match(preload, /ipcRenderer\.invoke\(ipcChannels\.processMetrics\)/);
@@ -193,15 +191,11 @@ test("stop-agent: full session stop chain (coordinator + detach)", () => {
 	assert.match(index, /emitSessionRuntimeDetach\(result\.value\);/);
 	assert.match(index, /stopAgentFromMonitor,/);
 	assert.match(index, /async function stopDshHostFromMonitor\(/);
-	assert.match(index, /dshHost\.markUserStopped\(\)/);
 	assert.match(index, /await dshHost\.dispose\(\)/);
 	assert.match(index, /stopDshHostFromMonitor,/);
 	// preload 暴露
 	assert.match(preload, /stopAgent: \(agentId: string\) =>/);
 	assert.match(preload, /ipcRenderer\.invoke\(ipcChannels\.stopAgent, agentId\)/);
-	assert.match(preload, /startDshHost: \(\) =>/);
-	assert.match(preload, /ipcChannels\.dshStartHost/);
-	assert.match(ipc, /dshStartHost: "dsh:start-host"/);
 	// 渲染层：停止确认用 shadcn ConfirmDialog（AlertDialog），不用 toast 双按钮；
 	// 停止后刷新快照让该行消失
 	assert.match(tab, /window\.piDesktop\.system\.stopAgent\(agent\.agentId\)/);
@@ -212,10 +206,6 @@ test("stop-agent: full session stop chain (coordinator + detach)", () => {
 	assert.match(tab, /danger\n/);
 	assert.match(tab, /void stopAgent\(agent\);/);
 	assert.match(tab, /await refresh\(\);/);
-	assert.match(tab, /window\.piDesktop\.sessions\.startDshHost\(\)/);
-	assert.match(tab, /snapshot\.dshHostIdle/);
-	assert.match(tab, /config\.process\.dshHostIdleHint/);
-	assert.match(tab, /<Play /);
 	assert.doesNotMatch(tab, /stopConfirm.*showNotice/s);
 	// 操作列：红色（destructive）带文字按钮，紧跟 agentId 而非表格最右侧
 	assert.match(tab, /CircleStop/);
@@ -253,7 +243,6 @@ test("stop-agent: full session stop chain (coordinator + detach)", () => {
 	assert.match(types, /sessionId\?: string/);
 	assert.match(types, /sessionTitle\?: string/);
 	assert.match(types, /sessionTitles\?: string\[\]/);
-	assert.match(types, /dshHostIdle\?: boolean/);
 });
 
 test("ProcessMetricsTab wires table columns and refresh", () => {
@@ -300,8 +289,6 @@ test("process monitor i18n keys exist in zh-CN and en-US", () => {
 		"config.process.agentSection",
 		"config.process.section",
 		"config.process.dshHost",
-		"config.process.dshHostStopped",
-		"config.process.dshHostIdleHint",
 		"config.process.dshSessionSummary",
 		"config.process.empty",
 		"config.process.stopHostConfirm",
@@ -311,12 +298,9 @@ test("process monitor i18n keys exist in zh-CN and en-US", () => {
 		"config.process.column.session",
 		"config.process.column.action",
 		"config.process.stop",
-		"config.process.start",
 		"config.process.stopConfirm",
 		"config.process.stopped",
-		"config.process.started",
 		"config.process.stopFailed",
-		"config.process.startFailed",
 	];
 	for (const key of keys) {
 		assert.match(zh, new RegExp(`"${key}":`), `zh-CN missing ${key}`);
