@@ -10,6 +10,10 @@ export default defineConfig({
   base,
   cleanUrls: true,
   lastUpdated: true,
+  // 页面已在 frontmatter title 里带品牌与关键词（如「PiDeck - pi desktop 桌面工作台」），
+  // 关闭默认的「| siteTitle」后缀拼接，避免 title 重复啰嗦、稀释搜索关键词权重。
+  // 注意：titleTemplate 是 defineConfig 顶层字段，且关闭值是 false（VitePress 未处理 null）。
+  titleTemplate: false,
 
   // README 与官网共用的图片（如微信群二维码）以 docs/images 为唯一数据源，
   // dev / build 启动时由插件同步进 public/images，避免同一张图两边各存一份。
@@ -204,6 +208,24 @@ export default defineConfig({
     ["meta", { name: "twitter:title", content: "PiDeck - pi Agent Desktop Workbench" }],
     ["meta", { name: "twitter:description", content: "Manage multiple pi AI coding agents in local workspaces. Open-source desktop app with sessions, Git, terminal, and extensions." }],
     ["meta", { name: "twitter:image", content: `${siteOrigin}/og-image.png` }],
+    // 搜索引擎站长平台验证位：GSC/Bing 验证码通过 CI 环境变量注入（pages.yml 的 env），
+    // 不用为了验证改代码。变量为空时不注入该 meta（head 数组类型要求二元素元组）。
+    ...(process.env.GSC_VERIFICATION
+      ? [
+          [
+            "meta",
+            { name: "google-site-verification", content: process.env.GSC_VERIFICATION },
+          ] as [string, Record<string, string>],
+        ]
+      : []),
+    ...(process.env.BING_VERIFICATION
+      ? [
+          [
+            "meta",
+            { name: "msvalidate.01", content: process.env.BING_VERIFICATION },
+          ] as [string, Record<string, string>],
+        ]
+      : []),
     [
       "script",
       { type: "application/ld+json" },

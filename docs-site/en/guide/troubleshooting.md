@@ -1,3 +1,8 @@
+---
+title: Troubleshooting | Diagnose PiDeck pi desktop issues
+description: "Troubleshooting guide for PiDeck: sessions failing to start, pi connection errors, blank screens, Git panel issues, terminal input problems — with environment report export."
+---
+
 # Troubleshooting Guide
 
 > Hit a problem? Follow the paths below — most cases resolve without reading logs. If yours isn't covered, use the **diagnostic report** at the bottom to bundle your environment info and ask for help with it.

@@ -1,5 +1,9 @@
 ---
 layout: home
+# 首页 title/description：面向「pi desktop / pi 桌面客户端 / AI 编码助手桌面」等核心搜索词，
+# 覆盖全局默认值（VitePress home 布局不会从正文提取描述）。
+title: PiDeck - pi desktop 桌面工作台 | 多项目 pi Agent 客户端
+description: PiDeck 是开源的 pi desktop 桌面工作台（pi 桌面客户端），在统一窗口管理多个 pi AI 编码助手会话、Git、终端与模型配置，支持导入 Codex/Claude 会话，覆盖 Windows、macOS、Linux。
 
 hero:
   name: PiDeck

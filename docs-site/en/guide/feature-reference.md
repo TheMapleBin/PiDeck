@@ -1,3 +1,8 @@
+---
+title: Feature Reference | PiDeck pi desktop manual
+description: "Complete feature reference for PiDeck: multi-project workspace, session timeline, Git panel, built-in terminal, model configuration, skills and extensions — the pi desktop quick manual."
+---
+
 # Feature Reference
 
 > This handbook walks through every feature of PiDeck by UI area: where each button, menu, context menu, and shortcut lives, how to use it, and what it does.

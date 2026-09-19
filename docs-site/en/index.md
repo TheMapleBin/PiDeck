@@ -1,5 +1,9 @@
 ---
 layout: home
+# Homepage title/description: targets core search terms like "pi desktop" and
+# "pi coding agent desktop client" (VitePress home layout extracts no description from body).
+title: PiDeck - The pi Desktop Workbench | Desktop Client for pi Coding Agents
+description: PiDeck is the open-source pi desktop workbench — manage multiple pi AI coding agent sessions, Git, terminal, and model configs in one desktop window, with Codex/Claude session import. Available for Windows, macOS, and Linux.
 
 hero:
   name: PiDeck

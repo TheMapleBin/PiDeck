@@ -1,3 +1,8 @@
+---
+title: FAQ | PiDeck pi desktop workbench
+description: "Frequently asked questions about PiDeck (pi desktop): installation issues, pi not detected, session restore failures, model config errors, proxy setup, and their fixes."
+---
+
 # Frequently Asked Questions
 
 ## General

@@ -1,3 +1,8 @@
+---
+title: 更新日志 | PiDeck pi desktop 版本发布记录
+description: PiDeck 每个版本的发布记录：新功能、问题修复与体验优化，跟随 pi desktop 桌面工作台的迭代节奏。
+---
+
 # 更新日志
 
 完整更新日志仍维护在仓库根目录：
