@@ -771,6 +771,7 @@ export function ProjectContextMenu(props: {
 export type SidebarRunControl = {
 	capabilities: SessionRunCapabilities;
 	busy?: boolean;
+	/** 关闭 Agent 进行中（closeAgent 期间）：菜单项据此显示进度文案。 */
 	isStopping?: boolean;
 	isRestarting?: boolean;
 	isReloading?: boolean;
@@ -799,7 +800,7 @@ function SidebarRunControlItems(props: { runControl: SidebarRunControl }) {
 	const disabled = Boolean(runControl.busy) || capabilities.pending;
 
 	const primaryDisabled = disabled || !canRunSessionAction(capabilities, "start");
-	const stopDisabled = disabled || !canRunSessionAction(capabilities, "stop");
+	const abortDisabled = disabled || !canRunSessionAction(capabilities, "abort");
 	const reloadDisabled = disabled || !canRunSessionAction(capabilities, "reload");
 
 	const primaryLabel = runControl.isRestarting
@@ -829,14 +830,16 @@ function SidebarRunControlItems(props: { runControl: SidebarRunControl }) {
 				</span>
 			</DropdownMenuItem>
 			<DropdownMenuItem
-				variant="destructive"
-				disabled={stopDisabled}
-				style={stopDisabled ? { opacity: 0.4 } : undefined}
-				onSelect={() => runControl.onAction("stop")}
+				disabled={abortDisabled}
+				style={abortDisabled ? { opacity: 0.4 } : undefined}
+				// 「停止回答」= abort：只中断当前正在跑的回合，进程与绑定保留；
+				// 杀进程的入口是菜单底部的「关闭 Agent」（两者语义不同，别合并）。
+				title={t("menu.stopAnswerHint")}
+				onSelect={() => runControl.onAction("abort")}
 			>
 				<span className="inline-flex items-center gap-2">
 					<CircleStop className="size-3.5" aria-hidden="true" />
-					{t("tabs.stopAgent")}
+					{t("menu.stopAnswer")}
 				</span>
 			</DropdownMenuItem>
 			<DropdownMenuItem
@@ -961,7 +964,12 @@ export function AgentContextMenu(props: {
 				</DropdownMenuItem>
 			)}
 			<DropdownMenuSeparator />
-			<DropdownMenuItem variant="destructive" onSelect={props.onCloseAgent}>
+			<DropdownMenuItem
+				variant="destructive"
+				disabled={busy}
+				title={t("menu.closeAgentHint")}
+				onSelect={props.onCloseAgent}
+			>
 				<XCircle className="size-3.5" aria-hidden="true" />
 				{t("menu.closeAgent")}
 			</DropdownMenuItem>
