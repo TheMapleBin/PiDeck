@@ -38,12 +38,19 @@ test("typed toast icons carry semantic colors", () => {
 
 // Ask（等待回答）不能借用 warning 的黄三角：用户会误读成「会话出错」。
 test("ask toast uses the dedicated question kind, not warning", () => {
+  // 后台 Ask 提醒走 question 档。M7 把巡检从每栏的 useSessionRuntimeController
+  // 收敛到 App 级单点挂载 useBackgroundAskPatrol，断言随之跟随新宿主文件；
+  // 同时守住架构约束：分栏 hook 不得再寄生一份巡检。
+  const patrol = readFileSync(
+    "src/renderer/src/hooks/useBackgroundAskPatrol.ts",
+    "utf8",
+  );
   const runtimeController = readFileSync(
     "src/renderer/src/hooks/useSessionRuntimeController.ts",
     "utf8",
   );
-  // 背景 Ask 提醒走 question 档
-  assert.match(runtimeController, /showNotice\(message, Number\.POSITIVE_INFINITY, "question"/);
+  assert.match(patrol, /showNotice\(message, Number\.POSITIVE_INFINITY, "question"/);
+  assert.doesNotMatch(runtimeController, /showNotice\(message, Number\.POSITIVE_INFINITY, "question"/);
   // question 档有独立图标（问号气泡）与身份色（--color-tool，跟会话内 ask 工具卡一致），
   // 既不是 warning 黄也不是主题强调色，避免「Ask = 出错」的误读
   assert.match(card, /question:\s*\{ Icon: MessageCircleQuestion/);

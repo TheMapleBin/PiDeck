@@ -43,7 +43,9 @@ export function useBackgroundAskPatrol(options: UseBackgroundAskPatrolOptions): 
       const message = display.question
         ? t("ask.backgroundPendingDetail", { title: display.sessionName, question: display.question })
         : t("ask.backgroundPending", { title: display.sessionName });
-      const noticeId = showNotice(message, Number.POSITIVE_INFINITY, "warning", undefined, {
+      // question 档（问号气泡图标 + ask 身份色）：Ask 是「等你回答」而不是异常，
+      // 用 warning 黄三角会让用户误以为会话出错（回归守卫：tests/sonnerToasterMount.test.mjs）。
+      const noticeId = showNotice(message, Number.POSITIVE_INFINITY, "question", undefined, {
         action: onFocusSession
           ? { label: t("ask.jumpToSession"), onClick: () => onFocusSession(ask.sessionId) }
           : undefined,
