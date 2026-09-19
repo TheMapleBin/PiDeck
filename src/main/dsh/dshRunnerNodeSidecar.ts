@@ -10,8 +10,9 @@ import { join } from "node:path";
  * 给 runner AllocConsole 再 Hide 又会闪一帧。
  *
  * 把第一级 / 第二级 runner 的可执行文件换成随包 node.exe 后，runner 本身是 CUI：
- * 继承 host 的隐藏控制台即可，不必再 AllocConsole，也不允许 CREATE_NO_WINDOW
- * （受限 token 下 CREATE_NO_WINDOW 会 STATUS_DLL_INIT_FAILED）。
+ * 用 CREATE_NO_WINDOW 自建无窗口可继承控制台即可，不必再 AllocConsole。
+ * 受限 token 的 CreateProcessAsUserW（pwsh）必须继承这份控制台，不能自己再
+ * CREATE_NO_WINDOW（否则 STATUS_DLL_INIT_FAILED）。
  *
  * 仅 Windows 需要这份 sidecar；macOS / Linux 的 electron 当 Node 跑没有 GUI 子系统问题。
  */

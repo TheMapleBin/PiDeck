@@ -226,6 +226,8 @@ export const ipcChannels = {
 	dshConfigMutate: "dsh:config-mutate",
 	/** DSH settings.openDocument（把配置文档交给平台打开）。 */
 	dshOpenDocument: "dsh:open-document",
+	/** DSH host 启动（进程监控/配置概览；覆盖手动停止意图）。 */
+	dshStartHost: "dsh:start-host",
 	/** DSH host 重启（DSH_HOME 切换后立即生效；有活跃 DSH 会话时拒绝）。 */
 	dshRestartHost: "dsh:restart-host",
 	/** DSH credentials.describe（configured/source/writable，无值）。 */

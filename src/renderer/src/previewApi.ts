@@ -684,6 +684,7 @@ export function createPreviewApi(): PiDesktopApi {
 			unsetDshCredential: async () => undefined,
 			readDshCredential: async () => undefined,
 			openDshDocument: async () => undefined,
+			startDshHost: async () => false,
 			restartDshHost: async () => true,
 			setFocusedSession: async () => undefined,
 			getRuntimeState: async (target) => ({

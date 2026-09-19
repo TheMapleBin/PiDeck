@@ -816,8 +816,30 @@ async function stopDshHostFromMonitor(): Promise<SessionCommandResult<undefined>
 		if (result.value) emitSessionRuntimeDetach(result.value);
 	}
 	await dshAgentManager.stopAll();
+	// 先记用户停止意图，再 dispose：设置页 forceMount 的只读查询不得把 host 拉回来。
+	dshHost.markUserStopped();
 	await dshHost.dispose();
 	return { ok: true, value: undefined };
+}
+
+/** 进程监控 / 配置概览「启动」：清掉手动停止标记并 fork。 */
+async function startDshHostExplicit(): Promise<boolean> {
+	try {
+		await dshHost.ensureStarted({ reason: "explicit" });
+		return dshHost.isHostProcessRunning() && dshHost.isHostReady();
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * DSH_HOME 切换 / 配置概览「重启」：先停会话再重新 fork。
+ * 走 explicit，覆盖进程监控里的手动停止。
+ */
+async function restartDshHostExplicit(): Promise<boolean> {
+	await dshAgentManager.stopAll();
+	await dshHost.restart();
+	return startDshHostExplicit();
 }
 
 function emitReplacementState(binding: SessionRuntimeBinding, includeMessages: boolean): void {
@@ -1973,7 +1995,7 @@ async function stopDshHostForRuntimeDiskOperation(): Promise<boolean> {
 async function startDshHostAfterRuntimeDiskOperation(wasRunning: boolean): Promise<void> {
 	if (!wasRunning) return;
 	try {
-		await dshHost.ensureStarted();
+		await dshHost.ensureStarted({ reason: "explicit" });
 	} catch (error) {
 		void appLogger?.warn("dsh-runtime", "restart host after runtime disk operation failed", {
 			error: error instanceof Error ? error.message : String(error),
@@ -2749,20 +2771,8 @@ function registerIpc() {
 			unsetDshCredential: (ref) => dshHost.unsetCredential(ref),
 			readDshCredential: (ref) => dshHost.readCredentialValue(ref),
 			openDshDocument: () => dshHost.openDocument(),
-			restartDshHost: async () => {
-				// 切换 DSH_HOME 前先停掉全部活跃 DSH 会话（host 侧会话仍在 $DSH_HOME
-				// 持久化，catalog 保留 dshSessionId，重新打开会话时 attach 恢复），
-				// 避免旧目录的 mux 悬挂在已 dispose 的 transport 上；再重启 host。
-				// D16：restart 后校验 host 真正拉起（boot 完成），失败返回 false 而非恒 true。
-				await dshAgentManager.stopAll();
-				await dshHost.restart();
-				try {
-					await dshHost.ensureStarted();
-					return dshHost.isHostProcessRunning() && dshHost.isHostReady();
-				} catch {
-					return false;
-				}
-			},
+			startDshHost: () => startDshHostExplicit(),
+			restartDshHost: () => restartDshHostExplicit(),
 			readDshHistoryPage: (dshSessionId, beforeSeq, pageSize) =>
 				dshAgentManager.readHistoryPage(dshSessionId, beforeSeq, pageSize),
 			readDshProcessEvents: (agentId, dshSessionId) =>
@@ -3020,16 +3030,8 @@ function registerIpc() {
 		// 进程监控停止 agent：按 agentId 走完整会话停止链路（含 detach 推送）
 		stopAgentFromMonitor,
 		getDshHostPid: () => dshHost.getHostPid(),
-		restartDshHost: async () => {
-			await dshAgentManager.stopAll();
-			await dshHost.restart();
-			try {
-				await dshHost.ensureStarted();
-				return dshHost.isHostProcessRunning() && dshHost.isHostReady();
-			} catch {
-				return false;
-			}
-		},
+		dshHostMonitorAvailable: () => dshRuntimeStatus.canCreateDshSession(),
+		restartDshHost: () => restartDshHostExplicit(),
 		dshHostIsStarted: () => dshHost.isStarted(),
 		providerMigration: {
 			configManager,

@@ -30,6 +30,11 @@ import { PIDECK_PLUGIN_BRIDGE_PATH } from "./pideckPluginBridge";
 import { classifyStaticPlugins, isUserPluginEntry, nearestPackageDir, readUserPatchRows, removeUserPatchRow, resolveManagedPluginDir, USER_PATCH_FILENAME } from "./dshUserPlugins";
 import { PIDECK_COMMANDS_BRIDGE_PATH } from "./pideckCommandsBridge";
 import { PIDECK_SESSION_BRIDGE_PATH } from "./pideckSessionBridge";
+import {
+	decideDshHostStart,
+	dshHostStartClearsUserStop,
+	type DshHostStartReason,
+} from "./dshHostStartGate";
 import type { DshFetchMessage } from "./dshHostBridge";
 import type {
 	DshCommandView,
@@ -56,7 +61,8 @@ import type {
  * - host 在 utilityProcess 里 boot（无 web/无 HTTP/无端口），原生 ABI 与崩溃面
  *   不污染主进程；hostEntry 产物经 electron-vite 多入口打包到 out/main/。
  * - 按需启动：默认后端为 dsh 时窗口首帧后后台预热；纯 pi 用户不 fork host。
- *   发送/历史/配置链路调用 ensureStarted() 幂等兜底。
+ *   发送/历史浏览走 ensureStarted({ reason: "session" })；配置只读查询不 fork。
+ *   进程监控手动停止后记 userStopped，预热/隐式启动不再拉起（issue #223）。
  * - 桥协议：dshHostBridge.ts（fetch-request/response/chunk/end/error）。
  *
  * DSH_HOME：直接使用用户真实 ~/.dsh（与 dsh CLI 行为一致，配置/凭证/会话
@@ -77,6 +83,11 @@ export class DshHost {
 	/** DSH_HOME 并发锁（B6）：锁文件路径与是否由本实例持有。 */
 	private hostLockPath = "";
 	private ownsHostLock = false;
+	/**
+	 * 用户在进程监控里主动停过 host。只读/预热不得再 fork；
+	 * 显式启动或打开 DSH 会话时清掉（见 dshHostStartGate）。
+	 */
+	private userStopped = false;
 
 	constructor(
 		private readonly getUserDataDir: () => string,
@@ -139,13 +150,28 @@ export class DshHost {
 	}
 
 	/** 启动/按需兜底（幂等）：fork host 并建立桥接客户端。 */
-	ensureStarted(): Promise<void> {
+	ensureStarted(options?: { reason?: DshHostStartReason }): Promise<void> {
 		if (this.client) return Promise.resolve();
+		const decision = decideDshHostStart({
+			isRunning: false,
+			userStopped: this.userStopped,
+			reason: options?.reason,
+		});
+		if (decision === "skip-user-stopped") return Promise.resolve();
+		if (dshHostStartClearsUserStop(options?.reason)) this.userStopped = false;
 		this.startPromise ??= this.start().catch((error) => {
 			this.startPromise = null;
 			throw error;
 		});
 		return this.startPromise;
+	}
+
+	/**
+	 * 进程监控「停止 DSH host」：记下用户意图，后续隐式 ensureStarted 不得再 fork。
+	 * 必须在 dispose 之前调用，避免停止过程中的只读查询把进程拉回来。
+	 */
+	markUserStopped(): void {
+		this.userStopped = true;
 	}
 
 	/** 已启动时返回领域客户端（未启动返回 null）。 */
@@ -171,7 +197,7 @@ export class DshHost {
 			schema: unknown;
 		}>;
 	}> {
-		await this.ensureStarted();
+		// 只读：配置页 forceMount 也会走到这里，未运行时不得 fork（issue #223）。
 		const client = this.client;
 		if (!client) {
 			return { writable: false, hasDocument: false, namespaces: [] };
@@ -291,7 +317,6 @@ export class DshHost {
 		source?: string;
 		writable: boolean;
 	}>> {
-		await this.ensureStarted();
 		const client = this.client;
 		if (!client) return {};
 		const described = await client.credentialsDescribe({ refs });
@@ -415,12 +440,11 @@ export class DshHost {
 
 	/**
 	 * Host 级模型目录（llm.models），不依赖已创建的 DSH 会话。
-	 * 给草稿/未启动会话的模型下拉用；首次调用会懒 boot。
+	 * 给草稿/未启动会话的模型下拉用；host 未运行时返回空列表，不 fork。
 	 * 与会话级 session.models 同一目录数据，透传每模型支持的思考档位
 	 * （reasoningEfforts），思考选择器按当前模型过滤档位。
 	 */
 	async listModels(): Promise<import("../../shared/types").AvailableModel[]> {
-		await this.ensureStarted();
 		const client = this.client;
 		if (!client) return [];
 		const listed = await client.sessionsModelCatalog();
@@ -609,14 +633,16 @@ export class DshHost {
 		return this.bridgeRpc(PIDECK_PLUGIN_BRIDGE_PATH, method, params);
 	}
 
-	/** 动态插件清单（进程内全部会话的临时扩展；重启即失）。 */
+	/** 动态插件清单（进程内全部会话的临时扩展；重启即失）。host 未运行返回空，不 fork。 */
 	async listDynamicPlugins(): Promise<DshPluginView[]> {
+		if (!this.client) return [];
 		const value = await this.pluginRpc("inventory", undefined);
 		return Array.isArray(value) ? (value as DshPluginView[]) : [];
 	}
 
 	/** 静态 Loader 条目清单（origin 标注来源：user = 用户补丁层 / builtin = 官方与 PiDeck 组合）。 */
 	async listStaticPlugins(): Promise<DshStaticPluginView[]> {
+		if (!this.client) return [];
 		const value = await this.pluginRpc("staticInventory", undefined);
 		const views = Array.isArray(value) ? (value as DshStaticPluginView[]) : [];
 		try {
@@ -753,7 +779,6 @@ export class DshHost {
 	async searchSessions(query: string): Promise<Array<{ sessionId: string; snippet: string }>> {
 		const trimmed = query.trim();
 		if (!trimmed) return [];
-		await this.ensureStarted();
 		const client = this.client;
 		if (!client) return [];
 		const searched = await client.sessionsSearch({ query: trimmed }, new AbortController().signal);
@@ -808,7 +833,7 @@ export class DshHost {
 	/**
 	 * 可配置提供方目录（llm.providers）：内置 catalog（declared，未配置）+
 	 * 已注册路由（active）。模型页「添加提供方」从 declared 未激活行中选择，
-	 * 与 dsh-web 的休眠目录选择同源。首次调用会懒 boot。
+	 * 与 dsh-web 的休眠目录选择同源。host 未运行时返回空列表，不 fork。
 	 */
 	async listProviders(): Promise<Array<{
 		provider: string;
@@ -816,7 +841,6 @@ export class DshHost {
 		active: boolean;
 		declared?: boolean;
 	}>> {
-		await this.ensureStarted();
 		const client = this.client;
 		if (!client) return [];
 		const listed = await client.llmProviders();
@@ -841,7 +865,6 @@ export class DshHost {
 		description?: string;
 		broken?: string;
 	}>> {
-		await this.ensureStarted();
 		const client = this.client;
 		if (!client) return [];
 		const listed = await client.agentPresetsList();

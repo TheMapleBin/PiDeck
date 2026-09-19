@@ -60,6 +60,10 @@ test("startup integration warms DSH after the main window only when default back
 	assert.match(configTab, /const restartHost = async \(\) =>/);
 	assert.match(configTab, /desktopApi\.sessions\.restartDshHost\(\)/);
 	assert.match(configTab, /t\("config\.dsh\.restartHost"\)/);
+	assert.match(configTab, /const startHost = async \(\) =>/);
+	assert.match(configTab, /desktopApi\.sessions\.startDshHost\(\)/);
+	assert.match(configTab, /t\("config\.dsh\.startHost"\)/);
+	assert.match(configTab, /statusResult\.started/);
 });
 
 test("startDshHostInBackground logs failures without surfacing an unhandled rejection", async () => {

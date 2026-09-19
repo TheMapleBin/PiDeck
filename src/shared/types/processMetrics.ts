@@ -39,4 +39,9 @@ export type ProcessMetricsSnapshot = {
 	totalAgentBytes: number;
 	/** 快照采样时间戳（ms） */
 	sampledAt: number;
+	/**
+	 * runtime 已安装但 DSH host 未在跑（用户停过 / 尚未预热）。
+	 * 进程监控据此展示启动入口，而不是把 host 从列表里抹掉（issue #223）。
+	 */
+	dshHostIdle?: boolean;
 };

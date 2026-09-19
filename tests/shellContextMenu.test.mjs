@@ -7,7 +7,8 @@ import vm from "node:vm";
 // 注册表模块无 electron 依赖，直接编译进 vm；child_process 用 stub 捕获 reg 调用参数。
 // promisify mock：等价于 promisify(execFile)，以 (cmd, args, cb) 调用底层 stub 并封装 Promise。
 let regCalls = [];
-const execFileStub = (cmd, args, cb) => {
+const execFileStub = (cmd, args, optionsOrCb, maybeCb) => {
+  const cb = typeof optionsOrCb === "function" ? optionsOrCb : maybeCb;
   regCalls.push({ cmd, args });
   cb(null, "", "");
 };
@@ -134,7 +135,8 @@ test("查询已注册：两个键都存在才为 true", async () => {
 
 test("查询未注册：任一键 query 失败即 false（短路不查第二个）", async () => {
   // 覆盖 execFile：folder 查询失败
-  const failingStub = (cmd, args, cb) => {
+  const failingStub = (cmd, args, optionsOrCb, maybeCb) => {
+    const cb = typeof optionsOrCb === "function" ? optionsOrCb : maybeCb;
     regCalls.push({ cmd, args });
     if (args[0] === "query" && args[1] === FOLDER_KEY) {
       cb(new Error("找不到指定的注册表项"));

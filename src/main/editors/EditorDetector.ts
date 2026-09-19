@@ -461,6 +461,25 @@ function toWindowsCompatiblePath(path: string): string {
 	return path;
 }
 
+/**
+ * 打开外部编辑器的 spawn 选项。
+ * win32 必须带 windowsHide：`.cmd` / `.bat` 垫片走 `cmd.exe /c start`，
+ * 缺了会闪出控制台（即使用户最终看到的是 GUI 编辑器）。
+ */
+export function editorLaunchSpawnOptions(): {
+	detached: true;
+	stdio: "ignore";
+	shell: false;
+	windowsHide: true;
+} {
+	return {
+		detached: true,
+		stdio: "ignore",
+		shell: false,
+		windowsHide: true,
+	};
+}
+
 export async function openProjectInEditor(editor: ExternalEditor, projectPath: string) {
 	// 防御性解析:即便 listConfiguredExternalEditors 把 stored command 修好了,
 	// 也兜底处理从历史 settings.json 直接传过来的 legacy editor 对象,避免
@@ -488,11 +507,7 @@ export async function openProjectInEditor(editor: ExternalEditor, projectPath: s
 			needsCmd,
 		});
 
-		const child = spawn(command, args, {
-			detached: true,
-			stdio: "ignore",
-			shell: false,
-		});
+		const child = spawn(command, args, editorLaunchSpawnOptions());
 		child.once("error", async (error) => {
 			console.error("[EditorDetector] failed to launch editor", {
 				editorId: editor.id,

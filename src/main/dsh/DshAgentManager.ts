@@ -1725,7 +1725,8 @@ export class DshAgentManager implements SessionAgentGateway {
 	}
 
 	private async ensureClient(): Promise<import("./dshRemoteClient").DshRemoteClient> {
-		await this.dshHost.ensureStarted();
+		// 打开/发送 DSH 会话是明确要用 host：覆盖进程监控里的手动停止（issue #223）。
+		await this.dshHost.ensureStarted({ reason: "session" });
 		return this.requireClient();
 	}
 

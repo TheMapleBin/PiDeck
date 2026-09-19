@@ -160,6 +160,8 @@ export type SystemIpcDeps = {
 	listDshMonitorSessions?: () => Array<{ title?: string }>;
 	/** 停止 DSH host：先卸会话再 dispose，不能走 pi stopAgentById。 */
 	stopDshHostFromMonitor?: () => Promise<SessionCommandResult<undefined>>;
+	/** runtime 已安装时进程监控展示 DSH host 停止行/启动入口。 */
+	dshHostMonitorAvailable?: () => boolean;
 	/** 单供应商 pi↔DSH 互迁（不为此拉起 host）。 */
 	providerMigration?: ProviderMigrationDeps;
 	/** 全局 Pi 模型 capability snapshot（启动/配置变更时 hydration，picker 只读）。 */
@@ -941,7 +943,12 @@ export function registerSystemIpc(deps: SystemIpcDeps): void {
 				sessions: deps.listDshMonitorSessions?.() ?? [],
 			}));
 		}
-		return getProcessSnapshot(agents);
+		const snapshot = await getProcessSnapshot(agents);
+		// runtime 已装但 host 未 fork：给进程监控一个「启动」入口，而不是假装没有 DSH。
+		if (!dshPid && deps.dshHostMonitorAvailable?.()) {
+			return { ...snapshot, dshHostIdle: true };
+		}
+		return snapshot;
 	});
 
 	ipcMain.handle(ipcChannels.stopAgent, async (_event, agentId: unknown) => {

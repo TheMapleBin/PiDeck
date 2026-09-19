@@ -385,6 +385,7 @@ export function createBrowserApi(): PiDesktopApi {
 			unsetDshCredential: async () => undefined,
 			readDshCredential: async () => undefined,
 			openDshDocument: async () => undefined,
+			startDshHost: async () => false,
 			restartDshHost: async () => true,
 		},
 		settings: {

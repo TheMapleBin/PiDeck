@@ -579,6 +579,9 @@ const api = {
 		/** DSH settings.openDocument（平台打开配置文档）。 */
 		openDshDocument: () =>
 			ipcRenderer.invoke(ipcChannels.dshOpenDocument) as Promise<void>,
+		/** DSH host 启动（进程监控/配置概览；覆盖手动停止意图）。 */
+		startDshHost: () =>
+			ipcRenderer.invoke(ipcChannels.dshStartHost) as Promise<boolean>,
 		/** DSH host 重启（DSH_HOME 切换后立即生效；有活跃 DSH 会话时返回 false）。 */
 		restartDshHost: () =>
 			ipcRenderer.invoke(ipcChannels.dshRestartHost) as Promise<boolean>,

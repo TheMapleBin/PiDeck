@@ -186,7 +186,9 @@ export type DshBackendIpcDeps = {
 	readDshCredential?: (ref: string) => Promise<string | undefined>;
 	/** DSH settings.openDocument（平台打开配置文档）。 */
 	openDshDocument?: () => Promise<void>;
-	/** DSH host 重启；返回 false 表示有活跃 DSH 会话被拒绝。 */
+	/** DSH host 启动（覆盖进程监控手动停止）；boot 失败返回 false。 */
+	startDshHost?: () => Promise<boolean>;
+	/** DSH host 重启；返回 false 表示 boot 失败。 */
 	restartDshHost?: () => Promise<boolean>;
 	/** DSH 历史分页（session.history 事件流翻页）；未装配时返回空页。 */
 	readDshHistoryPage?: (
@@ -432,6 +434,7 @@ export function registerSessionIpc(deps: SessionIpcDeps): void {
 		unsetDshCredential,
 		readDshCredential,
 		openDshDocument,
+		startDshHost,
 		restartDshHost,
 		readDshHistoryPage,
 		readDshProcessEvents,
@@ -1793,6 +1796,13 @@ export function registerSessionIpc(deps: SessionIpcDeps): void {
 		async () => {
 			if (!openDshDocument) throw new Error("DSH settings document is not available");
 			await openDshDocument();
+		},
+	);
+	ipcMain.handle(
+		ipcChannels.dshStartHost,
+		async () => {
+			if (!startDshHost) throw new Error("DSH host start is not available");
+			return startDshHost();
 		},
 	);
 	ipcMain.handle(

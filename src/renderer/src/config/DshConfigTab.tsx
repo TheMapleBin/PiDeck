@@ -8,6 +8,7 @@ FileCode2,
 FolderOpen,
 LayoutDashboard,
 LoaderCircle,
+Play,
 Puzzle,
 RefreshCw,
 ShieldCheck,
@@ -232,6 +233,18 @@ export const DshConfigTab = forwardRef<DshConfigTabHandle, {
 				setError(null);
 				return [];
 			}
+			const statusResult = await desktopApi.sessions.getDshStatus();
+			setStatus(statusResult);
+			// host 未运行：只展示概览上的启动入口，describe 不得为了填表单去 fork（issue #223）。
+			if (!statusResult.started) {
+				setNamespaces([]);
+				setWritable(false);
+				setHasDocument(false);
+				setModelCatalog({});
+				setProviderDirectory([]);
+				setError(null);
+				return [];
+			}
 			const settingsResult = await desktopApi.sessions.describeDshSettings();
 			setNamespaces(settingsResult.namespaces);
 			setWritable(settingsResult.writable);
@@ -349,8 +362,10 @@ export const DshConfigTab = forwardRef<DshConfigTabHandle, {
 	// 把导航钳制到概览页，保证用户一进来看到的就是安装引导。
 	// describe 失败（host boot 失败）时同理：配置分区无数据可渲染，留在概览页看错误原因。
 	useEffect(() => {
-		if ((!runtimeInstalled || error) && activeTab !== "overview") selectTab("overview");
-	}, [runtimeInstalled, error, activeTab, selectTab]);
+		if ((!runtimeInstalled || error || status?.started === false) && activeTab !== "overview") {
+			selectTab("overview");
+		}
+	}, [runtimeInstalled, error, status?.started, activeTab, selectTab]);
 
 	useEffect(() => {
 		const onMigrated = () => {
@@ -712,6 +727,26 @@ function Overview(props: {
 	};
 
 	/**
+	 * 手动启动 host：覆盖进程监控里的停止意图，不先杀会话（本来就没在跑）。
+	 */
+	const startHost = async () => {
+		if (switching) return;
+		setSwitching(true);
+		try {
+			const started = await desktopApi.sessions.startDshHost();
+			showNotice(
+				started ? t("config.dsh.hostStarted") : t("config.dsh.hostStartFailed"),
+				started ? 4000 : 6000,
+			);
+		} catch (error) {
+			showNotice(error instanceof Error ? error.message : String(error), 4000);
+		} finally {
+			setSwitching(false);
+			props.onChanged();
+		}
+	};
+
+	/**
 	 * 手动恢复 host：复用设置切换时的完整重启链路，确保先终止旧 mux，
 	 * 再等待新 host ready，不能只杀 utilityProcess 留下运行会话。
 	 */
@@ -757,10 +792,10 @@ function Overview(props: {
 						size="sm"
 						className="h-7 gap-1"
 						disabled={switching}
-						onClick={() => void restartHost()}
+						onClick={() => void (status?.started ? restartHost() : startHost())}
 					>
-						{switching ? <LoaderCircle className="size-3.5 animate-pideck-spin" aria-hidden="true" /> : <RefreshCw className="size-3.5" aria-hidden="true" />}
-						{t("config.dsh.restartHost")}
+						{switching ? <LoaderCircle className="size-3.5 animate-pideck-spin" aria-hidden="true" /> : status?.started ? <RefreshCw className="size-3.5" aria-hidden="true" /> : <Play className="size-3.5" aria-hidden="true" />}
+						{status?.started ? t("config.dsh.restartHost") : t("config.dsh.startHost")}
 					</Button>
 				</div>
 			</section>

@@ -70,6 +70,15 @@ function loadEditorDetector(fsStub, platform = "win32") {
 
 // ── matchProgramsDirName：目录名前缀匹配规则 ─────────────────────────
 
+test("editorLaunchSpawnOptions：win32 带 windowsHide，避免 cmd /c start 闪控制台", () => {
+	const { editorLaunchSpawnOptions } = loadEditorDetector({});
+	const options = editorLaunchSpawnOptions();
+	assert.equal(options.detached, true);
+	assert.equal(options.stdio, "ignore");
+	assert.equal(options.shell, false);
+	assert.equal(options.windowsHide, true);
+});
+
 test("matchProgramsDirName matches versioned and unversioned JetBrains dirs", () => {
 	const { matchProgramsDirName } = loadEditorDetector({});
 
