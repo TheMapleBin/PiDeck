@@ -253,6 +253,11 @@ export type AppUpdateDownloadState = {
 	total?: number;
 	/** 失败原因（phase=error，或 phase=ready 但上次安装启动失败）。 */
 	error?: string;
+	/**
+	 * 失败种类：check = 还没开始下包（含 macOS 只查不装）；download = 下包装失败。
+	 * 渲染层据此选「检查失败」或「下载失败」，缺省按检查失败处理，避免误报下载。
+	 */
+	errorKind?: "check" | "download";
 };
 
 /**

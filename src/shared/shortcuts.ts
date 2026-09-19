@@ -23,7 +23,9 @@ export type ShortcutId =
 	| "toggleDevTools"
 	| "openNewSession"
 	| "openSearch"
-	| "openCommandPalette";
+	| "openCommandPalette"
+	| "cycleModel"
+	| "cycleThinking";
 
 /** 设置页分组：general=通用（普通用户常用），dev=开发调试 */
 export type ShortcutGroupId = "general" | "dev";
@@ -75,6 +77,26 @@ export const SHORTCUT_DEFS: readonly ShortcutDef[] = [
 		// 与 VSCode 惯例一致：Cmd/Ctrl+P 打开命令面板（模糊搜索设置项并跳转 + 执行操作），
 		// 与会话搜索（openSearch）分开入口：前者搜「配置与操作」，后者搜「项目/会话」。
 		defaultAccelerator: { darwin: "Cmd+P", other: "Ctrl+P" },
+	},
+	{
+		id: "cycleModel",
+		group: "general",
+		labelKey: "settings.shortcuts.cycleModelLabel",
+		descriptionKey: "settings.shortcuts.cycleModelDesc",
+		// 语义对齐 pi TUI 的模型循环（Ctrl+P / Shift+Ctrl+P），但 Ctrl+P 在 PiDeck 是命令面板，
+		// 加 Alt 让位；macOS 侧进一步避开 Cmd+M（系统惯例 = 最小化窗口）。
+		// 循环范围 = 模型选择器里的「收藏」，见 renderer/utils/preferenceCycle.ts。
+		defaultAccelerator: { darwin: "Cmd+Alt+M", other: "Ctrl+M" },
+	},
+	{
+		id: "cycleThinking",
+		group: "general",
+		labelKey: "settings.shortcuts.cycleThinkingLabel",
+		descriptionKey: "settings.shortcuts.cycleThinkingDesc",
+		// 语义对齐 pi TUI 的思考档位循环（Shift+Tab），但 PiDeck 里 Shift+Tab 承担焦点导航
+		// （全局拦截会让对话框/设置页失去反向 Tab），因此默认走 Ctrl+T；macOS 避开 Cmd+T
+		// （新标签页惯例）改用 Cmd+Alt+T。
+		defaultAccelerator: { darwin: "Cmd+Alt+T", other: "Ctrl+T" },
 	},
 	{
 		id: "toggleDevTools",

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { lstatSync, readFileSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync } from "node:fs";
 import {
 	mkdtemp,
 	mkdir,
@@ -28,6 +28,7 @@ function loadSkillManagerModule() {
 	});
 	const sandbox = {
 		exports: {},
+		process,
 		require: (id) => {
 			if (id === "electron")
 				return {
@@ -101,6 +102,96 @@ async function createFileLink(target, linkPath) {
 	}
 	assertLinkCreated(linkPath);
 }
+
+// ── 重命名回归：markdown 技能绝不能把技能根目录搬走（数据丢失事故） ──
+
+test("rename a root markdown skill renames only the file, never the skills root", async () => {
+	await withTemporaryHome(async (home) => {
+		const { SkillManager } = loadSkillManagerModule();
+		const manager = new SkillManager(home);
+		const skillsRoot = join(home, ".pi", "agent", "skills");
+		await createSkillFile(join(skillsRoot, "foo.md"), "foo");
+		await createSkillFile(join(skillsRoot, "bar", "SKILL.md"), "bar");
+
+		const { skills } = await manager.list();
+		const foo = skills.find((s) => s.type === "markdown");
+		assert.ok(foo);
+		const renamed = await manager.rename(foo.path, "foo-renamed");
+
+		// 技能根目录原地不动，其他技能不受影响
+		assert.equal(existsSync(join(skillsRoot, "bar", "SKILL.md")), true);
+		assert.equal(existsSync(join(skillsRoot, "foo.md")), false);
+		assert.equal(existsSync(join(skillsRoot, "foo-renamed.md")), true);
+		// 旧实现会把整个 skills 根改名为新技能名（内容全部搬走），此处必须不存在
+		assert.equal(existsSync(join(home, ".pi", "agent", "foo-renamed")), false);
+		assert.equal(renamed.name, "foo-renamed");
+		assert.equal(renamed.path, join(skillsRoot, "foo-renamed.md"));
+		assert.match(readFileSync(renamed.path, "utf8"), /name: foo-renamed/);
+	});
+});
+
+test("renaming a disabled skill migrates the settings disabled list", async () => {
+	await withTemporaryHome(async (home) => {
+		const { SkillManager } = loadSkillManagerModule();
+		const manager = new SkillManager(home);
+		const target = join(home, ".pi", "agent", "skills", "my-skill", "SKILL.md");
+		await createSkillFile(target, "My-Skill");
+		const settings = { disabledSkills: [] };
+		manager.configureSettings(
+			() => settings,
+			(patch) => {
+				Object.assign(settings, patch);
+				return Promise.resolve(settings);
+			},
+		);
+		await manager.toggle(target, false);
+		assert.deepEqual(settings.disabledSkills, ["My-Skill"]);
+
+		const renamed = await manager.rename(target, "renamed-skill");
+		// 旧名条目被新名替换，不残留孤儿数据；禁用状态保持
+		assert.deepEqual(settings.disabledSkills, ["renamed-skill"]);
+		assert.equal(renamed.enabled, false);
+	});
+});
+
+test("markdown skill without frontmatter name falls back to its file name and writes name on rename", async () => {
+	await withTemporaryHome(async (home) => {
+		const { SkillManager } = loadSkillManagerModule();
+		const manager = new SkillManager(home);
+		const skillsRoot = join(home, ".pi", "agent", "skills");
+		await mkdir(skillsRoot, { recursive: true });
+		await writeFile(join(skillsRoot, "bare.md"), "---\ndescription: no name field\n---\n\nbody\n", "utf8");
+		const { skills } = await manager.list();
+		const bare = skills.find((s) => s.path === join(skillsRoot, "bare.md"));
+		assert.ok(bare);
+		// 回归：旧实现用 dirname().pop()，markdown 技能会显示成父目录名「skills」
+		assert.equal(bare.name, "bare");
+
+		// 重命名一个原 frontmatter 缺 name 字段的技能：成功写回并补全 name 字段
+		const renamed = await manager.rename(bare.path, "named-now");
+		assert.equal(renamed.name, "named-now");
+		assert.match(readFileSync(renamed.path, "utf8"), /name: named-now/);
+	});
+});
+
+test("renaming a directory skill keeps it inside the skills root", async () => {
+	await withTemporaryHome(async (home) => {
+		const { SkillManager } = loadSkillManagerModule();
+		const manager = new SkillManager(home);
+		const skillsRoot = join(home, ".pi", "agent", "skills");
+		await createSkillFile(join(skillsRoot, "bar", "SKILL.md"), "bar");
+
+		const { skills } = await manager.list();
+		const bar = skills.find((s) => s.type === "directory");
+		assert.ok(bar);
+		const renamed = await manager.rename(bar.path, "bar-renamed");
+
+		assert.equal(existsSync(join(skillsRoot, "bar")), false);
+		assert.equal(existsSync(join(skillsRoot, "bar-renamed", "SKILL.md")), true);
+		assert.equal(renamed.name, "bar-renamed");
+		assert.equal(renamed.path, join(skillsRoot, "bar-renamed", "SKILL.md"));
+	});
+});
 
 async function withTemporaryHome(run) {
 	const home = await mkdtemp(join(tmpdir(), "pideck-skill-manager-"));
@@ -264,6 +355,29 @@ test("installImageGenTemplate copies the bundled image-gen skill into the global
 		const again = await manager.installImageGenTemplate();
 		assert.equal(again.success, true);
 		assert.equal(readFileSync(target, "utf8"), written);
+	});
+});
+
+test("external skill directory import supports both managed global destinations", async () => {
+	await withTemporaryHome(async (home) => {
+		const source = join(home, "external", "source-skill");
+		await createSkillFile(join(source, "SKILL.md"), "external-skill", "External source skill");
+		await mkdir(join(source, "references"), { recursive: true });
+		await writeFile(join(source, "references", "guide.md"), "preserved attachment\n", "utf8");
+
+		const { SkillManager } = loadSkillManagerModule();
+		const manager = new SkillManager(home);
+		await manager.importSkillDirectory("pi-global", source, "external-pi");
+		await manager.importSkillDirectory("agents-global", source, "external-agents");
+
+		assert.equal(
+			readFileSync(join(home, ".pi", "agent", "skills", "external-pi", "SKILL.md"), "utf8"),
+			readFileSync(join(source, "SKILL.md"), "utf8"),
+		);
+		assert.equal(
+			readFileSync(join(home, ".agents", "skills", "external-agents", "references", "guide.md"), "utf8"),
+			"preserved attachment\n",
+		);
 	});
 });
 

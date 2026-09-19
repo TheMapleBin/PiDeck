@@ -7,6 +7,33 @@
 export interface ComboboxOption {
 	value: string;
 	label?: string;
+	/** 分组标题（已翻译）。相邻且相同的 group 归为一段，用于下拉里分段展示。 */
+	group?: string;
+}
+
+/** 组合框的展示分段：group 为 undefined 的选项归入同一段（无标题）。 */
+export interface ComboboxSection<T extends ComboboxOption> {
+	group?: string;
+	items: T[];
+}
+
+/**
+ * 按 group 把选项切成相邻分段。
+ *
+ * 用「相邻合并」而不是「按 group 值分组」：选项数组本身就是期望的展示顺序
+ * （如「不写入」置顶、预设按类别排列），按值分组会把顺序重新洗一遍；
+ * 相邻合并还能让同一个 group 在过滤后自然连成一段（中间组被筛没了也不留空标题）。
+ */
+export function groupComboboxOptions<T extends ComboboxOption>(
+	options: T[],
+): Array<ComboboxSection<T>> {
+	const sections: Array<ComboboxSection<T>> = [];
+	for (const option of options) {
+		const last = sections[sections.length - 1];
+		if (last && last.group === option.group) last.items.push(option);
+		else sections.push({ group: option.group, items: [option] });
+	}
+	return sections;
 }
 
 /**

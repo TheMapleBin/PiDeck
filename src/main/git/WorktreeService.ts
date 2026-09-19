@@ -9,6 +9,11 @@ import type { WorktreeEntry } from "../../shared/types";
 import type { MainProcessTranslationKey } from "../../shared/i18n/mainProcessCopy";
 
 const execFileAsync = promisify(execFile);
+
+/** git execFile 公共选项：Windows 缺 windowsHide 会闪出终端窗口。 */
+function gitExecOptions(cwd: string): { cwd: string; windowsHide: true } {
+	return { cwd, windowsHide: true };
+}
 type WorktreeCopy = (
 	key: MainProcessTranslationKey,
 	params?: Record<string, string | number>,
@@ -40,7 +45,7 @@ export class WorktreeService {
 			const { stdout } = await execFileAsync(
 				"git",
 				["worktree", "list", "--porcelain"],
-				{ cwd: projectPath },
+				gitExecOptions(projectPath),
 			);
 			const mainWorktree = await this.getMainWorktree(projectPath);
 			return this.parseWorktreeList(stdout, mainWorktree ?? projectPath);
@@ -71,7 +76,7 @@ export class WorktreeService {
 			await execFileAsync(
 				"git",
 				["worktree", "add", "--no-checkout", "-b", branch, worktreeDir],
-				{ cwd: projectPath },
+				gitExecOptions(projectPath),
 			);
 		} catch (error) {
 			console.error("[WorktreeService] git worktree add failed", error);
@@ -79,7 +84,7 @@ export class WorktreeService {
 		}
 
 		try {
-			await execFileAsync(currentGitExecutable(), ["reset", "--hard"], { cwd: worktreeDir });
+			await execFileAsync(currentGitExecutable(), ["reset", "--hard"], gitExecOptions(worktreeDir));
 		} catch (error) {
 			// reset 失败时清理刚创建的 worktree，避免残留半初始化目录。
 			await this.remove(worktreeDir, projectPath).catch(() => false);
@@ -117,7 +122,11 @@ export class WorktreeService {
 		}
 
 		try {
-			await execFileAsync(currentGitExecutable(), ["worktree", "remove", "--force", worktreePath], { cwd: projectPath });
+			await execFileAsync(
+				currentGitExecutable(),
+				["worktree", "remove", "--force", worktreePath],
+				gitExecOptions(projectPath),
+			);
 		} catch {
 			// git 拒绝移除：目录仍存在 → 拒绝物理删除（安全优先，删不掉也比删错强）；
 			// 目录已不存在 → 残留记录清理场景，无需回收站（无内容可删），继续视为成功。
@@ -134,7 +143,7 @@ export class WorktreeService {
 		// 对外部 worktree 尽量保守，只在“分支名等于目录名”时认为是 PiDeck 创建的同名工作区。
 		const worktreeDirName = basename(worktreePath);
 		if (entry.branch?.startsWith("pideck/") || entry.branch === worktreeDirName) {
-			await execFileAsync(currentGitExecutable(), ["branch", "-D", entry.branch], { cwd: projectPath }).catch(() => undefined);
+			await execFileAsync(currentGitExecutable(), ["branch", "-D", entry.branch], gitExecOptions(projectPath)).catch(() => undefined);
 		}
 
 		return true;
@@ -152,7 +161,11 @@ export class WorktreeService {
 		if (existsSync(worktreeDir)) {
 			throw new Error(this.translate("mainWorktree.folderExists"));
 		}
-		const ref = await execFileAsync(currentGitExecutable(), ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`], { cwd: projectPath })
+		const ref = await execFileAsync(
+			currentGitExecutable(),
+			["show-ref", "--verify", "--quiet", `refs/heads/${branch}`],
+			gitExecOptions(projectPath),
+		)
 			.then(() => true)
 			.catch(() => false);
 		if (ref) {
@@ -173,7 +186,7 @@ export class WorktreeService {
 			const { stdout } = await execFileAsync(
 				"git",
 				["rev-parse", "--git-common-dir"],
-				{ cwd: projectPath },
+				gitExecOptions(projectPath),
 			);
 			const commonDir = stdout.trim();
 			if (!commonDir) return null;

@@ -66,6 +66,7 @@ export function ProjectResourcesModal(props: {
 						projectId={props.project.id}
 						projectKind={props.project.kind}
 						projectName={props.project.name}
+						projects={[props.project]}
 						onClose={props.onClose}
 						onSaved={() => undefined}
 					/>

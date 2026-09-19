@@ -17,6 +17,7 @@ export type BackgroundUpdateWatchOptions = {
  * 通知规则（对齐 Netcatty 语义）：
  *   - 自动下载开启：下载完成后 toast 引导至设置页；设置页在确认草稿安全后才允许安装；
  *   - 下载失败或安装器未能启动：toast 错误并跳转设置页重试；
+ *   - 检查失败（含 macOS 只查不装）：toast「检查更新失败」，不说成下载失败；
  *   - Pi CLI：hasUpdate 且未提示过 → toast 一次并立即 notifySeen（入口在设置页）。
  * 本地 ref 兜一层去重，防快照重发/异步标记竞态导致重复 toast。
  */
@@ -81,15 +82,18 @@ export function useBackgroundUpdateWatch(options: BackgroundUpdateWatchOptions):
 			}
 
 			if (download?.phase === "error") {
-				// 下载/检查失败：toast 错误 + 去设置页（错误信息变化时提示一次）。
-				const errorKey = `${appStatus?.latestVersion ?? ""}:${download.error ?? ""}`;
-				if (notifiedRef.current.error !== errorKey && errorKey !== ":") {
+				// 检查失败和下载失败文案分开：macOS 只查不装，不能说成「下载失败」。
+				const isDownloadError = download.errorKind === "download";
+				const errorKey = `${appStatus?.latestVersion ?? ""}:${download.errorKind ?? "check"}:${download.error ?? ""}`;
+				if (notifiedRef.current.error !== errorKey && !errorKey.endsWith(":")) {
 					notifiedRef.current.error = errorKey;
 					showNotice(
-						t("update.downloadFailedDetail", { error: download.error ?? "" }),
+						t(isDownloadError ? "update.downloadFailedDetail" : "update.checkFailedDetail", {
+							error: download.error ?? "",
+						}),
 						0,
 						"error",
-						t("update.downloadFailedTitle"),
+						t(isDownloadError ? "update.downloadFailedTitle" : "update.checkFailedTitle"),
 						settingsAction,
 					);
 				}

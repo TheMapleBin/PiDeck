@@ -26,7 +26,7 @@ title: 贡献者
   <div class="contributor-info">
     <strong>zx3022448</strong>
     <span class="contributor-handle">@zx3022448</span>
-    <p>模型列表拉取优化及错误状态展示</p>
+    <p>模型列表拉取优化及错误状态展示、支持从 Claude Code / Codex 导入 MCP 与技能资源</p>
     <a href="https://github.com/zx3022448" target="_blank" rel="noreferrer">GitHub</a>
   </div>
 </div>

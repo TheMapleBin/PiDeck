@@ -96,7 +96,12 @@ import {
 	isProjectPrompt,
 	isProjectSkill,
 } from "./config/resourceScopeModel";
-import { getProviderHeaders, KNOWN_PROVIDER_ENDPOINTS } from "./config/providerHeaders";
+import {
+	getModelUserAgentOverride,
+	getProviderHeaders,
+	KNOWN_PROVIDER_ENDPOINTS,
+	setModelUserAgentOverride,
+} from "./config/providerHeaders";
 import { TOKENDANCE_PROVIDER } from "../../shared/tokendance";
 import { ALL_CONFIG_DIRTY_KEYS, dirtyKeysClearedByReload, dirtyKeysPreservedOnReload, reconcileConfigDirty } from "./config/configDirtyMarks";
 import { formatConfigUnsavedMessage, summarizeConfigUnsavedChanges, type ConfigUnsavedItem } from "./config/configUnsavedChangesSummary";
@@ -692,6 +697,10 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 	const providerPageSavePendingRef = useRef(false);
 	/** 用户隐藏的供应商 key 列表（模型页眼睛开关持久化到 AppSettings.hiddenProviders）。 */
 	const [hiddenProviders, setHiddenProviders] = useState<string[]>([]);
+	/** 用户隐藏的模型列表（格式："provider/modelId"，持久化到 AppSettings.hiddenModels）。 */
+	const [hiddenModels, setHiddenModels] = useState<string[]>([]);
+	/** 用户隐藏的认证供应商列表（持久化到 AppSettings.hiddenAuthProviders）。 */
+	const [hiddenAuthProviders, setHiddenAuthProviders] = useState<string[]>([]);
 	/** 切换供应商隐藏状态：本地立即生效 + 持久化到 AppSettings（不影响 models.json 配置本身）。 */
 	const handleToggleHiddenProvider = useCallback((name: string) => {
 		setHiddenProviders((prev) => {
@@ -700,13 +709,34 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 			return next;
 		});
 	}, []);
-	// 打开配置页时读取 AppSettings.hiddenProviders（模型页眼睛开关的持久化来源）
+	/** 切换模型隐藏状态：本地立即生效 + 持久化到 AppSettings。 */
+	const handleToggleHiddenModel = useCallback((provider: string, modelId: string) => {
+		const key = `${provider}/${modelId}`;
+		setHiddenModels((prev) => {
+			const next = prev.includes(key) ? prev.filter((item) => item !== key) : [...prev, key];
+			void api.settings.update({ hiddenModels: next }).catch(() => undefined);
+			return next;
+		});
+	}, []);
+	/** 切换认证供应商隐藏状态：本地立即生效 + 持久化到 AppSettings（auth.json 保留不变供运行时读取）。 */
+	const handleToggleHiddenAuthProvider = useCallback((name: string) => {
+		setHiddenAuthProviders((prev) => {
+			const next = prev.includes(name) ? prev.filter((item) => item !== name) : [...prev, name];
+			void api.settings.update({ hiddenAuthProviders: next }).catch(() => undefined);
+			return next;
+		});
+	}, []);
+	// 打开配置页时读取 AppSettings.hiddenProviders、hiddenModels 与 hiddenAuthProviders
 	useEffect(() => {
 		let cancelled = false;
 		void api.settings
 			.get()
 			.then((settings) => {
-				if (!cancelled) setHiddenProviders(settings.hiddenProviders ?? []);
+				if (!cancelled) {
+					setHiddenProviders(settings.hiddenProviders ?? []);
+					setHiddenModels(settings.hiddenModels ?? []);
+					setHiddenAuthProviders(settings.hiddenAuthProviders ?? []);
+				}
 			})
 			.catch(() => undefined);
 		return () => {
@@ -1374,6 +1404,8 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 					provider.apiKey,
 					provider.api as string | undefined,
 					getProviderHeaders(provider.headers),
+					// 与列表拉取 / 测试连接同用 per-provider 代理选择，否则需要代理的网关在这里会直连失败。
+					testProxyModeByProvider[providerName] ?? "follow",
 				);
 				if (result.success && result.models) {
 					listing = result.models.find((item) => item.id === model.id);
@@ -1403,6 +1435,36 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 		} finally {
 			setResettingModelKey(null);
 		}
+	};
+
+	/**
+	 * 逐模型 User-Agent：写 provider.modelOverrides[modelId].headers["User-Agent"]。
+	 * 该结构由 pi 在发请求前最后合并（优先级高于 provider.headers），用于
+	 * 「同一供应商里只有个别模型需要特殊 UA」的场景（如某个模型走 Response 协议）。
+	 */
+	const handleUpdateModelUserAgent = (
+		providerName: string,
+		index: number,
+		value: string,
+	) => {
+		const provider = modelsData.providers[providerName];
+		const model = provider?.models[index];
+		if (!provider || !model) return;
+		setModelsData({
+			...modelsData,
+			providers: {
+				...modelsData.providers,
+				[providerName]: {
+					...provider,
+					modelOverrides: setModelUserAgentOverride(
+						provider.modelOverrides,
+						model.id,
+						value,
+					),
+				},
+			},
+		});
+		markDirty("config:models");
 	};
 
 	const handleUpdateModelThinkingLevel = (
@@ -2635,6 +2697,8 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 							providerPageSaveRef={providerPageSaveRef}
 							hiddenProviders={hiddenProviders}
 							onToggleHiddenProvider={handleToggleHiddenProvider}
+							hiddenModels={hiddenModels}
+							onToggleHiddenModel={handleToggleHiddenModel}
 							fetchingProvider={fetchingProvider}
 							fetchedModels={fetchedModels}
 							fetchModelsErrorByProvider={fetchModelsErrorByProvider}
@@ -2661,6 +2725,14 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 							onAddModel={handleAddModel}
 							onUpdateModel={handleUpdateModel}
 							onUpdateModelThinkingLevel={handleUpdateModelThinkingLevel}
+							onUpdateModelUserAgent={handleUpdateModelUserAgent}
+							getModelUserAgentOverride={(providerName, index) => {
+								const provider = modelsData.providers[providerName];
+								const model = provider?.models[index];
+								return model
+									? getModelUserAgentOverride(provider.modelOverrides, model.id)
+									: "";
+							}}
 							onDeleteModel={handleDeleteModel}
 							onDeleteModels={handleDeleteModels}
 							onResetModel={handleResetModelToAdaptive}
@@ -2711,6 +2783,8 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 							newAuthName={newAuthName}
 							saving={saving}
 							modelsData={modelsData}
+							hiddenAuthProviders={hiddenAuthProviders}
+							onToggleHiddenAuthProvider={handleToggleHiddenAuthProvider}
 							onToggleAuth={(name) =>
 								setExpandedAuth(expandedAuth === name ? null : name)
 							}
@@ -2788,6 +2862,9 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 							<SkillsTab
 								scope={resourceScope}
 								projectId={resourceScope === "project" ? effectiveProjectId : undefined}
+								sourceProjectId={projectId}
+								projects={projects}
+								fixedProjectId={resourceOnly ? effectiveProjectId : undefined}
 								scopeSelector={resourceScopeSelector}
 								projectOverrides={projectResourcesData.overrides}
 								discoverySkills={discoveryData.skills}

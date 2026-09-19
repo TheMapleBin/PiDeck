@@ -31,7 +31,7 @@ import {
   RefreshCw,
   Fingerprint,
 } from "lucide-react";
-import { showNotice } from "./utils/notice";
+import { showNotice, type NoticeKind } from "./utils/notice";
 import { copyTextWithCopiedNotice } from "./utils/clipboardNotice";
 import { buildSettingsCommands, type PaletteCommand } from "./utils/commandPaletteCommands";
 import { CommandPalette } from "./components/overlays/CommandPalette";
@@ -195,6 +195,7 @@ import { SessionProxyDialog } from "./components/session/SessionProxyDialog";
 
 import { ImportOverlayHost } from "./components/overlays/ImportOverlayHost";
 import { EnvironmentOverlay } from "./components/overlays/EnvironmentOverlay";
+import { usePiEnvironmentGuide } from "./hooks/usePiEnvironmentGuide";
 import {
   EnvironmentDialog,
   FileContextMenu,
@@ -383,7 +384,7 @@ export function App() {
   /** 编辑器展示模式：弹框或侧栏 */
   // showToast 必须是稳定回调：文件树 / overlay 等 effect 若把它当依赖，
   // 每次 render 新建函数会把 setFiles([]) 打成无限更新（设置/关窗点不动）。
-  const showToast = useCallback((message: string, duration?: number, kind?: "info" | "warning" | "error") => {
+  const showToast = useCallback((message: string, duration?: number, kind?: NoticeKind) => {
     showNotice(message, duration, kind);
   }, []);
   // 历史命令：按 agent 隔离，agent 关闭即清除（不持久化）
@@ -825,6 +826,14 @@ export function App() {
     api,
   });
   const { piStatus, piChecking, environmentDialog, setPiStatus, setEnvironmentDialog } = piUpdate;
+  // pi 环境引导（Node→npm→pi 三步）：弹窗打开时自动检测第一步，关闭时重置一次性状态。
+  // 依赖只取稳定的 checkNode（useCallback）；piGuide 对象每次渲染都是新引用，
+  // 直接依赖会因 checkNode 内部 setState → 重渲染 → effect 重跑而形成检测循环。
+  const piGuide = usePiEnvironmentGuide(api);
+  const { checkNode: checkGuideNode } = piGuide;
+  useEffect(() => {
+    if (environmentDialog) void checkGuideNode();
+  }, [environmentDialog, checkGuideNode]);
   // 抽屉宽度状态由 useWorkspacePanels 统一管理（全局 localStorage 持久化，键 pid:drawer-width），
   // AppShell 拖拽提交经 setDrawerWidth 回写；此处不再持有独立 useState，避免双份状态漂移。
   const drawerWidth = workspace.drawerWidth;
@@ -2376,10 +2385,20 @@ export function App() {
   	};
   }
 
+  /**
+   * 关闭 Agent：杀掉绑定的 pi/DSH 进程并解绑（会话记录、历史消息与 Tab 全部保留，
+   * 之后可再「启动 Agent」）。与「停止回答」（abort，只中断当前回合）语义不同。
+   * 匿名会话的记录会被主进程丢弃，因此入口走 requestCloseAgent 先确认。
+   */
   async function closeAgent(agentId: string) {
     if (isPendingAgentId(agentId)) return;
     const target = getRuntimeTargetForAgent(agentId);
-    if (!target) return;
+    if (!target) {
+      // 没有绑定 = 没有可关闭的进程（渲染层快照可能已过期）：给出可见原因，
+      // 而不是静默返回让用户以为「点了没反应」。要恢复运行请用「启动 Agent」。
+      showToast(t("sessionCommand.runtimeUnavailable"), 3000);
+      return;
+    }
     // 标记停止中：Tab 栏「停止」菜单项/tab 徽章 + 会话消息区域遮罩据此显示 loading 动画
     setStoppingAgentId(agentId);
     setMutationOverlay({ sessionId: target.sessionId, kind: "stopping" });
@@ -2391,7 +2410,7 @@ export function App() {
     }
   }
 
-  function requestCloseAgent(agent: AgentTab): Promise<void> {
+  function requestCloseAgent(agent: Pick<AgentTab, "id" | "noSession">): Promise<void> {
     if (!agent.noSession) return closeAgent(agent.id);
     overlays.showConfirm({
       title: t("app.anonymousChatCloseTitle"),
@@ -2406,6 +2425,22 @@ export function App() {
       },
     });
     return Promise.resolve();
+  }
+
+  /**
+   * 关闭 Agent（会话维度入口，供 Tab 下拉使用）：复用侧栏 Agent 菜单的确认逻辑
+   * 与 closeAgent 链路（杀进程 + 解绑）。匿名会话内容不可恢复，会先弹确认。
+   */
+  function requestCloseAgentForSession(sessionId: string): void {
+    const target = getRuntimeTargetForSession(sessionId);
+    if (!target) {
+      showToast(t("sessionCommand.runtimeUnavailable"), 3000);
+      return;
+    }
+    void requestCloseAgent({
+      id: target.agentId,
+      noSession: getSessionRecord(sessionId)?.noSession,
+    });
   }
 
   async function abortAgent(agentId = activeAgentId) {
@@ -2613,7 +2648,8 @@ export function App() {
   /**
    * 会话运行控制统一入口：任意状态、任意入口（Tab 下拉 / 侧栏菜单 / 快捷键）都走这里。
    * - start：未启动/已解绑/error/closed → 有绑定走 restartRuntime 重建进程，无绑定走 activateRuntime。
-   * - stop：仅 live 有效，停掉绑定的 pi/DSH 进程（保留会话记录与 Tab）。
+   * - abort：只中断当前正在执行的回合（abort），进程与绑定保留、可立即继续对话；
+   *   与输入框的「停止」同义——要杀进程请走「关闭 Agent」（closeAgent）。
    * - restart：与 start 同路径（对 live 语义即重启）；running 时先弹确认，避免误杀正在输出的回答。
    * - reload：无进程时从磁盘刷新消息文件。
    */
@@ -2627,18 +2663,15 @@ export function App() {
       return;
     }
 
-    if (action === "stop") {
+    if (action === "abort") {
       const target = getRuntimeTargetForSession(sessionId);
       if (!target) {
-        // 进程已经不存在（终态被主进程惰性解绑）：没有可停的东西，直接刷成最新状态即可。
+        // 进程已经不存在（终态被主进程惰性解绑）：没有可中断的回合。
         showToast(t("sessionCommand.runtimeUnavailable"), 3000);
         return;
       }
-      try {
-        await closeAgent(target.agentId);
-      } catch (error) {
-        showToast(error instanceof Error ? error.message : String(error), 5000);
-      }
+      // abortAgent 自带失败 toast 与「立即清流式态」处理，不抛异常。
+      await abortAgent(target.agentId);
       return;
     }
 
@@ -3581,8 +3614,8 @@ export function App() {
       workspaceChrome.setSplitGroupConfig((config) => ({ ...config, color })),
     onExitAllSplit: workspaceChrome.exitAllSplit,
     // Tab 下拉运行控制：全状态统一入口（能力由 getSessionRunCapabilities 纯函数策略决定）。
-    // 停止 Agent = 停掉当前会话绑定的 pi/DSH 进程（保留会话与 Tab，可随时重启/重载）；
-    // 未启动/失败/已关闭的会话同样能看到菜单项，主控按钮文案切成「启动 Agent」。
+    // 「停止回答」= abort（只中断当前回合，进程保留）；「关闭 Agent」= 杀进程 + 解绑，
+    // 两者都保留会话记录与 Tab；未启动/失败/已关闭时主控按钮文案切成「启动 Agent」。
     runControl: currentSessionId
       ? {
           capabilities: getSessionRunCapabilities(currentSessionId),
@@ -3592,6 +3625,9 @@ export function App() {
           isReloading: reloadingSessionId === currentSessionId,
           // 「复制 Agent ID」用：与上面的 isStopping 同源判定（activeAgentId 即当前会话绑定的进程实例）
           agentId: activeAgentId,
+          onCloseAgent: activeAgentId
+            ? () => requestCloseAgentForSession(currentSessionId)
+            : undefined,
           onAction: (action: SessionRunAction) => void runSessionControl(currentSessionId, action),
         }
       : undefined,
@@ -4385,6 +4421,7 @@ export function App() {
       <EnvironmentDialog
         status={piStatus}
         checking={piChecking}
+        guide={piGuide}
         onClose={() => {
           setEnvironmentDialog(false);
           piUpdate.setCustomPathResult(null);
@@ -4392,6 +4429,8 @@ export function App() {
           piUpdate.setInstallResult(null);
           piUpdate.setInstallCompleted(false);
           piUpdate.setNpmAvailable(null);
+          // 引导面板的一次性状态同样重置，下次打开重新检测
+          piGuide.resetGuide();
         }}
         onRecheck={() => {
           piUpdate.setCustomPathResult(null);
@@ -4400,6 +4439,8 @@ export function App() {
           piUpdate.setInstallResult(null);
           piUpdate.setInstallCompleted(false);
           piUpdate.setInstallUseMirror(false);
+          // 引导步骤在重新检测后需要刷新（安装结果可能已让环境就绪）
+          void piGuide.checkNode();
           piUpdate.checkPiInstall("manual");
         }}
         onOpenInstallDocs={() =>

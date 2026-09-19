@@ -92,7 +92,8 @@ test("tab dropdown menu: no switch-to item, state-based disable with visible gra
 	// 置灰用内联 style（特异性最高，置灰可见）。
 	assert.match(source, /function RunControlItems\(/);
 	assert.match(source, /canRunSessionAction\(capabilities, "start"\)/);
-	assert.match(source, /canRunSessionAction\(capabilities, "stop"\)/);
+	// 「停止回答」= abort（只中断当前回合，进程保留）；杀进程的入口是「关闭 Agent」菜单项
+	assert.match(source, /canRunSessionAction\(capabilities, "abort"\)/);
 	assert.match(source, /canRunSessionAction\(capabilities, "reload"\)/);
 	assert.match(source, /\? \{ opacity: 0\.4 \} : undefined/);
 	// 主控项按状态切换文案：未启动/失败/已关闭 → 启动 Agent；live → 重启

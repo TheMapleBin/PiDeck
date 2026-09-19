@@ -9,6 +9,8 @@ import { DshHostProcess, resolveHostEntryPath } from "./DshHostProcess";
 import { DSH_RUNNER_NODE_ENV } from "./dshRunnerNodeSidecar";
 import { resolveDshRunnerNodePath } from "./dshRunnerNode";
 import { DshApiClient, type DshFetchTransport } from "./DshApiClient";
+import { dshManuallyStoppedError } from "./dshManualStop";
+import { applyDshBillBackfillPatch } from "./dshBillBackfillPatch";
 import { DshRemoteClient } from "./dshRemoteClient";
 import { toDshAvailableModels, toDshFetchedModels, unwrapDshDiscoveryModels } from "./dshModels";
 import { parseAgentDefaultModel } from "./dshDefaultModel";
@@ -21,6 +23,11 @@ import {
 	pideckHostLockPath,
 } from "./pideckDshHome";
 import { foldSessionTitleFromDir, listForeignSessionsFromDisk, scanDshSessionHeaders } from "./dshForeignSessionScan";
+import {
+	externalHostHolderPid,
+	resolveDshHomeSharing,
+} from "./dshHomeSharing";
+import type { DshHomeSharingState } from "../../shared/types/dshHome";
 import { PIDECK_PLUGIN_BRIDGE_PATH } from "./pideckPluginBridge";
 import { classifyStaticPlugins, isUserPluginEntry, nearestPackageDir, readUserPatchRows, removeUserPatchRow, resolveManagedPluginDir, USER_PATCH_FILENAME } from "./dshUserPlugins";
 import { PIDECK_COMMANDS_BRIDGE_PATH } from "./pideckCommandsBridge";
@@ -103,6 +110,13 @@ export class DshHost {
 		 * 改路径后需重启 host 才写入 fork env。
 		 */
 		private readonly getDshRunnerNodePath: () => string | undefined = () => undefined,
+		/**
+		 * 用户是否手动停止了 DSH host（设置项 dshManualStopped，持久化跨重启）。
+		 * 为真时所有「自动拉起」路径（ensureStarted 按需兜底 / 后台预热 / 崩溃自动重启 /
+		 * runtime 磁盘操作后恢复）一律不 fork，只有用户显式调用 startManually() 才放行。
+		 * 缺省 false = 保持按需自动启动的历史语义。
+		 */
+		private readonly isManualStopped: () => boolean = () => false,
 	) {}
 
 	/** 订阅 host-ready（首次启动与崩溃自动重启；E4：崩溃后恢复运行时状态）。 */
@@ -133,14 +147,44 @@ export class DshHost {
 		return this.hostProcess?.pid;
 	}
 
-	/** 启动/按需兜底（幂等）：fork host 并建立桥接客户端。 */
+	/** 是否处于「用户手动停止」状态（不想让它运行；自动拉起路径据此拒绝 fork）。 */
+	isManuallyStopped(): boolean {
+		return this.isManualStopped();
+	}
+
+	/**
+	 * 启动/按需兜底（幂等）：fork host 并建立桥接客户端。
+	 *
+	 * 手动停止优先：用户显式停过之后，所有自动路径（发送/历史/配置读取的兜底、
+	 * 后台预热、崩溃重启）都不再拉起——否则「停了一次又被某某后台任务悄悄拉回来」，
+	 * 用户会认为停止没生效。想恢复必须由用户在配置页点「启动」（走 startManually）。
+	 */
 	ensureStarted(): Promise<void> {
 		if (this.client) return Promise.resolve();
+		if (this.isManualStopped()) {
+			return Promise.reject(dshManuallyStoppedError());
+		}
 		this.startPromise ??= this.start().catch((error) => {
 			this.startPromise = null;
 			throw error;
 		});
 		return this.startPromise;
+	}
+
+	/**
+	 * 用户显式启动（清除手动停止语义后 boot）：配置页「启动」按钮走这里。
+	 * 必须由上层先把 settings.dshManualStopped 写成 false 再调用——本方法只负责 boot，
+	 * 不改 persisted 状态（DshHost 不持有 SettingsStore 写权限，保持单向依赖）。
+	 */
+	async startManually(): Promise<boolean> {
+		// 已在跑就直接返回成功（重复点「启动」不该 dispose 重建）。
+		if (this.isStarted() && this.isHostProcessRunning() && this.isHostReady()) return true;
+		try {
+			await this.ensureStarted();
+		} catch {
+			return false;
+		}
+		return this.isHostProcessRunning() && this.isHostReady();
 	}
 
 	/** 已启动时返回领域客户端（未启动返回 null）。 */
@@ -362,16 +406,53 @@ export class DshHost {
 		homeDir: string;
 		/** 最近一次 host boot 失败的真实原因（host-error 详情/stderr 尾部）；成功或从未失败为 null。 */
 		bootError?: string | null;
+		/** DSH_HOME 共享/冲突状态（issue #189 问题 1：与 dsh CLI 共用目录会互相覆盖状态）。 */
+		sharing: DshHomeSharingState;
+		/** 用户是否手动停止了 host（true 时不会自动启动，只有显式「启动」才拉起）。 */
+		manuallyStopped: boolean;
 	}> {
 		// E14：started 语义 = host 进程存活且 boot 完成（client 非 null 可能在崩溃重启
 		// 超限放弃后仍是陈旧引用，UI 会误显示「已启动」）。
 		const started = this.client !== null && this.isHostProcessRunning() && this.isHostReady();
+		const homeDir = this.getHomeDir();
 		return {
 			started,
-			homeDir: this.getHomeDir(),
+			homeDir,
 			// boot 失败详情透给渲染层：即使 describe 抛错，概览页也能拿到真实原因。
 			bootError: this.hostProcess?.getLastBootError() ?? null,
+			manuallyStopped: this.isManualStopped(),
+			sharing: {
+				...resolveDshHomeSharing({
+					dshHome: homeDir,
+					override: this.getDshHomeOverride(),
+					homeDir: homedir(),
+				}),
+				// 双 PiDeck 实例可检测：锁文件记录的 pid 仍存活且不是自己。
+				// 外部 dsh CLI 不写该锁，属已知盲区（sharesCliHome 负责兜底提示）。
+				externalHostPid: this.readExternalHostPid(),
+			},
 		};
+	}
+
+	/**
+	 * 读锁文件取「另一个存活 DSH host」的 pid（无/陈旧/自己持有 = undefined）。
+	 * 只读不写：getStatus 是纯查询路径，不得因为看一眼状态就改锁。
+	 */
+	private readExternalHostPid(): number | undefined {
+		const lockPath = this.hostLockPath || pideckHostLockPath(this.getHomeDir());
+		let raw: string | undefined;
+		try {
+			if (!existsSync(lockPath)) return undefined;
+			raw = readFileSync(lockPath, "utf8");
+		} catch {
+			// 锁文件读不到（权限/占用）：无法判定，按无冲突处理。
+			return undefined;
+		}
+		return externalHostHolderPid({
+			lockRaw: raw,
+			selfPid: process.pid,
+			isAlive: isProcessAlive,
+		});
 	}
 
 	/**
@@ -906,6 +987,9 @@ export class DshHost {
 	}
 
 	private async start(): Promise<void> {
+		// 门控在读到这里时才判定（而非只在 ensureStarted 入口）：startPromise 可能在
+		// 用户点「停止」之前就已建好，晚到的 await 不该越过刚刚生效的停止决定。
+		if (this.isManualStopped()) throw dshManuallyStoppedError();
 		const userData = this.getUserDataDir();
 		const override = this.getDshHomeOverride()?.trim();
 		// DSH_HOME 解析：设置覆盖 > ~/.dsh（统一入口，新用户也用 ~/.dsh，不另起炉灶）。
@@ -934,6 +1018,18 @@ export class DshHost {
 		const require = createRequire(join(runtimeRoot, "package.json"));
 		const appRoot = dirname(dirname(dirname(require.resolve("@deepseek-ai/dsh-base/package.json"))));
 		const hostEntryPath = resolveHostEntryPath(this.getAppPath());
+
+		// dsh-bill 启动回填默认关（CPU 修复）：必须在 fork 前对 host 实际加载的那份
+		// dsh-bill 应用文件补丁——require 锚点与 hostEntry 的 require.resolve 同源
+		//（runtimeRoot），dev / 打包内置 / userData 安装的 runtime 三种形态都命中。
+		// 失败不阻断 boot（fail-open：保持官方行为，只是 CPU 问题仍在）。
+		try {
+			applyDshBillBackfillPatch(require.resolve("dsh-bill"), (message, detail) =>
+				this.log("dsh-host", message, detail),
+			);
+		} catch (error) {
+			this.log("dsh-host", "dsh-bill 回填补丁异常（继续启动）", { error: String(error) });
+		}
 
 		// 会话级代理覆盖（DSH 降级方案）：DSH 是单一共享 host，无法按会话注入，
 		// 只能聚合所有 DSH 会话的开关应用到 host（off 优先于 on，见 sessionProxyPolicy）。
@@ -972,6 +1068,8 @@ export class DshHost {
 			// （ELECTRON_*/NODE_OPTIONS），避免污染 DSH 子进程树。
 			forkEnv,
 			(scope, message, detail) => this.log(scope, message, detail),
+			// 崩溃自动重启不经过 DshHost.start，必须把手动停止门控透传到进程层。
+			() => this.isManualStopped(),
 		);
 		this.hostProcess = hostProcess;
 		// 崩溃联动：host 进程退出（运行中崩溃）时中断全部在途桥 fetch（mux 长连接），

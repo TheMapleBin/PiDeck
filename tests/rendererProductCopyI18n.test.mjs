@@ -108,6 +108,9 @@ const extensions = read("src/renderer/src/config/ExtensionsTab.tsx")
 	+ "\n" + read("src/renderer/src/config/extensionsRecommendedPackages.tsx");
 const configShared = read("src/renderer/src/config/ConfigShared.tsx");
 const providerHeaders = read("src/renderer/src/config/providerHeaders.ts");
+// UA 预设清单已从 providerHeaders.ts 迁到 userAgentPresets.ts（纯函数 + 分组元数据，可单测）；
+// 这里跟着改指向，否则断言的是旧位置，迁移后会假失败。
+const userAgentPresets = read("src/renderer/src/config/userAgentPresets.ts");
 const queuedPrompt = read("src/renderer/src/hooks/useQueuedPrompt.ts");
 
 test("remaining renderer product copy is available in Chinese and English", () => {
@@ -171,10 +174,10 @@ test("reachable renderer surfaces use i18n without changing their UI structure",
   assert.match(promptStore, /value: "yao", label: t\("config\.promptStoreChinesePicks"\)/);
 	assert.match(extensions, /className="extensions-recommended-desc">[\s\S]*?t\(pkg\.descriptionKey\)/);
 	assert.match(configShared, /getApiTypeDescription\(option\)/);
-	assert.match(providerHeaders, /label: t\("config\.userAgentBrowser"\)/);
+	assert.match(userAgentPresets, /labelKey: "config\.userAgentBrowser"/);
 	assert.match(queuedPrompt, /unknownDeliveryMessage = t\("app\.queuedDeliveryUnknown"\)/);
 
-	for (const source of [fileDiffViewer, timeline, drawer, settingsStorage, surface, skillStore, yaoStore, skillHub, promptStore, extensions, providerHeaders, queuedPrompt]) {
+	for (const source of [fileDiffViewer, timeline, drawer, settingsStorage, surface, skillStore, yaoStore, skillHub, promptStore, extensions, providerHeaders, userAgentPresets, queuedPrompt]) {
 		assert.doesNotMatch(source, /" · 未保存"|"加载中\.\.\."|`加载更多历史消息|"复制安装命令"|"消息可能未送达"|>中文精选</);
 	}
 });

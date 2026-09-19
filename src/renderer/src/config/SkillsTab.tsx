@@ -16,11 +16,17 @@ import { desktopApi } from "../desktopApi";
 import { Input } from "../components/ui-shadcn/input";
 import type { ResourceScope } from "./ResourceScopeSelector";
 import { globalSkillOverrideKey, isGlobalSkillSourceId } from "../../../shared/resourceIdentity";
+import { ResourceImportDialog } from "./ResourceImportDialog";
 
 export function SkillsTab(props: {
 	scope: ResourceScope;
 	/** Project id used by store imports; global scope deliberately passes undefined. */
 	projectId?: string;
+	/** Active project id used as an external scan source in both global and project scopes. */
+	sourceProjectId?: string;
+	/** Project resource pages keep imports inside their current project. */
+	fixedProjectId?: string;
+	projects?: Array<{ id: string; name: string; kind?: string }>;
 	scopeSelector?: ReactNode;
 	projectOverrides: ProjectResourceOverrides;
 	discoverySkills: Array<{
@@ -44,6 +50,7 @@ export function SkillsTab(props: {
 	onRename: (skill: PiSkillSummary, newName: string) => Promise<void>;
 }) {
 	const { data } = props;
+	const projects = props.projects ?? [];
 	// Project scope shows both sources grouped by ownership; global scope only shows global skills.
 	const visibleSkills = data.skills.filter((skill) => props.scope === "project" || skill.sourceId === "pi-global" || skill.sourceId === "agents-global");
 	const projectSkills = visibleSkills.filter((skill) => skill.sourceId === "project-pi" || skill.sourceId === "project-agents");
@@ -133,6 +140,14 @@ export function SkillsTab(props: {
 					<Button variant="outline" size="sm" onClick={props.onRefresh} disabled={props.loading}>
 						{t("common.refresh")}
 					</Button>
+					<ResourceImportDialog
+						kind="skill"
+						sourceProjectId={props.sourceProjectId ?? props.projectId}
+						projects={projects}
+						fixedProjectId={props.fixedProjectId}
+						triggerLabel={t("config.import.button")}
+						onImported={props.onRefresh}
+					/>
 					<Button variant="secondary" size="sm" onClick={props.onOpenRoot}>
 						{t("config.openFolder")}
 					</Button>
@@ -394,4 +409,3 @@ function SkillTableRow(props: {
 		</TableRow>
 	);
 }
-

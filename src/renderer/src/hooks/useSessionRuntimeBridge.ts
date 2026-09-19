@@ -12,7 +12,7 @@ import { desktopApi } from "../desktopApi";
 import { t } from "../i18n";
 import type { TranslationKey } from "../i18n/rendererCopy.zh-CN";
 import { showNotice } from "../utils/notice";
-import type { NoticeActions } from "../utils/notice";
+import type { NoticeActions, NoticeKind } from "../utils/notice";
 
 type RuntimeBridgeCallbacks = {
   onRuntimeCapabilityChanged?: (input: {
@@ -51,7 +51,7 @@ export function useSessionRuntimeBridge(callbacks: RuntimeBridgeCallbacks = {}):
         const notice = event.payload as {
           message?: string;
           i18nKey?: string;
-          kind?: "info" | "warning" | "error";
+          kind?: NoticeKind;
           duration?: number;
           /** 主进程只能给符号化动作 id（它不掌握 UI 导航），在这里解析成实际跳转。 */
           action?: string;

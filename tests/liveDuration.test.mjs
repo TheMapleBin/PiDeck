@@ -1,33 +1,30 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import ts from "typescript";
-import vm from "node:vm";
 
-/** 编译 .ts 模块并在 vm 中加载（零外部依赖，node 直跑）。 */
-function loadTsModule(filePath) {
-  const output = ts.transpileModule(readFileSync(filePath, "utf8"), {
-    compilerOptions: {
-      module: ts.ModuleKind.CommonJS,
-      target: ts.ScriptTarget.ES2022,
-      jsx: ts.JsxEmit.ReactJSX,
-    },
-  }).outputText;
-  const module = { exports: {} };
-  vm.runInNewContext(output, {
-    module,
-    exports: module.exports,
-    require: (id) => (id.includes("duration") ? { formatDuration: (ms) => `${ms}ms` } : {}),
-  });
-  return module.exports;
-}
+import { createTsSandbox } from "./helpers/createTsSandbox.mjs";
 
-test("formatDuration: ms / seconds / minutes buckets", () => {
+/**
+ * 编译 .ts 模块并在 vm 中加载（相对 import 按源文件目录解析，见 helper 注释）。
+ * LiveDuration 只用到 formatDuration，用固定值桩替身（`${ms}ms`）观察 tick 行为。
+ */
+const loadTsModule = createTsSandbox({
+  stubs: { "./TimelineFormat": { formatDuration: (ms) => `${ms}ms` } },
+});
+
+test("formatDuration: ms / seconds / minutes / hours buckets", () => {
   const { formatDuration } = loadTsModule("src/renderer/src/components/session/TimelineFormat.ts");
   assert.equal(formatDuration(850), "850ms");
   assert.equal(formatDuration(3200), "3.2s");
   assert.equal(formatDuration(64000), "1m4s");
   assert.equal(formatDuration(120000), "2m");
+  // 小时档：长任务（挂机跑几小时）不能只显示分钟（「3120m」读不出来）
+  assert.equal(formatDuration(3_600_000), "1h");
+  assert.equal(formatDuration(3_720_000), "1h2m");
+  assert.equal(formatDuration(3_723_000), "1h2m3s");
+  // 分钟为 0 时省略该档位（1h0m3s → 1h3s）
+  assert.equal(formatDuration(3_603_000), "1h3s");
+  assert.equal(formatDuration(47_000_000), "13h3m20s");
 });
 
 test("getToolLiveStartTimestamp: 优先 meta.startedAt，消息 timestamp 被刷新时秒表不归零", () => {

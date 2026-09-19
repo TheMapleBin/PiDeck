@@ -116,13 +116,26 @@ export function getToolExitCode(message: ChatMessage): number | undefined {
   return undefined;
 }
 
+/**
+ * 时长格式化（时间线实时秒表 / 工具卡片 / 思考卡片 / 统计口径共用）。
+ *
+ * 档位：<1s 毫秒、<1m 秒（带十分位）、≥1m 分秒、≥1h 小时档。
+ * 各档位值为 0 时省略，既有写法保持不变（「2m」「1m4s」）。
+ * 必须有小时档：挂机跑长任务时只到分钟档会显示成「3120m」这种读不出来的数字。
+ */
 export function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
-  const seconds = Math.floor(ms / 1000);
-  if (seconds < 60) return `${seconds}.${Math.floor((ms % 1000) / 100)}s`;
-  const minutes = Math.floor(seconds / 60);
-  const remaining = seconds % 60;
-  return remaining > 0 ? `${minutes}m${remaining}s` : `${minutes}m`;
+  const totalSeconds = Math.floor(ms / 1000);
+  if (totalSeconds < 60) return `${totalSeconds}.${Math.floor((ms % 1000) / 100)}s`;
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  // 实时秒表保留秒档：长任务里秒在跳才说明「还在跑」，否则看着像卡死。
+  let text = "";
+  if (hours > 0) text += `${hours}h`;
+  if (minutes > 0) text += `${minutes}m`;
+  if (seconds > 0) text += `${seconds}s`;
+  return text;
 }
 
 export function formatTime(timestamp: number): string {

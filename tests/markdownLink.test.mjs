@@ -68,12 +68,19 @@ test("special symbols are excluded (arrows, multiplication, ellipsis)", () => {
 	assert.deepEqual(linkify("见 src/x.ts…"), ["file://src/x.ts"]);
 });
 
-test("code blocks and inline code are not linkified", () => {
+test("code blocks stay inert while inline-code file references become links", () => {
 	const tree = {
 		type: "root",
 		children: [
 			{ type: "code", value: "const p = 'src/a.ts';" },
-			{ type: "paragraph", children: [{ type: "inlineCode", value: "src/b.ts" }] },
+			{
+				type: "paragraph",
+				children: [
+					{ type: "inlineCode", value: "src/b.ts:12" },
+					{ type: "text", value: " and " },
+					{ type: "inlineCode", value: "foo()" },
+				],
+			},
 		],
 	};
 	const plugin = remarkLinkifyPaths();
@@ -81,11 +88,26 @@ test("code blocks and inline code are not linkified", () => {
 	const links = [];
 	const walk = (node) => {
 		if (!node || typeof node !== "object") return;
-		if (node.type === "link") links.push(node.url);
+		if (node.type === "link") links.push(node);
 		if (Array.isArray(node.children)) node.children.forEach(walk);
 	};
 	walk(tree);
-	assert.deepEqual(links, []);
+	assert.equal(links.length, 1);
+	assert.equal(decodeURIComponent(links[0].url.slice(7)), "src/b.ts:12");
+	assert.deepEqual(links[0].children, [{ type: "inlineCode", value: "src/b.ts:12" }]);
+});
+
+test("inline-code file references reject URI schemes and tolerate standalone filenames", () => {
+	const { isStandaloneFileReference } = markdownCore;
+	assert.equal(isStandaloneFileReference("src/main/index.ts:42"), true);
+	assert.equal(isStandaloneFileReference("package.json:1"), true);
+	assert.equal(isStandaloneFileReference("C:\\\\project\\\\main.ts:20"), true);
+	assert.equal(isStandaloneFileReference("https://example.com/src/main.ts"), false);
+	assert.equal(isStandaloneFileReference("file://src/main.ts"), false);
+	assert.equal(isStandaloneFileReference("vscode://file/src/main.ts"), false);
+	assert.equal(isStandaloneFileReference("main.ts"), true);
+	assert.equal(isStandaloneFileReference("not a file.ts"), false);
+	assert.equal(isStandaloneFileReference("src/main/index.ts extra"), false);
 });
 
 test("markdown links (link nodes) are not double-processed", () => {

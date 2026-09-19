@@ -32,6 +32,12 @@ const pickerHost = readFileSync(
   "src/renderer/src/components/session/ComposerPickerHost.tsx",
   "utf8",
 );
+/** 模型/思考域逻辑分两半：读侧目录/档位在 state hook，写侧应用与循环在 controller
+ * （选择器与 Ctrl+M/Ctrl+T 快捷键共用同一实现）。 */
+const preferenceController = [
+  readFileSync("src/renderer/src/hooks/useSessionPreferenceState.ts", "utf8"),
+  readFileSync("src/renderer/src/hooks/useSessionPreferenceController.ts", "utf8"),
+].join("\n");
 
 test("parsePiListModels parses table with provider/model/thinking", () => {
   const stdout = [
@@ -239,30 +245,33 @@ test("AgentManager.setModel detects Model not found with local model present", (
   assert.match(agentManager, /getModelsConfig\(\)/);
 });
 
-test("renderer ComposerPickerHost shows restart confirm on needsRestart", () => {
-  assert.match(pickerHost, /needsRestart/);
+test("renderer picker flow shows restart confirm on needsRestart", () => {
+  assert.match(preferenceController, /needsRestart/);
   assert.match(pickerHost, /ConfirmDialog/);
   // 确认后必须走统一重启入口（restartActiveAgent），才能点亮 SessionView overlay；
   // 禁止选择器自己调 restartRuntime（那条路径不置 restartingAgentId）。
-  assert.match(pickerHost, /restartActiveAgent/);
+  assert.match(preferenceController, /restartActiveAgent/);
+  assert.doesNotMatch(preferenceController, /desktopApi\.sessions\.restartRuntime/);
   assert.doesNotMatch(pickerHost, /desktopApi\.sessions\.restartRuntime/);
   // 确认时先写会话记录再重启：setRuntimeModel 失败路径不再写 catalog。
-  assert.match(pickerHost, /updateRecord\(sessionId, \{[\s\S]*?model: \{ provider: intent\.provider, modelId: intent\.modelId \}/);
+  assert.match(preferenceController, /updateRecord\(sessionId, \{[\s\S]*?model: \{ provider: intent\.provider, modelId: intent\.modelId \}/);
   assert.match(pickerHost, /modelRestartTitle/);
   assert.match(pickerHost, /modelRestartBody/);
 });
 
-test("ComposerPickerHost loads models on welcome page (no record)", () => {
+test("picker flow loads models on welcome page (no record)", () => {
   // 欢迎页/未启动 Agent 时 record 为 undefined，模型列表也必须加载：
   // 加载逻辑收敛到 useBackendModelCatalog（listModels 是全量的，不依赖 projectId），
-  // enabled 由 pickerNeedsModels 驱动；Pi/DSH 思考选择器都要加载，以便 Pi 欢迎页
-  // 读取 startup capability snapshot、DSH 按 reasoningEfforts 过滤。
+  // enabled 由「选择器打开 / 快捷键首次按下武装」驱动；Pi/DSH 思考选择器都要加载，
+  // 以便 Pi 欢迎页读取 startup capability snapshot、DSH 按 reasoningEfforts 过滤。
   const hook = readFileSync(
     "src/renderer/src/hooks/useBackendModelCatalog.ts",
     "utf8",
   );
-  assert.match(pickerHost, /const pickerNeedsModels = props\.picker === "model" \|\| props\.picker === "thinking"/);
-  assert.match(pickerHost, /useBackendModelCatalog\(\{[\s\S]*?enabled: pickerNeedsModels/);
+  assert.match(pickerHost, /pickerOpen: props\.picker === "model" \|\| props\.picker === "thinking"/);
+  // 目录刻意懒加载：Ctrl+M/Ctrl+T 首次按下才武装（cycleArmed），避免每个会话栏开机就拉一次
+  assert.match(preferenceController, /const catalogEnabled = options\.pickerOpen \|\| options\.cycleArmed/);
+  assert.match(preferenceController, /useBackendModelCatalog\(\{[\s\S]*?enabled: catalogEnabled/);
   // 后端分支收敛在 hook 内：DSH 走 host 目录，pi 走诊断报告通道（含失败原因分类）
   assert.match(hook, /listModelsReport\(options\.projectId, force\)/);
   assert.match(hook, /desktopApi\.sessions\.listDshModels\(\)/);
@@ -270,10 +279,7 @@ test("ComposerPickerHost loads models on welcome page (no record)", () => {
 });
 
 test("welcome page explicit model/thinking selections persist and are promoted into the first session", () => {
-  const picker = readFileSync(
-    "src/renderer/src/components/session/ComposerPickerHost.tsx",
-    "utf8",
-  );
+  const picker = preferenceController;
   const components = readFileSync(
     "src/renderer/src/components/session/ComposerComponents.tsx",
     "utf8",
@@ -460,9 +466,9 @@ test("model picker wires manual refresh + failure guide", () => {
   assert.match(hook, /reload: load/);
   assert.match(hook, /refreshing/);
   // 选择器把报告/刷新状态传给 ModelPicker
-  assert.match(pickerHost, /report=\{report\}/);
-  assert.match(pickerHost, /refreshing=\{refreshing\}/);
-  assert.match(pickerHost, /onRefresh=\{\(\) => reload\(true\)\}/);
+  assert.match(pickerHost, /report=\{preference\.report\}/);
+  assert.match(pickerHost, /refreshing=\{preference\.refreshing\}/);
+  assert.match(pickerHost, /onRefresh=\{\(\) => preference\.reloadCatalog\(true\)\}/);
   // 标题栏刷新按钮 + 空列表原因引导（版本过低/配置损坏/pi 未安装等）
   assert.match(components, /app\.modelPickerRefresh/);
   assert.match(components, /ModelListStatusGuide/);

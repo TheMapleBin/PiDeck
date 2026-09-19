@@ -1,14 +1,15 @@
 name: Release
 
 # 发版链路（tag push 即全自动）：
-#   push tag v* → 本 workflow 5 个构建 job（安装包 + runner-node zip + 本平台 runtime tgz）
+#   push tag v* → 本 workflow 5 个安装包构建 job + pack-dsh-runtime job（单 ubuntu
+#   runner 交叉打包 6 平台 runtime tgz，含 win32-arm64 / darwin-x64 这两个历史缺口）
 #   → softprops 用 RELEASE_PAT 发布（GITHUB_TOKEN 发布不广播 release: published，防递归）
-#   → post-release-sidecars.yml 被触发：原生补齐 win32-arm64 / darwin-x64 两份 runtime tgz
-#     （release.yml 两个 mac 构建都跑在 arm64 runner 上，产出的是 darwin-arm64；
-#      Windows 没有 arm64 构建 job）→ 结尾用 PAT 触发 sync-atomgit.yml
+#   → post-release-sidecars.yml 被触发：只负责触发 sync-atomgit.yml（runtime 补发
+#      职责已由交叉打包取代，见 docs/dsh-runtime-cross-pack.md）
 #   → sync-atomgit.yml 等资产清单稳定后同步到 AtomGit 镜像。
 # 手动补发入口：publish-dsh-runtime.yml / publish-dsh-runner-node.yml（保留，用于
-# 给旧版本补发或重试），sync-atomgit.yml 手动触发用于补同步。
+# 给旧版本补发或重试；前者同样支持 --target-* 交叉模式），sync-atomgit.yml 手动
+# 触发用于补同步。
 
 on:
   push:
@@ -214,8 +215,8 @@ jobs:
           ELECTRON_BUILDER_BINARIES_MIRROR: ${{ matrix.electron_builder_binaries_mirror }}
 
       # sidecar 跟应用版本 Release 一起发，不另开 tag（独立 tag 会抢走 GitHub /releases/latest）。
-      # runner-node 只在 Windows job 打两个 arch；DSH runtime tgz 由 npm run build 的 runtime:pack
-      # 按构建机平台产出，各 job 上传自己那份。缺失 glob 由 fail_on_unmatched_files: false 跳过。
+      # runner-node 只在 Windows job 打两个 arch；DSH runtime tgz 改由下方专用的
+      # pack-dsh-runtime 单 job 交叉打包 6 平台（2026-09 起不再依赖各构建机本地产出）。
       - name: Pack DSH runner Node sidecar
         if: matrix.platform == 'windows'
         run: node scripts/pack-dsh-runner-node.mjs --arch x64 && node scripts/pack-dsh-runner-node.mjs --arch arm64
@@ -246,5 +247,95 @@ jobs:
             ${{ matrix.skip_yml != true && 'release/latest*.yml' || '' }}
             dist-runtime/dsh-runner-node/*.zip
             dist-runtime/dsh-runner-node/dsh-runner-node-releases.json
-            dist-runtime/dsh-runtime-*.tgz
-            dist-runtime/dsh-runtime-*-releases.json
+
+  # DSH runtime tgz：单 runner 交叉打包 6 平台（2026-09 起，替代「各构建机本地产出 +
+  # post-release-sidecars 补 2 个平台」的旧链路）。
+  # 可行性根因：runtime 闭包内所有原生依赖都以 prebuild 分发（node-pty tarball 自带
+  # 全平台 prebuilds、koffi/sharp/rg 是 optional 平台包），
+  # `npm install --os --cpu --libc --ignore-scripts` 可在任意宿主交叉解析出目标平台
+  # 完整树（WSL 真机 boot 已验证，见 docs/dsh-runtime-cross-pack.md）。
+  # linux 目标必须显式 --libc glibc：npm 在非 Linux 宿主上检测不到 libc，会把
+  # libc:["glibc"] 的平台包（@img/sharp-linux-x64 等）静默过滤掉。
+  pack-dsh-runtime:
+    name: Pack DSH runtime (${{ matrix.os }}-${{ matrix.arch }})
+    needs: [resolve-version]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: win32
+            arch: x64
+          - os: win32
+            arch: arm64
+          - os: darwin
+            arch: x64
+          - os: darwin
+            arch: arm64
+          - os: linux
+            arch: x64
+          - os: linux
+            arch: arm64
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve-version.outputs.ref || '' }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.13.0
+          cache: npm
+
+      # 交叉解析只需要 npm + package-lock.json，不需要完整 npm ci（闭包树由
+      # pack 脚本在隔离目录自行安装）。semver 是脚本里范围匹配的依赖，从 lock
+      # 顶层条目直接取包，避免全量 npm ci（10 分钟+）。
+      - name: Restore semver for packing script
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./package-lock.json').packages['node_modules/semver'].version")
+          mkdir -p node_modules/semver
+          curl -sfL "https://registry.npmjs.org/semver/-/semver-${VERSION}.tgz" | tar -xz -C node_modules/semver --strip-components=1
+          node -e "console.log('semver', require('semver/package.json').version, 'ready')"
+
+      - name: Pack DSH runtime (cross)
+        run: node scripts/pack-dsh-runtime.mjs --target-os ${{ matrix.os }} --target-arch ${{ matrix.arch }}
+
+      - name: Check runtime archive
+        run: node scripts/check-dsh-asar.mjs --target-os ${{ matrix.os }} --target-arch ${{ matrix.arch }}
+
+      - name: Upload onto app Release
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PAT }}
+          # 手工输入走 env，避免直接拼进 shell。
+          TAG: ${{ needs.resolve-version.outputs.tag }}
+        shell: bash
+        run: |
+          ARCHIVE="dsh-runtime-${{ matrix.os }}-${{ matrix.arch }}.tgz"
+          INDEX="dsh-runtime-${{ matrix.os }}-${{ matrix.arch }}-releases.json"
+          if [ ! -f "dist-runtime/${ARCHIVE}" ] || [ ! -f "dist-runtime/${INDEX}" ]; then
+            echo "::error::缺少产物 dist-runtime/${ARCHIVE} 或 ${INDEX}"
+            ls -la dist-runtime || true
+            exit 1
+          fi
+          if [[ ! "$TAG" =~ ^v[0-9] ]]; then
+            echo "::error::目标不是应用版本 tag（got ${TAG}）。拒绝创建独立 sidecar Release。"
+            exit 1
+          fi
+          echo "Uploading ${ARCHIVE} onto ${TAG}"
+          # 并发追加偶发 422，短回退重试（与旧链路同款）。
+          for i in 1 2 3 4 5; do
+            if gh release upload "$TAG" \
+              "dist-runtime/${ARCHIVE}" \
+              "dist-runtime/${INDEX}" \
+              --clobber \
+              --repo "${{ github.repository }}"; then
+              exit 0
+            fi
+            echo "upload failed, retry ${i}/5"
+            sleep $((i * 5))
+          done
+          echo "::error::上传 ${ARCHIVE} 到 ${TAG} 失败"
+          exit 1

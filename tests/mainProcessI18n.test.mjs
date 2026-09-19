@@ -299,9 +299,10 @@ test("main-process user surfaces use stable copy and keep caught details in logs
     "utf8",
   );
   assert.match(updateService, /private setDownloadError/);
-  assert.match(updateService, /this\.download = \{ \.\.\.this\.download, phase: "error", error \}/);
+  assert.match(updateService, /errorKind/);
   assert.match(updateService, /"App update check failed"/);
-  assert.match(appUpdateCard, /t\("settings\.updateErrorDetail"/);
+  assert.match(appUpdateCard, /update\.checkFailedDetail/);
+  assert.match(appUpdateCard, /update\.downloadFailedDetail/);
   assert.match(appUpdateCard, /desktopApi\.app\.openExternal\(releaseUrl, true\)/);
 
   const projectStore = readFileSync("src/main/projects/ProjectStore.ts", "utf8");

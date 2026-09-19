@@ -403,6 +403,13 @@ export function projectDshEvent(
 			const hasToolCalls = Array.isArray(message.content) && message.content.some(
 				(block) => block !== null && typeof block === "object" && (block as { type?: unknown }).type === "tool-call",
 			);
+			// stopReason 归一化（对齐 pi RPC 的 provider 枚举，见 shared/types/session.ts）。
+			// 为什么：DSH 一次 turn 的每步模型响应都各落一条 assistant/message（中间步骤
+			// 也带 tool-call 块，实测 73 条全部如此），而渲染层 groupToolMessages 以
+			// stopReason==="stop" 判定「回合已收尾」。若全部标 stop，同一 turn 的每条中间
+			// 回复都会被拆成独立 agent-run（每个头像时间戳+独立「执行过程」chip）。
+			// 语义：带 tool-call = 中间回复（toolUse）；无 tool-call 的终态 = 最终回复（stop）。
+			const assistantStopReason = hasToolCalls ? "toolUse" : "stop";
 			if (hasToolCalls && !finalText.trim() && !finalThinking.trim() && !assistantImagesPresent && !base.pendingAssistantId) {
 				next.pendingAssistantId = undefined;
 				next.pendingAssistantText = "";
@@ -427,7 +434,7 @@ export function projectDshEvent(
 						text: finalText,
 						thinking: finalThinking.trim() ? finalThinking : undefined,
 						timestamp: eventTime(event.time),
-						stopReason: "stop",
+						stopReason: assistantStopReason,
 						...(assistantImages.length > 0 ? { images: assistantImages } : (previous.images ? { images: previous.images } : {})),
 						// 思考耗时：终态时间作为结束点（startedAt 已在骨架创建时记录）
 						...((finalThinking.trim() || previous.thinkingStartedAt !== undefined)
@@ -453,7 +460,7 @@ export function projectDshEvent(
 						text: finalText,
 						thinking: finalThinking.trim() ? finalThinking : undefined,
 						timestamp: eventTime(event.time),
-						stopReason: "stop",
+						stopReason: assistantStopReason,
 						...(assistantImages.length > 0 ? { images: assistantImages } : {}),
 						...(assistantImageMeta || usageForMessage ? { meta: { ...(assistantImageMeta ?? {}), ...(usageForMessage ? { usage: usageForMessage } : {}) } } : {}),
 					});
@@ -467,7 +474,7 @@ export function projectDshEvent(
 					text: finalText,
 					thinking: finalThinking.trim() ? finalThinking : undefined,
 					timestamp: eventTime(event.time),
-					stopReason: "stop",
+					stopReason: assistantStopReason,
 					...(assistantImages.length > 0 ? { images: assistantImages } : {}),
 					...(assistantImageMeta || usageForMessage ? { meta: { ...(assistantImageMeta ?? {}), ...(usageForMessage ? { usage: usageForMessage } : {}) } } : {}),
 				});

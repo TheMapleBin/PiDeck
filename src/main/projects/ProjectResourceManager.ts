@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
-import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
-import { dirname, join, relative, sep } from "node:path";
+import { mkdir, readdir, readFile, rename, writeFile, rm, cp, lstat, stat } from "node:fs/promises";
+import { dirname, join, relative, sep, basename, extname } from "node:path";
+import { randomUUID } from "node:crypto";
 import {
 	createProjectFileReadBoundary,
 	resolveProjectFileReadPath,
@@ -19,6 +20,8 @@ import type {
 	ProjectResourceListResult,
 	ProjectResourceOverrides,
 } from "../../shared/types";
+import type { McpConfigFile } from "../../shared/types/mcp";
+import { parseMcpConfigFile, validateMcpConfigFile } from "../config/mcpConfig";
 import type { MainProcessTranslationKey } from "../../shared/i18n/mainProcessCopy";
 import {
 	emptyProjectResourceOverrides,
@@ -28,9 +31,18 @@ import {
 import { discoverExtensionEntries } from "../extensions/extensionDiscovery";
 
 const SKILL_FILE = "SKILL.md";
+const IMPORT_MAX_FILE_BYTES = 10 * 1024 * 1024;
+const IMPORT_MAX_TREE_BYTES = 50 * 1024 * 1024;
+const IMPORT_MAX_DEPTH = 32;
+
+type ImportTreeState = { totalBytes: number };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function hasErrorCode(value: unknown, code: string): boolean {
+	return isRecord(value) && value.code === code;
 }
 
 /** Validate project settings before any resource mutation so malformed JSON is never overwritten. */
@@ -152,6 +164,185 @@ export class ProjectResourceManager {
 		const safeDirectory = await this.resolveProjectWritePath(project, location);
 		await mkdir(safeDirectory, { recursive: true });
 		return this.resolveExistingProjectPath(project, safeDirectory);
+	}
+
+	/**
+	 * Resolve a project-owned resource directory without creating it.
+	 *
+	 * Import scanning uses this method to inspect occupancy while keeping scans read-only.
+	 * The returned path is resolved through the same canonical boundary as every project
+	 * mutation, so a missing directory still inherits the real, registered project root.
+	 */
+	async resolveResourceDirectory(
+		projectId: string,
+		kind: Exclude<ProjectResourceDirectoryKind, "prompts">,
+	): Promise<string> {
+		const project = this.requireProject(projectId);
+		const location = this.skillLocations(project).find((candidate) => candidate.id === kind)?.path;
+		if (!location) throw new Error(this.translate("mainProjectResource.pathOutsideProject"));
+		return this.resolveProjectWritePath(project, location);
+	}
+
+	/**
+	 * Read the project-owned `.pi/mcp.json` through the project boundary.
+	 * A missing file is an empty configuration; malformed JSON/configuration is an error
+	 * so an import can never replace a file the user may need to repair manually.
+	 */
+	async readProjectMcpConfig(projectId: string): Promise<McpConfigFile> {
+		const project = this.requireProject(projectId);
+		const lexicalPath = join(this.projectRoot(project), ".pi", "mcp.json");
+		const entry = await lstat(lexicalPath).catch((error: unknown) => {
+			if (hasErrorCode(error, "ENOENT")) return null;
+			throw error;
+		});
+		if (!entry) {
+			// A missing optional config is normally an empty writable layer.  Still resolve
+			// its nearest existing parent before returning: otherwise an escaping `.pi`
+			// junction could look like a harmless absent file during scan and only fail after
+			// the user has selected entries for import.
+			await this.resolveProjectWritePath(project, lexicalPath);
+			return {};
+		}
+
+		const safePath = await this.resolveExistingProjectPath(project, lexicalPath);
+		const parsed = parseMcpConfigFile(await readFile(safePath, "utf8"));
+		if (parsed.error) throw new Error(parsed.error);
+		const validationError = validateMcpConfigFile(parsed.file);
+		if (validationError) throw new Error(validationError);
+		return parsed.file;
+	}
+
+	/**
+	 * Atomically replace the project-owned `.pi/mcp.json` after boundary and schema checks.
+	 * The temporary file lives beside the destination and is always cleaned up on failure.
+	 */
+	async saveProjectMcpConfig(projectId: string, file: McpConfigFile): Promise<void> {
+		const project = this.requireProject(projectId);
+		const validationError = validateMcpConfigFile(file);
+		if (validationError) throw new Error(validationError);
+
+		const boundary = await this.projectBoundary(project);
+		const lexicalPath = join(this.projectRoot(project), ".pi", "mcp.json");
+		const safePath = await this.resolveProjectWritePath(project, lexicalPath);
+		await mkdir(dirname(safePath), { recursive: true });
+
+		// Resolve the temporary name after creating the parent. This closes the gap where a
+		// newly-created `.pi` directory could otherwise be replaced by a symlink between
+		// boundary resolution and the write.
+		const temporaryLexicalPath = join(dirname(safePath), `.${basename(safePath)}.${randomUUID()}.tmp`);
+		const temporaryPath = await resolveProjectFileWritePath(boundary, temporaryLexicalPath);
+		try {
+			await writeFile(temporaryPath, `${JSON.stringify(file, null, 2)}\n`, { encoding: "utf8", flag: "wx" });
+			// The final destination is resolved again after the staging write.  A project
+			// directory can be swapped for a link/junction while the temporary file is being
+			// written; rename must use a freshly-bound, still-canonical target rather than
+			// the path accepted before that asynchronous work began.
+			const latestPath = await resolveProjectFileWritePath(boundary, lexicalPath);
+			if (latestPath !== safePath) throw new Error(this.translate("mainProjectResource.pathOutsideProject"));
+			await rename(temporaryPath, latestPath);
+		} finally {
+			await rm(temporaryPath, { force: true }).catch(() => undefined);
+		}
+	}
+
+	/**
+	 * Copy a complete external skill directory into a project-local target.
+	 * This API is intentionally not exposed through IPC; the import manager supplies the
+	 * source path from its short-lived, validated scan session.
+	 */
+	async importSkillDirectory(
+		projectId: string,
+		locationId: Exclude<ProjectResourceDirectoryKind, "prompts">,
+		sourceDirectory: string,
+		targetName: string,
+	): Promise<void> {
+		const project = this.requireProject(projectId);
+		if (!targetName || targetName !== targetName.trim() || targetName.toLowerCase() !== targetName || targetName.length > 64 || !/^[\p{L}\p{N}](?:[\p{L}\p{N}-]{0,63})$/u.test(targetName)) {
+			throw new Error(this.translate("mainProjectResource.pathOutsideProject"));
+		}
+		await this.assertImportSkillTree(sourceDirectory);
+
+		const boundary = await this.projectBoundary(project);
+		const lexicalRoot = this.skillLocations(project).find((candidate) => candidate.id === locationId)?.path;
+		if (!lexicalRoot) throw new Error(this.translate("mainProjectResource.pathOutsideProject"));
+		const safeRoot = await resolveProjectFileWritePath(boundary, lexicalRoot);
+		const initialTarget = join(safeRoot, targetName);
+		const occupied = existsSync(safeRoot) && (await readdir(safeRoot, { withFileTypes: true }).catch(() => []))
+			.some((entry) => entry.name.toLowerCase() === targetName.toLowerCase() || this.normalizeSkillName(entry.name) === targetName);
+		if (occupied || existsSync(initialTarget)) {
+			throw new Error(this.translate("mainProjectResource.skillAlreadyExists", { name: targetName }));
+		}
+		await mkdir(safeRoot, { recursive: true });
+		// Re-resolve after creating the parent.  A project-local reparse point could be
+		// swapped while the directory was being created; the canonical boundary must be
+		// applied to the temporary file and final destination immediately before copying.
+		const stableRoot = await resolveProjectFileWritePath(boundary, lexicalRoot);
+		const stableTarget = await resolveProjectFileWritePath(boundary, join(lexicalRoot, targetName));
+		const stableOccupied = (await readdir(stableRoot, { withFileTypes: true }).catch(() => []))
+			.some((entry) => entry.name.toLowerCase() === targetName.toLowerCase() || this.normalizeSkillName(entry.name) === targetName);
+		if (stableOccupied || existsSync(stableTarget)) {
+			throw new Error(this.translate("mainProjectResource.skillAlreadyExists", { name: targetName }));
+		}
+		const temporaryLexical = join(stableRoot, `.${targetName}.${randomUUID()}.tmp`);
+		const temporaryPath = await resolveProjectFileWritePath(boundary, temporaryLexical);
+		const assertTargetAbsent = async (): Promise<void> => {
+			const entry = await lstat(stableTarget).catch((error: unknown) => {
+				if (hasErrorCode(error, "ENOENT")) return null;
+				throw error;
+			});
+			if (entry) throw new Error(this.translate("mainProjectResource.skillAlreadyExists", { name: targetName }));
+		};
+		try {
+			await assertTargetAbsent();
+			await cp(sourceDirectory, temporaryPath, {
+				recursive: true,
+				errorOnExist: true,
+				force: false,
+				verbatimSymlinks: true,
+			});
+			await this.assertImportSkillTree(temporaryPath);
+			// The source copy can take long enough for a project-local directory to be
+			// replaced by a junction. Re-resolve both paths immediately before rename so
+			// the final mutation still targets the registered project's canonical tree.
+			if (await resolveProjectFileReadPath(boundary, temporaryPath) !== temporaryPath) {
+				throw new Error(this.translate("mainProjectResource.pathOutsideProject"));
+			}
+			if (await resolveProjectFileWritePath(boundary, lexicalRoot) !== stableRoot) {
+				throw new Error(this.translate("mainProjectResource.pathOutsideProject"));
+			}
+			if (await resolveProjectFileWritePath(boundary, join(lexicalRoot, targetName)) !== stableTarget) {
+				throw new Error(this.translate("mainProjectResource.pathOutsideProject"));
+			}
+			await assertTargetAbsent();
+			await rename(temporaryPath, stableTarget);
+		} finally {
+			await rm(temporaryPath, { recursive: true, force: true }).catch(() => undefined);
+		}
+	}
+
+	private async assertImportSkillTree(
+		root: string,
+		depth = 0,
+		state: ImportTreeState = { totalBytes: 0 },
+	): Promise<void> {
+		if (depth > IMPORT_MAX_DEPTH) throw new Error("Skill directory is too deep.");
+		const rootEntry = await lstat(root);
+		if (!rootEntry.isDirectory() || rootEntry.isSymbolicLink()) {
+			throw new Error("Skill source must be a directory without symbolic links.");
+		}
+		for (const entry of await readdir(root, { withFileTypes: true })) {
+			if (entry.isSymbolicLink()) throw new Error("Skill contains a symbolic link and cannot be imported.");
+			const fullPath = join(root, entry.name);
+			if (entry.isDirectory()) {
+				await this.assertImportSkillTree(fullPath, depth + 1, state);
+				continue;
+			}
+			if (!entry.isFile()) throw new Error("Skill contains an unsupported file type.");
+			const size = (await stat(fullPath)).size;
+			if (size > IMPORT_MAX_FILE_BYTES) throw new Error("Skill file is too large.");
+			state.totalBytes += size;
+			if (state.totalBytes > IMPORT_MAX_TREE_BYTES) throw new Error("Skill directory is too large.");
+		}
 	}
 
 	async deleteSkill(projectId: string, skillPath: string): Promise<void> {
@@ -350,7 +541,7 @@ export class ProjectResourceManager {
 		const warnings = this.validateSkill(name, description);
 		return {
 			id: `${location.id}:${skillPath}`,
-			name: name || dirname(skillPath).split(/[\\/]/).pop() || this.translate("mainSkill.unnamed"),
+			name: name || this.fallbackSkillName(skillPath, type) || this.translate("mainSkill.unnamed"),
 			description,
 			path: skillPath,
 			dir: dirname(skillPath),
@@ -537,7 +728,17 @@ export class ProjectResourceManager {
 		return project;
 	}
 
-	/** 重命名项目级 Skill：重命名目录并更新 SKILL.md 中的 name 字段 */
+	/** frontmatter 缺 name 时的回退名：markdown 取文件名（去扩展名），目录取目录名。
+	 *  不能直接用 dirname().pop()——markdown 技能会显示成父目录名「skills」。 */
+	private fallbackSkillName(skillPath: string, type: PiSkillSummary["type"]): string {
+		return type === "markdown"
+			? basename(skillPath, extname(skillPath))
+			: basename(dirname(skillPath));
+	}
+
+	/** 重命名项目级 Skill：按类型分流——目录技能重命名技能目录，markdown 技能只重命名单个文件。
+	 *  markdown 技能的 skill.dir 是技能根目录（<root>/.pi/skills），绝不能当重命名目标，
+	 *  否则整个项目技能根目录会被改名搬走，其余技能全部消失（数据丢失事故）。 */
 	async renameSkill(projectId: string, skillPath: string, newName: string): Promise<PiSkillSummary> {
 		const project = this.requireProject(projectId);
 		const skill = await this.findSkill(project, skillPath);
@@ -545,35 +746,80 @@ export class ProjectResourceManager {
 		if (!normalizedNew) throw new Error(this.translate("mainSkill.nameRequired"));
 
 		const displayName = newName.trim();
-		const oldDir = await this.resolveExistingProjectPath(project, skill.dir);
 		const safeSkillPath = await this.resolveExistingProjectPath(project, skill.path);
-		const parentDir = dirname(oldDir);
-		const newDir = await this.resolveProjectWritePath(project, join(parentDir, normalizedNew));
+		const isDirectory = skill.type === "directory";
+		const oldTarget = await this.resolveExistingProjectPath(project, isDirectory ? skill.dir : skill.path);
+		const parentDir = dirname(oldTarget);
+		const newTarget = await this.resolveProjectWritePath(
+			project,
+			isDirectory
+				? join(parentDir, normalizedNew)
+				: join(parentDir, `${normalizedNew}${extname(oldTarget)}`),
+		);
 
-		if (oldDir === newDir) throw new Error(this.translate("mainSkill.sameName"));
-		if (existsSync(newDir)) throw new Error(this.translate("mainProjectResource.skillAlreadyExists", { name: normalizedNew }));
+		if (oldTarget === newTarget) throw new Error(this.translate("mainSkill.sameName"));
+		if (existsSync(newTarget)) throw new Error(this.translate("mainProjectResource.skillAlreadyExists", { name: normalizedNew }));
 
-		// 更新 SKILL.md 中的 name frontmatter
+		// 先在旧位置读原文，rename 成功后再把 frontmatter 写到新位置：
+		// 中途失败不会留下「frontmatter 已改名、文件/目录还在原地」的部分变更。
 		const raw = await readFile(safeSkillPath, "utf8");
-		const updated = this.setFrontmatterName(raw, displayName);
-		await writeFile(safeSkillPath, updated, "utf8");
+		await rename(oldTarget, newTarget);
+		// 目录技能新路径拼 SKILL.md；markdown 技能新路径就是改名后的单文件本身
+		const newSkillPath = isDirectory ? join(newTarget, SKILL_FILE) : newTarget;
+		await writeFile(newSkillPath, this.setFrontmatterName(raw, displayName), "utf8");
 
-		await rename(oldDir, newDir);
+		// 禁用列表同步迁移：旧名条目替换为新名，避免孤儿数据与白名单双源漂移
+		await this.migrateDisabledSkillName(project, skill.name, displayName);
 
 		// 重命名后重新读取
-		const newSkillPath = join(newDir, SKILL_FILE);
-		return this.readSkill(newSkillPath, this.skillLocations(project).find((l) => newSkillPath.startsWith(l.path)) ?? this.skillLocations(project)[0], skill.type);
+		return this.readSkill(
+			newSkillPath,
+			this.skillLocations(project).find((l) => newSkillPath.startsWith(l.path)) ?? this.skillLocations(project)[0],
+			skill.type,
+		);
 	}
 
-	/** 更新 frontmatter 中的 name 字段 */
+	/** 重命名后同步项目 .pi/settings.json 的 disabledSkills：旧名条目替换为新名（大小写不敏感）。
+	 *  旧名不在列表时不写文件，避免为未禁用技能凭空创建 settings。 */
+	private async migrateDisabledSkillName(project: Project, oldName: string, newDisplayName: string): Promise<void> {
+		const oldKey = oldName.toLowerCase();
+		const newKey = newDisplayName.toLowerCase();
+		if (oldKey === newKey) return;
+		const settingsFile = await this.resolveProjectWritePath(
+			project,
+			join(this.projectRoot(project), ".pi", "settings.json"),
+		);
+		const settings = await readProjectSettingsForWrite(
+			settingsFile,
+			this.translate("mainConfig.invalidJson"),
+		);
+		const disabled = Array.isArray(settings.disabledSkills)
+			? settings.disabledSkills.filter((name): name is string => typeof name === "string")
+			: [];
+		if (!disabled.some((name) => name.toLowerCase() === oldKey)) return;
+		const nextDisabled = disabled.filter(
+			(name) => name.toLowerCase() !== oldKey && name.toLowerCase() !== newKey,
+		);
+		nextDisabled.push(newDisplayName);
+		settings.disabledSkills = nextDisabled;
+		await mkdir(dirname(settingsFile), { recursive: true });
+		await writeFile(settingsFile, `${JSON.stringify(settings, null, 2)}\n`, "utf8");
+	}
+
+	/** 更新 frontmatter 中的 name 字段；若原 frontmatter 缺 name: 则置顶补全 */
 	private setFrontmatterName(raw: string, name: string): string {
 		const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---/);
 		if (!match) return `---\nname: ${name}\n---\n\n${raw}`;
 		const lines = match[1].split(/\r?\n/);
+		let changed = false;
 		const nextLines = lines.map((line) => {
-			if (line.trim().startsWith("name:")) return `name: ${name}`;
+			if (line.trim().startsWith("name:")) {
+				changed = true;
+				return `name: ${name}`;
+			}
 			return line;
 		});
+		if (!changed) nextLines.unshift(`name: ${name}`);
 		return raw.replace(match[0], `---\n${nextLines.join("\n")}\n---`);
 	}
 
@@ -665,6 +911,15 @@ export class ProjectResourceManager {
 	}
 
 	private normalizeSkillName(value: string) {
-		return value.trim().toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+		// Keep project-local imports/renames aligned with the global SkillManager and
+		// the external-import scanner: Unicode letters/numbers are valid path components,
+		// while punctuation collapses to a single dash and names are bounded for safe IPC.
+		const normalized = value
+			.trim()
+			.toLowerCase()
+			.replace(/[^\p{L}\p{N}-]+/gu, "-")
+			.replace(/-+/g, "-")
+			.replace(/^-|-$/g, "");
+		return normalized.slice(0, 64).replace(/-+$/g, "");
 	}
 }

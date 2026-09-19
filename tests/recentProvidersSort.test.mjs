@@ -17,6 +17,11 @@ const pickerHost = readFileSync(
   "src/renderer/src/components/session/ComposerPickerHost.tsx",
   "utf8",
 );
+/** 模型/思考域状态由 state hook + controller 持有（选择器渲染壳只透传）。 */
+const preferenceController = [
+  readFileSync("src/renderer/src/hooks/useSessionPreferenceState.ts", "utf8"),
+  readFileSync("src/renderer/src/hooks/useSessionPreferenceController.ts", "utf8"),
+].join("\n");
 const settingsTypes = readFileSync("src/shared/types/settings.ts", "utf8");
 
 describe("orderProviderGroups（模型选择器供应商排序）", () => {
@@ -103,7 +108,7 @@ describe("recentProviders 链路契约（源码级）", () => {
   });
 
   test("ComposerPickerHost 读 settings.recentProviders 并传给 ModelPicker", () => {
-    assert.match(pickerHost, /setRecentProviders\(settings\.recentProviders/);
-    assert.match(pickerHost, /recentProviders=\{recentProviders\}/);
+    assert.match(preferenceController, /setRecentProviders\(settings\.recentProviders/);
+    assert.match(pickerHost, /recentProviders=\{preference\.recentProviders\}/);
   });
 });

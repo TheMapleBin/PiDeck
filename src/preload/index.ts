@@ -4,6 +4,7 @@ import type { TokendanceAuthMode } from "../shared/tokendance";
 import type { AnnouncementState } from "../shared/types/announcement";
 import type { RpcLogBatch, RpcLogEntry } from "../shared/types/rpcLog";
 import type { DshRuntimeStatus, DshRuntimeInstallProgress } from "../shared/types/dshRuntime";
+import type { DshHomeSharingState } from "../shared/types/dshHome";
 import type { GitExecutableInfo } from "../shared/types/git";
 import type { DshRunnerNodeInfo, DshRunnerNodeInstallResult } from "../shared/types/dshRunnerNode";
 import type { ImageBlobPayload, ImageGenConfigFile, ImageGenRequest, ImageGenResult, ImageGenSaveResult } from "../shared/types/imagegen";
@@ -84,6 +85,10 @@ import type {
 	ProjectResourceListResult,
 	ProjectResourceDiscoveryResult,
 	ProjectResourceOverrides,
+	ResourceImportScanInput,
+	ResourceImportApplyInput,
+	ResourceImportScanResponse,
+	ResourceImportApplyResponse,
 	PetAggregateState,
 	PetManifest,
 	PetNotification,
@@ -105,6 +110,7 @@ import type {
 	FeishuConnectInput,
 	FeishuSessionBotResult,
 	FeishuTestResult,
+	FileSearchResult,
 	FileTreeNode,
 	GitBranchInfo,
 	GitDiscardResource,
@@ -129,6 +135,8 @@ import type {
 	PiInstallExecResult,
 	WslConnectionValidation,
 	NpmAvailabilityResult,
+	PiRuntimeNodeStatus,
+	PiRuntimeNodeInstallResult,
 	PasteFileWriteInput,
 	PasteFileWriteResult,
 	PiPromptTemplateListResult,
@@ -321,6 +329,11 @@ const api = {
 			ipcRenderer.invoke(ipcChannels.filesList, projectId, options) as Promise<
 				FileTreeNode[]
 			>,
+		/** 工作区文件名搜索（issue #215）：主进程全盘扫描，忽略规则与文件树一致 */
+		search: (projectId: string, query: string) =>
+			ipcRenderer.invoke(ipcChannels.filesSearch, projectId, query) as Promise<
+				FileSearchResult[]
+			>,
 		open: (path: string, scope?: ProjectFileAccessScope) =>
 			ipcRenderer.invoke(ipcChannels.filesOpen, path, scope) as Promise<void>,
 		showInFolder: (path: string, scope?: ProjectFileAccessScope) =>
@@ -469,12 +482,16 @@ const api = {
 				model: string;
 				reasoningEffort?: string;
 			} | undefined>,
-		/** DSH 配置管理页状态（host 启动状态 + DSH_HOME 目录 + 最近 boot 失败原因）。 */
+		/** DSH 配置管理页状态（host 启动状态 + DSH_HOME 目录 + 最近 boot 失败原因 + 共享状态）。 */
 		getDshStatus: () =>
 			ipcRenderer.invoke(ipcChannels.dshGetStatus) as Promise<{
 				started: boolean;
 				homeDir: string;
 				bootError?: string | null;
+				/** 共享/冲突状态（issue #189）；旧主进程未回传时缺省。 */
+				sharing?: DshHomeSharingState;
+				/** 用户是否手动停止了 host（true 时不会自动启动）；旧主进程未回传时缺省。 */
+				manuallyStopped?: boolean;
 			}>,
 		/** 探测本机 CUI node（DSH 沙箱 runner）。传草稿路径可在保存前预览。 */
 		detectDshRunnerNode: (configuredPath?: string) =>
@@ -569,6 +586,12 @@ const api = {
 		/** DSH host 重启（DSH_HOME 切换后立即生效；有活跃 DSH 会话时返回 false）。 */
 		restartDshHost: () =>
 			ipcRenderer.invoke(ipcChannels.dshRestartHost) as Promise<boolean>,
+		/** DSH host 手动停止（停活跃 DSH 会话 + dispose + 持久化停止标记，跨重启不自动启动）。 */
+		stopDshHost: () =>
+			ipcRenderer.invoke(ipcChannels.dshStopHost) as Promise<boolean>,
+		/** DSH host 显式启动（清除手动停止标记并 boot；返回 host 是否就绪）。 */
+		startDshHost: () =>
+			ipcRenderer.invoke(ipcChannels.dshStartHost) as Promise<boolean>,
 		deleteRecord: (sessionId: string) =>
 			ipcRenderer.invoke(ipcChannels.sessionsCatalogDelete, sessionId) as Promise<boolean>,
 		/** 归档会话（移入 .pideck-archive/ 并从目录移除）；运行中的会话会抛错 */
@@ -1273,6 +1296,15 @@ const api = {
 		/** 检查 npm 是否可用 */
 		checkNpm: () =>
 			ipcRenderer.invoke(ipcChannels.piCheckNpm) as Promise<NpmAvailabilityResult>,
+		/** 环境引导：检测便携 Node 副本 + 系统 node 状态 */
+		runtimeNodeCheck: () =>
+			ipcRenderer.invoke(ipcChannels.piRuntimeNodeCheck) as Promise<PiRuntimeNodeStatus>,
+		/** 环境引导：安装便携 Node 到 userData（镜像回退 + sha256 校验，主进程内完成） */
+		runtimeNodeInstall: () =>
+			ipcRenderer.invoke(ipcChannels.piRuntimeNodeInstall) as Promise<PiRuntimeNodeInstallResult>,
+		/** 环境引导：全局安装 pi（收紧通道：只传镜像布尔意图，命令由主进程拼接） */
+		runtimePiInstall: (useMirror: boolean) =>
+			ipcRenderer.invoke(ipcChannels.piRuntimePiInstall, useMirror === true) as Promise<PiInstallExecResult>,
 	},
 	/** WSL 相关操作（仅 Windows 有效） */
 	wsl: {
@@ -1457,6 +1489,12 @@ const api = {
 			ipcRenderer.invoke(ipcChannels.skillsOpenFolder, path) as Promise<void>,
 		rename: (skillPath: string, newName: string) =>
 			ipcRenderer.invoke(ipcChannels.skillsRename, skillPath, newName) as Promise<PiSkillSummary>,
+	},
+	resourceImport: {
+		scan: (input: ResourceImportScanInput) =>
+			ipcRenderer.invoke(ipcChannels.resourceImportScan, input) as Promise<ResourceImportScanResponse>,
+		apply: (input: ResourceImportApplyInput) =>
+			ipcRenderer.invoke(ipcChannels.resourceImportApply, input) as Promise<ResourceImportApplyResponse>,
 	},
 	prompts: {
 		list: () =>

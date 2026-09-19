@@ -53,12 +53,34 @@
  *
  * 实测（win32-x64）：225.4MB → 150.5MB 未压缩，tarball 47.2MB → 33.6MB。
  * 裁剪后必须跑一遍入口解析校验（见 docs 的验证记录），确认没有裁掉运行文件。
+ *
+ * ── 交叉解析模式（--target-os/--target-arch，2026-09 新增）──────────────
+ *
+ * 原模式（默认）：从项目 node_modules 收集闭包 → 只能产出本机平台归档，
+ * 因此 CI 需要 5 个原生 runner + post-release-sidecars 补 2 个平台。
+ *
+ * 新模式（--target-os=<os> --target-arch=<arch>）：从 package-lock.json 遍历闭包
+ * （dshRuntimeLockClosure.mjs），把每个包的 lock 精确版本写进临时 package.json，
+ * 在隔离目录 `npm install --os --cpu --libc --ignore-scripts` 交叉解析出目标平台
+ * 完整树，再走与原模式相同的闭包收集/裁剪/打包。
+ *
+ * 可行性根因：所有原生依赖都以 prebuild 分发（node-pty tarball 自带全平台
+ * prebuilds；koffi=@koromix/koffi-*、sharp=@img/sharp-*、rg=@vscode/ripgrep-*），
+ * 无一需要本机编译；2026-09-18 实证（WSL 真机 boot 通过）。
+ *
+ * 两个必须的防御：
+ * 1. **libc 显式化**：linux 平台包（@img/sharp-linux-x64 等）声明 libc:["glibc"]，
+ *    npm 在非 Linux 宿主上检测不到 libc 会把它们静默过滤掉（只剩 wasm32 兜底）。
+ *    所以 linux 目标缺省强制 glibc，并在归档校验里断言原生包在位（check-dsh-asar）。
+ * 2. **版本钉死**：临时 package.json 用 lock 精确版本，防 ^0.1.5-rc.1 对 prerelease
+ *    的 caret 语义漂移到 rc.2（实测 230/240 包漂移）。
  */
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { copyFileSync, createReadStream, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, truncateSync, writeFileSync } from "node:fs";
+import { copyFileSync, createReadStream, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, truncateSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, relative, resolve, sep } from "node:path";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import * as tar from "tar";
 // 裁剪规则独立成模块：CLI 主流程不便 import（会触发打包），测试直接引用规则单测。
@@ -69,6 +91,13 @@ import {
 	isSrcPrunable,
 	runtimeEntryResolvableOnDisk,
 } from "./runtime-prune-rules.mjs";
+import {
+	collectLockClosure,
+	isPlatformGatedEntry,
+	npmPlatformArgs,
+	normalizeTarget,
+	pinnedDependenciesFromClosure,
+} from "./dshRuntimeLockClosure.mjs";
 
 const require = createRequire(import.meta.url);
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -78,11 +107,36 @@ const ARCHIVE_ROOT = "dsh-runtime";
 /** 随包资源目录名（与 main/dsh/runtime/DshRuntimeManager.DSH_BUNDLED_RUNTIME_DIRNAME 一致）。 */
 const DSH_BUNDLED_DIRNAME = "dsh-runtime";
 
-const PLATFORM = process.platform;
-const ARCH = process.arch;
+const PLATFORM_NATIVE = process.platform;
+const ARCH_NATIVE = process.arch;
 
 const argv = process.argv.slice(2);
 const dryRun = argv.includes("--dry-run");
+
+/** 读 CLI 选项值（--name value 形式；缺省返回 undefined）。 */
+function argValue(name) {
+	const index = argv.indexOf(name);
+	return index >= 0 ? argv[index + 1] : undefined;
+}
+
+/**
+ * 交叉解析模式：--target-os/--target-arch 任一出现即启用。
+ * 两个参数必须成对出现（只给一个 platform 就是语义不完整，直接报错）。
+ */
+const targetRequested = argv.includes("--target-os") || argv.includes("--target-arch");
+let target = null;
+if (targetRequested) {
+	const normalized = normalizeTarget({
+		os: argValue("--target-os"),
+		arch: argValue("--target-arch"),
+		libc: argValue("--target-libc"),
+	});
+	if (normalized.error) {
+		console.error(`[pack-dsh-runtime] ${normalized.error}`);
+		process.exit(1);
+	}
+	target = normalized;
+}
 /**
  * 官方默认 lite：不把 runtime 打进 extraResources。
  * --full 才拷进随包目录；--lite 显式传入时与默认等价（兼容旧脚本/文档）。
@@ -165,6 +219,14 @@ function collectClosure(seedDirs) {
 function packageNameOf(dir) {
 	return readPackageJson(dir)?.name;
 }
+
+/**
+ * 作用域外的种子：这两个包不在 @deepseek-ai 下，但 hostEntry 会
+ * `require.resolve` 它们（持久 pwsh 工具、用量计费插件），缺了 host 起不来。
+ * dsh-tool-pwsh-persistent 是 file: 本地包（packages/），dsh-bill 在 registry。
+ * 提前到交叉解析之前声明：lock 闭包遍历与临时 package.json 都要用它。
+ */
+const EXTRA_SEED_NAMES = ["dsh-bill", "dsh-tool-pwsh-persistent"];
 
 /**
  * 判断包目录是否为 file: 本地依赖的 symlink（npm 7+ 对 file:/workspace: 建链）。
@@ -253,17 +315,187 @@ function listFiles(dir) {
 
 const appPackage = JSON.parse(readFileSync(join(projectRoot, "package.json"), "utf8"));
 const nodeModulesRoot = join(projectRoot, "node_modules");
-const dshScopeDir = join(nodeModulesRoot, "@deepseek-ai");
 
-if (!existsSync(dshScopeDir)) {
-	console.error("[pack-dsh-runtime] node_modules/@deepseek-ai 不存在，请先 npm install");
-	process.exit(1);
+/**
+ * 归档命名与平台三元组：
+ * - 默认模式：本机平台（兼容旧行为，runtime:pack 在构建机原地产出）。
+ * - 交叉模式：--target-* 指定平台，闭包源是临时目录的 npm 交叉解析结果。
+ */
+const PLATFORM = target?.os ?? PLATFORM_NATIVE;
+const ARCH = target?.arch ?? ARCH_NATIVE;
+const LIBC = target?.libc ?? "";
+
+/**
+ * 交叉解析的隔离工作区（node_modules + 临时 package.json）。
+ * mkdtemp 保证多次运行不互相污染；失败路径里 rmSync 清理。
+ */
+let crossWorkspace = null;
+
+function cleanupCrossWorkspace() {
+	if (!crossWorkspace) return;
+	try {
+		rmSync(crossWorkspace, { recursive: true, force: true });
+	} catch {
+		// Windows 上文件可能被杀软短暂锁住；残留目录交给下次 mkdtemp 不冲突
+	}
+	crossWorkspace = null;
 }
 
-// --if-missing：tgz 已在 outDir 就跳过闭包扫描。官方默认 lite，extraResources
-// 目录只留 .gitkeep——不能再看 bundleDir/manifest.json，否则本地残留的 --full
-// 产物会被当成「已齐备」直接打进安装包。
-// 不比对内容哈希：依赖变了需要手动删 dist-runtime/ 重打。
+/**
+ * 交叉解析出目标平台的闭包树，返回作为闭包收集源的 node_modules 根目录。
+ * 在默认模式下直接返回项目 node_modules（零行为变化）。
+ */
+function resolveClosureNodeModulesRoot() {
+	if (!target) {
+		// 默认模式保留原校验：项目 node_modules 必须先 npm install。
+		if (!existsSync(join(nodeModulesRoot, "@deepseek-ai"))) {
+			console.error("[pack-dsh-runtime] node_modules/@deepseek-ai 不存在，请先 npm install");
+			process.exit(1);
+		}
+		return nodeModulesRoot;
+	}
+
+	const lockPath = join(projectRoot, "package-lock.json");
+	if (!existsSync(lockPath)) {
+		console.error("[pack-dsh-runtime] 交叉模式需要 package-lock.json（闭包遍历与版本钉死的数据源）");
+		process.exit(1);
+	}
+	const lockPackages = JSON.parse(readFileSync(lockPath, "utf8")).packages ?? {};
+
+	/** 种子：@deepseek-ai 作用域全集 + 两个作用域外种子（与磁盘模式同一份数据源）。 */
+	const scopeNames = Object.keys(lockPackages)
+		.filter((key) => /^node_modules\/(@deepseek-ai\/[^/]+)$/.test(key))
+		.map((key) => key.slice("node_modules/".length));
+	const seedNames = [...scopeNames, ...EXTRA_SEED_NAMES];
+
+	const { keys, versions, multiVersion } = collectLockClosure(lockPackages, seedNames);
+	console.log(
+		`[pack-dsh-runtime] lock 闭包: ${keys.length} 条目 / ${versions.size} 个包名` +
+			(multiVersion.size > 0 ? `（同名多版本 ${multiVersion.size}，次要版本由 npm 嵌套落位）` : ""),
+	);
+
+	const missingSeeds = ["@deepseek-ai/dsh", "dsh-bill"].filter((name) => !versions.has(name));
+	if (missingSeeds.length > 0) {
+		console.error(`[pack-dsh-runtime] lock 里找不到种子包：${missingSeeds.join(", ")}（package.json 与 package-lock.json 不同步？先 npm install）`);
+		process.exit(1);
+	}
+	// file: 本地包（dsh-tool-pwsh-persistent）在 lock 里是 link 条目，没有版本号；
+	// 只要仓库内 packages/ 目录存在且已构建（入口预检会验）就算种子在位。
+	for (const name of EXTRA_SEED_NAMES) {
+		const entry = lockPackages[`node_modules/${name}`];
+		if (entry?.link && typeof entry.resolved === "string") {
+			if (!existsSync(join(projectRoot, entry.resolved, "package.json"))) {
+				console.error(`[pack-dsh-runtime] file: 本地包目录缺失：${entry.resolved}`);
+				process.exit(1);
+			}
+		}
+	}
+
+	// 临时 package.json：闭包内每个包用 lock 精确版本钉死，从根上防 ^prerelease 漂移。
+	// 平台专有包（os/cpu/libc 门控，如 @img/sharp-*、@koromix/koffi-*、
+	// @deepseek-ai/node-addon-system-*）必须写进 optionalDependencies：它们在
+	// lock/registry 里就是 optional，写成 dependencies 会让 npm 在非目标平台报
+	// notsup 硬错误退出（2026-09-18 实证），optional 下则正确跳过并留给目标平台。
+	const deps = pinnedDependenciesFromClosure(versions);
+	const optionalDeps = {};
+	for (const key of keys) {
+		const entry = lockPackages[key];
+		if (!isPlatformGatedEntry(entry)) continue;
+		// 提取包名：key 形如 node_modules/<scope>/<name> 或 …/pkg/node_modules/<name>。
+		// 注意用 /node_modules/ 带前导斜杠的分隔符只能命中嵌套段；顶层 key 以
+		// node_modules/ 开头（前面没有斜杠），必须单独剥前缀，否则 name 拿到的是
+		// 整条 key，versions.has 必然 false → 平台包全部漏进 dependencies（EBADPLATFORM）。
+		const name = key.replace(/^node_modules\//, "").split("/node_modules/").at(-1);
+		if (!name || !versions.has(name)) continue;
+		// 同名多版本的次要版本会被顶层版本覆盖：optional 表只留顶层版本。
+		optionalDeps[name] = versions.get(name);
+		delete deps[name];
+	}
+	// file: 本地包不在 registry，不能写版本号——必须继续走仓库内源码目录，否则
+	// npm install 直接报 No matching version。file: 相对路径以 workdir 为基准，
+	// 所以这里写成指向仓库内 packages/ 的绝对路径（跨盘/跨目录都稳）。
+	for (const name of EXTRA_SEED_NAMES) {
+		const entry = lockPackages[`node_modules/${name}`];
+		if (entry?.link && typeof entry.resolved === "string") {
+			deps[name] = `file:${resolve(join(projectRoot, entry.resolved)).split(sep).join("/")}`;
+			delete optionalDeps[name];
+		}
+	}
+
+	crossWorkspace = mkdtempSync(join(tmpdir(), "dsh-cross-"));
+	const workNodeModules = join(crossWorkspace, "node_modules");
+	const workPackageJson = {
+		name: "dsh-runtime-cross",
+		private: true,
+		version: "0.0.0",
+		dependencies: deps,
+		// 空对象在 npm 里表示「无 optional 依赖」，写出去便于诊断（直接看 workdir）。
+		optionalDependencies: Object.keys(optionalDeps).length > 0 ? optionalDeps : {},
+	};
+	writeFileSync(
+		join(crossWorkspace, "package.json"),
+		`${JSON.stringify(workPackageJson, null, 2)}\n`,
+	);
+	console.log(`[pack-dsh-runtime] 临时 package.json: ${Object.keys(deps).length} 硬依赖 + ${Object.keys(optionalDeps).length} 平台 optional`);
+
+	console.log(
+		`[pack-dsh-runtime] 交叉解析: ${target.os}-${target.arch}` +
+			(target.libc ? ` libc=${target.libc}` : "") +
+			` （${keys.length} 个 lock 条目，--ignore-scripts）`,
+	);
+	// 交叉解析只下 prebuild 与 JS，不需要任何 install 脚本；--ignore-scripts 同时
+	// 是供应链面收窄（不在用户机上跑第三方 postinstall）。
+	const npmArgs = [
+		"install", "--no-audit", "--no-fund",
+		...npmPlatformArgs(target),
+		"--cache", resolve(join(projectRoot, "node_modules/.cache/dsh-cross-npm")),
+		// 优先本地缓存/离线；首次运行仍会真实下载，但不会跳过 registry 校验。
+		"--prefer-offline",
+	];
+	try {
+		execFileSync("npm", npmArgs, { cwd: crossWorkspace, stdio: "inherit", shell: process.platform === "win32" });
+	} catch (error) {
+		cleanupCrossWorkspace();
+		console.error(`[pack-dsh-runtime] 交叉解析失败（npm install ${target.os}-${target.arch}）：${error.message}`);
+		process.exit(1);
+	}
+	if (!existsSync(workNodeModules)) {
+		cleanupCrossWorkspace();
+		console.error("[pack-dsh-runtime] 交叉解析未产出 node_modules（npm install 静默失败）");
+		process.exit(1);
+	}
+	return workNodeModules;
+}
+
+/** 成功路径的收尾：打包完成后清交叉工作区（失败路径在各 exit 前已清）。 */
+process.on("exit", () => cleanupCrossWorkspace());
+// Ctrl+C / kill 也要清：mkdtemp 的临时目录带 220MB node_modules，不清会堆积。
+for (const signal of ["SIGINT", "SIGTERM"]) {
+	process.on(signal, () => {
+		cleanupCrossWorkspace();
+		process.exit(1);
+	});
+}
+
+const closureNodeModulesRoot = resolveClosureNodeModulesRoot();
+const dshScopeDir = join(closureNodeModulesRoot, "@deepseek-ai");
+if (!existsSync(dshScopeDir)) {
+	cleanupCrossWorkspace();
+	console.error(`[pack-dsh-runtime] 闭包源里没有 @deepseek-ai 作用域：${dshScopeDir}`);
+	process.exit(1);
+}
+// runtimeVersion 取 dsh 包版本。交叉模式下临时 package.json 用的是 lock 精确版本，
+// 安装结果与磁盘模式同构，两种模式都从装好的 dsh/package.json 读。
+const dshVersion = readPackageJson(join(dshScopeDir, "dsh")).version;
+const appVersion = appPackage.version;
+
+/**
+ * --if-missing：tgz 已在 outDir 就跳过闭包扫描。官方默认 lite，extraResources
+ * 目录只留 .gitkeep——不能再看 bundleDir/manifest.json，否则本地残留的 --full
+ * 产物会被当成「已齐备」直接打进安装包。
+ * 不比对内容哈希：依赖变了需要手动删 dist-runtime/ 重打。
+ * 放在交叉解析之后：命中跳过时也要先把交叉工作区清掉再退出。
+ */
 if (ifMissing) {
 	const archiveName = `dsh-runtime-${PLATFORM}-${ARCH}.tgz`;
 	const archivePath = join(outDir, archiveName);
@@ -273,6 +505,7 @@ if (ifMissing) {
 		// lite：只看 outDir 的 tgz+索引。跳过重打也必须清 extraResources，
 		// 否则 dist:fast 会把上次 --full 残留打进安装包。
 		if (existsSync(archivePath) && existsSync(indexPath)) {
+			cleanupCrossWorkspace();
 			ensureLiteExtraResources(bundleDir);
 			console.log("[pack-dsh-runtime] --if-missing：归档与索引已存在，跳过（已清 extraResources）");
 			process.exit(0);
@@ -281,24 +514,18 @@ if (ifMissing) {
 		existsSync(join(bundleDir, "manifest.json")) &&
 		existsSync(join(bundleDir, archiveName))
 	) {
+		cleanupCrossWorkspace();
 		console.log("[pack-dsh-runtime] --if-missing：随包 runtime 已存在，跳过");
 		process.exit(0);
 	}
 }
-
-/**
- * 作用域外的种子：这两个包不在 @deepseek-ai 下，但 hostEntry 会
- * `require.resolve` 它们（持久 pwsh 工具、用量计费插件），缺了 host 起不来。
- * 它们同样在下面的「随 app 分发则跳过」规则里被豁免——依赖分区后 app 不再带它们。
- */
-const EXTRA_SEED_NAMES = ["dsh-bill", "dsh-tool-pwsh-persistent"];
 
 const seedDirs = [
 	...readdirSync(dshScopeDir)
 		.filter((name) => !isNpmHashedLeftoverDir(name))
 		.map((name) => join(dshScopeDir, name))
 		.filter((dir) => existsSync(join(dir, "package.json"))),
-	...EXTRA_SEED_NAMES.map((name) => join(nodeModulesRoot, name)).filter((dir) =>
+	...EXTRA_SEED_NAMES.map((name) => join(closureNodeModulesRoot, name)).filter((dir) =>
 		existsSync(join(dir, "package.json")),
 	),
 ];
@@ -338,16 +565,14 @@ for (const dir of closure) {
 			}
 			const rel = relative(base, full).split(sep).join("/");
 			const size = statSync(full).size;
-			if (isExcluded(rel, base, srcPrunable)) prunedBytes += size;
-			else files.push({ abs: full, relInClosure: relative(nodeModulesRoot, full) });
+			if (isExcluded(rel, base, srcPrunable, PLATFORM)) prunedBytes += size;
+			else files.push({ abs: full, relInClosure: relative(closureNodeModulesRoot, full) });
 		}
 	};
 	walk(dir, dir);
 }
 
 const totalBytes = files.reduce((sum, f) => sum + statSync(f.abs).size, 0);
-const dshVersion = readPackageJson(join(dshScopeDir, "dsh")).version;
-const appVersion = appPackage.version;
 
 const manifest = {
 	schemaVersion: 1,
@@ -375,7 +600,7 @@ const manifest = {
 };
 
 const mb = (bytes) => `${(bytes / 1024 / 1024).toFixed(1)}MB`;
-console.log("[pack-dsh-runtime] 平台:", `${PLATFORM}-${ARCH}`);
+console.log("[pack-dsh-runtime] 平台:", `${PLATFORM}-${ARCH}${LIBC ? `-${LIBC}` : ""}${target ? "（交叉解析）" : "（本机）"}`);
 console.log("[pack-dsh-runtime] 闭包包数:", closure.length);
 console.log("[pack-dsh-runtime] 文件数:", files.length);
 console.log("[pack-dsh-runtime] 归档前体积:", mb(totalBytes), `(已裁剪 ${mb(prunedBytes)})`);
@@ -403,7 +628,9 @@ const archivePath = join(outDir, archiveName);
  *   相对化，解出来会变成 `Users/14012/...` 这种盘符外的完整路径。
  */
 const MANIFEST_TMP_NAME = ".dsh-runtime-manifest.json";
-const manifestTmp = join(nodeModulesRoot, MANIFEST_TMP_NAME);
+// 归档临时 manifest 写进闭包源 node_modules（与 tar 的 cwd 同根）：默认模式是项目
+// node_modules，交叉模式是临时工作区——后者随 cleanupCrossWorkspace 一起回收。
+const manifestTmp = join(closureNodeModulesRoot, MANIFEST_TMP_NAME);
 writeFileSync(manifestTmp, JSON.stringify(manifest, null, 2));
 
 try {
@@ -411,7 +638,7 @@ try {
 		{
 			gzip: { level: 9 },
 			file: archivePath,
-			cwd: nodeModulesRoot,
+			cwd: closureNodeModulesRoot,
 			portable: true,
 			onWriteEntry: (entry) => {
 				// 条目统一带 "./" 传入（规避 tar 对 "@" 开头路径的特殊解释——

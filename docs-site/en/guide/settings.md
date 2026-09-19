@@ -1,3 +1,8 @@
+---
+title: Settings & Skills | Visual pi configuration in PiDeck
+description: "Configure pi visually in PiDeck: models.json / auth.json editors, provider and model management, skills and extensions, proxy settings — no more hand-editing JSON in your pi desktop."
+---
+
 # Settings & Skills
 
 PiDeck provides visual configuration management for all its settings.

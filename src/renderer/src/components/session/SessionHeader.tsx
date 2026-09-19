@@ -57,7 +57,7 @@ export type SessionHeaderProps = LegacySessionHeaderProps | ModernSessionHeaderP
 
 /**
  * 渲染会话状态徽章（+ 分屏身份标题）。
- * 会话运行控制（停止/重启）已迁入 Tab 下拉（SessionTabsBar 的 canStopCurrent 链路），
+ * 会话运行控制（启动/重启/停止回答/重载）已迁入 Tab 下拉（SessionTabsBar 的 runControl 链路），
  * 此组件不再承载操作菜单；embedded 模式供 Tab 栏 actions 复用；普通模式保留
  * 分屏 pane 外壳（paneTitle + 退出分屏）。
  */

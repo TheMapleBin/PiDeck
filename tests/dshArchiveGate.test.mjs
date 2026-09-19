@@ -65,12 +65,22 @@ async function buildFixture({ withLib }) {
 		writeFileSync(join(dir, "package.json"), JSON.stringify({ name, version: "1.0.0", ...extra }));
 	};
 	for (const name of [...REQUIRED, ...ENTRY_PACKAGES]) writePkg(name);
+	// 交叉打包引入的原生资产门禁（406e78de）：目标平台的 sharp/koffi/rg 平台包与
+	// node-pty 的 prebuilds/<platform>-<arch>/ 必须在位，最小归档也跟着摆齐。
+	const target = `${process.platform}-${process.arch}`;
+	for (const name of [`@img/sharp-${target}`, `@koromix/koffi-${target}`, `@vscode/ripgrep-${target}`]) {
+		writePkg(name);
+	}
 	// 闸门钉死的关键文件（koffi 的 src 入口 + node-pty 存在性）
 	const koffiDir = join(src, "node_modules", "koffi", "src", "koffi");
 	mkdirSync(koffiDir, { recursive: true });
 	writeFileSync(join(koffiDir, "index.cjs"), "module.exports = {};");
 	mkdirSync(join(src, "node_modules", "node-pty"), { recursive: true });
 	writeFileSync(join(src, "node_modules", "node-pty", "package.json"), JSON.stringify({ name: "node-pty" }));
+	// node-pty 的平台 prebuild 目录（win32 上 conpty.dll 是硬运行时依赖）
+	const ptyPrebuildDir = join(src, "node_modules", "node-pty", "prebuilds", target);
+	mkdirSync(ptyPrebuildDir, { recursive: true });
+	writeFileSync(join(ptyPrebuildDir, "pty.node"), "");
 
 	// 事故包：exports 同时声明 "." → lib/index.js 与 "./package.json"（元数据导出）
 	const culprit = join(src, "node_modules", "dsh-tool-pwsh-persistent");

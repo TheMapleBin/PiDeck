@@ -143,7 +143,12 @@ export function AppUpdateCard(props: AppUpdateCardProps) {
 			{download && download.phase === "error" && (
 				<div className="mt-2 flex flex-col gap-1">
 					<p className="text-caption text-destructive">
-						{t("settings.updateErrorDetail", { error: download.error ?? t("common.unknown") })}
+						{t(
+							download.errorKind === "download"
+								? "update.downloadFailedDetail"
+								: "update.checkFailedDetail",
+							{ error: download.error ?? t("common.unknown") },
+						)}
 					</p>
 					{props.updateSource === "github" && (
 						<p className="text-caption text-muted-foreground">{t("settings.updateGithubFailHint")}</p>

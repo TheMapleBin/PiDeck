@@ -1319,6 +1319,122 @@ select:focus-visible {
   color: var(--color-text-secondary);
 }
 
+/* ── pi 环境引导（Node→npm→pi 三步）─────────────────── */
+/* 置顶提示卡：已装 pi 直接配路径，视觉上用 accent 软底提醒但不抢错误/成功的语义色 */
+.env-already-installed-card {
+  border-color: color-mix(
+    in srgb,
+    var(--color-accent) 20%,
+    var(--color-border-subtle)
+  );
+  background: var(--color-accent-soft);
+}
+
+/* 引导面板容器 */
+.env-guide {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.env-guide > strong {
+  font-size: var(--font-size-control);
+}
+
+/* 单个步骤：完成态收窄为状态行；活跃态展示操作；未解锁态淡化 */
+.env-guide-step {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-panel);
+}
+.env-guide-step.locked {
+  opacity: 0.55;
+}
+.env-guide-step.done {
+  border-color: color-mix(
+    in srgb,
+    var(--color-accent) 24%,
+    var(--color-border-subtle)
+  );
+}
+.env-guide-step-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.env-guide-step-mark {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-pill);
+  background: var(--color-bg-muted);
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-micro);
+  font-weight: 700;
+}
+.env-guide-step.done .env-guide-step-mark {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  color: var(--color-text-inverse);
+}
+.env-guide-step-head b {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+.env-guide-step-state {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-secondary);
+}
+.env-guide-step-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.env-guide-step-body > small {
+  color: var(--color-text-secondary);
+  line-height: 1.55;
+  font-size: var(--font-size-caption);
+}
+.env-guide-step-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 引导内联结果（成功/失败摘要） */
+.env-guide-result {
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-caption);
+  line-height: 1.5;
+  word-break: break-word;
+}
+.env-guide-result.success {
+  border: 1px solid color-mix(in srgb, var(--color-accent) 24%, var(--color-border-subtle));
+  background: var(--color-accent-soft);
+  color: var(--color-text-primary);
+}
+.env-guide-result.error {
+  border: 1px solid color-mix(in srgb, var(--color-danger) 32%, var(--color-border-subtle));
+  background: color-mix(in srgb, var(--color-danger) 8%, transparent);
+  color: var(--color-danger);
+}
+
 .wechat-shell {
   position: relative;
   --list-width: 190px;

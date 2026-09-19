@@ -117,7 +117,17 @@ export type SessionRunState =
 	| "detached"
 	| "unstarted";
 
-export type SessionRunAction = "start" | "stop" | "restart" | "reload";
+/**
+ * 会话运行控制动作（语义边界，别混用）：
+ * - `start` / `restart`：启动或重建进程（live 时即「杀掉重启」，会中断当前回答）；
+ * - `abort`：只中断当前正在执行的回合，进程与绑定保留、可立即继续对话
+ *   （与输入框的「停止」按钮同义）；
+ * - `reload`：无进程时从磁盘刷新消息文件。
+ *
+ * 「关闭 Agent」（杀进程 + 解绑，会话记录与历史消息保留）不是运行控制动作：
+ * 它走独立的 closeAgent 链路，见 App 的 closeAgent / requestCloseAgent。
+ */
+export type SessionRunAction = "start" | "restart" | "reload" | "abort";
 
 export interface SessionRunCapabilities {
 	/** 归一化后的运行状态（UI 可直接用于文案/徽章） */
@@ -127,7 +137,8 @@ export interface SessionRunCapabilities {
 	/** 「主控按钮」语义：unstarted/detached/error/closed → start；live → restart */
 	primaryAction: "start" | "restart";
 	canStart: boolean;
-	canStop: boolean;
+	/** 中断当前回合（abort）：仅回合正在执行且无互斥操作时可用 */
+	canAbort: boolean;
 	canRestart: boolean;
 	canReload: boolean;
 	/** 主控动作会杀掉正在执行的对话，UI 必须先确认 */
@@ -176,12 +187,12 @@ export function sessionRunCapabilities(input: {
 	const isTerminal = state === "error" || state === "closed";
 	const needsStart = state === "unstarted" || state === "detached" || isTerminal;
 
-	// starting 期间进程已 fork 但尚未握手完成：启动/重启会造成竞争，必须挡住；
-	// 但「停止」保留可用——进程卡在启动阶段时用户需要一个手动中断的出口。
+	// starting 期间进程已 fork 但尚未握手完成：启动/重启会造成竞争，必须挡住。
 	const canStart = state !== "starting" && !busy && (needsStart || isLive);
-	// 停止对 live（含 starting）生效，用于中断卡在启动阶段的进程；
-	// 终态没有可停的进程，改由「启动」重建（见 canStart 分支）。
-	const canStop = isLive && !busy;
+	// 「停止回答」只中断正在跑的那个回合（abort）：starting 阶段 RPC 尚未握手、
+	// 没有可中断的回合，卡启动/卡回答的出口是「关闭 Agent」（杀进程 + 解绑，
+	// 不属于本策略）；idle/终态没有在跑的回合，同样不该给出「停止回答」。
+	const canAbort = state === "running" && !busy;
 	// 重载是从磁盘刷新消息文件：live 时内存里有流式消息，强刷会覆盖，
 	// 因此只对「无进程」状态开放（终态/未启动/已解绑）。
 	const canReload = !isLive && !busy;
@@ -191,7 +202,7 @@ export function sessionRunCapabilities(input: {
 		hasBinding,
 		primaryAction: needsStart ? "start" : "restart",
 		canStart,
-		canStop,
+		canAbort,
 		canRestart: canStart && !input.hasInFlightQueuedPrompt,
 		canReload,
 		// 主控按钮在 live 态是「重启进程」：会中断当前回答，必须先确认。
@@ -209,8 +220,8 @@ export function canRunSessionAction(
 		case "start":
 		case "restart":
 			return capabilities.canRestart;
-		case "stop":
-			return capabilities.canStop;
+		case "abort":
+			return capabilities.canAbort;
 		case "reload":
 			return capabilities.canReload;
 	}

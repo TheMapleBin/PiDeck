@@ -16,6 +16,7 @@ import {
   type WslPiProbeResult,
 } from "../wsl/wslPiProbe";
 import { decodeWslOutput } from "../wsl/wslExe";
+import { buildPiProxyEnvPatch } from "../sessions/sessionProxyPolicy";
 
 /**
  * 进程级 WSL pi 探测缓存。
@@ -306,6 +307,10 @@ export class PiLocator {
         : []),
       // Linux 常见全局 bin，同样覆盖“桌面启动 PATH 不完整”的场景。
       ...(process.platform === "linux" ? ["/usr/local/bin", "/usr/bin"] : []),
+      // PiDeck 自带引导装的便携 Node/pi 全局目录（<userData>/pi-runtime）：
+      // 引导安装不写系统 PATH，装完 pi.cmd/pi 可执行落在这两个目录，必须自行扫描。
+      join(app.getPath("userData"), "pi-runtime", "node"),
+      join(app.getPath("userData"), "pi-runtime", "pi-global"),
     ];
 
     // These directories only locate an existing pi installation; pi itself is not bundled yet.
@@ -500,22 +505,10 @@ export class PiLocator {
     env: NodeJS.ProcessEnv,
     settings?: PiProxySettings,
   ) {
-    if (!settings?.piProxyEnabled) return env;
-    const proxyUrl = settings.piProxyUrl.trim();
-    if (!proxyUrl) return env;
-    const bypass = settings.piProxyBypass.trim();
-
-    // 这里只给 pi agent 子进程注入标准代理环境变量，避免误影响 desktop 自身的更新、外链和配置管理请求。
-    return {
-      ...env,
-      HTTP_PROXY: proxyUrl,
-      HTTPS_PROXY: proxyUrl,
-      ALL_PROXY: proxyUrl,
-      http_proxy: proxyUrl,
-      https_proxy: proxyUrl,
-      all_proxy: proxyUrl,
-      ...(bypass ? { NO_PROXY: bypass, no_proxy: bypass } : {}),
-    };
+    // 代理 env 的组装规则（含为什么必须带 NODE_USE_ENV_PROXY）集中在
+    // sessionProxyPolicy.buildPiProxyEnvPatch，与 DSH host 共用同一套语义，避免两处漂移。
+    const patch = buildPiProxyEnvPatch(settings);
+    return patch ? { ...env, ...patch } : env;
   }
 
   /**

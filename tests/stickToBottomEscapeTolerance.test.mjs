@@ -52,3 +52,9 @@ test("re-lock is only available from confirmed down input", () => {
     /if \(!state\.escapedFromLock && state\.isNearBottom\) \{\s*setEscapedFromLock\(false\);\s*setIsAtBottom\(true\);/,
   );
 });
+
+test("nested scroller at edge forwards wheel intent to the timeline", () => {
+  assert.match(engineSource, /const canChildScroll =/);
+  assert.match(engineSource, /applyWheelOnScroll\(scroll, deltaY\)/);
+  assert.match(engineSource, /preserveScrollPosition,/);
+});

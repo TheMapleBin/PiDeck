@@ -2,11 +2,14 @@ import { readdir, rename as fsRename, mkdir, writeFile, stat } from "node:fs/pro
 import { join, relative, dirname, resolve, sep } from "node:path";
 import { trashPath } from "./trash";
 import { parseWslUncPath } from "../wsl/WslPaths";
-import type { FileTreeNode } from "../../shared/types";
+import type { FileSearchResult, FileTreeNode } from "../../shared/types";
 import {
   DEFAULT_FILE_TREE_MAX_DEPTH,
   FILE_TREE_ABSOLUTE_MAX_DEPTH,
   FILE_TREE_MAX_DIRECTORY_ENTRIES,
+  FILE_SEARCH_MAX_RESULTS,
+  FILE_SEARCH_TIMEOUT_MS,
+  FILE_SEARCH_MAX_DIRECTORY_ENTRIES,
 } from "../../shared/fileTree";
 
 // target 是 Maven/Gradle 构建产物目录，与 build/dist 同类；不忽略会让 composer @
@@ -132,6 +135,64 @@ export class FileSystemService {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * 工作区文件名搜索（issue #215）：全盘 BFS 扫描，返回扁平命中列表，不构树。
+   * 与 listTree 的差异（为什么不能复用 readDirectory）：
+   * - 搜索必须穿透到任意深度，不能受懒加载深度/单层上限约束——大目录跳过而不是拒收；
+   * - 需要可中断：达到结果上限或超时立即返回已收集部分，用户拿到的是「够用的结果」
+   *   而不是报错（对超大 monorepo 尤其重要）。
+   * 查询按小写子串匹配；空查询由 IPC 层拦截，这里不再校验。
+   */
+  async searchNames(root: string, query: string): Promise<FileSearchResult[]> {
+    const normalizedQuery = query.trim().toLowerCase();
+    // 空查询兑底：includes("") 恒真，不清掉会返回全盘前 N 条；IPC 层已拦，这里防御直接调用方
+    if (normalizedQuery.length === 0) return [];
+    const rootResolved = resolve(root);
+    // BFS 队列：先宽后深，优先命中浅层文件；目录命中也收集（跳转到目录/在文件夹中显示都有用）。
+    const queue: string[] = [rootResolved];
+    const results: FileSearchResult[] = [];
+    // Date.now 只用来卡总耗时；单次 readdir 不单独限时（单目录失败即跳过）。
+    const deadline = Date.now() + FILE_SEARCH_TIMEOUT_MS;
+    while (queue.length > 0 && results.length < FILE_SEARCH_MAX_RESULTS && Date.now() < deadline) {
+      const current = queue.shift()!;
+      let entries;
+      try {
+        entries = await readdir(current, { withFileTypes: true });
+      } catch {
+        // 无权限/竞态删除：跳过该目录继续扫，不能让一个坏目录中断整次搜索
+        continue;
+      }
+      // 超大目录只放弃这一层，不放弃整次搜索；listTree 的整层拒绝语义在这里反而会导致大仓库搜不到东西。
+      if (entries.length > FILE_SEARCH_MAX_DIRECTORY_ENTRIES) continue;
+      const pendingDirs: string[] = [];
+      for (const entry of entries) {
+        if (results.length >= FILE_SEARCH_MAX_RESULTS) break;
+        const name = entry.name;
+        if (ignoredNames.has(name)) continue;
+        if (!name.toLowerCase().includes(normalizedQuery)) {
+          // 未命中也要入队目录继续下钻：搜索目标是「路径任意位置包含查询词的文件」
+          if (entry.isDirectory()) pendingDirs.push(join(current, name));
+          continue;
+        }
+        const absolutePath = join(current, name);
+        const type = entry.isDirectory() ? "directory" : "file";
+        // symlink 等非常规类型直接跳过：Dirent 对符号链接的 isDirectory/isFile 均为 false，
+        // 跳过既避免把链接当文件误报，也防 symlink 环导致 BFS 永不终止。
+        if (type === "file" && !entry.isFile()) continue;
+        results.push({
+          name,
+          path: absolutePath,
+          relativePath: relative(rootResolved, absolutePath).replace(/\\/g, "/"),
+          type,
+        });
+        if (entry.isDirectory()) pendingDirs.push(absolutePath);
+      }
+      // 目录统一排在文件后入队：同层先收完文件再下钻，浅层文件命中优先于深层目录
+      queue.push(...pendingDirs);
+    }
+    return results;
   }
 
   /** 删除文件或空目录；非空目录需要递归删除 */

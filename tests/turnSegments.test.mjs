@@ -385,6 +385,32 @@ test("groupToolMessages 运行中 ask_question 标记 askPending 并冻结在提
 	assert.equal(run.askWaitMs, 0);
 });
 
+test("groupToolMessages DSH 整轮多步 toolUse 中间回复保持单 run（stopReason 拆碎回合回归）", () => {
+	// 回归（2026-09-17）：DSH 投影器曾把每条 assistant/message 都标 stopReason="stop"，
+	// 而 DSH 一次 turn 的每步模型响应各落一条 assistant/message（中间步骤也带 tool-call），
+	// 导致同一 turn 的每条中间短文本被拆成独立 agent-run（头像+时间戳+「执行过程」chip 重复）。
+	// 投影器改为带 tool-call 标 toolUse 后：单 turn 内多条 toolUse 中间回复 + 末尾一条
+	// stop 最终回复应合并为一个 run；真实用户消息到来时才开启下一 run。
+	const { groupToolMessages } = loadAppUtils();
+	const user = { id: "u1", agentId: "a", role: "user", text: "修 issue", timestamp: 1 };
+	const mk = (id, text, stopReason, ts) => ({ id, agentId: "a", role: "assistant", text, stopReason, timestamp: ts });
+	const messages = [
+		user,
+		mk("a1", "我先看下代码", "toolUse", 2),
+		{ id: "t1", agentId: "a", role: "tool", text: "✓ read", timestamp: 3, meta: { toolName: "read", status: "done" } },
+		mk("a2", "找到了问题", "toolUse", 4),
+		{ id: "t2", agentId: "a", role: "tool", text: "✓ edit", timestamp: 5, meta: { toolName: "edit", status: "done" } },
+		mk("a3", "修好了，总结如下", "stop", 6),
+	];
+	const rendered = groupToolMessages(messages);
+	const runs = rendered.filter((item) => item.kind === "agent-run");
+	assert.equal(runs.length, 1, "同一 turn 的 toolUse 中间回复 + stop 收尾应为一个 run");
+	const texts = runs[0].items
+		.filter((item) => item.kind === "message")
+		.map((item) => item.message.text);
+	assert.equal(JSON.stringify(texts), JSON.stringify(["我先看下代码", "找到了问题", "修好了，总结如下"]));
+});
+
 test("groupToolMessages 非 ask 工具不计入等待；已结算等待不影响新一轮 run", () => {
 	const { groupToolMessages } = loadAppUtils();
 	const user = { id: "u1", agentId: "a", role: "user", text: "问题", timestamp: 1 };

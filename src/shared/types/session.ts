@@ -69,6 +69,18 @@ export type FileTreeNode = {
 	size?: number;
 };
 
+/**
+ * 工作区文件名搜索结果（issue #215）：扁平列表，不构树。
+ * `path` 为绝对路径，预览/打开/在文件夹中显示等复用 FileTreeNode 的下游链路；
+ * 高亮由渲染层用查询词在 name 上 indexOf 计算，主进程不冗余回传命中片段。
+ */
+export type FileSearchResult = {
+	name: string;
+	path: string;
+	relativePath: string;
+	type: "file" | "directory";
+};
+
 export type SessionSource = "pi" | "codex" | "claude" | "opencode" | "zcode" | "workbuddy" | "cursor";
 export type SessionEnvironment = "native" | "wsl";
 

@@ -1,3 +1,8 @@
+---
+title: 常见问题 FAQ | PiDeck pi desktop 桌面工作台
+description: PiDeck（pi desktop）常见问题解答：安装失败、pi 检测不到、会话无法恢复、模型配置报错、代理设置等高频问题的排查方法与解决方案。
+---
+
 # 常见问题
 
 这里整理了一些与 **PiDeck**、**pi Agent 桌面工作台**、**本地 AI 编码助手** 相关的常见问题，帮助搜索引擎和用户更快找到答案。

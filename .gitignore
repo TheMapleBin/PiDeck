@@ -90,6 +90,11 @@ beui-todo-list.tmp.json
 # 临时编辑/测试脚本
 scratch-edit-samples/
 scripts/tmp-*
+# 一次性探针/调试脚本与产物（可能含 API key、真实账号数据，绝不能进公开仓库）
+.tmp-*.cjs
+.tmp-*.mjs
+.tmp-*/
+.tmp-el-probe/
 # beUI 官方源码提取的临时对比目录（不应提交）
 .beui-official/
 

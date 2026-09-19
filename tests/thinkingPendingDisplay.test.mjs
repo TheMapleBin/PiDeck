@@ -79,10 +79,11 @@ test("契约: ComposerArea 不预先限制运行中的思考强度修改", () =>
 });
 
 test("契约: runtime 返回的思考档位用于同步 SessionRecord", () => {
-  const picker = readFileSync(
-    "src/renderer/src/components/session/ComposerPickerHost.tsx",
-    "utf8",
-  );
+  // 思考档位应用链路现由 controller 持有（选择器与 Ctrl+T 快捷键共用同一实现）
+  const picker = [
+    readFileSync("src/renderer/src/hooks/useSessionPreferenceState.ts", "utf8"),
+    readFileSync("src/renderer/src/hooks/useSessionPreferenceController.ts", "utf8"),
+  ].join("\n");
   assert.match(picker, /const appliedThinkingLevel = agentState\.thinkingLevel \?\? level/);
   assert.match(picker, /thinkingLevel: appliedThinkingLevel/);
   assert.doesNotMatch(picker, /thinkingPending|setThinkingPending/);

@@ -1,13 +1,18 @@
 {
   "schemaVersion": 1,
   "version": "1.0.0",
-  "bundleSha256": "ab9c9110e5b9cb7fa660fa1149ddbef96c9e2b4a21db57080043bc898cdd4872",
-  "fileCount": 13,
+  "bundleSha256": "a809f08d82001449a893f0b0c1e4b3ce0e8a00bdc152e56dc40e1760d013e33b",
+  "fileCount": 14,
   "files": [
     {
       "name": "pi-deck-ask-question.ts",
       "sha256": "f9f04c1255c2b89b3ca243b66cc7affc073f9c7282d71e8b404a1a4b21c9c4d2",
       "bytes": 20623
+    },
+    {
+      "name": "pi-deck-file-links.ts",
+      "sha256": "f6f83fbd80155949121519c70cee4be9f1440307edb9a7f70271d275fac3b3e6",
+      "bytes": 1929
     },
     {
       "name": "pi-deck-goal-mode.ts",
@@ -21,8 +26,8 @@
     },
     {
       "name": "pi-deck-plan-mode.ts",
-      "sha256": "5ce48c4d3d509b63e3cfe540db1f1b06b59ba2c62ee75288550067955c041a9b",
-      "bytes": 16422
+      "sha256": "af7d0e57c23d24a2c75aefe219da756a6586a352411cd6d192d63929921695ab",
+      "bytes": 17883
     },
     {
       "name": "pi-deck-request-size-recovery.ts",

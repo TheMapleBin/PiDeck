@@ -45,6 +45,9 @@ import {
 import type { FileTreeNode, Project, SessionSummary } from "../../../../shared/types";
 import { Input } from "../ui-shadcn/input";
 import { PathTooltip } from "../ui-shadcn/PathTooltip";
+import { FileSearch, Search } from "lucide-react";
+import { useFileSearch } from "../../hooks/useFileSearch";
+import { FileSearchResults } from "./FileSearchResults";
 
 // Button 收口状态（P0 UI 统一）：抽屉头部/文件工具行图标按钮已换 shadcn Button（ghost + 原 tailwind class 保留）。
 // 保留原生 button（内容排版/折叠区块语义 + 自定义 CSS 驱动，P2 CSS 收口时迁移）：
@@ -122,6 +125,7 @@ export function DrawerContent(props: {
 			)}
 			{props.panel === "files" && (
 				<FilesPanel
+					projectId={props.project?.id}
 					files={props.files}
 					expandedDirs={props.expandedDirs}
 					onToggleDirectory={props.onToggleDirectory}
@@ -153,6 +157,8 @@ export function DrawerContent(props: {
 }
 
 function FilesPanel(props: {
+	/** 搜索用项目 id：未选中项目时搜索入口不渲染 */
+	projectId?: string;
 	files: FileTreeNode[];
 	expandedDirs: Set<string>;
 	onToggleDirectory: (path: string) => void;
@@ -195,6 +201,14 @@ function FilesPanel(props: {
 	}, [sortDirection]);
 	// 折叠中间包开关：IDEA 式把单子目录链合并成点分节点，深包结构一行展示。
 	const [compactPackages, setCompactPackages] = useAtom(compactMiddlePackagesAtom);
+	// 文件名搜索（issue #215）：状态域在 hook，面板只转发输入与关闭
+	const fileSearch = useFileSearch({ projectId: props.projectId });
+	const [searchOpen, setSearchOpen] = useState(false);
+	// 关闭时同步清空查询词：退出搜索态必须回到完整文件树，且避免残留查询触发下一次挂载时的扫描
+	const closeSearch = useCallback(() => {
+		setSearchOpen(false);
+		fileSearch.clearSearch();
+	}, [fileSearch]);
 	// 排序是纯展示层变换：不改变 props.files 引用，只影响渲染次序
 	const sortedFiles = useMemo(
 		() => sortFileNodes(props.files, sortMode, sortDirection),
@@ -286,6 +300,26 @@ function FilesPanel(props: {
 					>
 						<FolderTree size={13} aria-hidden="true" />
 					</Button>
+					{/* 文件名搜索入口（issue #215）：打开后用结果列表替换文件树 */}
+					{props.projectId && (
+						<Button
+							type="button"
+							variant="ghost"
+							size="icon-sm"
+							className={cn(
+								"icon-only inline-grid size-6 place-items-center rounded-md",
+								searchOpen
+									? "bg-accent text-foreground"
+									: "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+							)}
+							onClick={() => (searchOpen ? closeSearch() : setSearchOpen(true))}
+							title={t("drawer.fileSearch")}
+							aria-label={t("drawer.fileSearch")}
+							aria-pressed={searchOpen}
+						>
+							<Search size={13} aria-hidden="true" />
+						</Button>
+					)}
 					{props.onOpenFolder && (
 						<Button type="button" variant="ghost" size="icon-sm" className="icon-only inline-grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground" onClick={props.onOpenFolder} title={t("drawer.openFolder")} aria-label={t("drawer.openFolder")}>
 							<Folder size={13} />
@@ -319,7 +353,18 @@ function FilesPanel(props: {
 					)}
 				</div>
 			</div>
-			{displayFiles.map((node) => (
+			{searchOpen ? (
+				<FileSearchResults
+					query={fileSearch.query}
+					onQueryChange={fileSearch.setQuery}
+					results={fileSearch.results}
+					isSearching={fileSearch.isSearching}
+					onViewFile={props.onViewFile}
+					onFileContextMenu={props.onFileContextMenu}
+					onClear={closeSearch}
+				/>
+			) : (
+				displayFiles.map((node) => (
 				<FileNode
 					key={node.path}
 					node={node}
@@ -333,7 +378,8 @@ function FilesPanel(props: {
 				dragOverDir={dragOverDir}
 					onDragOverDirChange={setDragOverDir}
 				/>
-			))}
+				))
+			)}
 		</div>
 	);
 }
