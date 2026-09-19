@@ -270,7 +270,9 @@ export function parseRichInputChips(
 
 	// &session：逐个 & 起点匹配，命中后把 lastIndex 推到 chip 末尾，
 	// 避免旧版 (&[^\n]+) 贪婪吃掉整行导致一行只能出一个 session chip。
-	const ampStartRe = /(?<![:/.#!~?=&])&/gu;
+	// && / &> 等 Shell 控制符不是会话引用；时间线缺少白名单时若把它们回退成 session
+	// chip，会在用户发出命令后把每个 && 渲染成一枚“乱码”徽标。
+	const ampStartRe = /(?<![:/.#!~?=&])&(?![&|;>])/gu;
 	while ((m = ampStartRe.exec(text)) !== null) {
 		const start = m.index;
 		const captured = text.slice(start + 1);
