@@ -94,6 +94,9 @@ export class DshAgentManager implements SessionAgentGateway {
 	private muxAbort?: AbortController;
 	private muxPump?: Promise<void>;
 	private muxFirstSubscription = true;
+	/** Host 级投影控制流（session/control）泵：投影变更广播的唯一来源。 */
+	private controlAbort?: AbortController;
+	private controlPump?: Promise<void>;
 	/** 0.1.5：每会话 session/follow 泵（journal 事件流；取代旧聚合 mux 的会话事件）。
 	 *  共享 mux（$events）只剩审批/提问瀑布；journal 事件按会话各开一条。 */
 	private readonly followPumps = new Map<string, { controller: AbortController; promise: Promise<void> }>();
@@ -1686,9 +1689,17 @@ export class DshAgentManager implements SessionAgentGateway {
 	}
 
 	/**
-	 * mux session/projection 帧 → runtime 投影缓存（上下文圆环/会话统计数据源）。
-	 * 只消费本项目消费的投影单元（contextPressure/contextBreakdown/tokenUsage/sessionStats），
-	 * 其余键忽略——渲染层队列/后台任务展示（session/queue、session/jobs）如需接入，在此扩展。
+	 * 投影帧 → runtime 投影缓存（上下文圆环/会话统计/待办的数据源）。
+	 *
+	 * 帧有三个来源，都汇到这一个入口：
+	 * - `session/control` 的 `{type:'projection', sessionId, key, value, seq}`
+	 *   （0.1.5 唯一实时来源，host 的 sessionProjections.onChanged 原样广播）；
+	 * - `session/follow` snapshot 里的 `projections`；
+	 * - 投影 baseline（`applyProjectionBaseline` 逐 key 拆开复用本方法）。
+	 *
+	 * 只消费本项目消费的投影单元（contextPressure/contextBreakdown/tokenUsage/
+	 * sessionStats/todos），其余键忽略——渲染层队列/后台任务展示（session/queue、
+	 * session/jobs）如需接入，在此扩展。
 	 * 帧的 value 是 host 按 onChanged 原样下发的单元值本体（无 {key: value} 包装）；
 	 * 解析器（parse*Projection）统一兼容包装形（attach projections.values）与单元值形（帧）。
 	 */
@@ -1754,20 +1765,31 @@ export class DshAgentManager implements SessionAgentGateway {
 	}
 
 	/**
-	 * 消费 `session.history` 尾页携带的 projections baseline（官方 ProjectionValueStore
-	 * 播种语义）：attach/restart/重连补帧/崩溃恢复都拉同一尾页，baseline 是底层完整折叠，
-	 * 不受 200 条事件窗口截断影响。与 mux 实时帧共用 acceptsProjectionFrame 的
-	 * higher-seq-wins，历史基线晚于实时帧到达时会被拒绝（不回退）。
+	 * 消费投影 baseline（`{asOfSeq, values}` 块）——两个来源共用同一入口：
+	 * - `session.history` 尾页的 `projections`（attach/restart/重连补帧/崩溃恢复都拉
+	 *   同一尾页，是底层完整折叠，不受 200 条事件窗口截断影响）；
+	 * - `session/control` 首帧 `{type:'baseline', value:{projections}}` 里每会话一块
+	 *   （host 重连后重发，天然完成投影补齐）。
+	 *
+	 * 逐 key 判断是否存在：缺 key 的不动（保留现值），避免用 baseline 的“缺省”
+	 * 把已到达的实时值抹掉。与实时帧共用 acceptsProjectionFrame 的 higher-seq-wins，
+	 * 基线晚于实时帧到达时会被拒绝（不回退）。
 	 */
+	private applyProjectionBaseline(runtime: DshAgentRuntime, block: unknown): void {
+		if (block === null || typeof block !== "object") return;
+		const record = block as { asOfSeq?: unknown; values?: unknown };
+		if (record.values === null || typeof record.values !== "object") return;
+		const values = record.values as Record<string, unknown>;
+		const asOfSeq = typeof record.asOfSeq === "number" && Number.isSafeInteger(record.asOfSeq) && record.asOfSeq >= -1 ? record.asOfSeq : undefined;
+		for (const key of DSH_PROJECTION_KEYS) {
+			if (!Object.prototype.hasOwnProperty.call(values, key)) continue;
+			this.applyProjectionFrame(runtime, { key, value: values[key], seq: asOfSeq });
+		}
+	}
+
+	/** `session.history` 尾页 projections baseline 入口（语义见 applyProjectionBaseline）。 */
 	private applyHistoryProjectionBaseline(runtime: DshAgentRuntime, projections: unknown): void {
-		if (projections === null || typeof projections !== "object") return;
-		const block = projections as { asOfSeq?: unknown; values?: unknown };
-		const asOfSeq = typeof block.asOfSeq === "number" && Number.isSafeInteger(block.asOfSeq) && block.asOfSeq >= -1 ? block.asOfSeq : undefined;
-		const values = block.values !== null && typeof block.values === "object" ? (block.values as Record<string, unknown>) : undefined;
-		const parsed = parseDshTodoList(values?.todos);
-		if (parsed === undefined) return;
-		if (asOfSeq !== undefined && !this.acceptsProjectionFrame(runtime, "todos", asOfSeq)) return;
-		runtime.todos = parsed;
+		this.applyProjectionBaseline(runtime, projections);
 	}
 
 	private applyControl(runtime: DshAgentRuntime, next: DshControlState): void {
@@ -1927,14 +1949,63 @@ export class DshAgentManager implements SessionAgentGateway {
 		this.muxAbort = undefined;
 		this.muxPump = undefined;
 		this.muxFirstSubscription = true;
+		this.controlAbort?.abort();
+		this.controlAbort = undefined;
+		this.controlPump = undefined;
 		for (const pump of this.followPumps.values()) pump.controller.abort();
 		this.followPumps.clear();
 	}
 
 	/**
-	 * 确保进程级共享 mux 在跑。host 的 events.mux 是全会话聚合流：
-	 * 每个 runtime 再开一条会互相打断，第二个会话 create/attach 失败。
-	 * 断连自愈仍按指数退避重连；重连后给每个仍活着的 runtime 补帧。
+	 * 确保 Host 级投影控制流（session/control）在跑。
+	 *
+	 * 0.1.5 把旧 events.mux 的「投影变更广播」放在这条流上：session/follow 的
+	 * snapshot 只在 attach 那一刻带一次投影基线，之后 sessionStats / tokenUsage /
+	 * contextPressure / contextBreakdown / todos 的每次变更都只经
+	 * sessionProjections.onChanged → session/control 下发。不订阅这条流，
+	 * runtime 投影就永远停在 attach 初值（新建会话更是全空），
+	 * deriveSessionStatsFallback 顶上 ⇒ 输入框底下只剩「N 轮 · M 步」，
+	 * LLM/工具墙钟、平均首字、tok/s、累计 token、缓存命中率全部缺失。
+	 *
+	 * 与 mux 同款断连退避；重连后 host 重发 baseline，天然完成投影补齐
+	 * （baseline 走 higher-seq-wins，不会把已到达的新值打回旧值）。
+	 */
+	private startControlPump(): void {
+		if (this.controlPump && this.controlAbort && !this.controlAbort.signal.aborted) return;
+		const controller = new AbortController();
+		this.controlAbort = controller;
+		this.controlPump = (async () => {
+			let backoffMs = 250;
+			while (!controller.signal.aborted) {
+				if (!this.dshHost.isHostProcessRunning() || !this.dshHost.isHostReady()) {
+					await delay(backoffMs, controller.signal);
+					backoffMs = Math.min(backoffMs * 2, 2000);
+					continue;
+				}
+				try {
+					const client = this.requireClient();
+					for await (const frame of client.sessionControl(controller.signal)) {
+						backoffMs = 250;
+						this.dispatchMuxFrame(frame);
+					}
+				} catch {
+					// 流错误（host 崩溃 abortAllPending）或 host 未启动：退避重连。
+				}
+				if (controller.signal.aborted) break;
+				await delay(backoffMs, controller.signal);
+				backoffMs = Math.min(backoffMs * 2, 2000);
+			}
+		})().catch((error) => {
+			if (controller.signal.aborted) return;
+			console.error("[dsh-agent] control pump error:", error);
+		});
+	}
+
+	/**
+	 * 确保进程级共享 mux 在跑。0.1.5 后 events.mux 已不存在：会话 journal 走
+	 * 每会话 follow 泵，审批/提问瀑布走 $events，投影广播走 session/control。
+	 * 三者都是进程级共享流（每个 runtime 再开一条会互相打断，第二个会话
+	 * create/attach 失败）；断连自愈按指数退避重连。
 	 */
 	private startMux(_runtime: DshAgentRuntime): void {
 		// 0.1.5：会话 journal 事件走每会话 follow 泵（this.followPumps），共享 mux
@@ -1944,6 +2015,9 @@ export class DshAgentManager implements SessionAgentGateway {
 		// （journal 有 turn/end），但 PiDeck 收不到任何事件（无流式、无收口、无报错）。
 		// ensureFollowPump 按 agentId 幂等，重复调用无害。
 		this.ensureFollowPump(_runtime);
+		// 投影控制流同理：必须早于下面的 mux 早退分支，否则第二个会话起就不再订阅
+		// （startControlPump 自身幂等，重复调用无害）。
+		this.startControlPump();
 		if (this.muxPump && this.muxAbort && !this.muxAbort.signal.aborted) return;
 		const controller = new AbortController();
 		this.muxAbort = controller;
@@ -1999,6 +2073,11 @@ export class DshAgentManager implements SessionAgentGateway {
 		if (!runtime) return;
 		if (payload.type === "approval/requested" || payload.type === "question/requested") {
 			this.handleServerRequest(runtime, frame, payload);
+			return;
+		}
+		if (payload.type === "session/projection-baseline") {
+			// session/control 的 baseline 是全会话投影快照，按 sessionId 拆帧后到这里。
+			this.applyProjectionBaseline(runtime, payload.block);
 			return;
 		}
 		if (payload.type === "session/projection") {
