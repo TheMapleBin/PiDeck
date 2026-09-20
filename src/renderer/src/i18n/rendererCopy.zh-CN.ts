@@ -62,7 +62,6 @@ export const zhCN = {
 	"app.worktreeMainWorkspace": "主工作区",
 	"app.worktreeOtherWorkspaces": "其他工作区",
 	"app.worktreeBranchLoading": "…",
-	"app.currentBranch": "当前分支：{branch}",
 	"app.worktreeShowMoreSessions": "还有 {count} 个会话…",
 	"app.worktreeNew": "新建工作区",
 	"app.worktreeNewShort": "新建",
