@@ -75,6 +75,18 @@ test("selected ask options stay visible under the outline variant's dark utiliti
 	assert.doesNotMatch(timelineStyles, /\.ask-inline-bar-option\.selected\s*\{/);
 });
 
+test("Ask options render as full-width horizontal bars, one per row", () => {
+	// 2026-12 用户反馈：2/4 列栅格在长文案下把选项压成窄条，标签与说明挤在一起。
+	// 单选/多选/单卡三条渲染路径统一改成整行横条（flex-col + w-full），
+	// 与 WebTimeline 的既有选项语言一致；不得退回 grid-cols-* 栅格。
+	const bars = overlay.match(/className="flex min-w-0 flex-col gap-1.5"/g) ?? [];
+	assert.equal(bars.length, 3, "batch select / batch multi_select / single select must all be one-per-row bars");
+	assert.doesNotMatch(overlay, /grid-cols-[24]/);
+	// 横条高度由内容决定（长描述自然换行），不再靠 72px 固定最小高度对齐栅格单元。
+	assert.doesNotMatch(overlay, /min-h-\[72px\]/);
+	assert.match(overlay, /ask-inline-bar-option h-auto min-h-\[30px\] w-full min-w-0 max-w-none flex-col items-start justify-center gap-0\.5 px-2 py-1\.5 text-left break-words whitespace-normal/);
+});
+
 test("Plan/simple select options render as single-row optically aligned buttons", () => {
 	// 2026-12 用户反馈：上下两行（标签/说明各一行）文本对不齐。
 	// live 卡选项改为单行：固定高度 + 标签不缩 + 说明 truncate，等宽等高光学对齐。
