@@ -97,6 +97,7 @@
     "postinstall": "node scripts/fix-pty-permissions.js",
     "prepare": "node scripts/install-git-hooks.mjs",
     "hooks:install": "node scripts/install-git-hooks.mjs",
+    "sync:main": "node scripts/sync-main.mjs",
     "typecheck": "tsc --noEmit",
     "make-icon": "node scripts/make-icon.js",
     "compile-exe": "node scripts/compile-exe.js",
