@@ -566,21 +566,21 @@ export function GitPanel(props: GitPanelProps) {
 	}, [layout, paneState, props.projectId, repoScopeKey]);
 
 	/**
-	 * 刷新 push/pull 角标：先 fetch 远程跟踪引用，再对比本地差距。
-	 * 静默失败（无远程/离线/非仓库）时保持上次角标，不打扰用户。
+	 * 读取 push/pull 角标：只读本地 refs，不 fetch、不走网络。
 	 *
-	 * fetch/aheadBehind 通过 ref 读取：GitDrawerHost 的作用域包装器可能随外层
-	 * render 重建，但不应因此重新安排 5 分钟计时器。
+	 * 为什么单独拆出一支：`HEAD...@{u}` 的差距完全由本地 refs 决定——AI 在终端里
+	 * commit / push / 切分支后本地 refs 立即更新，直接重读就能把角标归零。
+	 * 若只在 fetch 成功后才计数，fetch 慢或失败（离线/需凭据）时角标会长时间停在旧值
+	 * （历史缺陷：AI 推完要等到下一轮 5 分钟 fetch 才消失）。
+	 *
+	 * aheadBehind 经 ref 读取：宿主包装器可能随外层 render 重建，不应因此重排定时器。
 	 */
-	const refreshAheadBehind = useCallback(async () => {
-		const fetch = fetchRef.current;
+	const readAheadBehind = useCallback(async () => {
 		const aheadBehind = aheadBehindRef.current;
-		if (!fetch || !aheadBehind) return;
+		if (!aheadBehind) return;
 		const projectId = props.projectId;
 		const currentRepoScopeKey = repoScopeKey;
 		try {
-			await fetch(projectId);
-			if (projectId !== projectIdRef.current || currentRepoScopeKey !== repoScopeKeyRef.current) return;
 			const result = await aheadBehind(projectId);
 			if (projectId === projectIdRef.current && currentRepoScopeKey === repoScopeKeyRef.current) {
 				setAheadBehind(result);
@@ -588,9 +588,36 @@ export function GitPanel(props: GitPanelProps) {
 				writeAheadBehindCache(projectId, currentRepoScopeKey, result);
 			}
 		} catch {
-			// 静默失败：离线/无远程时角标保持上次已知值，不弹错误
+			// 静默失败：非仓库/无上游时角标保持上次已知值，不弹错误
 		}
 	}, [props.projectId, repoScopeKey]);
+
+	/**
+	 * 刷新 push/pull 角标。
+	 *
+	 * @param fetchRemote - 是否先 `git fetch` 再计数：
+	 *   true  → 手动刷新与 5 分钟定时器（要知道别人推到远程的新提交，behind 才准）；
+	 *   false → 本地事件驱动（外部 commit/push/切分支、窗口重新聚焦），只读本地 refs。
+	 *
+	 * 顺序刻意是「先本地 → 再 fetch → 再本地」：第一步不依赖网络，用户点刷新或 AI
+	 * 在终端 push 完后角标能立即变；fetch 仅用于校正 behind，失败也不阻挡本地计数。
+	 */
+	const refreshAheadBehind = useCallback(
+		async (fetchRemote = true) => {
+			await readAheadBehind();
+			if (!fetchRemote) return;
+			const fetch = fetchRef.current;
+			if (!fetch) return;
+			try {
+				await fetch(props.projectId);
+			} catch {
+				// 静默失败：离线/无远程时保留上一次 fetch 的 behind，ahead 已由本地计数更新
+				return;
+			}
+			await readAheadBehind();
+		},
+		[props.projectId, readAheadBehind],
+	);
 
 	/**
 	 * 拉取最新 Git 工作区状态。
@@ -617,7 +644,7 @@ export function GitPanel(props: GitPanelProps) {
 					// 刷新成功说明当前目录可用，恢复仓库/工具标记（手动 git init 或安装 git 后自动恢复轮询）
 					setNotAGitRepo(false);
 					setGitNotInstalled(false);
-					// 仅首次/手动刷新成功后再 fetch：5 秒静默轮询不应打远程。
+					// 非 silent refresh 成功后顺带刷角标（内含 fetch 远程校正 behind），不必再单独 fetch
 					if (!silent) void refreshAheadBehind();
 				}
 			} catch (caught) {
@@ -683,17 +710,38 @@ export function GitPanel(props: GitPanelProps) {
 		void refresh();
 	}, [layout, refresh]);
 
-	// 静默轮询：每 5 秒拉取一次最新工作区状态，不显示 loading 动画、不覆盖错误。
+	// 静默轮询：每 5 秒拉取一次最新工作区状态 + 重读本地 ahead/behind 角标。
 	// 非 git 仓库 / 未安装 git 时暂停轮询——状态恢复（git init / 安装 git）后由
 	// refresh 成功路径清标记，interval 随依赖重建自动恢复。
+	//
+	// 角标为何也走这里：`HEAD...@{u}` 只依赖本地 refs，AI 在终端里 commit/push 后
+	// 本地 refs 立即变化，5 秒内就能把「已推送」的角标归零；只读本地不发网络，
+	// 代价是一次 `git rev-list`，比 5 分钟一轮的 fetch 快得多（fetch 仍用于发现
+	// 别人推到远端的新提交）。mutation（push/pull 进行中）跳过，避免读到中间态
+	// 把角标写回旧值。
 	useEffect(() => {
 		if (layout === "historyOnly") return;
 		const timer = window.setInterval(() => {
 			if (notAGitRepo || gitNotInstalled) return;
+			if (mutationRunningRef.current) return;
 			void refresh(true);
+			void readAheadBehind();
 		}, 5000);
 		return () => window.clearInterval(timer);
-	}, [layout, refresh, notAGitRepo, gitNotInstalled]);
+	}, [layout, refresh, readAheadBehind, notAGitRepo, gitNotInstalled]);
+
+	// 窗口重新获得焦点时补一次静默刷新：常见用法是切到终端让 AI commit/push 再切回来，
+	// 不必要等下一轮 5 秒轮询（角标只读本地 refs，代价很低）。
+	useEffect(() => {
+		if (layout === "historyOnly") return;
+		const onFocus = () => {
+			if (notAGitRepo || gitNotInstalled || mutationRunningRef.current) return;
+			void refresh(true);
+			void readAheadBehind();
+		};
+		window.addEventListener("focus", onFocus);
+		return () => window.removeEventListener("focus", onFocus);
+	}, [layout, refresh, readAheadBehind, notAGitRepo, gitNotInstalled]);
 
 	// 定时 fetch 远程：每 5 分钟刷新一次 ahead/behind 角标。
 	// 首次 fetch 改走 refresh 成功路径，避免未确认仓库时立刻 spawn `git fetch`。
@@ -960,8 +1008,9 @@ export function GitPanel(props: GitPanelProps) {
 		try {
 			await props.push(projectId);
 			if (projectId !== projectIdRef.current) return;
+			// refresh() 的非 silent 成功路径会先读本地角标再 fetch：push 后本地 refs 已更新，
+			// ahead 立即归零且不依赖 fetch 成败，不必再单独等一轮角标刷新。
 			await refresh();
-			await refreshAheadBehind();
 		} catch (caught) {
 			if (projectId === projectIdRef.current) {
 				const text = gitOperationErrorText(caught);
@@ -1005,8 +1054,8 @@ export function GitPanel(props: GitPanelProps) {
 		try {
 			await props.pull(projectId);
 			if (projectId !== projectIdRef.current) return;
+			// 同 push：pull 后本地 refs 已是最终结果，本地角标计数先给出准确值
 			await refresh();
-			await refreshAheadBehind();
 		} catch (caught) {
 			if (projectId === projectIdRef.current) {
 				// 拉取失败同样不常驻面板错误区，避免错误条占位挤压变更列表。

@@ -806,16 +806,19 @@ export class GitService {
 	/**
 	 * 计算当前分支相对上游（@{upstream}）的提交差距，驱动 push/pull 角标。
 	 * 无上游（未 push 过/本地分支）、非仓库或命令失败时返回 null，UI 不显示角标。
-	 * 调用方应先行 fetch，使 behind 反映远程最新状态。
+	 *
+	 * 用 `HEAD...@{upstream}` 一次 spawn 完成：@{upstream} 本身就是合法修订表达式，
+	 * 不必先 rev-parse 解析上游名（那条命令只是为区分「无上游」与失败，而两者对调用方
+	 * 都是「不显示角标」）。角标会被周期性重读（外部提交/push 后要跟平），少一次 spawn 值得。
+	 *
+	 * 只读本地 refs，不发网络：本地 commit / push 后本地 refs 已更新，结果立即正确；
+	 * 要让 behind 反映远程最新状态（别人推到远端）需要调用方先行 fetch。
 	 */
 	async getAheadBehind(cwd: string): Promise<GitAheadBehind | null> {
 		try {
-			// 无上游时该命令失败（exit 128），直接视为无角标
-			const { stdout: upstreamRaw } = await execFileAsync(currentGitExecutable(), ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"], { cwd, timeout: GIT_MUTATION_TIMEOUT_MS });
-			const upstream = upstreamRaw.trim();
-			if (!upstream) return null;
-			// --left-right --count 输出 "<left> <right>"：左=HEAD 独有（ahead），右=上游独有（behind）
-			const { stdout: countRaw } = await execFileAsync(currentGitExecutable(), ["rev-list", "--left-right", "--count", `HEAD...${upstream}`], { cwd, timeout: GIT_MUTATION_TIMEOUT_MS });
+			// --left-right --count 输出 "<left> <right>"：左=HEAD 独有（ahead），右=上游独有（behind）。
+			// 无上游时该命令直接失败（exit 128），落入 catch 返回 null。
+			const { stdout: countRaw } = await execFileAsync(currentGitExecutable(), ["rev-list", "--left-right", "--count", "HEAD...@{upstream}"], { cwd, timeout: GIT_MUTATION_TIMEOUT_MS });
 			const [left, right] = countRaw.trim().split(/\s+/);
 			return {
 				ahead: parseInt(left ?? "0", 10) || 0,
