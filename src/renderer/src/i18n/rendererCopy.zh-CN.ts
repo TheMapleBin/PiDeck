@@ -2474,6 +2474,10 @@ export const zhCN = {
 	"config.modelSpecAutoFilled": "已按模型能力目录填充 {model} 的规格",
 	"config.modelUserAgent": "User-Agent",
 	"config.modelUserAgentInherit": "留空时继承该供应商的 UA",
+	"config.modelUserAgentClear": "清除覆盖",
+	// 弹框里解释逐模型 UA 的优先级：modelOverrides 覆盖 provider.headers（pi 的 rawModelHeaders 最后展开），
+	// 不写清这一层用户会以为「填了就替换掉供应商 UA 的全部场景」
+	"config.modelUserAgentDialogDesc": "留空 = 继承该供应商的 UA；填写后由 pi 覆盖供应商级 User-Agent（优先级更高），只对当前模型生效。",
 	"config.modelResetAdaptive": "重置为自适应",
 	"config.modelResetAdaptiveDone": "已按 {model} 的自适应模板重置能力字段",
 	"config.modelResetAdaptiveKept": "未匹配到自适应模板，已保留手动填写的容量字段",
@@ -2940,10 +2944,11 @@ export const zhCN = {
 	"drawer.fileSortAsc": "升序排列",
 	"drawer.fileSortDesc": "倒序排列",
 	"drawer.compactPackages": "折叠中间包（合并单子目录链）",
-	"drawer.fileSearch": "按名称搜索文件",
+	"drawer.fileSearch": "按名称搜索文件（Ctrl+F / ⌘F，或直接输入字符）",
 	"drawer.fileSearchPlaceholder": "按名称搜索文件…",
 	"drawer.fileSearchScanning": "正在扫描工作区…",
 	"drawer.fileSearchNoResults": "未找到匹配「{query}」的文件",
+	"drawer.fileSearchEmptyHint": "输入文件名开始搜索，任意深度的文件都会被扫描",
 	"drawer.deleteFileTitle": "删除文件",
 	"drawer.deleteFileConfirm": "确定要删除「{name}」吗？此操作不可撤销。",
 	"drawer.deleteFolderTitle": "删除目录",
