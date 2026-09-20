@@ -2,6 +2,23 @@ import { mainProcessEnUS } from "../../../shared/i18n/mainProcessCopy";
 import type { TranslationKey } from "./rendererCopy.zh-CN";
 
 export const enUS: Record<TranslationKey, string> = {
+	"quickTask.title": "PiDeck quick task",
+	"quickTask.new": "New task",
+	"quickTask.workbench": "Open workbench",
+	"quickTask.closeHint": "Closing this window returns to the workbench; tasks keep running. Nothing executes until you send.",
+	"quickTask.pending": "Your current task is preserved. Start a new task in {{path}}?",
+	"quickTask.keep": "Keep current task",
+	"quickTask.addDescription": "This folder is not a project yet. Confirm adding it to enter a task.",
+	"quickTask.loading": "Preparing task…",
+	"quickTask.retry": "Retry",
+	// Error code → copy: the main process only returns a code (see shared/types/quickTask.ts)
+	"quickTask.error.invalidPath": "Cannot open this working directory: the path is not accepted.",
+	"quickTask.error.notDirectory": "Cannot open this working directory: it is not a folder.",
+	"quickTask.error.notFound": "Cannot open this working directory: it does not exist or was moved.",
+	"quickTask.error.permissionDenied": "Cannot open this working directory: access is denied.",
+	"quickTask.error.unknown": "The operation failed. Please try again.",
+	"quickTask.menuTitle": "Start quick tasks from Explorer",
+	"quickTask.menuDescription": "Add a quick task entry to the Windows desktop, folders and folder backgrounds. Windows 11 may require Show more options.",
 	"sidebar.pendingConfirmation": "Pending",
 	"sidebar.pendingConfirmationCount": "Pending ({count})",
 	"sidebar.pendingConfirmationHint": "{count} pending confirmation(s) in this project",
@@ -391,6 +408,10 @@ export const enUS: Record<TranslationKey, string> = {
 	"fileLink.openInExplorer": "Open in Explorer",
 	"fileLink.copyRelativePath": "Copy Relative Path",
 	"fileLink.copyAbsolutePath": "Copy Absolute Path",
+	// Option C (#229): plain left click still opens the built-in editor; the modifier
+	// temporarily routes to the system default app. {modifier} is platform-resolved (⌘ / Ctrl).
+	"fileLink.modifierClickShortcut": "{modifier}+click",
+	"fileLink.modifierOpenHint": "{modifier}+click: open with the system default app (a plain click opens the built-in editor)",
 	"app.openProjectInEditor": "Open project in editor",
 	"app.openWithEditor": "Open with",
 	"app.openWithEditorNoProject": "No project directory: editors unavailable, file manager opens home",

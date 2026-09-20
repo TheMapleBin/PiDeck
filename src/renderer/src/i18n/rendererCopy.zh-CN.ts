@@ -1,6 +1,23 @@
 import { mainProcessZhCN } from "../../../shared/i18n/mainProcessCopy";
 
 export const zhCN = {
+	"quickTask.title": "PiDeck 小任务",
+	"quickTask.new": "新任务",
+	"quickTask.workbench": "打开完整工作台",
+	"quickTask.closeHint": "关闭小窗口会返回工作台，任务继续运行。只有发送后才执行任务。",
+	"quickTask.pending": "已保留当前任务。要在 {{path}} 新建任务吗？",
+	"quickTask.keep": "保留当前任务",
+	"quickTask.addDescription": "此目录尚未添加为项目。确认添加后即可输入任务。",
+	"quickTask.loading": "准备任务中…",
+	"quickTask.retry": "重试",
+	// 错误码 → 文案：主进程只回码，这里负责本地化（见 shared/types/quickTask.ts）
+	"quickTask.error.invalidPath": "无法打开该工作目录：路径格式不被接受。",
+	"quickTask.error.notDirectory": "无法打开该工作目录：它不是一个文件夹。",
+	"quickTask.error.notFound": "无法打开该工作目录：目录不存在或已被移动。",
+	"quickTask.error.permissionDenied": "无法打开该工作目录：没有访问权限。",
+	"quickTask.error.unknown": "操作失败，请重试。",
+	"quickTask.menuTitle": "右键发起小任务",
+	"quickTask.menuDescription": "在 Windows 桌面、文件夹及空白处添加小任务入口。Windows 11 可能需要「显示更多选项」。",
 	"sidebar.pendingConfirmation": "待确认",
 	"sidebar.pendingConfirmationCount": "待确认 ({count})",
 	"sidebar.pendingConfirmationHint": "该项目有 {count} 个待确认的提问",
@@ -390,6 +407,10 @@ export const zhCN = {
 	"fileLink.openInExplorer": "在资源管理器打开",
 	"fileLink.copyRelativePath": "复制相对路径",
 	"fileLink.copyAbsolutePath": "复制绝对路径",
+	// 方案 C（#229）：左键默认仍进内置编辑器，修饰键临时改走系统默认应用；
+	// {modifier} 由渲染层按平台传入（macOS ⌘ / 其余 Ctrl）
+	"fileLink.modifierClickShortcut": "{modifier}+点击",
+	"fileLink.modifierOpenHint": "{modifier}+点击：用系统默认应用打开（直接点击进入内置编辑器）",
 	"app.noExternalEditors": "未检测到外部编辑器",
 	"app.openProjectInEditor": "在编辑器中打开项目",
 	"app.openWithEditor": "打开方式",

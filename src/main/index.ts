@@ -290,6 +290,8 @@ import { fetchModelList, refreshModelCatalogIfStale, refreshModelList } from "./
 import { registerFilesIpc } from "./ipc/filesIpc";
 import { registerClipboardIpc } from "./ipc/clipboardIpc";
 import { registerShellMenuIpc } from "./ipc/shellMenuIpc";
+import { QuickTaskWindowChrome } from "./quickTask/quickTaskWindowChrome";
+import { registerQuickTaskIpc } from "./ipc/quickTaskIpc";
 import { BROWSER_PANEL_PARTITION as BROWSER_PANEL_PARTITION_SHARED, isAllowedBrowserPanelUrl as isAllowedBrowserPanelUrlShared } from "./browser/browserSecurity";
 import { WebServiceManager } from "./web/WebServiceManager";
 import { preparePreloadPath } from "./preloadPath";
@@ -315,6 +317,12 @@ import { createMacManualUpdateChecker } from "./update/macManualUpdate";
 import { UpdateService } from "./update/UpdateService";
 
 let mainWindow: BrowserWindow | null = null;
+// 紧凑模式（右键小任务）与主窗口几何的接线统一收在 quickTaskWindowChrome：
+// 本文件不再出现紧凑模式的激活判断、屏幕几何计算与「关闭=返回工作台」的拦截逻辑。
+const quickTaskChrome = new QuickTaskWindowChrome({
+	getWindow: () => mainWindow,
+	saveWorkbenchBounds: (size) => saveLastWindowBounds(app.getPath("userData"), size),
+});
 let tray: Tray | null = null;
 /** 标记是否由用户主动退出（托盘菜单「退出」），区别于窗口关闭隐藏到托盘 */
 let isQuitting = false;
@@ -1174,6 +1182,7 @@ function handleVersionFocusRequest(payload?: FocusPayload) {
 	const target = extractFocusTargetFromArgv(payload?.argv);
 	const activateSession = async () => {
 		if (!target) return;
+		if (await quickTaskChrome.applyLaunchTarget(target)) return;
 		// 文件夹右键打开：已收录目录直接跳项目（渲染层 selectProjectCommand）；
 		// 未收录目录推 projectPath，渲染层弹确认框走新增项目流程。
 		if (target.projectPath) {
@@ -1632,15 +1641,11 @@ async function createWindow() {
 	// 供下次 startupWindowMode="last" 启动使用；隐藏到托盘不记录（窗口未关闭）。
 	// 注意：mainWindow 为模块级可空变量，此处用创建后的局部引用确保非空
 	const windowForState = createdWindow;
-	windowForState.on("close", () => {
-		if (!windowForState.isDestroyed()) {
-			const normal = windowForState.isMaximized() || windowForState.isFullScreen() ? windowForState.getNormalBounds() : windowForState.getBounds();
-			saveLastWindowBounds(app.getPath("userData"), { width: normal.width, height: normal.height });
-		}
-	});
+	windowForState.on("close", () => quickTaskChrome.saveWorkbenchBoundsOnClose(windowForState));
 
 	// 关闭窗口时根据设置决定：隐藏到托盘还是正常退出
 	mainWindow.on("close", (event) => {
+		if (!isQuitting && quickTaskChrome.interceptClose(event)) return;
 		if (!isQuitting && settingsStore.get().closeToTray) {
 			event.preventDefault();
 			mainWindow?.hide();
@@ -3058,7 +3063,9 @@ function registerIpc() {
 	registerShellMenuIpc({
 		appLogger,
 		menuTitle: mainCopy("shellMenu.openWithPiDeck"),
+		quickTaskTitle: mainCopy("shellMenu.quickTask"),
 	});
+	registerQuickTaskIpc(quickTaskChrome.controller);
 }
 
 function sendTelemetryHeartbeat() {
@@ -3998,6 +4005,10 @@ app
 		// 之后不再自动备份。同步快，不挡首帧；失败仅记录，不阻断启动。
 		configBackupManager?.ensureInitialBackups();
 		await createWindow();
+		// Quick tasks should not wait for unrelated WSL/proxy startup probes. The controller
+		// retains validated intent until the renderer subscribes or requests its snapshot.
+		const coldStartTarget = extractFocusTargetFromArgv(process.argv);
+		await quickTaskChrome.applyLaunchTarget(coldStartTarget);
 		setupTray();
 		// 粘贴文件启动清理：删除超过保留期的落盘文件（fire-and-forget，不挡首帧）
 		void cleanupPasteFiles?.().catch((error: unknown) => {
@@ -4142,7 +4153,6 @@ app
 		// 页面仍在加载时直接 send 会丢（preload/React 监听未注册），故走 pending 队列：
 		// did-finish-load 补发一次 + renderer 挂载后主动拉取（见 queueFocusTarget 注释）。
 		// catalog 可能尚未加载完，renderer 侧监听会小间隔重试直到能解析到会话记录。
-		const coldStartTarget = extractFocusTargetFromArgv(process.argv);
 		if (coldStartTarget) {
 			if (coldStartTarget.projectPath) {
 				// 项目表就绪后再判定是否已收录：否则已注册目录也会弹「添加为项目」。
