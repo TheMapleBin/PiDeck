@@ -390,6 +390,10 @@ export const zhCN = {
 	"fileLink.openInExplorer": "在资源管理器打开",
 	"fileLink.copyRelativePath": "复制相对路径",
 	"fileLink.copyAbsolutePath": "复制绝对路径",
+	// 方案 C（#229）：左键默认仍进内置编辑器，修饰键临时改走系统默认应用；
+	// {modifier} 由渲染层按平台传入（macOS ⌘ / 其余 Ctrl）
+	"fileLink.modifierClickShortcut": "{modifier}+点击",
+	"fileLink.modifierOpenHint": "{modifier}+点击：用系统默认应用打开（直接点击进入内置编辑器）",
 	"app.noExternalEditors": "未检测到外部编辑器",
 	"app.openProjectInEditor": "在编辑器中打开项目",
 	"app.openWithEditor": "打开方式",

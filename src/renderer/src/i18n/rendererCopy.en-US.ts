@@ -391,6 +391,10 @@ export const enUS: Record<TranslationKey, string> = {
 	"fileLink.openInExplorer": "Open in Explorer",
 	"fileLink.copyRelativePath": "Copy Relative Path",
 	"fileLink.copyAbsolutePath": "Copy Absolute Path",
+	// Option C (#229): plain left click still opens the built-in editor; the modifier
+	// temporarily routes to the system default app. {modifier} is platform-resolved (⌘ / Ctrl).
+	"fileLink.modifierClickShortcut": "{modifier}+click",
+	"fileLink.modifierOpenHint": "{modifier}+click: open with the system default app (a plain click opens the built-in editor)",
 	"app.openProjectInEditor": "Open project in editor",
 	"app.openWithEditor": "Open with",
 	"app.openWithEditorNoProject": "No project directory: editors unavailable, file manager opens home",

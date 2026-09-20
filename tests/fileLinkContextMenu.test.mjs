@@ -78,3 +78,37 @@ test("复用文件抽屉的 menu.defaultOpen 文案，两个语言包都在", ()
 		assert.match(copy, /"fileLink\.copyAbsolutePath":\s*"/);
 	}
 });
+
+// —— issue #229 方案 C：Ctrl/⌘ + 左键 = 系统默认应用 ——
+// 只做手势，不引入「全局二选一」或「后缀记忆」这类会被遗忘的设置（用户明确只批了 C）。
+
+test("适配键方案 C：Ctrl/⌘ + 左键走系统默认应用，普通左键行为不变", () => {
+	const start = linkSource.indexOf("const handleClick");
+	const end = linkSource.indexOf("const handleContextMenu");
+	assert.ok(start >= 0 && end > start, "MarkdownLink should keep handleClick before handleContextMenu");
+	const clickBlock = linkSource.slice(start, end);
+	// 同时接受 ctrlKey 与 metaKey：Windows/Linux 用 Ctrl、macOS 用 ⌘
+	assert.match(clickBlock, /if\s*\(\(e\.ctrlKey\s*\|\|\s*e\.metaKey\)\s*&&\s*resolvedPath\)\s*\{[\s\S]{0,80}?openWithDefaultApp\(\);\s*return;\s*\}/);
+	// 修饰键分支必须先于内置编辑器跳转，否则两条链路都会触发
+	const modifierIndex = clickBlock.search(/if\s*\(\(e\.ctrlKey\s*\|\|\s*e\.metaKey\)/);
+	const editorIndex = clickBlock.indexOf("onOpenFile(fileLinkPath, fileLinkLine)");
+	assert.ok(editorIndex > modifierIndex, "the modifier branch must run before the built-in editor route");
+	// 无修饰键时仍走 onOpenFile（默认体验不退化）
+	assert.match(clickBlock, /if\s*\(onOpenFile\s*&&\s*fileLinkPath\)\s*\{[\s\S]{0,80}?onOpenFile\(fileLinkPath, fileLinkLine\)/);
+});
+
+test("修饰键文案平台化，且菜单快捷键与左键同源", () => {
+	assert.match(linkSource, /const\s+FILE_LINK_MODIFIER\s*=\s*detectRendererPlatform\(\)\s*===\s*"darwin"\s*\?\s*"⌘"\s*:\s*"Ctrl"/);
+	const item = /<DropdownMenuItem\s+onSelect=\{openWithDefaultApp\}>[\s\S]*?<\/DropdownMenuItem>/.exec(menuBlock())?.[0];
+	assert.ok(item, "the default-open menu item should exist");
+	assert.match(item, /<DropdownMenuShortcut>\{t\("fileLink\.modifierClickShortcut",\s*\{\s*modifier:\s*FILE_LINK_MODIFIER\s*\}\)\}<\/DropdownMenuShortcut>/);
+	// hover 提示必须同时给出完整路径与快捷键说明（title 走 i18n，不硬编码中文）
+	assert.match(linkSource, /title=\{isFileLink\s*\?[\s\S]{0,160}?fileLinkPath[\s\S]{0,160}?fileLink\.modifierOpenHint/);
+});
+
+test("修饰键文案两个语言包都在且带 {modifier} 占位符", () => {
+	for (const copy of [zhCopy, enCopy]) {
+		assert.match(copy, /"fileLink\.modifierClickShortcut":\s*"[^"]*\{modifier\}[^"]*"/);
+		assert.match(copy, /"fileLink\.modifierOpenHint":\s*"[^"]*\{modifier\}[^"]*"/);
+	}
+});
