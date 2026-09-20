@@ -10,6 +10,26 @@ import { Input } from "../ui-shadcn/input";
 import { Textarea } from "../ui-shadcn/textarea";
 import { ApprovalCard } from "../ui-shadcn/approval-card";
 
+/**
+ * ask 选项选中态的 utility 表达（锚点类 `selected` 保留，供测试与 DOM 查询使用）。
+ *
+ * 为什么不再依赖 legacy 的 `.ask-inline-bar-option.selected`：选项是 shadcn
+ * Button variant="outline"，其 `bg-background` / `dark:bg-input/30` /
+ * `dark:border-input` 位于 utilities 层，按层序（legacy < utilities）稳压 legacy 声明——
+ * 亮色下只剩边框变色，夜间模式下选中与未选中完全同色（用户反馈「夜间模式 ask
+ * 选中样式不明显」的根因）。移到这里后用 utility 表达，twMerge 会丢掉冲突的 variant
+ * 类，两种主题都生效；暗色取更高比例的 accent 混色，保证一档可辨的底色差。
+ */
+const ASK_OPTION_SELECTED_CLASS =
+	"selected border-[var(--color-accent)] bg-[color:color-mix(in_srgb,var(--color-accent)_12%,var(--color-bg-panel))] hover:bg-[color:color-mix(in_srgb,var(--color-accent)_16%,var(--color-bg-panel))] dark:border-[var(--color-accent)] dark:bg-[color:color-mix(in_srgb,var(--color-accent)_22%,var(--color-bg-panel))] dark:hover:bg-[color:color-mix(in_srgb,var(--color-accent)_28%,var(--color-bg-panel))]";
+
+/** 批量问答题目 tab 的选中态：同上，`active` 锚点类保留，底色/边框/文字色由 utility 承担。 */
+const ASK_TAB_ACTIVE_CLASS =
+	"active border-[var(--color-accent)] bg-[color:color-mix(in_srgb,var(--color-accent)_12%,var(--color-bg-panel))] text-[var(--color-accent)] hover:bg-[color:color-mix(in_srgb,var(--color-accent)_16%,var(--color-bg-panel))] dark:border-[var(--color-accent)] dark:bg-[color:color-mix(in_srgb,var(--color-accent)_22%,var(--color-bg-panel))] dark:hover:bg-[color:color-mix(in_srgb,var(--color-accent)_28%,var(--color-bg-panel))]";
+
+/** 已作答（未必聚焦）的题目 tab：绿色边框提示「这题已答」，作为 Check 图标之外的第二线索。 */
+const ASK_TAB_ANSWERED_CLASS = "answered border-[var(--color-success)]";
+
 export type RuntimeUiBinding = {
 	sessionId: string;
 	agentId: string;
@@ -173,7 +193,7 @@ function BatchAskInlineBar(props: { request: AgentUiRequest; responding: boolean
 							variant="ghost"
 							role="tab"
 							aria-selected={active}
-							className={`ask-batch-tab inline-flex h-[26px] flex-none items-center gap-1 rounded-md border border-border-subtle bg-transparent px-2 font-sans text-micro whitespace-nowrap text-text-secondary transition-colors hover:border-border-strong hover:text-text-primary focus-visible:outline-[var(--focus-ring)] focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-55${active ? " active" : ""}${answered ? " answered" : ""}`}
+							className={`ask-batch-tab inline-flex h-[26px] flex-none items-center gap-1 rounded-md border border-border-subtle bg-transparent px-2 font-sans text-micro whitespace-nowrap text-text-secondary transition-colors hover:border-border-strong hover:text-text-primary focus-visible:outline-[var(--focus-ring)] focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-55${answered ? ` ${ASK_TAB_ANSWERED_CLASS}` : ""}${active ? ` ${ASK_TAB_ACTIVE_CLASS}` : ""}`}
 							disabled={props.responding}
 							onClick={() => setCurrentTab(index)}
 						>
@@ -311,7 +331,7 @@ function BatchQuestion(props: {
 				{question.type === "confirm" ? (
 					<div className="flex gap-2">
 						<Button
-							className={`ask-inline-bar-option ask-inline-bar-option-yes flex-none items-center justify-center gap-1 whitespace-nowrap${props.answer === true ? " selected" : ""}`}
+							className={`ask-inline-bar-option ask-inline-bar-option-yes flex-none items-center justify-center gap-1 whitespace-nowrap${props.answer === true ? ` ${ASK_OPTION_SELECTED_CLASS}` : ""}`}
 							variant="outline"
 							disabled={props.responding}
 							onClick={() => {
@@ -326,7 +346,7 @@ function BatchQuestion(props: {
 							{t("common.true")}
 						</Button>
 						<Button
-							className={`ask-inline-bar-option ask-inline-bar-option-no flex-none items-center justify-center gap-1 whitespace-nowrap${props.answer === false ? " selected" : ""}`}
+							className={`ask-inline-bar-option ask-inline-bar-option-no flex-none items-center justify-center gap-1 whitespace-nowrap${props.answer === false ? ` ${ASK_OPTION_SELECTED_CLASS}` : ""}`}
 							variant="outline"
 							disabled={props.responding}
 							onClick={() => {
@@ -351,7 +371,7 @@ function BatchQuestion(props: {
 								return (
 									<Button
 										key={`${question.id}:${index}`}
-										className={`ask-inline-bar-option h-auto min-h-[30px] w-full min-w-0 max-w-none flex-col items-start justify-center gap-0.5 px-2 py-1 text-left break-words whitespace-normal${expandedOptionLayout ? " min-h-[72px] py-2" : ""}${props.answer === value ? " selected" : ""}`}
+										className={`ask-inline-bar-option h-auto min-h-[30px] w-full min-w-0 max-w-none flex-col items-start justify-center gap-0.5 px-2 py-1 text-left break-words whitespace-normal${expandedOptionLayout ? " min-h-[72px] py-2" : ""}${props.answer === value ? ` ${ASK_OPTION_SELECTED_CLASS}` : ""}`}
 										variant="outline"
 										disabled={props.responding}
 										onClick={() => {
@@ -411,7 +431,7 @@ function BatchQuestion(props: {
 								return (
 									<Button
 										key={`${question.id}:${index}`}
-										className={`ask-inline-bar-option h-auto min-h-[30px] w-full min-w-0 max-w-none flex-col items-start justify-center gap-0.5 px-2 py-1 text-left break-words whitespace-normal${expandedOptionLayout ? " min-h-[72px] py-2" : ""}${selected ? " selected" : ""}`}
+										className={`ask-inline-bar-option h-auto min-h-[30px] w-full min-w-0 max-w-none flex-col items-start justify-center gap-0.5 px-2 py-1 text-left break-words whitespace-normal${expandedOptionLayout ? " min-h-[72px] py-2" : ""}${selected ? ` ${ASK_OPTION_SELECTED_CLASS}` : ""}`}
 										variant="outline"
 										disabled={props.responding}
 										onClick={() => {
@@ -601,7 +621,7 @@ export function SessionRuntimeUiOverlay({ sessionId, runtime, ui, responder, onE
 									key={`${request.requestId}:${option}`}
 									// 单行选项（2026-12 用户反馈：上下两行文本对不齐）：标签+说明同行，
 									// 固定高度 + 说明 truncate（title 兔底全文），等宽等高实现光学对齐。
-									className={`ask-inline-bar-option h-[30px] w-full min-w-0 max-w-none items-center justify-start gap-2 px-2 py-0 text-left${selectedOption === option ? " selected" : ""}`}
+									className={`ask-inline-bar-option h-[30px] w-full min-w-0 max-w-none items-center justify-start gap-2 px-2 py-0 text-left${selectedOption === option ? ` ${ASK_OPTION_SELECTED_CLASS}` : ""}`}
 									variant="outline"
 									disabled={responding}
 									onClick={() => {
@@ -610,6 +630,9 @@ export function SessionRuntimeUiOverlay({ sessionId, runtime, ui, responder, onE
 									}}
 									title={parsed.description || parsed.label}
 								>
+									{/* 选中态对勾：夜间模式下 accent 混色底 + 边框仍可能不够醒目，
+									    与批量卡一致再补一个非颜色线索（success 色，不跟随主题 accent）。 */}
+									{selectedOption === option ? <Check size={14} className="shrink-0 text-[var(--color-success)]" aria-hidden="true" /> : null}
 									{/* 标签不缩不截：短标签（如「开始执行」）保证两枚按钮说明文案起点对齐；
 									    超长标签兜底 max-w 截断，避免挤压说明列。 */}
 									<span className="max-w-[45%] shrink-0 truncate text-caption font-medium leading-none text-text-primary">{parsed.label}</span>

@@ -1028,11 +1028,11 @@ body.ask-dialog-open .ask-card-preview {
   border-color: var(--color-danger);
   color: var(--color-danger);
 }
-.ask-inline-bar-option.selected {
-  border-color: var(--color-accent);
-  background: color-mix(in srgb, var(--color-accent) 10%, var(--color-bg-panel));
-  color: var(--color-text-primary);
-}
+/* ask 选项选中态不在这里：选项是 shadcn Button variant="outline"，utilities 层的
+   bg-background / dark:bg-input/30 / dark:border-input 会压过 legacy 声明
+   （层序 legacy < utilities），夜间模式下选中与未选中完全同色。
+   选中态统一由组件层 utility 常量 ASK_OPTION_SELECTED_CLASS 承担
+   （components/overlays/SessionRuntimeUiOverlay.tsx）。 */
 .ask-inline-bar-option:disabled,
 .ask-inline-bar-submit-btn:disabled,
 .ask-inline-bar-close:disabled {

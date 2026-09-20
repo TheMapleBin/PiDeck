@@ -18,7 +18,7 @@ export function ProjectResourcesModal(props: { project: Project; onClose: () => 
 
 	return (
 		<Dialog open onOpenChange={(next) => !next && props.onClose()}>
-			<DialogContent showCloseButton={false} stagger className="config-modal flex h-[min(760px,calc(100vh-32px))] w-[80vw] max-w-[80vw] flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(1300px,80vw)] [--wallpaper-dialog-alpha:var(--wallpaper-panel-alpha,30%)]">
+			<DialogContent showCloseButton={false} stagger className="config-modal flex h-[min(760px,calc(100vh-32px))] w-[80vw] max-w-[80vw] flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(1300px,80vw)]">
 				<DialogHeader className="shrink-0 gap-1 border-b border-border-subtle px-6 py-4 text-left">
 					<div className="flex items-start justify-between gap-4">
 						<div className="min-w-0">

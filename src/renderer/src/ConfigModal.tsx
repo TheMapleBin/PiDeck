@@ -291,7 +291,7 @@ class ConfigModalErrorBoundary extends Component<{ open: boolean; onClose: () =>
 		// #115：错误兜底直接走 shadcn Dialog（components/ui/Modal 薄包装已退役）
 		return (
 			<Dialog open={this.props.open} onOpenChange={(next) => !next && this.props.onClose()}>
-				<DialogContent showCloseButton={false} className={cn("flex flex-col gap-0 overflow-hidden p-0", configModalSizeClass, "config-modal", "[--wallpaper-dialog-alpha:var(--wallpaper-panel-alpha,30%)]")}>
+				<DialogContent showCloseButton={false} className={cn("flex flex-col gap-0 overflow-hidden p-0", configModalSizeClass, "config-modal")}>
 					<DialogHeader className="flex-row items-center justify-between px-4 py-3">
 						<DialogTitle>{t("config.loadFailed")}</DialogTitle>
 						<DialogClose asChild>
@@ -2806,7 +2806,7 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 	// 独立模式：完整 Dialog（标题栏含保存/导出/导入/关闭；内容与嵌入模式完全一致）
 	return (
 		<Dialog open={open} onOpenChange={(next) => !next && handleClose()}>
-			<DialogContent showCloseButton={false} className={cn("flex flex-col gap-0 overflow-hidden p-0", configModalSizeClass, "config-modal", "[--wallpaper-dialog-alpha:var(--wallpaper-panel-alpha,30%)]")}>
+			<DialogContent showCloseButton={false} className={cn("flex flex-col gap-0 overflow-hidden p-0", configModalSizeClass, "config-modal")}>
 				{/* 顶栏/侧栏控件与设置弹窗、会话顶栏统一到 sm / text-sm 密度 */}
 				<DialogHeader className="flex-row items-center justify-between px-4 py-2.5">
 					<DialogTitle className="text-sm font-semibold tracking-tight">{t("config.title")}</DialogTitle>
