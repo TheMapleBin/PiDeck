@@ -11,7 +11,7 @@
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
 ![Electron](https://img.shields.io/badge/Electron-38-47848f)
 ![React](https://img.shields.io/badge/React-19-61dafb)
-![Version](https://img.shields.io/badge/version-0.7.6-blue)
+![Version](https://img.shields.io/badge/version-0.7.7--beta-blue)
 
 国内 AtomGit 托管：https://atomgit.com/ayuayue/PiDeck
 <!-- 预留 AtomGit G-Star 徽章位（替换占位链接后启用）
@@ -100,25 +100,25 @@
 
 ## 📋 更新日志
 
-> **最新版本 v0.7.6**（2026-09-17）
+> **最新版本 v0.7.7-beta**（2026-09-20）
 
-### v0.7.6 更新亮点
-- 🚀 **全局快捷键自定义**
-- 🚀 **Ctrl/Cmd+P 命令面板**
-- 🚀 **提示词商店官方模板与内置技能热更新**
-- 🚀 **提示词商店新增 WB 增强提示词模板**
-- 🚀 **项目级定时任务，管理改模态弹框**
-- 🚀 **会话 Tab 栏「当前会话操作」**
-- 🚀 **会话内文件路径链接右键菜单**
-- 🚀 **侧栏与 Tab 菜单可直接复制 Agent ID**
-- 🚀 **DSH 权限按钮与 pi 安全等级菜单统一（#214）**
-- 🚀 **提问卡支持直接回车提交**
-- 🚀 **导入 Cursor Agent 会话**
-- 🚀 **官方安装包不再随 DSH runtime**
-- ✨ **生图会话不再因 base64 落盘撑爆渲染进程**
-- ✨ **渲染进程 OOM 分层治理**
-- ✨ **常驻缓存补字节预算**
-- ✨ **超大会话不再打不开 / 闪退**
+### v0.7.7-beta 更新亮点
+- 🚀 **工作区文件按名称搜索（#215）**
+- 🚀 **从其他目录导入会话（项目移动 / 改名后找回历史）**
+- 🚀 **外部资源导入（MCP / 技能 / 提示词）**
+- 🚀 **严格工具采样可显式开关（`compat.supportsStrictMode`）**
+- 🚀 **供应商、模型与认证的隐藏与自定义排序**
+- 🚀 **侧栏项目树显示当前 Git 分支**
+- 🚀 **新增「切换模型」与「思考强度循环」快捷键（Ctrl+M / Ctrl+T，macOS ⌘⌥M / ⌘⌥T）**
+- 🚀 **会话 Tab 悬停提示显示工作区**
+- 🚀 **长时间任务的耗时显示小时档**
+- 🚀 **DSH host 可手动停止（跨重启持久）**
+- 🚀 **pi 环境引导支持一键安装便携 Node 与 pi CLI**
+- 🚀 **DSH runtime 改为单 runner 交叉打包全平台**
+- ✨ **第三方中转站拉不到模型 / 手填模型也用不了已修复**
+- ✨ **Provider 的 User-Agent 收敛为单个可输入下拉并扩充预设**
+- ✨ **DSH 配置目录共用风险现在会明确提示（#189）**
+- ✨ **公告提醒不再反复弹**
 
 [查看完整更新日志 →](CHANGELOG.zh-CN.md)
 
