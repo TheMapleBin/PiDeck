@@ -1,9 +1,10 @@
-import { dialog, ipcMain } from "electron";
+import { dialog, ipcMain, type BrowserWindow } from "electron";
 import { resolve } from "node:path";
 import { spawn, type ChildProcess } from "node:child_process";
 import { ipcChannels } from "../../shared/ipc";
 import type { GitDiscardResource, GitGenerateCommitMessageResult, GitWorkspaceDiffGroup } from "../../shared/types";
 import type { GitService } from "../git/GitService";
+import type { GitRefsWatcher } from "../git/GitRefsWatcher";
 import { currentGitExecutable, detectGitExecutable } from "../git/gitExecutable";
 import { listGitRepos, resolveGitCwd } from "../git/gitRepoScope";
 import type { AppLogger } from "../logging/AppLogger";
@@ -19,6 +20,10 @@ export type GitIpcDeps = {
 	appLogger: Pick<AppLogger, "warn" | "info" | "error">;
 	mainCopy: (key: string, params?: Record<string, string | number>) => string;
 	gitService: GitService;
+	/** refs 变化监听：面板订阅后由主进程推送，push/commit 后角标秒级跟平 */
+	gitRefsWatcher: GitRefsWatcher;
+	/** refs 变化推送需要发往主窗口（宠物窗等其它窗口不订阅） */
+	getMainWindow: () => BrowserWindow | null;
 	piLocator: PiLocator;
 	projectStore: ProjectStore;
 	settingsStore: SettingsStore;
@@ -232,7 +237,7 @@ async function quickGenerate(projectPath: string, prompt: string, piLocator: PiL
 
 // ── IPC 注册 ────────────────────────────────────────────────────────
 
-export function registerGitIpc({ appLogger, mainCopy, gitService, piLocator, projectStore, settingsStore, worktreeService }: GitIpcDeps): void {
+export function registerGitIpc({ appLogger, mainCopy, gitService, gitRefsWatcher, getMainWindow, piLocator, projectStore, settingsStore, worktreeService }: GitIpcDeps): void {
 	const hostPath = (path: string): string => {
 		const settings = settingsStore.get();
 		if (process.platform !== "win32" || !settings.wslEnabled || !settings.wslDistro || (!path.startsWith("/") && !parseWslUncPath(path))) {
@@ -567,6 +572,29 @@ export function registerGitIpc({ appLogger, mainCopy, gitService, piLocator, pro
 	// ahead/behind：驱动 push/pull 角标；无上游返回 null（不显示角标）
 	ipcMain.handle(ipcChannels.gitAheadBehind, async (_event, projectId: string, repoPath?: string) => {
 		return gitService.getAheadBehind(requireGitCwd(projectId, repoPath));
+	});
+
+	// refs 变化监听：面板挂载时订阅、卸载时退订。commit/push/fetch/切分支会改写 refs 签名，
+	// 主进程检出后立即推送，渲染层重读（延迟上限 = watcher 的轮询间隔 1.5 秒）。
+	// 订阅是加速手段而非正确性前提：非 git 目录、读不到文件时 watcher 静默降级，渲染层仍有轮询兜底。
+	ipcMain.handle(ipcChannels.gitWatchRefs, (_event, projectId: string, repoPath?: string) => {
+		return gitRefsWatcher.acquire(projectId, requireGitCwd(projectId, repoPath));
+	});
+
+	ipcMain.handle(ipcChannels.gitUnwatchRefs, (_event, watchId: string) => {
+		// 入参不可信：只接受非空字符串；未知 watchId 由 watcher 静默忽略
+		if (typeof watchId !== "string" || watchId === "") return;
+		gitRefsWatcher.release(watchId);
+	});
+
+	// 事件桥：watcher → 渲染层推送。payload 用 watchId 而不是仓库路径，
+	// 多仓项目里 N 个面板共用这条通道，各自比对自己的 id 即可，无需再规范化路径。
+	// 退订由 watcher.disposeAll() 在退出清理时统一清空，无需单独登记。
+	gitRefsWatcher.on((watchId) => {
+		const window = getMainWindow();
+		// 窗口已销毁时 send 会抛：这里只推送，不影响监听本身
+		if (!window || window.isDestroyed()) return;
+		window.webContents.send(ipcChannels.gitRefsChanged, watchId);
 	});
 
 	// 删除变更文件（移入回收站）：路径由 GitService 按 status 白名单校验

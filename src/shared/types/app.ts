@@ -123,6 +123,13 @@ export type ProjectResourceDiscoveryResult = {
 
 export type ProjectResourceDirectoryKind = "project-pi" | "project-agents" | "prompts";
 
+export type CreateProjectSkillInput = {
+	projectId: string;
+	name: string;
+	description: string;
+	locationId: Extract<PiSkillLocation["id"], "project-pi" | "project-agents">;
+};
+
 export type PiExtensionSummary = {
 	id: string;
 	source: string;

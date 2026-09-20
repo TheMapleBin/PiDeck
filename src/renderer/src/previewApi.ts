@@ -366,6 +366,19 @@ export function createPreviewApi(): PiDesktopApi {
 				},
 			}),
 			openDirectory: async () => undefined,
+			createSkill: async (input) => ({
+				id: `project-pi:${input.name}`,
+				name: input.name,
+				description: input.description,
+				path: `C:/Users/preview/project/.pi/skills/${input.name}/SKILL.md`,
+				dir: `C:/Users/preview/project/.pi/skills/${input.name}`,
+				sourceId: "project-pi" as const,
+				sourceLabel: ".pi/skills",
+				type: "directory" as const,
+				enabled: true,
+				valid: true,
+				warnings: [],
+			}),
 			deleteSkill: async () => undefined,
 			deleteExtension: async () => undefined,
 			toggleExtension: async () => undefined,
@@ -820,6 +833,10 @@ export function createPreviewApi(): PiDesktopApi {
 			fetch: async () => undefined,
 			// 预览环境无真实远程：恒返回 null（不显示 push/pull 角标）
 			aheadBehind: async () => null,
+			// 预览环境无主进程监听：恒返回空 watchId，onRefsChanged 是空订阅（不推送）
+			watchRefs: async () => "",
+			unwatchRefs: async () => {},
+			onRefsChanged: () => () => {},
 			deleteFiles: async () => {},
 			// 预览环境无真实子进程：恒报告「PATH 中的 git 可用」
 			detectExecutable: async () => ({
@@ -1016,6 +1033,19 @@ export function createPreviewApi(): PiDesktopApi {
 			readContent: async (_path) => ({
 				content: "# preview-skill\n\nPreview skill body used by the browser preview layout.",
 			}),
+			create: async (input) => ({
+				id: `pi-global:${input.name}`,
+				name: input.name,
+				description: input.description,
+				path: `C:/Users/preview/.pi/agent/skills/${input.name}/SKILL.md`,
+				dir: `C:/Users/preview/.pi/agent/skills/${input.name}`,
+				sourceId: input.locationId,
+				sourceLabel: "~/.pi/agent/skills",
+				type: "directory" as const,
+				enabled: true,
+				valid: true,
+				warnings: [],
+			}),
 			toggle: async (path, enabled) => ({
 				id: `pi-global:${path}`,
 				name: "preview-skill",
@@ -1204,6 +1234,14 @@ export function createPreviewApi(): PiDesktopApi {
 			openFolder: async () => undefined,
 			edit: async (_filePath, _content?) => "---\ndescription: Preview\n---\n\nPreview content",
 			listByProject: async () => ({ templates: [], globalDir: "" }),
+			createInProject: async (_projectId, input) => ({
+				name: input.name,
+				path: `project://${_projectId}/.pi/prompts/${input.name}.md`,
+				description: input.description,
+				content: `---\ndescription: ${input.description}\n---\n`,
+				userCreated: true,
+				scope: "project",
+			}),
 			deleteFromProject: async () => undefined,
 			rename: async (_oldName, newName) => ({
 				name: newName,

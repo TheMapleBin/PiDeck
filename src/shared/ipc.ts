@@ -10,6 +10,7 @@ export const ipcChannels = {
 	projectsChanged: "projects:changed",
 	projectResourcesList: "project-resources:list",
 	projectResourcesOpenDirectory: "project-resources:open-directory",
+	projectResourcesCreateSkill: "project-resources:create-skill",
 	projectResourcesDeleteSkill: "project-resources:delete-skill",
 	projectResourcesToggleSkill: "project-resources:toggle-skill",
 	projectResourcesDeleteExtension: "project-resources:delete-extension",
@@ -297,6 +298,7 @@ export const ipcChannels = {
 	settingsApplyWindow: "settings:apply-window",
 	skillsList: "skills:list",
 	skillsReadContent: "skills:read-content",
+	skillsCreate: "skills:create",
 	skillsToggle: "skills:toggle",
 	skillsDelete: "skills:delete",
 	skillsOpenFolder: "skills:open-folder",
@@ -307,6 +309,7 @@ export const ipcChannels = {
 	promptsOpenFolder: "prompts:open-folder",
 	promptsEdit: "prompts:edit",
 	promptsListByProject: "prompts:list-by-project",
+	promptsCreateInProject: "prompts:create-in-project",
 	promptsDeleteInProject: "prompts:delete-in-project",
 	promptsRename: "prompts:rename",
 	promptsRenameInProject: "prompts:rename-in-project",
@@ -406,6 +409,18 @@ export const ipcChannels = {
 	gitFetch: "git:fetch",
 	/** 当前分支相对上游的提交差距（ahead/behind），驱动 push/pull 角标 */
 	gitAheadBehind: "git:ahead-behind",
+	/**
+	 * 订阅某个仓库的 refs 变化（commit/push/fetch/切分支），返回 watchId。
+	 * 主进程按 (projectId, repoPath) 复用一份 1.5 秒签名轮询（零句柄），与 gitUnwatchRefs 成对使用。
+	 */
+	gitWatchRefs: "git:watch-refs",
+	/** 退订 refs 监听：计数归零时主进程才停掉该仓库的轮询（面板卸载 / 切仓库时调用） */
+	gitUnwatchRefs: "git:unwatch-refs",
+	/**
+	 * refs 变化推送（主进程 → 渲染层，订阅式）：payload 为 watchId，
+	 * 每个面板只处理自己订阅的那一份（多仓项目共用同一条通道）。
+	 */
+	gitRefsChanged: "git:refs-changed",
 	/** 从磁盘删除变更文件（移入回收站，可恢复） */
 	gitDeleteFiles: "git:delete-files",
 	/**

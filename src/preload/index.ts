@@ -71,6 +71,7 @@ import type {
 	VisionBridgeConfig,
 	ProjectInheritedResourceToggleInput,
 	ProjectResourceDirectoryKind,
+	CreateProjectSkillInput,
 	ProjectResourceListResult,
 	ProjectResourceDiscoveryResult,
 	ProjectResourceOverrides,
@@ -134,6 +135,7 @@ import type {
 	PiProxyTestResult,
 	PiUpdateCheckResult,
 	PiSkillListResult,
+	CreatePiSkillInput,
 	PiSkillSummary,
 	SkillContentResult,
 	Project,
@@ -239,6 +241,7 @@ const api = {
 	projectResources: {
 		list: (projectId: string) => ipcRenderer.invoke(ipcChannels.projectResourcesList, projectId) as Promise<ProjectResourceListResult>,
 		openDirectory: (projectId: string, kind: ProjectResourceDirectoryKind) => ipcRenderer.invoke(ipcChannels.projectResourcesOpenDirectory, projectId, kind) as Promise<void>,
+		createSkill: (input: CreateProjectSkillInput) => ipcRenderer.invoke(ipcChannels.projectResourcesCreateSkill, input) as Promise<PiSkillSummary>,
 		deleteSkill: (projectId: string, skillPath: string) => ipcRenderer.invoke(ipcChannels.projectResourcesDeleteSkill, projectId, skillPath) as Promise<void>,
 		deleteExtension: (projectId: string, extensionPath: string) => ipcRenderer.invoke(ipcChannels.projectResourcesDeleteExtension, projectId, extensionPath) as Promise<void>,
 		toggleExtension: (projectId: string, extensionPath: string, enabled: boolean) => ipcRenderer.invoke(ipcChannels.projectResourcesToggleExtension, projectId, extensionPath, enabled) as Promise<void>,
@@ -719,6 +722,21 @@ const api = {
 		fetch: (projectId: string, repoPath?: string) => ipcRenderer.invoke(ipcChannels.gitFetch, projectId, repoPath) as Promise<void>,
 		/** 当前分支相对上游的提交差距（ahead/behind），驱动 push/pull 角标 */
 		aheadBehind: (projectId: string, repoPath?: string) => ipcRenderer.invoke(ipcChannels.gitAheadBehind, projectId, repoPath) as Promise<import("../shared/types").GitAheadBehind | null>,
+		/**
+		 * 订阅仓库 refs 变化（commit/push/fetch/切分支），返回 watchId。
+		 * 与 unwatchRefs 成对使用：组件卸载时必须退订，否则监听句柄会留到应用退出。
+		 */
+		watchRefs: (projectId: string, repoPath?: string) => ipcRenderer.invoke(ipcChannels.gitWatchRefs, projectId, repoPath) as Promise<string>,
+		/** 退订 refs 监听；未知 watchId 由主进程静默忽略（重复退订安全） */
+		unwatchRefs: (watchId: string) => ipcRenderer.invoke(ipcChannels.gitUnwatchRefs, watchId) as Promise<void>,
+		/** refs 变化推送：payload 为 watchId，调用方只处理自己订阅的那一份。返回退订函数。 */
+		onRefsChanged: (listener: (watchId: string) => void) => {
+			const handler = (_event: unknown, watchId: string) => listener(watchId);
+			ipcRenderer.on(ipcChannels.gitRefsChanged, handler);
+			return () => {
+				ipcRenderer.removeListener(ipcChannels.gitRefsChanged, handler);
+			};
+		},
 		/** 从磁盘删除变更文件（移入回收站，可恢复） */
 		deleteFiles: (projectId: string, paths: string[], repoPath?: string) => ipcRenderer.invoke(ipcChannels.gitDeleteFiles, projectId, paths, repoPath) as Promise<void>,
 		/**
@@ -841,6 +859,7 @@ const api = {
 		list: () => ipcRenderer.invoke(ipcChannels.skillsList) as Promise<PiSkillListResult>,
 		// 读技能 SKILL.md 正文（白名单校验在主进程完成），技能选择器详情/全文插入用。
 		readContent: (path: string) => ipcRenderer.invoke(ipcChannels.skillsReadContent, path) as Promise<SkillContentResult>,
+		create: (input: CreatePiSkillInput) => ipcRenderer.invoke(ipcChannels.skillsCreate, input) as Promise<PiSkillSummary>,
 		toggle: (path: string, enabled: boolean) => ipcRenderer.invoke(ipcChannels.skillsToggle, path, enabled) as Promise<PiSkillSummary>,
 		delete: (path: string) => ipcRenderer.invoke(ipcChannels.skillsDelete, path) as Promise<void>,
 		openFolder: (path?: string) => ipcRenderer.invoke(ipcChannels.skillsOpenFolder, path) as Promise<void>,
@@ -857,6 +876,7 @@ const api = {
 		openFolder: () => ipcRenderer.invoke(ipcChannels.promptsOpenFolder) as Promise<void>,
 		edit: (filePath: string, content?: string) => ipcRenderer.invoke(ipcChannels.promptsEdit, filePath, content) as Promise<string | void>,
 		listByProject: (projectId: string) => ipcRenderer.invoke(ipcChannels.promptsListByProject, projectId) as Promise<PiPromptTemplateListResult>,
+		createInProject: (projectId: string, input: CreatePiPromptTemplateInput) => ipcRenderer.invoke(ipcChannels.promptsCreateInProject, projectId, input) as Promise<PiPromptTemplateSummary>,
 		deleteFromProject: (projectId: string, name: string) => ipcRenderer.invoke(ipcChannels.promptsDeleteInProject, projectId, name) as Promise<void>,
 		rename: (oldName: string, newName: string) => ipcRenderer.invoke(ipcChannels.promptsRename, oldName, newName) as Promise<PiPromptTemplateSummary>,
 		renameInProject: (projectId: string, oldName: string, newName: string) => ipcRenderer.invoke(ipcChannels.promptsRenameInProject, projectId, oldName, newName) as Promise<PiPromptTemplateSummary>,

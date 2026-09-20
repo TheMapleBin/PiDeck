@@ -118,8 +118,8 @@ test("skill table uses real aligned columns, not a colSpan card", () => {
 	assert.match(skillTableRow, /<TableCell className="text-right">/);
 	// 操作按钮直接放在 TableCell 内，不再包一层可点击的卡片 button。
 	assert.doesNotMatch(skillTableRow, /<button[\s\S]*skill-rename-inline[\s\S]*<Button/);
-	// 新建 Skill 表单已整体移除：位置选择 Select 与旧自定义下拉弹层都不应出现。
-	assert.doesNotMatch(skills, /<SelectTrigger/);
+	// 位置选择改为 shadcn Select，不再使用自定义下拉弹层。
+	// （远端 abb45b39 有意恢复默认高度：选择器仅显示相对路径、单行截断左对齐）
+	assert.match(skills, /<SelectTrigger className="w-full">/);
 	assert.doesNotMatch(skills, /skill-location-picker/);
-	assert.doesNotMatch(skills, /config\.createSkill/);
 });

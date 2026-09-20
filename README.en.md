@@ -11,7 +11,7 @@
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
 ![Electron](https://img.shields.io/badge/Electron-38-47848f)
 ![React](https://img.shields.io/badge/React-19-61dafb)
-![Version](https://img.shields.io/badge/version-0.7.6-blue)
+![Version](https://img.shields.io/badge/version-0.7.7--beta-blue)
 
 <!-- star-history:start -->
 <picture>
@@ -81,25 +81,25 @@
 
 ## 📋 Changelog
 
-> **Latest: v0.7.6** (2026-09-17)
+> **Latest: v0.7.7-beta** (2026-09-20)
 
-### v0.7.6 Release Highlights
-- 🚀 **Customizable global shortcuts**
-- 🚀 **Ctrl/Cmd+P command palette**
-- 🚀 **Hot updates for official prompt templates and built-in skills**
-- 🚀 **WB enhancement prompt templates in the store**
-- 🚀 **Project-scoped scheduled tasks, management as a modal**
-- 🚀 **Session tab “current session actions”**
-- 🚀 **Context menu for file path links in sessions**
-- 🚀 **Copy the agent ID from sidebar and tab menus**
-- 🚀 **DSH permission button unified with the pi security-level menu (#214)**
-- 🚀 **Ask cards submit on Enter**
-- 🚀 **Import Cursor Agent sessions**
-- 🚀 **Official installer no longer ships DSH runtime**
-- ✨ **Image-gen sessions no longer OOM the renderer from inline base64**
-- ✨ **Layered renderer OOM controls**
-- ✨ **Resident caches gain byte budgets**
-- ✨ **Huge sessions no longer fail to open or crash the app**
+### v0.7.7-beta Release Highlights
+- 🚀 **Search workspace files by name (#215)**
+- 🚀 **Import sessions from another directory (recover history after a move or rename)**
+- 🚀 **Import external resources (MCP / skills / prompt templates)**
+- 🚀 **Strict tool sampling can be switched explicitly (`compat.supportsStrictMode`)**
+- 🚀 **Hide and reorder providers, models and auth entries**
+- 🚀 **The sidebar project tree shows the current Git branch**
+- 🚀 **New “cycle model” and “cycle thinking effort” shortcuts (Ctrl+M / Ctrl+T, macOS ⌘⌥M / ⌘⌥T)**
+- 🚀 **Session tab hover tooltips show the workspace**
+- 🚀 **Hour-scale durations for long tasks**
+- 🚀 **DSH host can be stopped manually (persisted across restarts)**
+- 🚀 **The pi environment guide installs portable Node and the pi CLI in one click**
+- 🚀 **DSH runtime archives are cross-packed from a single runner**
+- ✨ **Third-party relays no longer fail to list models — or to use a manually typed one**
+- ✨ **Provider User-Agent collapsed into a single editable dropdown, with a much fuller preset list**
+- ✨ **Shared DSH config directory is now called out (#189)**
+- ✨ **Announcement toasts no longer repeat forever**
 
 [View Full Changelog →](CHANGELOG.md)
 
