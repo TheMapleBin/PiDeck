@@ -57,6 +57,24 @@ const BACKUP_FILE_PREFIX = "backup-";
  */
 export const MAX_BACKUPS = 5;
 
+const BACKUP_ID_PATTERN = /^backup-(\d+)(?:-(\d+))?\.json$/;
+
+/**
+ * 备份文件名比较：先比时间戳数字串（等长可比），同毫秒时再比序号。
+ * 序号必须按数值比，否则 `-10` 会被字符串比较排到 `-2` 前面，
+ * 导致同毫秒批次里新旧顺序错乱（prune 会删错）。
+ * 不符合命名规范的名字排到最后（不参与正常定序）。
+ */
+function compareBackupFileName(left: string, right: string): number {
+	const a = BACKUP_ID_PATTERN.exec(left);
+	const b = BACKUP_ID_PATTERN.exec(right);
+	if (!a || !b) return left < right ? -1 : left > right ? 1 : 0;
+	if (a[1] !== b[1]) return a[1] < b[1] ? -1 : 1;
+	const seqA = a[2] === undefined ? 0 : Number(a[2]);
+	const seqB = b[2] === undefined ? 0 : Number(b[2]);
+	return seqA - seqB;
+}
+
 /** 递归脱敏时命中的字段名（值必须为 string 且足够长才替换，避免误伤短标识符）。 */
 const SECRET_KEY_NAMES = new Set([
 	"key",
@@ -108,7 +126,16 @@ export class ConfigBackupManager {
 				const meta = this.readMeta(join(dir, name));
 				if (meta) metas.push(meta);
 			}
-			metas.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+			// 排序必须满足严格弱序且结果确定，否则 prune 会删错文件：
+			// createdAt 只有毫秒精度，同一毫秒内连续创建的备份（CI 慢机器上常见）
+			// 时间戳完全相同；旧实现用 `a < b ? 1 : -1` 对相等元素也返回 -1，
+			// 破坏排序契约（V8 TimSort 下结果不确定），曾导致保留策略删错最旧备份
+			// （main CI 2026-09-19 红灯）。这里补 id 作确定性次级键：id 与时间戳
+			// 同源（backup-<stamp>[-seq].json），同毫秒时按序号定序。
+			metas.sort((a, b) => {
+				if (a.createdAt !== b.createdAt) return a.createdAt < b.createdAt ? 1 : -1;
+				return compareBackupFileName(a.id, b.id) > 0 ? -1 : 1;
+			});
 			return { ok: true, backups: metas };
 		} catch (error) {
 			this.report("list", error);
