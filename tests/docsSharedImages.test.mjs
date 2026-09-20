@@ -15,11 +15,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
-import {
-	SHARED_README_IMAGES,
-	resolveSharedImageSource,
-	syncSharedReadmeImages,
-} from "../docs-site/.vitepress/sharedReadmeImages.ts";
+import { SHARED_README_IMAGES, resolveSharedImageSource, syncSharedReadmeImages } from "../docs-site/.vitepress/sharedReadmeImages.ts";
 
 const REPO_ROOT = resolve(import.meta.dirname, "..");
 const DOCS_IMAGES_DIR = join(REPO_ROOT, "docs", "images");
@@ -35,9 +31,7 @@ test("生成副本被 gitignore，不会退化回两份手工同步的图", () =
 	const gitignore = readFileSync(join(REPO_ROOT, ".gitignore"), "utf8");
 	for (const name of SHARED_README_IMAGES) {
 		// 逐行比对而不是 includes：避免注释里提到文件名也算通过
-		const ignored = gitignore
-			.split("\n")
-			.some((line) => line.trim() === `docs-site/public/images/${name}`);
+		const ignored = gitignore.split("\n").some((line) => line.trim() === `docs-site/public/images/${name}`);
 		assert.ok(ignored, `.gitignore 未忽略 docs-site/public/images/${name}`);
 	}
 });
@@ -101,11 +95,7 @@ test("源图缺失时硬失败，不静默跳过", () => {
 		const emptySource = join(tmp, "empty");
 		mkdirSync(emptySource, { recursive: true });
 
-		assert.throws(
-			() => syncSharedReadmeImages(join(tmp, "public"), emptySource),
-			/缺少共用图片/,
-			"缺图必须抛错，否则线上会发一张破图",
-		);
+		assert.throws(() => syncSharedReadmeImages(join(tmp, "public"), emptySource), /缺少共用图片/, "缺图必须抛错，否则线上会发一张破图");
 	} finally {
 		rmSync(tmp, { recursive: true, force: true });
 	}

@@ -223,14 +223,7 @@ export type FeedbackEnvironment = {
 };
 
 /** 应用更新生命周期阶段（由 electron-updater 事件映射）。 */
-export type AppUpdatePhase =
-	| "idle"
-	| "checking"
-	| "available"
-	| "downloading"
-	| "ready"
-	| "installing"
-	| "error";
+export type AppUpdatePhase = "idle" | "checking" | "available" | "downloading" | "ready" | "installing" | "error";
 
 /** 更新交付能力：automatic=应用内下载/安装；manual=仅检测并引导至 Release。 */
 export type AppUpdateDeliveryMode = "automatic" | "manual";

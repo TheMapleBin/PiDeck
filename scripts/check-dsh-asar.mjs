@@ -60,12 +60,7 @@ if (hasTarget) {
 }
 
 const firstNonFlag = argv.find((value, index) => !value.startsWith("--") && (index === 0 || !argv[index - 1].startsWith("--")));
-const defaultArchive = join(
-	scriptDir,
-	"..",
-	"dist-runtime",
-	`dsh-runtime-${targetPlatform}-${targetArch}.tgz`,
-);
+const defaultArchive = join(scriptDir, "..", "dist-runtime", `dsh-runtime-${targetPlatform}-${targetArch}.tgz`);
 
 const archivePath = firstNonFlag ? resolve(firstNonFlag) : defaultArchive;
 
@@ -101,17 +96,7 @@ const REQUIRED = [
  *  0.1.5：dsh-host-apiproxy 已废，传输半在 dsh-client-connection，
  *  网关/端点在 dsh-api-gateway / dsh-api-session-controller（见
  *  docs/dsh-0.1.5-typert-migration.md）。 */
-const ENTRY_PACKAGES = [
-	"@deepseek-ai/dsh-base",
-	"@deepseek-ai/dsh-app-boot",
-	"@deepseek-ai/dsh-cmdline",
-	"@deepseek-ai/dsh-client-connection",
-	"@deepseek-ai/dsh-api-gateway",
-	"@deepseek-ai/dsh-api-remotes",
-	"@deepseek-ai/dsh-api-session-controller",
-	"dsh-bill",
-	"dsh-tool-pwsh-persistent",
-];
+const ENTRY_PACKAGES = ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-app-boot", "@deepseek-ai/dsh-cmdline", "@deepseek-ai/dsh-client-connection", "@deepseek-ai/dsh-api-gateway", "@deepseek-ai/dsh-api-remotes", "@deepseek-ai/dsh-api-session-controller", "dsh-bill", "dsh-tool-pwsh-persistent"];
 
 /**
  * 已知「运行时代码在 src/」的包，归档里必须带这些文件（见 runtime-prune-rules.mjs
@@ -301,9 +286,7 @@ for (const nativePkg of expectedNativePackages) {
 // 顶层与嵌套各一份（版本不同），任一份带有目标平台 prebuild 即可。
 const ptyPrebuildPrefix = `prebuilds/${targetPlatform}-${targetArch}/`;
 const ptyDirs = [...presentRelByDir.keys()].filter((dir) => dir.endsWith("/node-pty"));
-const ptyHasPrebuild = ptyDirs.some((dir) =>
-	[...(presentRelByDir.get(dir) ?? new Set())].some((rel) => rel.startsWith(ptyPrebuildPrefix)),
-);
+const ptyHasPrebuild = ptyDirs.some((dir) => [...(presentRelByDir.get(dir) ?? new Set())].some((rel) => rel.startsWith(ptyPrebuildPrefix)));
 if (!ptyHasPrebuild) {
 	failures.push(`node-pty prebuilds/${targetPlatform}-${targetArch}/ missing（原生模块缺平台二进制）`);
 }
@@ -317,7 +300,4 @@ if (failures.length > 0) {
 	for (const failure of failures) console.error(`FAIL  ${failure}`);
 	process.exit(1);
 }
-console.log(
-	`OK    ${REQUIRED.length} baseline + ${ENTRY_PACKAGES.length} entry packages present; ` +
-		`${pkgJsonByDir.size} package dirs entry-resolved; critical files present`,
-);
+console.log(`OK    ${REQUIRED.length} baseline + ${ENTRY_PACKAGES.length} entry packages present; ` + `${pkgJsonByDir.size} package dirs entry-resolved; critical files present`);

@@ -28,15 +28,16 @@ function loadAskUi(selectionText) {
 	}).outputText;
 	// selectionText === undefined：不提供 window（SSR 兜底分支）；
 	// 沙箱不提供 document → 模块级 mousedown 监听器不安装（快照恒 null，走保守兜底）
-	const sandbox = selectionText === undefined
-		? { exports: {}, require: () => ({}) }
-		: {
-			exports: {},
-			require: () => ({}),
-			window: {
-				getSelection: () => (selectionText === null ? null : { toString: () => selectionText }),
-			},
-		};
+	const sandbox =
+		selectionText === undefined
+			? { exports: {}, require: () => ({}) }
+			: {
+					exports: {},
+					require: () => ({}),
+					window: {
+						getSelection: () => (selectionText === null ? null : { toString: () => selectionText }),
+					},
+				};
 	vm.runInNewContext(output, sandbox, { filename: "askUi.ts" });
 	return sandbox.exports;
 }

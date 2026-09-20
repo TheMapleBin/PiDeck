@@ -14,11 +14,7 @@
  * 只提供「识别结果」让弹窗显示说明（模型：内置默认开、零配置）。
  */
 import { stripOpenAiVersionPath } from "./baseUrlPath";
-import type {
-	UsageProbeProviderConfig,
-	UsageProbeTemplateCategory,
-	UsageProbeTemplateMeta,
-} from "../../shared/types/providerUsage";
+import type { UsageProbeProviderConfig, UsageProbeTemplateCategory, UsageProbeTemplateMeta } from "../../shared/types/providerUsage";
 import type { UsageProbeCandidate, UsageProbeParse } from "./providerUsageProbe";
 
 /** 声明式模板元数据（渲染层 pills 数据源；id 稳定，文案走 i18n）。 */
@@ -57,10 +53,7 @@ export function isDeclarativeTemplateId(id: string): boolean {
  */
 export function buildDeclarativeUsageProbeTemplate(
 	templateId: string,
-	config: Pick<
-		UsageProbeProviderConfig,
-		"apiKey" | "baseUrl" | "accessToken" | "userId" | "cookie" | "cookiePath" | "valuePath" | "currencyPath"
-	>,
+	config: Pick<UsageProbeProviderConfig, "apiKey" | "baseUrl" | "accessToken" | "userId" | "cookie" | "cookiePath" | "valuePath" | "currencyPath">,
 	endpoint: { baseUrl: string; apiKey: string },
 ): { candidate: UsageProbeCandidate; baseUrl: string; apiKey: string } | { error: string } {
 	if (templateId === "general") {
@@ -109,11 +102,7 @@ export function buildDeclarativeUsageProbeTemplate(
 		const valuePath = config.valuePath?.trim() ?? "";
 		if (!cookie || !cookiePath || !valuePath) {
 			return {
-				error: !cookie
-					? "Cookie 模板需要网页登录态 Cookie（F12 → Network → 请求头 Cookie）"
-					: !cookiePath
-						? "Cookie 模板需要接口路径（如 /api/wallet/summary）"
-						: "Cookie 模板需要余额字段路径（如 data.availableBalanceCny）",
+				error: !cookie ? "Cookie 模板需要网页登录态 Cookie（F12 → Network → 请求头 Cookie）" : !cookiePath ? "Cookie 模板需要接口路径（如 /api/wallet/summary）" : "Cookie 模板需要余额字段路径（如 data.availableBalanceCny）",
 			};
 		}
 		// 与 newapi 同理：管理接口挂在站点根，baseUrl 常带 /v1，剥离版本段得到管理根，

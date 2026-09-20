@@ -12,15 +12,12 @@ import vm from "node:vm";
  * 表现为候选 shell 列表恒为空。此测试从 IPC 边界锁定 handler 行为。
  */
 function loadTerminalIpc({ ipcMain, ipcChannels }) {
-	const output = ts.transpileModule(
-		readFileSync("src/main/ipc/terminalIpc.ts", "utf8"),
-		{
-			compilerOptions: {
-				module: ts.ModuleKind.CommonJS,
-				target: ts.ScriptTarget.ES2022,
-			},
+	const output = ts.transpileModule(readFileSync("src/main/ipc/terminalIpc.ts", "utf8"), {
+		compilerOptions: {
+			module: ts.ModuleKind.CommonJS,
+			target: ts.ScriptTarget.ES2022,
 		},
-	).outputText;
+	}).outputText;
 	const module = { exports: {} };
 	vm.runInNewContext(output, {
 		module,

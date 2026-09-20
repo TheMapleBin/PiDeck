@@ -34,11 +34,7 @@ function looksLikePath(p: string): boolean {
  * Windows 必须是 CUI node.exe（不能用 electron.exe），主版本需 Node 24。
  * 本机其它 Node 可继续占 PATH；缺 24 时可一键下载到 userData。
  */
-export function DshRunnerNodeRow(props: {
-	draft: AppSettings;
-	updateDraft: (patch: Partial<AppSettings>) => void;
-	isDirty: (field: keyof AppSettings) => boolean;
-}) {
+export function DshRunnerNodeRow(props: { draft: AppSettings; updateDraft: (patch: Partial<AppSettings>) => void; isDirty: (field: keyof AppSettings) => boolean }) {
 	const { draft, updateDraft, isDirty } = props;
 	const draftPath = (draft.dshRunnerNodePath ?? "").trim();
 	const [info, setInfo] = useState<DshRunnerNodeInfo | null>(null);
@@ -114,16 +110,12 @@ export function DshRunnerNodeRow(props: {
 	};
 
 	const status = info;
-	const effectiveVersion = status?.source === "not-found" ? "" : status?.version ?? "";
+	const effectiveVersion = status?.source === "not-found" ? "" : (status?.version ?? "");
 	const resolvedDisplay = draftPath || status?.resolvedPath || status?.system?.resolvedPath || "";
 	const detectedPath = status?.system?.resolvedPath ?? status?.resolvedPath ?? "";
 	const ok = Boolean(status?.compatible && !status.error);
 	const needsInstall = !ok;
-	const detectedCompatible = Boolean(
-		status?.system?.resolvedPath &&
-			status.system.resolvedPath !== draftPath &&
-			/^24\./.test(status.system.version),
-	);
+	const detectedCompatible = Boolean(status?.system?.resolvedPath && status.system.resolvedPath !== draftPath && /^24\./.test(status.system.version));
 
 	return (
 		<SettingRow
@@ -141,22 +133,11 @@ export function DshRunnerNodeRow(props: {
 					<Input
 						className="w-56 min-w-0 flex-1 font-mono text-xs"
 						value={draftPath}
-						placeholder={
-							draftPath
-								? ""
-								: looksLikePath(detectedPath)
-									? detectedPath
-									: t("settings.dshRunnerNodePlaceholder")
-						}
+						placeholder={draftPath ? "" : looksLikePath(detectedPath) ? detectedPath : t("settings.dshRunnerNodePlaceholder")}
 						title={draftPath || (looksLikePath(detectedPath) ? detectedPath : "")}
 						onChange={(e) => updateDraft({ dshRunnerNodePath: e.target.value })}
 					/>
-					<Button
-						variant="outline"
-						size="sm"
-						disabled={detecting}
-						onClick={() => void runDetect(draftPath)}
-					>
+					<Button variant="outline" size="sm" disabled={detecting} onClick={() => void runDetect(draftPath)}>
 						{detecting ? t("settings.dshRunnerNodeDetecting") : t("settings.dshRunnerNodeDetect")}
 					</Button>
 					<Button variant="outline" size="sm" onClick={() => void chooseFile()}>
@@ -176,10 +157,7 @@ export function DshRunnerNodeRow(props: {
 					)}
 				</div>
 				{ok && resolvedDisplay && (
-					<small
-						className="block truncate font-mono text-caption text-muted-foreground"
-						title={`${sourceLabel(status?.source ?? "path")}${effectiveVersion ? ` · ${t("settings.dshRunnerNodeVersion", { version: effectiveVersion })}` : ""} · ${resolvedDisplay}`}
-					>
+					<small className="block truncate font-mono text-caption text-muted-foreground" title={`${sourceLabel(status?.source ?? "path")}${effectiveVersion ? ` · ${t("settings.dshRunnerNodeVersion", { version: effectiveVersion })}` : ""} · ${resolvedDisplay}`}>
 						{sourceLabel(status?.source ?? "path")}
 						{effectiveVersion ? ` · ${t("settings.dshRunnerNodeVersion", { version: effectiveVersion })}` : ""}
 						{" · "}
@@ -206,32 +184,17 @@ export function DshRunnerNodeRow(props: {
 				)}
 				{needsInstall && (
 					<div className="flex flex-wrap items-center gap-2">
-						<Button
-							variant="outline"
-							size="sm"
-							disabled={installing}
-							onClick={() => void installPrivateCopy()}
-						>
+						<Button variant="outline" size="sm" disabled={installing} onClick={() => void installPrivateCopy()}>
 							{installing ? t("settings.dshRunnerNodeInstalling") : t("settings.dshRunnerNodeInstall")}
 						</Button>
-						<Button
-							variant="ghost"
-							size="sm"
-							onClick={() =>
-								openInSystemBrowser(dshRunnerNodeReleasePageUrl(draft.updateSource ?? "atomgit"))
-							}
-						>
+						<Button variant="ghost" size="sm" onClick={() => openInSystemBrowser(dshRunnerNodeReleasePageUrl(draft.updateSource ?? "atomgit"))}>
 							{t("settings.dshRunnerNodeOpenDownload")}
 						</Button>
 					</div>
 				)}
-				{installMessage && (
-					<small className="block text-caption text-muted-foreground">{installMessage}</small>
-				)}
+				{installMessage && <small className="block text-caption text-muted-foreground">{installMessage}</small>}
 				{installError && <small className="block text-caption text-danger">{installError}</small>}
-				<small className="block text-caption leading-relaxed text-muted-foreground">
-					{t("settings.dshRunnerNodeCoexistHint")}
-				</small>
+				<small className="block text-caption leading-relaxed text-muted-foreground">{t("settings.dshRunnerNodeCoexistHint")}</small>
 			</div>
 		</SettingRow>
 	);

@@ -34,10 +34,7 @@ const IMPORT_META_MAX_LINES = 16;
  * - 坏行跳过（头部截断可能切在行中间或多字节字符上，不影响在前几行找到标记）；
  * - 只读头部，**不 materialize 整个文件**。
  */
-export async function readImportMetaHead(
-	targetPath: string,
-	type: string,
-): Promise<{ sourceMtime: number; sourceSize: number } | undefined> {
+export async function readImportMetaHead(targetPath: string, type: string): Promise<{ sourceMtime: number; sourceSize: number } | undefined> {
 	let handle;
 	try {
 		handle = await open(targetPath, "r");

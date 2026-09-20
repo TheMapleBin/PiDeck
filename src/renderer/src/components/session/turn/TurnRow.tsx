@@ -1,6 +1,4 @@
-import {
-  messageEntryId,
-} from "../../../utils/sessionCommands";
+import { messageEntryId } from "../../../utils/sessionCommands";
 import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ChevronUp, Clock, Share, SquarePen, Trash } from "lucide-react";
 import { atom, useAtomValue, useSetAtom } from "jotai";
@@ -18,10 +16,7 @@ import { buildTurnDisplay, hasFoldableContent } from "../timeline/buildTurnDispl
 import { boundMountedSteps, TIMELINE_MOUNTED_STEP_LIMIT } from "../timeline/turnMountBudget";
 import { resolveLiveInterimId } from "../timeline/liveMount";
 import { buildProcessSummary } from "../timeline/segmentSummary";
-import type {
-	AgentRunItem,
-	MessageItem,
-} from "../timeline/types";
+import type { AgentRunItem, MessageItem } from "../timeline/types";
 import { sameAgentRunForRender } from "../../app/AppUtils";
 import { FinalAnswer } from "./FinalAnswer";
 import { InterimAnswer } from "./InterimAnswer";
@@ -88,8 +83,7 @@ export type TurnRowProps = {
 	onEnterMultiSelect?: () => void;
 };
 
-export const TurnRow = memo(
-	function TurnRow(props: TurnRowProps) {
+export const TurnRow = memo(function TurnRow(props: TurnRowProps) {
 	const { run } = props;
 	const rowRef = useRef<HTMLElement | null>(null);
 	const [editing, setEditing] = useState(false);
@@ -113,8 +107,7 @@ export const TurnRow = memo(
 	const duration = isComplete && effectiveStart > 0 ? Math.max(0, run.endedAt - effectiveStart) : 0;
 	// 耗时：结束后固定（endedAt - startedAt - ask 等待）；流式中（isRunLive）由 LiveDuration 实时增长；
 	// 轮被 ask_question 阻塞时冻结在提问弹起时刻（时间不再计入）。
-	const showDuration =
-		((isComplete && !isRunLive && duration > 0) || (isRunLive && effectiveStart > 0));
+	const showDuration = (isComplete && !isRunLive && duration > 0) || (isRunLive && effectiveStart > 0);
 
 	// 扁平展示序列：Live 与 History 共用 msg-thinking-* 身份（liveThinkingId 命中即挂步）。
 	const displayItems = useMemo(
@@ -147,13 +140,9 @@ export const TurnRow = memo(
 	//   新一轮流式时旧轮会把会话槽里的新一轮正文再打印一遍——同一中间回复前后双份
 	//   （2026-08 回归：判定逻辑见 resolveLiveInterimId，按轮级门控）。
 	// 流式期间 content 每 50ms 变化但 streaming 不变 → 派生 boolean 引用稳定 → 零额外重渲染。
-	const liveTextActive = useAtomValue(
-		props.sessionId ? liveTextActiveBySessionAtom(props.sessionId) : NO_LIVE_TEXT_ATOM,
-	);
+	const liveTextActive = useAtomValue(props.sessionId ? liveTextActiveBySessionAtom(props.sessionId) : NO_LIVE_TEXT_ATOM);
 	const liveInterimId = useMemo(() => {
-		const last = displayItems.find(
-			(item) => item.kind === "interim-answer" && item.id === lastInterimId,
-		);
+		const last = displayItems.find((item) => item.kind === "interim-answer" && item.id === lastInterimId);
 		if (!last || last.kind !== "interim-answer") return undefined;
 		return resolveLiveInterimId({
 			sessionId: props.sessionId,
@@ -164,15 +153,7 @@ export const TurnRow = memo(
 			isStreaming: props.isStreaming,
 			isLastAgentRun: props.isLastAgentRun,
 		});
-	}, [
-		props.sessionId,
-		props.agentRunning,
-		props.isStreaming,
-		props.isLastAgentRun,
-		lastInterimId,
-		displayItems,
-		liveTextActive,
-	]);
+	}, [props.sessionId, props.agentRunning, props.isStreaming, props.isLastAgentRun, lastInterimId, displayItems, liveTextActive]);
 
 	// live plain 卸下 → settled Markdown 挂上：只给刚卸下的那条 id 打一次 settle 淡入。
 	const prevLiveIdRef = useRef<string | undefined>(undefined);
@@ -196,27 +177,12 @@ export const TurnRow = memo(
 	// 流式对话行为设置（App 同步写入）+ 新一轮信号（composer 发送成功后 bump）。
 	// 设置变化低频；tick 经 atomFamily selectAtom 隔离，跨会话 bump 不触发本行重渲染。
 	const flowSettings = useAtomValue(turnFlowSettingsAtom);
-	const newTurnCollapseTick = useAtomValue(
-		props.sessionId
-			? newTurnCollapseTickBySessionIdAtomFamily(props.sessionId)
-			: NO_TURN_TICK_ATOM,
-	);
+	const newTurnCollapseTick = useAtomValue(props.sessionId ? newTurnCollapseTickBySessionIdAtomFamily(props.sessionId) : NO_TURN_TICK_ATOM);
 	// 执行过程展开状态跨挂载记忆（run 级）：切会话再切回时恢复手动/流式展开的
 	// 轮次；selectAtom 按 run.id 取值，同会话其它 run 变化不重渲染本行。
-	const stepsVisibleMemoryAtom = useMemo(
-		() => props.sessionId
-			? selectAtom(
-					runStepsVisibleMemoryBySessionIdAtomFamily(props.sessionId),
-					(map) => map[run.id] ?? undefined,
-					Object.is,
-				)
-			: NO_STEPS_MEMORY_ATOM,
-		[props.sessionId, run.id],
-	);
+	const stepsVisibleMemoryAtom = useMemo(() => (props.sessionId ? selectAtom(runStepsVisibleMemoryBySessionIdAtomFamily(props.sessionId), (map) => map[run.id] ?? undefined, Object.is) : NO_STEPS_MEMORY_ATOM), [props.sessionId, run.id]);
 	const stepsVisibleMemory = useAtomValue(stepsVisibleMemoryAtom);
-	const setRunStepsMemoryAtom = useSetAtom(
-		runStepsVisibleMemoryBySessionIdAtomFamily(props.sessionId ?? ""),
-	);
+	const setRunStepsMemoryAtom = useSetAtom(runStepsVisibleMemoryBySessionIdAtomFamily(props.sessionId ?? ""));
 	const onStepsVisibleMemoryChange = useCallback(
 		(visible: boolean | undefined, atTick: number) => {
 			const runId = run.id;
@@ -230,47 +196,34 @@ export const TurnRow = memo(
 		},
 		[props.sessionId, run.id, setRunStepsMemoryAtom],
 	);
-	const { stepsVisible, setStepsVisibleFromUser, toggleSteps } =
-		useTurnExecution({
-			runId: run.id,
-			agentRunning: props.agentRunning,
-			isComplete,
-			hasFinalAnswer,
-			isLatestRun: props.isLatestRun,
-			expandInterimDuringStream: flowSettings.expandInterimDuringStream,
-			collapsePrevRunsOnNewTurn: flowSettings.collapsePrevRunsOnNewTurn,
-			newTurnCollapseTick,
-			autoCollapseTick: props.autoCollapseTick,
-			onAutoCollapsed: props.onAutoCollapsed,
-			stepsVisibleMemory,
-			onStepsVisibleMemoryChange,
-		});
+	const { stepsVisible, setStepsVisibleFromUser, toggleSteps } = useTurnExecution({
+		runId: run.id,
+		agentRunning: props.agentRunning,
+		isComplete,
+		hasFinalAnswer,
+		isLatestRun: props.isLatestRun,
+		expandInterimDuringStream: flowSettings.expandInterimDuringStream,
+		collapsePrevRunsOnNewTurn: flowSettings.collapsePrevRunsOnNewTurn,
+		newTurnCollapseTick,
+		autoCollapseTick: props.autoCollapseTick,
+		onAutoCollapsed: props.onAutoCollapsed,
+		stepsVisibleMemory,
+		onStepsVisibleMemoryChange,
+	});
 
 	// 中间内容（思考/工具/中间回答）与最终回答分组：
 	// 中间内容统一收进执行过程折叠容器（stepsVisible 整体控制显隐），
 	// 最终回答留在容器外常驻、永不折叠。
-	const foldableItems = useMemo(
-		() => displayItems.filter((item) => item.kind !== "final-answer"),
-		[displayItems],
-	);
-	const finalItems = useMemo(
-		() => displayItems.filter((item) => item.kind === "final-answer"),
-		[displayItems],
-	);
+	const foldableItems = useMemo(() => displayItems.filter((item) => item.kind !== "final-answer"), [displayItems]);
+	const finalItems = useMemo(() => displayItems.filter((item) => item.kind === "final-answer"), [displayItems]);
 	// 单轮步骤挂载预算（2026-08 #213）：极端轮次（单轮上百个工具/思考条目）默认只挂尾部
 	// LIMIT 条，顶部给「显示更早 N 条步骤」入口——内容仍在 foldableItems 里，点开即全量挂载。
 	// 用 run.id 而非布尔量做「已展开」状态：换 run 自然重置，不需要额外 effect。
 	const [expandedStepsRunId, setExpandedStepsRunId] = useState<string | undefined>(undefined);
 	const stepsFullyExpanded = expandedStepsRunId === run.id;
-	const mountedSteps = useMemo(
-		() => boundMountedSteps(foldableItems, TIMELINE_MOUNTED_STEP_LIMIT, stepsFullyExpanded),
-		[foldableItems, stepsFullyExpanded],
-	);
+	const mountedSteps = useMemo(() => boundMountedSteps(foldableItems, TIMELINE_MOUNTED_STEP_LIMIT, stepsFullyExpanded), [foldableItems, stepsFullyExpanded]);
 	// 收集本轮所有 assistant 消息（按 run.items 的时序保持原始顺序）
-	const assistantMessages = run.items.filter(
-		(item): item is MessageItem =>
-			item.kind === "message" && item.message.role === "assistant",
-	);
+	const assistantMessages = run.items.filter((item): item is MessageItem => item.kind === "message" && item.message.role === "assistant");
 	const allImages: ImageContent[] = [];
 	for (const item of assistantMessages) {
 		if (item.message.images) allImages.push(...item.message.images);
@@ -303,17 +256,7 @@ export const TurnRow = memo(
 	};
 
 	return (
-		<article
-			ref={rowRef}
-			className={`turn-row mb-6 w-full min-w-0 max-w-full ${
-				props.agentRunning && !isComplete
-					? "turn-row--running"
-					: isComplete
-						? "turn-row--complete"
-						: "turn-row--pending"
-			} ${props.fresh ? "turn-row--fresh" : ""} ${props.topFresh ? "turn-row--top-fresh" : ""}`}
-			data-message-id={run.id}
-		>
+		<article ref={rowRef} className={`turn-row mb-6 w-full min-w-0 max-w-full ${props.agentRunning && !isComplete ? "turn-row--running" : isComplete ? "turn-row--complete" : "turn-row--pending"} ${props.fresh ? "turn-row--fresh" : ""} ${props.topFresh ? "turn-row--top-fresh" : ""}`} data-message-id={run.id}>
 			<div className="flex min-w-0 flex-col gap-3">
 				{/* 行头：头像 + Pi/DSH 署名 + 时间。耗时不放行头——回复生成时用户视线在底部，
 				    统一显示在 turn 尾部（见底部耗时行），不用翻回开头看跑了多久。 */}
@@ -330,11 +273,7 @@ export const TurnRow = memo(
 						// Radix 传入目标 open；必须 set 而非 toggle，否则受控更新会把状态打反。
 						onOpenChange={setStepsVisibleFromUser}
 					>
-						<ProcessSummaryToggle
-							summary={processSummary}
-							expanded={stepsVisible}
-							onToggle={toggleSteps}
-						/>
+						<ProcessSummaryToggle summary={processSummary} expanded={stepsVisible} onToggle={toggleSteps} />
 						<CollapsibleContent className="execution-summary-details">
 							{/* 折叠挂载策略（2026-09 主流实践，按轮状态分场景）：
 							    1. 非流式轮（agentRunning=false，含历史已结束轮）折叠时**完全卸载**内容——
@@ -356,64 +295,44 @@ export const TurnRow = memo(
 									<span>{t("timeline.showEarlierSteps", { count: mountedSteps.hiddenCount })}</span>
 								</button>
 							)}
-							{(stepsVisible || props.agentRunning === true) && mountedSteps.items.map((item) => {
-								let content: ReactNode;
-								let itemKey: string;
-								if (item.kind === "process-entry") {
-									itemKey = item.entry.id;
-									if (item.entry.kind === "thinking-entry") {
+							{(stepsVisible || props.agentRunning === true) &&
+								mountedSteps.items.map((item) => {
+									let content: ReactNode;
+									let itemKey: string;
+									if (item.kind === "process-entry") {
+										itemKey = item.entry.id;
+										if (item.entry.kind === "thinking-entry") {
+											content = <ThinkingStep group={item.entry.group} hidden={!stepsVisible} showThinking={props.showThinking} onOpenExternal={props.onOpenExternal} onOpenFile={props.onOpenFile} />;
+										} else {
+											content = <ToolStep group={item.entry.group} hidden={!stepsVisible} stopped={props.agentRunning !== true} sessionId={props.sessionId} onOpenFile={props.onOpenFile} />;
+										}
+									} else if (item.kind === "interim-answer") {
+										itemKey = item.id;
+										// Live 末条在折叠容器外渲染，此处跳过以免双份。
+										if (item.id === liveInterimId) return null;
 										content = (
-											<ThinkingStep
-												group={item.entry.group}
+											<InterimAnswer
+												mode="settled"
+												text={item.message.text}
 												hidden={!stepsVisible}
-												showThinking={props.showThinking}
+												isStreaming={false}
+												settle={settleId === item.id}
+												// 折叠区内一律 process：正文已与最终回答同尺寸，process 只负责 my-3 间距。
+												// 无最终回答的末段也要这段间距，否则会贴着上方工具行。
+												variant="process"
 												onOpenExternal={props.onOpenExternal}
 												onOpenFile={props.onOpenFile}
 											/>
 										);
 									} else {
-										content = (
-											<ToolStep
-												group={item.entry.group}
-												hidden={!stepsVisible}
-												stopped={props.agentRunning !== true}
-												sessionId={props.sessionId}
-												onOpenFile={props.onOpenFile}
-											/>
-										);
+										// final-answer 不在此容器内（见下方常驻区），此处仅兜底跳过
+										return null;
 									}
-								} else if (item.kind === "interim-answer") {
-									itemKey = item.id;
-									// Live 末条在折叠容器外渲染，此处跳过以免双份。
-									if (item.id === liveInterimId) return null;
-									content = (
-										<InterimAnswer
-											mode="settled"
-											text={item.message.text}
-											hidden={!stepsVisible}
-											isStreaming={false}
-											settle={settleId === item.id}
-											// 折叠区内一律 process：正文已与最终回答同尺寸，process 只负责 my-3 间距。
-											// 无最终回答的末段也要这段间距，否则会贴着上方工具行。
-											variant="process"
-											onOpenExternal={props.onOpenExternal}
-											onOpenFile={props.onOpenFile}
-										/>
-									);
-								} else {
-									// final-answer 不在此容器内（见下方常驻区），此处仅兜底跳过
-									return null;
-								}
-								return <Fragment key={itemKey}>{content}</Fragment>;
-							})}
+									return <Fragment key={itemKey}>{content}</Fragment>;
+								})}
 							{/* 收起按钮：固定在折叠容器末尾（不再是动态跟随） */}
 							{stepsVisible && (
-								<button
-									type="button"
-									className="execution-summary-collapse"
-									onClick={toggleSteps}
-									title={t("common.collapse")}
-								>
+								<button type="button" className="execution-summary-collapse" onClick={toggleSteps} title={t("common.collapse")}>
 									<ChevronUp size={12} aria-hidden="true" />
 									<span>{t("common.collapse")}</span>
 								</button>
@@ -423,16 +342,7 @@ export const TurnRow = memo(
 				)}
 
 				{/* Live 正文：折叠容器外常显，确保流式 DOM 可采样、不被 Collapsible 卸载 */}
-				{liveInterimId && props.sessionId && (
-					<InterimAnswer
-						mode="live"
-						sessionId={props.sessionId}
-						hidden={false}
-						isStreaming={Boolean(props.isStreaming || props.agentRunning || liveInterimId)}
-						onOpenExternal={props.onOpenExternal}
-						onOpenFile={props.onOpenFile}
-					/>
-				)}
+				{liveInterimId && props.sessionId && <InterimAnswer mode="live" sessionId={props.sessionId} hidden={false} isStreaming={Boolean(props.isStreaming || props.agentRunning || liveInterimId)} onOpenExternal={props.onOpenExternal} onOpenFile={props.onOpenFile} />}
 
 				{/* 最终回答：本轮最后一条 assistant 文本，常驻、永不折叠 */}
 				{finalItems.map((item) => (
@@ -459,51 +369,24 @@ export const TurnRow = memo(
 				{/* 操作栏 */}
 				{mergedText && !editing && (
 					<div className="flex min-h-6 items-center gap-1 opacity-55 transition-opacity hover:opacity-100 focus-within:opacity-100">
-						{!containsImageGen && <CopyMenu
-							text={stripMarkdown(mergedText)}
-							markdown={mergedText}
-							targetRef={rowRef}
-						/>}
-						<Button
-							type="button"
-							variant="ghost"
-							size="icon-sm"
-							className="turn-row-action-btn size-7 rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground"
-							onClick={props.onEnterMultiSelect}
-							title={t("app.multiSelectEnter")}
-						>
+						{!containsImageGen && <CopyMenu text={stripMarkdown(mergedText)} markdown={mergedText} targetRef={rowRef} />}
+						<Button type="button" variant="ghost" size="icon-sm" className="turn-row-action-btn size-7 rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground" onClick={props.onEnterMultiSelect} title={t("app.multiSelectEnter")}>
 							<Share size={14} />
 						</Button>
-						{!props.isStreaming &&
-							!props.isRuntimeBusy &&
-							assistantMessages.at(-1)?.message.id && (
-								<>
-									{props.onEditMessage && (
-										<Button
-											type="button"
-											variant="ghost"
-											size="icon-sm"
-											className="turn-row-action-btn size-7 rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground"
-											onClick={startEditing}
-											title={t("common.edit")}
-										>
-											<SquarePen size={14} />
-										</Button>
-									)}
-									{props.onDeleteMessage && (
-										<Button
-											type="button"
-											variant="ghost"
-											size="icon-sm"
-											className="turn-row-action-btn size-7 rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground"
-											onClick={deleteMessage}
-											title={t("common.delete")}
-										>
-											<Trash size={14} />
-										</Button>
-									)}
-								</>
-							)}
+						{!props.isStreaming && !props.isRuntimeBusy && assistantMessages.at(-1)?.message.id && (
+							<>
+								{props.onEditMessage && (
+									<Button type="button" variant="ghost" size="icon-sm" className="turn-row-action-btn size-7 rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground" onClick={startEditing} title={t("common.edit")}>
+										<SquarePen size={14} />
+									</Button>
+								)}
+								{props.onDeleteMessage && (
+									<Button type="button" variant="ghost" size="icon-sm" className="turn-row-action-btn size-7 rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground" onClick={deleteMessage} title={t("common.delete")}>
+										<Trash size={14} />
+									</Button>
+								)}
+							</>
+						)}
 					</div>
 				)}
 
@@ -515,24 +398,13 @@ export const TurnRow = memo(
 					<div className="flex items-center gap-1.5 text-muted-foreground">
 						<Clock size={12} className="shrink-0" aria-hidden="true" />
 						{/* 耗时数字与行头时间一致用界面字体（见 TurnAuthorHeader 注释）；tabular-nums 保持跳动不抖 */}
-						<span className="text-body leading-none tabular-nums">
-							{isRunLive && run.askPending ? (
-								formatDuration(Math.max(0, (run.askPendingAt ?? effectiveStart) - effectiveStart))
-							) : isRunLive ? (
-								<LiveDuration startedAt={effectiveStart} isStreaming />
-							) : (
-								formatDuration(duration)
-							)}
-						</span>
+						<span className="text-body leading-none tabular-nums">{isRunLive && run.askPending ? formatDuration(Math.max(0, (run.askPendingAt ?? effectiveStart) - effectiveStart)) : isRunLive ? <LiveDuration startedAt={effectiveStart} isStreaming /> : formatDuration(duration)}</span>
 					</div>
 				)}
-
 			</div>
 		</article>
 	);
-},
-turnRowPropsEqual,
-);
+}, turnRowPropsEqual);
 
 /**
  * TurnRow 自定义 memo 比较（阶段 0：历史 run 跳过重渲染）。

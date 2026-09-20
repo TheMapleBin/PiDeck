@@ -31,7 +31,11 @@ function loadXuePromptManager() {
 				},
 			},
 			// PromptManager 只是被构造，不参与 list/detail；给一个空壳即可
-			"./PromptManager": { PromptManager: class { configureWsl() {} } },
+			"./PromptManager": {
+				PromptManager: class {
+					configureWsl() {}
+				},
+			},
 		},
 	});
 }
@@ -41,11 +45,7 @@ test("detail：覆盖层同名 slug 优先，title 缺省时回退 db，正文�
 	const overlayDir = mkdtempSync(join(tmpdir(), "pideck-prompt-overlay-"));
 	try {
 		// 覆盖 enhance-prompt：只写正文（无 frontmatter），title 应回退 db 里的中文标题
-		writeFileSync(
-			join(overlayDir, "enhance-prompt.md"),
-			"# 覆盖层增强正文\n\n（热更新后的新版本）\n",
-			"utf8",
-		);
+		writeFileSync(join(overlayDir, "enhance-prompt.md"), "# 覆盖层增强正文\n\n（热更新后的新版本）\n", "utf8");
 		const manager = new XuePromptManager(undefined, () => overlayDir);
 
 		const detail = await manager.detail("enhance-prompt", "编程提示词");
@@ -63,11 +63,7 @@ test("detail：frontmatter 提供 title/description 时优先于 db", { skip: !d
 	const { XuePromptManager } = loadXuePromptManager();
 	const overlayDir = mkdtempSync(join(tmpdir(), "pideck-prompt-overlay-"));
 	try {
-		writeFileSync(
-			join(overlayDir, "enhance-prompt.md"),
-			"---\ntitle: 覆盖层新标题\ndescription: 覆盖层新描述\n---\n\n# 正文\n",
-			"utf8",
-		);
+		writeFileSync(join(overlayDir, "enhance-prompt.md"), "---\ntitle: 覆盖层新标题\ndescription: 覆盖层新描述\n---\n\n# 正文\n", "utf8");
 		const manager = new XuePromptManager(undefined, () => overlayDir);
 
 		const detail = await manager.detail("enhance-prompt", "编程提示词");
@@ -84,11 +80,7 @@ test("list：覆盖层新增 slug 直接出现在商店列表", { skip: !dbAvail
 	const { XuePromptManager } = loadXuePromptManager();
 	const overlayDir = mkdtempSync(join(tmpdir(), "pideck-prompt-overlay-"));
 	try {
-		writeFileSync(
-			join(overlayDir, "brand-new.md"),
-			"---\ntitle: 全新模板\ndescription: 远端新增的模板\n---\n\n# 全新内容\n",
-			"utf8",
-		);
+		writeFileSync(join(overlayDir, "brand-new.md"), "---\ntitle: 全新模板\ndescription: 远端新增的模板\n---\n\n# 全新内容\n", "utf8");
 		const manager = new XuePromptManager(undefined, () => overlayDir);
 
 		// 用搜索词定位新增条目（全量 4000+ 条按 category,title 排序，brand-new 会被分页截断）

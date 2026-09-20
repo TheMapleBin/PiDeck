@@ -64,20 +64,9 @@ test("afterPack cleanup preserves the Lark SDK package main entry", async () => 
 		await afterPackCleanup({ appOutDir });
 
 		const entries = normalizedEntries(archive);
-		assert.ok(
-			entries.includes("node_modules/@larksuiteoapi/node-sdk/lib/index.js"),
-			"the package.json main entry must remain in the final asar",
-		);
-		assert.equal(
-			entries.includes("node_modules/@larksuiteoapi/node-sdk/README.md"),
-			false,
-			"the fixture must exercise an asar repack through normal documentation cleanup",
-		);
-		assert.equal(
-			entries.includes("node_modules/@larksuiteoapi/node-sdk/es/index.js"),
-			false,
-			"asar must drop the ESM copy; CJS main is lib/index.js",
-		);
+		assert.ok(entries.includes("node_modules/@larksuiteoapi/node-sdk/lib/index.js"), "the package.json main entry must remain in the final asar");
+		assert.equal(entries.includes("node_modules/@larksuiteoapi/node-sdk/README.md"), false, "the fixture must exercise an asar repack through normal documentation cleanup");
+		assert.equal(entries.includes("node_modules/@larksuiteoapi/node-sdk/es/index.js"), false, "asar must drop the ESM copy; CJS main is lib/index.js");
 	} finally {
 		await rm(appOutDir, { recursive: true, force: true });
 	}
@@ -102,23 +91,14 @@ test("repack unpack glob keeps native binaries and hostEntry, not every .js", ()
 test("package.json unpacks node-pty so packaged terminal can load pty.node", () => {
 	const pkg = JSON.parse(readFileSync("package.json", "utf8"));
 	const unpack = pkg.build?.asarUnpack ?? [];
-	assert.ok(
-		unpack.includes("node_modules/node-pty/**"),
-		"asarUnpack must list node-pty; otherwise terminal:ensure fails in the installed app (#154)",
-	);
-	assert.ok(
-		unpack.includes("node_modules/@deepseek-ai/dsh-subprocess-local/node_modules/node-pty/**"),
-		"asarUnpack must list the nested DSH node-pty 1.2 prebuild used by dsh-subprocess-local",
-	);
+	assert.ok(unpack.includes("node_modules/node-pty/**"), "asarUnpack must list node-pty; otherwise terminal:ensure fails in the installed app (#154)");
+	assert.ok(unpack.includes("node_modules/@deepseek-ai/dsh-subprocess-local/node_modules/node-pty/**"), "asarUnpack must list the nested DSH node-pty 1.2 prebuild used by dsh-subprocess-local");
 });
 
 test("package.json unpacks sharp native packages for every dependency depth", () => {
 	const pkg = JSON.parse(readFileSync("package.json", "utf8"));
 	const unpack = pkg.build?.asarUnpack ?? [];
-	assert.ok(
-		unpack.includes("node_modules/**/@img/sharp-*/**"),
-		"asarUnpack must cover nested sharp libvips packages; versioned .so files need a real disk path on Linux",
-	);
+	assert.ok(unpack.includes("node_modules/**/@img/sharp-*/**"), "asarUnpack must cover nested sharp libvips packages; versioned .so files need a real disk path on Linux");
 });
 
 /**
@@ -132,14 +112,7 @@ test("afterPack cleanup keeps the target arch node-pty prebuild when cross-build
 	try {
 		const sourceDir = join(appOutDir, "fixture");
 		const archive = join(appOutDir, "resources", "app.asar");
-		const prebuildsDir = join(
-			appOutDir,
-			"resources",
-			"app.asar.unpacked",
-			"node_modules",
-			"node-pty",
-			"prebuilds",
-		);
+		const prebuildsDir = join(appOutDir, "resources", "app.asar.unpacked", "node_modules", "node-pty", "prebuilds");
 
 		await put(join(sourceDir, "node_modules", "node-pty", "README.md"), "fixture documentation\n");
 		await mkdir(dirname(archive), { recursive: true });
@@ -153,11 +126,7 @@ test("afterPack cleanup keeps the target arch node-pty prebuild when cross-build
 		await afterPackCleanup({ appOutDir, electronPlatformName: "linux", arch: 3 });
 
 		const remaining = (await readdir(prebuildsDir)).sort();
-		assert.deepEqual(
-			remaining,
-			["linux-arm64"],
-			"cross-building linux arm64 must keep only the arm64 prebuild; keeping the build host arch breaks the terminal",
-		);
+		assert.deepEqual(remaining, ["linux-arm64"], "cross-building linux arm64 must keep only the arm64 prebuild; keeping the build host arch breaks the terminal");
 	} finally {
 		await rm(appOutDir, { recursive: true, force: true });
 	}
@@ -168,14 +137,7 @@ test("afterPack cleanup falls back to host arch when context arch is absent", as
 	try {
 		const sourceDir = join(appOutDir, "fixture");
 		const archive = join(appOutDir, "resources", "app.asar");
-		const prebuildsDir = join(
-			appOutDir,
-			"resources",
-			"app.asar.unpacked",
-			"node_modules",
-			"node-pty",
-			"prebuilds",
-		);
+		const prebuildsDir = join(appOutDir, "resources", "app.asar.unpacked", "node_modules", "node-pty", "prebuilds");
 
 		await put(join(sourceDir, "node_modules", "node-pty", "README.md"), "fixture documentation\n");
 		await mkdir(dirname(archive), { recursive: true });
@@ -189,11 +151,7 @@ test("afterPack cleanup falls back to host arch when context arch is absent", as
 		await afterPackCleanup({ appOutDir });
 
 		const remaining = await readdir(prebuildsDir);
-		assert.equal(
-			remaining.length,
-			1,
-			"without an explicit target arch the cleanup must still keep exactly one prebuild",
-		);
+		assert.equal(remaining.length, 1, "without an explicit target arch the cleanup must still keep exactly one prebuild");
 	} finally {
 		await rm(appOutDir, { recursive: true, force: true });
 	}
@@ -204,41 +162,19 @@ test("afterPack cleanup keeps versioned libvips shared objects unpacked", async 
 	try {
 		const sourceDir = join(appOutDir, "fixture");
 		const archive = join(appOutDir, "resources", "app.asar");
-		const libvipsPath = join(
-			sourceDir,
-			"node_modules",
-			"@deepseek-ai",
-			"dsh-attachment-local",
-			"node_modules",
-			"@img",
-			"sharp-libvips-linux-x64",
-			"lib",
-			"libvips-cpp.so.8.18.3",
-		);
+		const libvipsPath = join(sourceDir, "node_modules", "@deepseek-ai", "dsh-attachment-local", "node_modules", "@img", "sharp-libvips-linux-x64", "lib", "libvips-cpp.so.8.18.3");
 		await put(libvipsPath, "ELF_SHARED_LIBRARY");
 		await put(join(dirname(libvipsPath), "README.md"), "fixture documentation that forces a repack\n");
 		await mkdir(dirname(archive), { recursive: true });
 		await createAsarPackageWithOptions(sourceDir, archive, { unpack: "*.so*" });
 
 		const relativeLibvipsPath = "node_modules/@deepseek-ai/dsh-attachment-local/node_modules/@img/sharp-libvips-linux-x64/lib/libvips-cpp.so.8.18.3";
-		assert.equal(
-			isUnpackedInHeader(archive, relativeLibvipsPath),
-			true,
-			"fixture must start with libvips outside app.asar",
-		);
+		assert.equal(isUnpackedInHeader(archive, relativeLibvipsPath), true, "fixture must start with libvips outside app.asar");
 
 		await afterPackCleanup({ appOutDir });
 
-		assert.equal(
-			isUnpackedInHeader(archive, relativeLibvipsPath),
-			true,
-			"repacking asar must preserve versioned ELF libraries outside app.asar",
-		);
-		assert.equal(
-			normalizedEntries(archive).includes("node_modules/@deepseek-ai/dsh-attachment-local/node_modules/@img/sharp-libvips-linux-x64/lib/README.md"),
-			false,
-			"the fixture must exercise a real afterPack cleanup and repack",
-		);
+		assert.equal(isUnpackedInHeader(archive, relativeLibvipsPath), true, "repacking asar must preserve versioned ELF libraries outside app.asar");
+		assert.equal(normalizedEntries(archive).includes("node_modules/@deepseek-ai/dsh-attachment-local/node_modules/@img/sharp-libvips-linux-x64/lib/README.md"), false, "the fixture must exercise a real afterPack cleanup and repack");
 	} finally {
 		await rm(appOutDir, { recursive: true, force: true });
 	}
@@ -269,13 +205,7 @@ test("afterPack cleanup keeps node-pty unpacked after asar repack", async () => 
 		await createAsarPackageWithOptions(sourceDir, archive, {
 			unpack: "{**/*.node,**/*.dll,hostEntry.js}",
 		});
-		const unpackedPty = join(
-			appOutDir,
-			"resources",
-			"app.asar.unpacked",
-			"node_modules",
-			"node-pty",
-		);
+		const unpackedPty = join(appOutDir, "resources", "app.asar.unpacked", "node_modules", "node-pty");
 		// asarUnpack 影子目录：源码树也会出现在 unpacked，afterPack 必须两边都清。
 		await put(join(unpackedPty, "lib", "utils.js"), "module.exports = {};\n");
 		await put(join(unpackedPty, "src", "index.ts"), "export {};\n");
@@ -284,85 +214,29 @@ test("afterPack cleanup keeps node-pty unpacked after asar repack", async () => 
 		await put(join(unpackedPty, "deps", "winpty", "README.md"), "winpty sources\n");
 		await put(join(unpackedPty, "scripts", "post-install.js"), "// compile-time\n");
 
-		assert.equal(
-			isUnpackedInHeader(archive, ptyNodeRel),
-			true,
-			"fixture must start with an unpacked pty.node so the test exercises the regression",
-		);
-		assert.equal(
-			isUnpackedInHeader(archive, "out/main/hostEntry.js"),
-			true,
-			"fixture must start with unpacked hostEntry.js like electron-builder asarUnpack",
-		);
+		assert.equal(isUnpackedInHeader(archive, ptyNodeRel), true, "fixture must start with an unpacked pty.node so the test exercises the regression");
+		assert.equal(isUnpackedInHeader(archive, "out/main/hostEntry.js"), true, "fixture must start with unpacked hostEntry.js like electron-builder asarUnpack");
 
 		await afterPackCleanup({ appOutDir });
 
-		assert.equal(
-			isUnpackedInHeader(archive, ptyNodeRel),
-			true,
-			"repacking asar must keep pty.node unpacked so Electron maps require() to app.asar.unpacked",
-		);
-		assert.equal(
-			isUnpackedInHeader(archive, "out/main/hostEntry.js"),
-			true,
-			"repacking asar must keep hostEntry.js unpacked for utilityProcess",
-		);
-		assert.equal(
-			isUnpackedInHeader(archive, "out/main/index.js"),
-			false,
-			"repacking must not unpack every .js just because hostEntry.js is unpacked",
-		);
-		assert.equal(
-			normalizedEntries(archive).includes("node_modules/node-pty/README.md"),
-			false,
-			"the fixture must still exercise an asar repack through documentation cleanup",
-		);
+		assert.equal(isUnpackedInHeader(archive, ptyNodeRel), true, "repacking asar must keep pty.node unpacked so Electron maps require() to app.asar.unpacked");
+		assert.equal(isUnpackedInHeader(archive, "out/main/hostEntry.js"), true, "repacking asar must keep hostEntry.js unpacked for utilityProcess");
+		assert.equal(isUnpackedInHeader(archive, "out/main/index.js"), false, "repacking must not unpack every .js just because hostEntry.js is unpacked");
+		assert.equal(normalizedEntries(archive).includes("node_modules/node-pty/README.md"), false, "the fixture must still exercise an asar repack through documentation cleanup");
 		const { existsSync } = await import("node:fs");
-		assert.equal(
-			existsSync(join(appOutDir, "resources", "app.asar.tmp")),
-			false,
-			"repack must not leave app.asar.tmp in the shipped app directory",
-		);
-		assert.equal(
-			existsSync(join(appOutDir, "resources", "app.asar.tmp.unpacked")),
-			false,
-			"repack must not leave app.asar.tmp.unpacked; portable NSIS extracts it before the window appears",
-		);
-		assert.equal(
-			normalizedEntries(archive).includes("node_modules/node-pty/src/index.ts"),
-			false,
-			"asar copy of node-pty src/ is compile-time only",
-		);
+		assert.equal(existsSync(join(appOutDir, "resources", "app.asar.tmp")), false, "repack must not leave app.asar.tmp in the shipped app directory");
+		assert.equal(existsSync(join(appOutDir, "resources", "app.asar.tmp.unpacked")), false, "repack must not leave app.asar.tmp.unpacked; portable NSIS extracts it before the window appears");
+		assert.equal(normalizedEntries(archive).includes("node_modules/node-pty/src/index.ts"), false, "asar copy of node-pty src/ is compile-time only");
 		assert.equal(existsSync(join(unpackedPty, "src")), false, "unpacked node-pty src/ must go");
 		assert.equal(existsSync(join(unpackedPty, "third_party")), false, "unpacked node-pty third_party/ must go");
 		assert.equal(existsSync(join(unpackedPty, "build")), false, "unpacked node-pty build/ must go; runtime loads prebuilds");
 		assert.equal(existsSync(join(unpackedPty, "deps")), false, "unpacked node-pty deps/ is winpty source, not required at runtime");
 		assert.equal(existsSync(join(unpackedPty, "scripts")), false, "unpacked node-pty scripts/ is compile-time only");
-		assert.equal(
-			normalizedEntries(archive).includes("node_modules/node-pty/deps/winpty/README.md"),
-			false,
-			"asar copy of node-pty deps/ must go with the unpacked tree",
-		);
-		assert.equal(
-			normalizedEntries(archive).includes("node_modules/node-pty/lib/utils.js"),
-			true,
-			"asar copy of node-pty lib/ is the JS runtime",
-		);
-		assert.equal(
-			existsSync(join(unpackedPty, "lib", "utils.js")),
-			true,
-			"unpacked node-pty lib/ is the JS runtime; afterPack must keep it",
-		);
-		assert.equal(
-			existsSync(join(unpackedPty, "prebuilds", hostPrebuild, "pty.node")),
-			true,
-			"current-platform prebuild must remain",
-		);
-		assert.equal(
-			existsSync(join(unpackedPty, "prebuilds", hostPrebuild, "conpty", "conpty.dll")),
-			true,
-			"conpty.dll lives beside the .node; afterPack must not sweep files inside the kept prebuild",
-		);
+		assert.equal(normalizedEntries(archive).includes("node_modules/node-pty/deps/winpty/README.md"), false, "asar copy of node-pty deps/ must go with the unpacked tree");
+		assert.equal(normalizedEntries(archive).includes("node_modules/node-pty/lib/utils.js"), true, "asar copy of node-pty lib/ is the JS runtime");
+		assert.equal(existsSync(join(unpackedPty, "lib", "utils.js")), true, "unpacked node-pty lib/ is the JS runtime; afterPack must keep it");
+		assert.equal(existsSync(join(unpackedPty, "prebuilds", hostPrebuild, "pty.node")), true, "current-platform prebuild must remain");
+		assert.equal(existsSync(join(unpackedPty, "prebuilds", hostPrebuild, "conpty", "conpty.dll")), true, "conpty.dll lives beside the .node; afterPack must not sweep files inside the kept prebuild");
 	} finally {
 		await rm(appOutDir, { recursive: true, force: true });
 	}

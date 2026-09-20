@@ -59,18 +59,13 @@ test("every run state keeps a way out of the current state", () => {
 	// 出口是「关闭 Agent」（杀进程 + 解绑），它由 closeAgent 链路保证、不随策略置灰。
 	for (const input of STATE_MATRIX) {
 		const caps = sessionRunCapabilities(input);
-		const usable = ["start", "abort", "reload"].filter((action) =>
-			canRunSessionAction(caps, action),
-		);
+		const usable = ["start", "abort", "reload"].filter((action) => canRunSessionAction(caps, action));
 		if (input.state === "starting") {
 			// 刻意全禁：此时唯一的合理动作是关掉卡住的进程，而不是在策略里假造一个。
 			assert.equal(usable.length, 0, "starting 只保留「关闭 Agent」这一个出口");
 			continue;
 		}
-		assert.ok(
-			usable.length > 0,
-			`state=${input.state} binding=${input.hasBinding} should keep at least one action enabled`,
-		);
+		assert.ok(usable.length > 0, `state=${input.state} binding=${input.hasBinding} should keep at least one action enabled`);
 	}
 });
 
@@ -180,39 +175,23 @@ test("canRunSessionAction maps start and restart onto the same capability", () =
 // DSH 共享 host 永远不按会话重启（会波及所有 DSH 会话）。
 
 test("proxy apply strategy restarts a live pi session so the change takes effect at once", () => {
-	assert.equal(
-		resolveProxyApplyStrategy({ backend: "pi", hasBinding: true, isLive: true }),
-		"restart-now",
-	);
+	assert.equal(resolveProxyApplyStrategy({ backend: "pi", hasBinding: true, isLive: true }), "restart-now");
 	// 后端缺省视为 pi（旧数据兼容），同样享受自动重启。
-	assert.equal(
-		resolveProxyApplyStrategy({ backend: undefined, hasBinding: true, isLive: true }),
-		"restart-now",
-	);
+	assert.equal(resolveProxyApplyStrategy({ backend: undefined, hasBinding: true, isLive: true }), "restart-now");
 });
 
 test("proxy apply strategy waits for next start when there is no live process", () => {
 	// 未启动/已解绑：下次启动进程时自然读到新配置，不需要额外动作。
-	assert.equal(
-		resolveProxyApplyStrategy({ backend: "pi", hasBinding: false, isLive: false }),
-		"next-start",
-	);
+	assert.equal(resolveProxyApplyStrategy({ backend: "pi", hasBinding: false, isLive: false }), "next-start");
 	// 终态（error/closed）持有绑定但进程已死：重启没有意义，等下次启动。
-	assert.equal(
-		resolveProxyApplyStrategy({ backend: "pi", hasBinding: true, isLive: false }),
-		"next-start",
-	);
+	assert.equal(resolveProxyApplyStrategy({ backend: "pi", hasBinding: true, isLive: false }), "next-start");
 });
 
 test("proxy apply strategy never auto-restarts the shared DSH host", () => {
 	// DSH 是单一共享 host：按会话重启会杀掉所有 DSH 会话，必须只提示不重启。
 	for (const isLive of [true, false]) {
 		for (const hasBinding of [true, false]) {
-			assert.equal(
-				resolveProxyApplyStrategy({ backend: "dsh", hasBinding, isLive }),
-				"dsh-host-restart",
-				`dsh live=${isLive} binding=${hasBinding} must not auto-restart`,
-			);
+			assert.equal(resolveProxyApplyStrategy({ backend: "dsh", hasBinding, isLive }), "dsh-host-restart", `dsh live=${isLive} binding=${hasBinding} must not auto-restart`);
 		}
 	}
 });

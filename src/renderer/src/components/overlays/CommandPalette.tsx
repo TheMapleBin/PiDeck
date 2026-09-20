@@ -1,17 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { fuzzyMatch } from "../../utils/commandPaletteFuzzy";
-import {
-	PALETTE_GROUP_ORDER,
-	type PaletteCommand,
-} from "../../utils/commandPaletteCommands";
-import {
-	CommandDialog,
-	CommandEmpty,
-	CommandGroup,
-	CommandInput,
-	CommandItem,
-	CommandList,
-} from "../ui-shadcn/command";
+import { PALETTE_GROUP_ORDER, type PaletteCommand } from "../../utils/commandPaletteCommands";
+import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "../ui-shadcn/command";
 import { t } from "../../i18n";
 
 export type CommandPaletteProps = {
@@ -84,10 +74,7 @@ export function CommandPalette(props: CommandPaletteProps) {
 	}, [open]);
 
 	// 空查询时收起 onlyWhenSearching 条目（几十条字段级入口会把顶层入口淹没）
-	const visibleCommands = useMemo(
-		() => (query.trim() ? commands : commands.filter((command) => !command.onlyWhenSearching)),
-		[commands, query],
-	);
+	const visibleCommands = useMemo(() => (query.trim() ? commands : commands.filter((command) => !command.onlyWhenSearching)), [commands, query]);
 
 	/**
 	 * 分组：组间顺序由 PALETTE_GROUP_ORDER 定，组内顺序交给 cmdk（按 filter 分数）。
@@ -160,35 +147,21 @@ export function CommandPalette(props: CommandPaletteProps) {
 									key={command.id}
 									value={command.id}
 									// keywords[0] 必须是标题：filter 依赖这个约定取标题做匹配与高亮
-									keywords={[
-										command.title,
-										...(command.subtitle ? [command.subtitle] : []),
-										...(command.keywords ?? []),
-									]}
+									keywords={[command.title, ...(command.subtitle ? [command.subtitle] : []), ...(command.keywords ?? [])]}
 									onSelect={() => {
 										// 先关面板再执行：命令可能打开设置页/弹窗，面板留着会盖在上面
 										onOpenChange(false);
 										command.run();
 									}}
 								>
-									{Icon ? (
-										<Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-									) : null}
+									{Icon ? <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" /> : null}
 									<span className="min-w-0 flex-1">
 										<span className="block truncate text-sm text-foreground">
 											<HighlightedText text={command.title} indices={indices} />
 										</span>
-										{command.subtitle ? (
-											<span className="block truncate text-xs text-muted-foreground">
-												{command.subtitle}
-											</span>
-										) : null}
+										{command.subtitle ? <span className="block truncate text-xs text-muted-foreground">{command.subtitle}</span> : null}
 									</span>
-									{command.kbd ? (
-										<kbd className="flex h-6 shrink-0 items-center rounded-md border border-border px-1.5 text-micro text-muted-foreground">
-											{command.kbd}
-										</kbd>
-									) : null}
+									{command.kbd ? <kbd className="flex h-6 shrink-0 items-center rounded-md border border-border px-1.5 text-micro text-muted-foreground">{command.kbd}</kbd> : null}
 								</CommandItem>
 							);
 						})}

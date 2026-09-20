@@ -16,14 +16,16 @@ import { StoreSearchBar } from "./StoreSearchBar";
  * （`pi install npm:<name>`），安装成功后通过 onInstalled 通知父级刷新已安装列表。
  */
 
-const api = (window as unknown as {
-	piDesktop: {
-		extensions: {
-			catalog: (query: PiPackageCatalogQuery) => Promise<PiPackageCatalog>;
-			install: (source: string, projectId?: string) => Promise<string>;
+const api = (
+	window as unknown as {
+		piDesktop: {
+			extensions: {
+				catalog: (query: PiPackageCatalogQuery) => Promise<PiPackageCatalog>;
+				install: (source: string, projectId?: string) => Promise<string>;
+			};
 		};
-	};
-}).piDesktop;
+	}
+).piDesktop;
 
 /** 类型过滤选项（对应目录页 type 参数；空 = 全部）。 */
 const TYPE_OPTIONS: Array<{ value: string; label: string }> = [
@@ -85,29 +87,32 @@ export function ExtensionStoreTab(props: {
 		searchInputRef.current?.focus();
 	}, []);
 
-	const load = useCallback(async (opts: { page?: number; refresh?: boolean } = {}) => {
-		const seq = ++requestSeq.current;
-		setLoading(true);
-		setError(null);
-		try {
-			const data = await api.extensions.catalog({
-				page: opts.page ?? page,
-				query: appliedQuery.trim(),
-				type,
-				sort,
-				...(opts.refresh ? { refresh: true } : {}),
-			});
-			if (seq !== requestSeq.current) return; // 已被更新的请求覆盖
-			setCatalog(data);
-			setPage(data.page);
-		} catch (err) {
-			if (seq !== requestSeq.current) return;
-			console.error("[ExtensionStore] Catalog failed", err);
-			setError(t("config.extensionStoreLoadError"));
-		} finally {
-			if (seq === requestSeq.current) setLoading(false);
-		}
-	}, [page, appliedQuery, type, sort]);
+	const load = useCallback(
+		async (opts: { page?: number; refresh?: boolean } = {}) => {
+			const seq = ++requestSeq.current;
+			setLoading(true);
+			setError(null);
+			try {
+				const data = await api.extensions.catalog({
+					page: opts.page ?? page,
+					query: appliedQuery.trim(),
+					type,
+					sort,
+					...(opts.refresh ? { refresh: true } : {}),
+				});
+				if (seq !== requestSeq.current) return; // 已被更新的请求覆盖
+				setCatalog(data);
+				setPage(data.page);
+			} catch (err) {
+				if (seq !== requestSeq.current) return;
+				console.error("[ExtensionStore] Catalog failed", err);
+				setError(t("config.extensionStoreLoadError"));
+			} finally {
+				if (seq === requestSeq.current) setLoading(false);
+			}
+		},
+		[page, appliedQuery, type, sort],
+	);
 
 	// 搜索词不参与自动加载：只在 appliedQuery / 类型 / 排序 变化时回到第一页重新加载；
 	// 挂载时该 effect 同样执行，即为首次加载
@@ -127,11 +132,7 @@ export function ExtensionStoreTab(props: {
 	};
 
 	/** 已安装判断：installSource（npm:<name>）与已安装扩展的 source 精确匹配 */
-	const isInstalled = useCallback(
-		(item: PiPackageCatalogItem) =>
-			props.installedExtensions.some((ext) => ext.source === item.installSource),
-		[props.installedExtensions],
-	);
+	const isInstalled = useCallback((item: PiPackageCatalogItem) => props.installedExtensions.some((ext) => ext.source === item.installSource), [props.installedExtensions]);
 
 	const handleInstall = async (item: PiPackageCatalogItem) => {
 		if (installing) return;
@@ -203,25 +204,15 @@ export function ExtensionStoreTab(props: {
 				</Select>
 			</div>
 
-			{error && (
-				<div className="mb-3.5 rounded-sm border border-danger/20 bg-danger-soft px-3.5 py-2.5 text-control leading-relaxed text-danger whitespace-pre-line">
-					{error}
-				</div>
-			)}
+			{error && <div className="mb-3.5 rounded-sm border border-danger/20 bg-danger-soft px-3.5 py-2.5 text-control leading-relaxed text-danger whitespace-pre-line">{error}</div>}
 
-			{loading && !catalog && (
-				<div className="py-12 text-center text-control text-text-tertiary">{t("config.promptStoreSearching")}</div>
-			)}
+			{loading && !catalog && <div className="py-12 text-center text-control text-text-tertiary">{t("config.promptStoreSearching")}</div>}
 
-			{catalog && !loading && catalog.items.length === 0 && (
-				<div className="py-12 text-center text-control text-text-tertiary">{t("config.extensionStoreNoResults")}</div>
-			)}
+			{catalog && !loading && catalog.items.length === 0 && <div className="py-12 text-center text-control text-text-tertiary">{t("config.extensionStoreNoResults")}</div>}
 
 			{catalog && catalog.items.length > 0 && (
 				<div className="prompt-store-results">
-					<small className="prompt-store-result-count">
-						{t("config.extensionStoreResultCount", { count: total })}
-					</small>
+					<small className="prompt-store-result-count">{t("config.extensionStoreResultCount", { count: total })}</small>
 					{catalog.items.map((item) => {
 						const installed = isInstalled(item);
 						const installingThis = installing === item.installSource;
@@ -238,16 +229,14 @@ export function ExtensionStoreTab(props: {
 									</strong>
 									<p className="prompt-store-card-desc">{item.description}</p>
 									<div className="prompt-store-card-meta">
-										{item.author && <span>{t("config.skillStoreAuthor")}: {item.author}</span>}
-										{item.downloadsPerMonth !== undefined && (
-											<span className="prompt-store-card-category">
-												{formatDownloads(item.downloadsPerMonth)}/mo
+										{item.author && (
+											<span>
+												{t("config.skillStoreAuthor")}: {item.author}
 											</span>
 										)}
+										{item.downloadsPerMonth !== undefined && <span className="prompt-store-card-category">{formatDownloads(item.downloadsPerMonth)}/mo</span>}
 										{item.publishedAt && <span>{formatPublishedAt(item.publishedAt)}</span>}
-										{item.types.length > 0 && (
-											<span className="prompt-store-card-category">{item.types.join(", ")}</span>
-										)}
+										{item.types.length > 0 && <span className="prompt-store-card-category">{item.types.join(", ")}</span>}
 									</div>
 								</div>
 								<div className="prompt-store-card-actions">
@@ -308,24 +297,12 @@ export function ExtensionStoreTab(props: {
 			{/* 分页：上一页 / 下一页 */}
 			{catalog && lastPage > 1 && (
 				<div className="mt-4 flex items-center justify-center gap-3">
-					<Button
-						variant="outline"
-						size="sm"
-						onClick={() => void load({ page: page - 1 })}
-						disabled={loading || page <= 1}
-					>
+					<Button variant="outline" size="sm" onClick={() => void load({ page: page - 1 })} disabled={loading || page <= 1}>
 						<ArrowLeft size={14} strokeWidth={1.8} className="mr-1" aria-hidden="true" />
 						{t("config.extensionStorePrevPage")}
 					</Button>
-					<span className="text-caption text-muted-foreground">
-						{t("config.extensionStorePage", { page, lastPage })}
-					</span>
-					<Button
-						variant="outline"
-						size="sm"
-						onClick={() => void load({ page: page + 1 })}
-						disabled={loading || page >= lastPage}
-					>
+					<span className="text-caption text-muted-foreground">{t("config.extensionStorePage", { page, lastPage })}</span>
+					<Button variant="outline" size="sm" onClick={() => void load({ page: page + 1 })} disabled={loading || page >= lastPage}>
 						{t("config.extensionStoreNextPage")}
 						<ArrowRight size={14} strokeWidth={1.8} className="ml-1" aria-hidden="true" />
 					</Button>

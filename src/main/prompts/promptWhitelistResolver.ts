@@ -2,18 +2,7 @@ import { existsSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join, relative } from "node:path";
 import ignore from "ignore";
-import {
-	addIgnoreRules,
-	applyPatterns,
-	isDirEntry,
-	isFileEntry,
-	passesOverrides,
-	readSettingsObject,
-	readStringArray,
-	resolveFromBase,
-	splitResourceEntries,
-	toPosixPath,
-} from "../resourceWhitelist";
+import { addIgnoreRules, applyPatterns, isDirEntry, isFileEntry, passesOverrides, readSettingsObject, readStringArray, resolveFromBase, splitResourceEntries, toPosixPath } from "../resourceWhitelist";
 import { globalPromptOverrideKey } from "../../shared/resourceIdentity";
 import { readProjectResourceOverrides } from "../projects/projectResourceOverrides";
 import { resolveConfiguredPackageResources } from "../packageResourceResolver";
@@ -41,9 +30,7 @@ import { resolveConfiguredPackageResources } from "../packageResourceResolver";
  * Auto-discovered prompt directories are top-level only; explicit/package directories recurse.
  * Package sources use managed npm/git/local paths and expand manifest globs exactly as pi 0.85.
  */
-export function resolveEnabledPromptPaths(
-	options: PromptWhitelistResolverOptions,
-): string[] | null {
+export function resolveEnabledPromptPaths(options: PromptWhitelistResolverOptions): string[] | null {
 	const { cwd } = options;
 	const home = options.agentHomeDir?.trim() || homedir();
 	const agentDir = join(home, ".pi", "agent");
@@ -51,35 +38,17 @@ export function resolveEnabledPromptPaths(
 	const includeProjectResources = options.includeProjectResources !== false;
 
 	const userSettings = readSettingsObject(join(agentDir, "settings.json"));
-	const projectSettings = includeProjectResources
-		? readSettingsObject(join(projectBaseDir, "settings.json"))
-		: {};
+	const projectSettings = includeProjectResources ? readSettingsObject(join(projectBaseDir, "settings.json")) : {};
 
 	// 全局、项目本地和项目继承覆盖分别匹配，避免同名模板跨作用域串扰。
-	const globalDisabledKeys = new Set(
-		(options.disabledNames ?? []).map((name) => name.toLowerCase()),
-	);
-	const projectDisabledKeys = new Set(
-		readStringArray(projectSettings, "disabledPrompts").map((name) => name.toLowerCase()),
-	);
-	const inheritedDisabledKeys = new Set(
-		includeProjectResources
-			? readProjectResourceOverrides(cwd).disabledGlobalPrompts
-			: [],
-	);
-	if (
-		includeProjectResources &&
-		globalDisabledKeys.size === 0 &&
-		projectDisabledKeys.size === 0 &&
-		inheritedDisabledKeys.size === 0
-	) return null;
+	const globalDisabledKeys = new Set((options.disabledNames ?? []).map((name) => name.toLowerCase()));
+	const projectDisabledKeys = new Set(readStringArray(projectSettings, "disabledPrompts").map((name) => name.toLowerCase()));
+	const inheritedDisabledKeys = new Set(includeProjectResources ? readProjectResourceOverrides(cwd).disabledGlobalPrompts : []);
+	if (includeProjectResources && globalDisabledKeys.size === 0 && projectDisabledKeys.size === 0 && inheritedDisabledKeys.size === 0) return null;
 
 	const isGlobalEnabled = (promptFile: string) => {
 		const name = basename(promptFile).replace(/\.md$/i, "").toLowerCase();
-		return (
-			!globalDisabledKeys.has(name) &&
-			!inheritedDisabledKeys.has(globalPromptOverrideKey(name))
-		);
+		return !globalDisabledKeys.has(name) && !inheritedDisabledKeys.has(globalPromptOverrideKey(name));
 	};
 	const isProjectEnabled = (promptFile: string) => {
 		const name = basename(promptFile).replace(/\.md$/i, "").toLowerCase();
@@ -95,12 +64,8 @@ export function resolveEnabledPromptPaths(
 	};
 
 	// settings.prompts 数组的 plain 条目 = 显式路径；patterns 条目 = 该作用域自动发现过滤
-	const { plain: userPlain, patterns: userOverrides } = splitResourceEntries(
-		Array.isArray(userSettings.prompts) ? userSettings.prompts : [],
-	);
-	const { plain: projectPlain, patterns: projectOverrides } = splitResourceEntries(
-		Array.isArray(projectSettings.prompts) ? projectSettings.prompts : [],
-	);
+	const { plain: userPlain, patterns: userOverrides } = splitResourceEntries(Array.isArray(userSettings.prompts) ? userSettings.prompts : []);
+	const { plain: projectPlain, patterns: projectOverrides } = splitResourceEntries(Array.isArray(projectSettings.prompts) ? projectSettings.prompts : []);
 
 	// 1) pi auto-discovery only reads top-level .md files from each prompts directory.
 	collectAutoPromptDir(join(agentDir, "prompts"), isGlobalEnabled, addPath, agentDir, userOverrides);
@@ -124,9 +89,7 @@ export function resolveEnabledPromptPaths(
 		collectDirectory: collectPromptDirFiles,
 	})) {
 		if (!resource.enabled) continue;
-		const enabled = resource.scope === "project"
-			? isProjectEnabled(resource.path)
-			: isGlobalEnabled(resource.path);
+		const enabled = resource.scope === "project" ? isProjectEnabled(resource.path) : isGlobalEnabled(resource.path);
 		if (enabled) addPath(resource.path);
 	}
 
@@ -145,13 +108,7 @@ export type PromptWhitelistResolverOptions = {
 };
 
 /** Auto-discovered prompts are top-level files only in pi 0.85. */
-function collectAutoPromptDir(
-	dir: string,
-	isPiDeckEnabled: (promptFile: string) => boolean,
-	addPath: (path: string) => void,
-	overridesBase: string,
-	overrides: string[],
-): void {
+function collectAutoPromptDir(dir: string, isPiDeckEnabled: (promptFile: string) => boolean, addPath: (path: string) => void, overridesBase: string, overrides: string[]): void {
 	let entries;
 	try {
 		entries = readdirSync(dir, { withFileTypes: true });
@@ -176,15 +133,7 @@ function collectAutoPromptDir(
  * 无 skills 的 pi/agents 模式差异——所有层级的 .md 都是模板（含 .d.md），
  * 跳过 . 开头与 node_modules；ignore 规则从 root 起逐目录应用。
  */
-function collectPromptDir(
-	dir: string,
-	isPiDeckEnabled: (promptFile: string) => boolean,
-	addPath: (path: string) => void,
-	overridesBase: string,
-	overrides: string[],
-	root = dir,
-	ig?: ReturnType<typeof ignore>,
-): void {
+function collectPromptDir(dir: string, isPiDeckEnabled: (promptFile: string) => boolean, addPath: (path: string) => void, overridesBase: string, overrides: string[], root = dir, ig?: ReturnType<typeof ignore>): void {
 	let entries;
 	try {
 		entries = readdirSync(dir, { withFileTypes: true });
@@ -218,13 +167,7 @@ function collectPromptDir(
  * （pi 的 collectFilesFromPaths → collectResourceFiles(dir, "prompts") = collectFiles(dir, /\.md$/)，
  * 无 ignore）；整个显式集合再过 patterns（! + -）过滤。
  */
-function collectSettingsPrompts(
-	base: string,
-	plain: string[],
-	patterns: string[],
-	isPiDeckEnabled: (promptFile: string) => boolean,
-	addPath: (path: string) => void,
-): void {
+function collectSettingsPrompts(base: string, plain: string[], patterns: string[], isPiDeckEnabled: (promptFile: string) => boolean, addPath: (path: string) => void): void {
 	const allFiles: string[] = [];
 	for (const rawPath of plain) {
 		const resolved = resolveFromBase(rawPath, base);
@@ -248,6 +191,12 @@ function collectSettingsPrompts(
 /** 枚举目录下全部模板文件（无 ignore——与 pi 的 collectResourceFiles 一致）。 */
 function collectPromptDirFiles(dir: string): string[] {
 	const files: string[] = [];
-	collectPromptDir(dir, () => true, (path) => files.push(path), dir, []);
+	collectPromptDir(
+		dir,
+		() => true,
+		(path) => files.push(path),
+		dir,
+		[],
+	);
 	return files;
 }

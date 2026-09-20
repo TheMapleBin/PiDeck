@@ -46,14 +46,8 @@ test("AgentManager 的 Ask 通知改由独立开关门控，与通用通知解�
 });
 
 test("设置面板与未保存摘要均提供该开关", () => {
-	const notificationTab = readFileSync(
-		"src/renderer/src/components/app/settings/NotificationTab.tsx",
-		"utf8",
-	);
-	const summary = readFileSync(
-		"src/renderer/src/components/app/settings/unsavedChangesSummary.ts",
-		"utf8",
-	);
+	const notificationTab = readFileSync("src/renderer/src/components/app/settings/NotificationTab.tsx", "utf8");
+	const summary = readFileSync("src/renderer/src/components/app/settings/unsavedChangesSummary.ts", "utf8");
 	assert.match(notificationTab, /updateDraft\(\{ askNotificationEnabled: checked \}\)/);
 	assert.match(summary, /\{ field: "askNotificationEnabled", tab: "notification", itemKey: "settings\.askNotification" \}/);
 });

@@ -24,15 +24,9 @@ const TIMEOUT_MS = 30000;
 const PWSH_PATH = process.env.PWSH_PATH || "pwsh";
 
 // 与 src/index.ts createPtySession 的 initCommand 逐条同步（改动时需两边一致）
-const initCommand = [
-	"Remove-Module PSReadLine -ErrorAction SilentlyContinue",
-	"[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)",
-	"$env:GIT_PAGER = 'cat'",
-	"$env:GIT_TERMINAL_PROMPT = '0'",
-	"$env:npm_config_yes = 'true'",
-	"$env:GIT_EDITOR = 'true'",
-	`function prompt { '${SHELL_PROMPT} ' }`,
-].join("; ");
+const initCommand = ["Remove-Module PSReadLine -ErrorAction SilentlyContinue", "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)", "$env:GIT_PAGER = 'cat'", "$env:GIT_TERMINAL_PROMPT = '0'", "$env:npm_config_yes = 'true'", "$env:GIT_EDITOR = 'true'", `function prompt { '${SHELL_PROMPT} ' }`].join(
+	"; ",
+);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -49,7 +43,9 @@ function run() {
 		buffer += d;
 		if (buffer.length > 1024 * 1024) buffer = buffer.slice(-512 * 1024);
 	});
-	handle.onExit(() => { buffer += "\n__PTY_EXITED__\n"; });
+	handle.onExit(() => {
+		buffer += "\n__PTY_EXITED__\n";
+	});
 
 	async function waitFor(pattern, timeoutMs = TIMEOUT_MS) {
 		const start = Date.now();
@@ -62,7 +58,10 @@ function run() {
 
 	const send = (cmd) => handle.write(cmd + "\r");
 	const tail = (n = 600) =>
-		buffer.slice(-n).replace(/\u001b\[[0-9;?]*[A-Za-z]/g, "").replace(/\r/g, "");
+		buffer
+			.slice(-n)
+			.replace(/\u001b\[[0-9;?]*[A-Za-z]/g, "")
+			.replace(/\r/g, "");
 
 	return { handle, waitFor, send, tail, raw: () => buffer };
 }
@@ -95,22 +94,17 @@ if (!boot.ok) {
 }
 
 // 1) env 注入值
-results.push(await step(s, "env 注入生效（GIT_PAGER=cat / TERMINAL_PROMPT=0 / yes=true / EDITOR=true）",
-	"$env:GIT_PAGER; $env:GIT_TERMINAL_PROMPT; $env:npm_config_yes; $env:GIT_EDITOR",
-	(c) => c.includes("cat") && c.includes("true") && c.includes("0")));
+results.push(await step(s, "env 注入生效（GIT_PAGER=cat / TERMINAL_PROMPT=0 / yes=true / EDITOR=true）", "$env:GIT_PAGER; $env:GIT_TERMINAL_PROMPT; $env:npm_config_yes; $env:GIT_EDITOR", (c) => c.includes("cat") && c.includes("true") && c.includes("0")));
 
 // 2) git diff 不再进分页器挂死（旧版会挂到 5 分钟超时）
-results.push(await step(s, "git diff --stat HEAD~1 秒回（不分页）", "git diff --stat HEAD~1",
-	(c) => c.includes("changed")));
+results.push(await step(s, "git diff --stat HEAD~1 秒回（不分页）", "git diff --stat HEAD~1", (c) => c.includes("changed")));
 
 // 3) git log 同样不分页
-results.push(await step(s, "git log --oneline -3 秒回（不分页）", "git log --oneline -3",
-	(c) => /[0-9a-f]{7,}/.test(c)));
+results.push(await step(s, "git log --oneline -3 秒回（不分页）", "git log --oneline -3", (c) => /[0-9a-f]{7,}/.test(c)));
 
 // 4) Set-Location 状态跨调用保持
 await step(s, "Set-Location 生效", "Set-Location 'F:\\PiDeck\\src\\main\\dsh'; Get-Location", () => true);
-results.push(await step(s, "状态保持：下一条 Get-Location 仍在 src\\main\\dsh", "Get-Location",
-	(c) => c.includes("src\\main\\dsh")));
+results.push(await step(s, "状态保持：下一条 Get-Location 仍在 src\\main\\dsh", "Get-Location", (c) => c.includes("src\\main\\dsh")));
 
 s.handle.kill();
 const passed = results.filter(Boolean).length;

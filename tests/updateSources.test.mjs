@@ -25,7 +25,11 @@ function loadTsModule(filePath, deps) {
 		{
 			module,
 			exports: module.exports,
-			require: (name) => deps[name] ?? (() => { throw new Error(`unexpected require: ${name}`); })(),
+			require: (name) =>
+				deps[name] ??
+				(() => {
+					throw new Error(`unexpected require: ${name}`);
+				})(),
 			console,
 			URL, // vm 沙箱默认无 URL 全局，normalizeCustomMirrorHost 依赖它校验协议
 		},
@@ -65,22 +69,13 @@ test("updateSourceFeedUrl: github 源返回 null（走内置 app-update.yml 通�
 });
 
 test("updateSourceFeedUrl: atomgit 源生成 AtomGit generic feed baseUrl", () => {
-	assert.equal(
-		updateSourceFeedUrl("atomgit"),
-		"https://atomgit.com/ayuayue/PiDeck/releases/download/latest",
-	);
+	assert.equal(updateSourceFeedUrl("atomgit"), "https://atomgit.com/ayuayue/PiDeck/releases/download/latest");
 	assert.equal(atomGitFeedUrl(), "https://atomgit.com/ayuayue/PiDeck/releases/download/latest");
-	assert.equal(
-		gitHubLatestDownloadBase(),
-		"https://github.com/ayuayue/PiDeck/releases/latest/download",
-	);
+	assert.equal(gitHubLatestDownloadBase(), "https://github.com/ayuayue/PiDeck/releases/latest/download");
 });
 
 test("updateSourceLatestReleaseUrl: macOS manual 检查走 AtomGit OpenAPI latest", () => {
-	assert.equal(
-		updateSourceLatestReleaseUrl("atomgit"),
-		"https://api.atomgit.com/api/v5/repos/ayuayue/PiDeck/releases/latest",
-	);
+	assert.equal(updateSourceLatestReleaseUrl("atomgit"), "https://api.atomgit.com/api/v5/repos/ayuayue/PiDeck/releases/latest");
 	assert.equal(updateSourceLatestReleaseUrl("atomgit"), atomGitLatestReleaseApiUrl());
 	assert.equal(updateSourceLatestReleaseUrl("github"), null);
 });

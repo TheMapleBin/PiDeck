@@ -64,11 +64,7 @@ export function useTurnExecution(opts: {
 		}
 		// 新一轮已发生且本轮非最新：一律折叠（含手动展开过的，含本轮刚刚失去
 		// 最新位 & tick 已 bump 的「卸载期间新消息」场景），旧记忆作废。
-		if (
-			opts.collapsePrevRunsOnNewTurn !== false &&
-			opts.isLatestRun === false &&
-			currentTick > 0
-		) {
+		if (opts.collapsePrevRunsOnNewTurn !== false && opts.isLatestRun === false && currentTick > 0) {
 			return false;
 		}
 		// 非 live（agentRunning=false：只看历史/会话空闲）一律折叠。
@@ -108,12 +104,7 @@ export function useTurnExecution(opts: {
 	// 轮次重新撑开；下降沿不再自动展开（旧「结束展开」已由 1.5s 自动收起取代）。
 	useEffect(() => {
 		const running = Boolean(opts.agentRunning);
-		if (
-			running &&
-			!wasRunningRef.current &&
-			!userOverrideRef.current &&
-			opts.expandInterimDuringStream
-		) {
+		if (running && !wasRunningRef.current && !userOverrideRef.current && opts.expandInterimDuringStream) {
 			setStepsVisible(true);
 			opts.onStepsVisibleMemoryChange?.(true, opts.newTurnCollapseTick ?? 0);
 		}
@@ -135,12 +126,7 @@ export function useTurnExecution(opts: {
 		userOverrideRef.current = false;
 		setStepsVisible(false);
 		opts.onStepsVisibleMemoryChange?.(undefined, tick);
-	}, [
-		opts.collapsePrevRunsOnNewTurn,
-		opts.isLatestRun,
-		opts.newTurnCollapseTick,
-		opts.onStepsVisibleMemoryChange,
-	]);
+	}, [opts.collapsePrevRunsOnNewTurn, opts.isLatestRun, opts.newTurnCollapseTick, opts.onStepsVisibleMemoryChange]);
 
 	// timeline 侧 1.5s idle 后发来的自动收起信号。仅最新轮、仍有最终回答且执行过程
 	// 当前可见时收起；已经手动折叠/从未展开的轮次不回调，timeline 不会错误滚动。
@@ -155,19 +141,16 @@ export function useTurnExecution(opts: {
 		setStepsVisible(false);
 		opts.onStepsVisibleMemoryChange?.(undefined, tick);
 		opts.onAutoCollapsed?.();
-	}, [
-		opts.autoCollapseTick,
-		opts.hasFinalAnswer,
-		opts.isLatestRun,
-		opts.onAutoCollapsed,
-		opts.onStepsVisibleMemoryChange,
-	]);
+	}, [opts.autoCollapseTick, opts.hasFinalAnswer, opts.isLatestRun, opts.onAutoCollapsed, opts.onStepsVisibleMemoryChange]);
 
-	const setStepsVisibleFromUser = useCallback((open: boolean) => {
-		userOverrideRef.current = true;
-		setStepsVisible(open);
-		opts.onStepsVisibleMemoryChange?.(open, opts.newTurnCollapseTick ?? 0);
-	}, [opts.onStepsVisibleMemoryChange, opts.newTurnCollapseTick]);
+	const setStepsVisibleFromUser = useCallback(
+		(open: boolean) => {
+			userOverrideRef.current = true;
+			setStepsVisible(open);
+			opts.onStepsVisibleMemoryChange?.(open, opts.newTurnCollapseTick ?? 0);
+		},
+		[opts.onStepsVisibleMemoryChange, opts.newTurnCollapseTick],
+	);
 
 	const toggleSteps = useCallback(() => {
 		userOverrideRef.current = true;

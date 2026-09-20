@@ -17,7 +17,13 @@ function loadTsModule(filePath) {
 		fileName: filePath,
 	}).outputText;
 	const module = { exports: {} };
-	vm.runInNewContext(output, { module, exports: module.exports, require: () => { throw new Error("unexpected require"); } });
+	vm.runInNewContext(output, {
+		module,
+		exports: module.exports,
+		require: () => {
+			throw new Error("unexpected require");
+		},
+	});
 	return module.exports;
 }
 
@@ -66,10 +72,7 @@ test("pickAnnouncementBatch：一轮只弹最新的 1 条，其余归入 suppres
 
 test("pickAnnouncementBatch：默认上限就是 1（有意的防刷屏常量，改动会改变产品行为）", () => {
 	assert.equal(policy.ANNOUNCEMENT_TOAST_BURST_LIMIT, 1);
-	assert.deepEqual(
-		Array.from(policy.pickAnnouncementBatch(["a", "b"]).shown).length,
-		policy.ANNOUNCEMENT_TOAST_BURST_LIMIT,
-	);
+	assert.deepEqual(Array.from(policy.pickAnnouncementBatch(["a", "b"]).shown).length, policy.ANNOUNCEMENT_TOAST_BURST_LIMIT);
 });
 
 test("pickAnnouncementBatch：空列表 / 单项 / 自定义 limit / 负数 limit", () => {

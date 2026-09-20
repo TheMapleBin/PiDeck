@@ -44,17 +44,7 @@ const REQUIRED = [
 	"dsh-workflow",
 ].map((name) => `@deepseek-ai/${name}`);
 
-const ENTRY_PACKAGES = [
-	"@deepseek-ai/dsh-base",
-	"@deepseek-ai/dsh-app-boot",
-	"@deepseek-ai/dsh-cmdline",
-	"@deepseek-ai/dsh-client-connection",
-	"@deepseek-ai/dsh-api-gateway",
-	"@deepseek-ai/dsh-api-remotes",
-	"@deepseek-ai/dsh-api-session-controller",
-	"dsh-bill",
-	"dsh-tool-pwsh-persistent",
-];
+const ENTRY_PACKAGES = ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-app-boot", "@deepseek-ai/dsh-cmdline", "@deepseek-ai/dsh-client-connection", "@deepseek-ai/dsh-api-gateway", "@deepseek-ai/dsh-api-remotes", "@deepseek-ai/dsh-api-session-controller", "dsh-bill", "dsh-tool-pwsh-persistent"];
 
 /** 造一个「除目标包外全部合规」的最小 runtime 归档；withLib 控制事故复现与否。 */
 async function buildFixture({ withLib }) {
@@ -100,10 +90,7 @@ async function buildFixture({ withLib }) {
 		writeFileSync(join(culprit, "lib", "index.js"), "export const x = 1;");
 	}
 
-	writeFileSync(
-		join(src, "manifest.json"),
-		JSON.stringify({ schemaVersion: 1, runtimeVersion: "0.1.5-rc.1", archiveSha256: "" }),
-	);
+	writeFileSync(join(src, "manifest.json"), JSON.stringify({ schemaVersion: 1, runtimeVersion: "0.1.5-rc.1", archiveSha256: "" }));
 
 	const archivePath = join(mkdtempSync(join(tmpdir(), "dsh-gate-out-")), "dsh-runtime-fixture.tgz");
 	await tar.c(

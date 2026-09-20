@@ -66,10 +66,7 @@ function modelFromEvent(event: { data?: unknown }): { provider: string; model: s
  * 从单条 SessionEvent 推导过程事件；无对应语义时返回 undefined。
  * prev 仅用于「同内容不重复记录」的幂等判断（如权限/plan 事件重复推送时跳过）。
  */
-export function collectDshProcessEvent(
-	prev: SessionProcessEvent[],
-	event: { type?: string; seq?: number; data?: unknown; time?: unknown } | undefined,
-): SessionProcessEvent | undefined {
+export function collectDshProcessEvent(prev: SessionProcessEvent[], event: { type?: string; seq?: number; data?: unknown; time?: unknown } | undefined): SessionProcessEvent | undefined {
 	if (!event?.type) return undefined;
 	const type = event.type;
 	const seq = typeof event.seq === "number" ? event.seq : 0;
@@ -131,9 +128,7 @@ export function collectDshProcessEvent(
 			const meta = data as { operation?: unknown; goal?: unknown; cleared?: unknown };
 			const operation = asString(meta.operation);
 			const objective = isRecord(meta.goal) ? asString((meta.goal as Record<string, unknown>).objective) : undefined;
-			const summary = operation === "clear"
-				? "goal cleared"
-				: `goal ${operation ?? "changed"}${objective ? `: ${objective}` : ""}`;
+			const summary = operation === "clear" ? "goal cleared" : `goal ${operation ?? "changed"}${objective ? `: ${objective}` : ""}`;
 			return {
 				id,
 				kind: "custom",
@@ -169,9 +164,7 @@ export function collectDshProcessEvent(
 			const delayMs = asNumber(data.delayMs);
 			const failureText = retryFailureMessage(data.failure);
 			const countText = maxRetries !== undefined ? `${retry}/${maxRetries}` : String(retry);
-			const summary = failureText
-				? `retry ${countText}: ${failureText}`
-				: `retry ${countText}`;
+			const summary = failureText ? `retry ${countText}: ${failureText}` : `retry ${countText}`;
 			return {
 				id,
 				kind: "retry",
@@ -191,10 +184,7 @@ export function collectDshProcessEvent(
 }
 
 /** 追加一条过程事件并封顶（与 pi 的 MAX_EVENTS 同语义）。 */
-export function pushDshProcessEvent(
-	current: SessionProcessEvent[],
-	next: SessionProcessEvent | undefined,
-): SessionProcessEvent[] {
+export function pushDshProcessEvent(current: SessionProcessEvent[], next: SessionProcessEvent | undefined): SessionProcessEvent[] {
 	if (!next) return current;
 	// id 级去重：id 含 journal seq，会话内唯一。follow 泵打开时的首帧 journal 尾部
 	// snapshot（0.1.5 "complete opening snapshot"）会把 attach 阶段已收集的事件重放，
@@ -212,10 +202,7 @@ export function pushDshProcessEvent(
  * 批量收集：按 seq 升序逐条 collect（attach/restart/backfill/history 重放共用）。
  * 幂等规则由 collectDshProcessEvent 内部保证（同模型/同预设连续不重复记账）。
  */
-export function collectDshProcessEvents(
-	prev: SessionProcessEvent[],
-	events: ReadonlyArray<{ type?: string; seq?: number; data?: unknown; time?: unknown } | undefined>,
-): SessionProcessEvent[] {
+export function collectDshProcessEvents(prev: SessionProcessEvent[], events: ReadonlyArray<{ type?: string; seq?: number; data?: unknown; time?: unknown } | undefined>): SessionProcessEvent[] {
 	let result = prev;
 	for (const event of events) {
 		if (!event) continue;
@@ -236,9 +223,7 @@ function unwrapProjectionValue(values: unknown, key: string): unknown {
 }
 
 /** 解析 contextPressure 投影单元值（attach 的 values 包装形或 mux 帧的单元值形均可）。 */
-export function parseContextPressureProjection(
-	values: unknown,
-): { pressureTokens?: number; projectedTokens?: number; contextWindow?: number } | undefined {
+export function parseContextPressureProjection(values: unknown): { pressureTokens?: number; projectedTokens?: number; contextWindow?: number } | undefined {
 	const raw = unwrapProjectionValue(values, "contextPressure");
 	if (!isRecord(raw)) return undefined;
 	const result: { pressureTokens?: number; projectedTokens?: number; contextWindow?: number } = {};
@@ -252,9 +237,7 @@ export function parseContextPressureProjection(
 }
 
 /** 解析 contextBreakdown 投影单元值（attach 的 values 包装形或 mux 帧的单元值形均可）。 */
-export function parseContextBreakdownProjection(
-	values: unknown,
-): { systemTokens: number; toolsTokens: number; messageTokens: number } | undefined {
+export function parseContextBreakdownProjection(values: unknown): { systemTokens: number; toolsTokens: number; messageTokens: number } | undefined {
 	const raw = unwrapProjectionValue(values, "contextBreakdown");
 	if (!isRecord(raw)) return undefined;
 	const systemTokens = asNumber(raw.systemTokens);
@@ -306,9 +289,7 @@ export function parseSessionStatsProjection(values: unknown): DshSessionStatsPro
  * 由 host sessionStats 投影派生渲染层视图：平均首字延迟与生成速度
  * （无样本字段保持 undefined，UI 不渲染对应行）。
  */
-export function deriveDshSessionStats(
-	raw: DshSessionStatsProjection,
-): AgentRuntimeState["dshSessionStats"] {
+export function deriveDshSessionStats(raw: DshSessionStatsProjection): AgentRuntimeState["dshSessionStats"] {
 	return {
 		turns: raw.turns,
 		steps: raw.steps,
@@ -362,9 +343,7 @@ export function cacheHitPercentOf(usage: DshUsageTotals | undefined): number | u
  * 每条 assistant = 一步（被取消而未组装消息的步在投影中不可见，保持 0）。
  * 没有任何回合（无 user 也无产物）时返回 undefined。墙钟字段保持 0，UI 只渲染有数字的组。
  */
-export function deriveSessionStatsFallback(
-	messages: ReadonlyArray<{ role?: string }>,
-): DshSessionStatsProjection | undefined {
+export function deriveSessionStatsFallback(messages: ReadonlyArray<{ role?: string }>): DshSessionStatsProjection | undefined {
 	let turns = 0;
 	let steps = 0;
 	let pending = false;
@@ -403,9 +382,7 @@ export function deriveSessionStatsFallback(
  * 上下文圆环兜底占用——配合 request/context 的 contextWindow，dsh 会话在首个
  * 回合后即可显示圆环，与 pi 行为统一。
  */
-export function estimateContextTokens(
-	messages: ReadonlyArray<{ role?: string; text?: string }>,
-): number {
+export function estimateContextTokens(messages: ReadonlyArray<{ role?: string; text?: string }>): number {
 	let chars = 0;
 	for (const message of messages) {
 		if (typeof message.text !== "string" || !message.text) continue;

@@ -17,9 +17,13 @@ function loadTracker() {
 		if (id.includes("shared/types/soundAlert")) return soundAlertModule;
 		throw new Error(`Unexpected require: ${id}`);
 	};
-	vm.runInNewContext(outputText, { module, exports: module.exports, require: requireShim }, {
-		filename: "soundAlertTracker.ts",
-	});
+	vm.runInNewContext(
+		outputText,
+		{ module, exports: module.exports, require: requireShim },
+		{
+			filename: "soundAlertTracker.ts",
+		},
+	);
 	return module.exports;
 }
 
@@ -29,9 +33,13 @@ function loadSoundAlertCommonJs() {
 		compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 	});
 	const module = { exports: {} };
-	vm.runInNewContext(outputText, { module, exports: module.exports }, {
-		filename: "soundAlert.ts",
-	});
+	vm.runInNewContext(
+		outputText,
+		{ module, exports: module.exports },
+		{
+			filename: "soundAlert.ts",
+		},
+	);
 	return module.exports;
 }
 

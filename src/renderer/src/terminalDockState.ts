@@ -35,10 +35,7 @@ export function terminalOwnerKey(owner: TerminalDockOwner): string {
  * 单按钮双作用域：有 agent 优先挂 agent，否则挂当前项目。
  * 与「项目空引导页也能开终端」的产品规则对齐。
  */
-export function resolveTerminalOwner(
-	activeAgentId: string | undefined,
-	activeProjectId: string | undefined,
-): TerminalDockOwner | undefined {
+export function resolveTerminalOwner(activeAgentId: string | undefined, activeProjectId: string | undefined): TerminalDockOwner | undefined {
 	// pending-* 只是渲染层占位 id，主进程 agents map 里还不存在。
 	// 若把 Dock 挂到 pending owner 上，ensure/create 会立刻抛 Agent not found。
 	if (activeAgentId && !activeAgentId.startsWith("pending-")) {
@@ -48,9 +45,7 @@ export function resolveTerminalOwner(
 	return undefined;
 }
 
-export function parseTerminalOwnerKey(
-	key: string,
-): TerminalDockOwner | undefined {
+export function parseTerminalOwnerKey(key: string): TerminalDockOwner | undefined {
 	const agentPrefix = "agent:";
 	const projectPrefix = "project:";
 	if (key.startsWith(agentPrefix)) {
@@ -64,11 +59,7 @@ export function parseTerminalOwnerKey(
 	return undefined;
 }
 
-export function setTerminalDockOpen(
-	current: TerminalDockStateByOwner,
-	ownerKey: string,
-	open: boolean,
-): TerminalDockStateByOwner {
+export function setTerminalDockOpen(current: TerminalDockStateByOwner, ownerKey: string, open: boolean): TerminalDockStateByOwner {
 	return {
 		...current,
 		[ownerKey]: {
@@ -78,11 +69,7 @@ export function setTerminalDockOpen(
 	};
 }
 
-export function setTerminalDockCollapsed(
-	current: TerminalDockStateByOwner,
-	ownerKey: string,
-	collapsed: boolean,
-): TerminalDockStateByOwner {
+export function setTerminalDockCollapsed(current: TerminalDockStateByOwner, ownerKey: string, collapsed: boolean): TerminalDockStateByOwner {
 	return {
 		...current,
 		[ownerKey]: {
@@ -98,11 +85,7 @@ export function setTerminalDockCollapsed(
  * 旧版 hook 曾把 agentId 直接作为 key 写入；遇到仍存活的旧 key 时原地迁成
  * `agent:<id>`，避免热更新或升级中的流式事件把已打开终端直接清掉。
  */
-export function pruneTerminalDockState(
-	current: TerminalDockStateByOwner,
-	liveAgentIds: Set<string>,
-	liveProjectIds: Set<string>,
-): TerminalDockStateByOwner {
+export function pruneTerminalDockState(current: TerminalDockStateByOwner, liveAgentIds: Set<string>, liveProjectIds: Set<string>): TerminalDockStateByOwner {
 	let next: TerminalDockStateByOwner | undefined;
 	for (const [key, value] of Object.entries(current)) {
 		const owner = parseTerminalOwnerKey(key);
@@ -118,9 +101,7 @@ export function pruneTerminalDockState(
 			delete next[key];
 			continue;
 		}
-		const live = owner.kind === "agent"
-			? liveAgentIds.has(owner.id)
-			: liveProjectIds.has(owner.id);
+		const live = owner.kind === "agent" ? liveAgentIds.has(owner.id) : liveProjectIds.has(owner.id);
 		if (!live) {
 			next ??= { ...current };
 			delete next[key];
@@ -130,11 +111,7 @@ export function pruneTerminalDockState(
 }
 
 /** pending agent → 真实 agent 时，把 UI 状态迁到新 id（与其它 agent 记录迁移一致） */
-export function migrateTerminalDockAgentState(
-	current: TerminalDockStateByOwner,
-	replacementById: Map<string, string>,
-	liveAgentIds: Set<string>,
-): TerminalDockStateByOwner {
+export function migrateTerminalDockAgentState(current: TerminalDockStateByOwner, replacementById: Map<string, string>, liveAgentIds: Set<string>): TerminalDockStateByOwner {
 	const next: TerminalDockStateByOwner = {};
 	for (const [key, value] of Object.entries(current)) {
 		const owner = parseTerminalOwnerKey(key);
@@ -166,12 +143,7 @@ export const TERMINAL_COLLAPSE_THRESHOLD_PX = 35;
  * - owner 与当前激活 owner 相同 → 仅聚焦栏挂载（随焦点走，仍是同一份终端）
  * - owner 与激活 owner 不同（分屏双栏各有自己的 agent）→ 不随焦点消失，持续显示
  */
-export function shouldMountPaneTerminalDock(input: {
-	ownerKey: string | undefined;
-	activeOwnerKey: string | undefined;
-	focused: boolean;
-	open: boolean;
-}): boolean {
+export function shouldMountPaneTerminalDock(input: { ownerKey: string | undefined; activeOwnerKey: string | undefined; focused: boolean; open: boolean }): boolean {
 	if (!input.ownerKey || !input.open) return false;
 	if (input.ownerKey === input.activeOwnerKey) return input.focused;
 	return true;
@@ -187,11 +159,13 @@ export function shouldMountPaneTerminalDock(input: {
  */
 export function resolvePaneTerminal(input: {
 	sessionId: string;
-	runtime: {
-		agentId?: string;
-		runtimeGeneration?: number;
-		status?: string | null;
-	} | undefined;
+	runtime:
+		| {
+				agentId?: string;
+				runtimeGeneration?: number;
+				status?: string | null;
+		  }
+		| undefined;
 	projectId?: string;
 	project?: { id: string; path: string; kind?: string } | undefined;
 }): { owner: TerminalDockOwner; target: TerminalTarget } | undefined {
@@ -238,18 +212,11 @@ export function resolvePaneTerminal(input: {
  * 注意：程序化 setLayout 触发的 onResize 是否抑制折叠/展开转换，由调用方
  * （SessionView 有 composer 联动保护窗口）自行判断，本函数只做几何裁决。
  */
-export function applyTerminalPanelResize(input: {
-	px: number;
-	collapsed: boolean;
-	maxHeight: number;
-}): { collapsed?: boolean; height?: number } {
+export function applyTerminalPanelResize(input: { px: number; collapsed: boolean; maxHeight: number }): { collapsed?: boolean; height?: number } {
 	if (input.px <= TERMINAL_COLLAPSE_THRESHOLD_PX) {
 		return input.collapsed ? {} : { collapsed: true };
 	}
-	const height = Math.max(
-		TERMINAL_HEIGHT_MIN,
-		Math.min(Math.round(input.px), Math.round(input.maxHeight)),
-	);
+	const height = Math.max(TERMINAL_HEIGHT_MIN, Math.min(Math.round(input.px), Math.round(input.maxHeight)));
 	return input.collapsed ? { collapsed: false, height } : { height };
 }
 
@@ -277,10 +244,7 @@ export function loadTerminalHeight(fallback: number): number {
 
 export function saveTerminalHeight(height: number): void {
 	try {
-		localStorage.setItem(
-			TERMINAL_HEIGHT_STORAGE_KEY,
-			String(Math.max(TERMINAL_HEIGHT_MIN, Math.round(height))),
-		);
+		localStorage.setItem(TERMINAL_HEIGHT_STORAGE_KEY, String(Math.max(TERMINAL_HEIGHT_MIN, Math.round(height))));
 	} catch {
 		// 配额/隐私模式失败时静默忽略；高度仍在本会话内存中有效
 	}

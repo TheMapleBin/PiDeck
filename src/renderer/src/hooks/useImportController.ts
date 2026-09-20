@@ -31,14 +31,9 @@ function errorMessage(reason: unknown): string {
  * Provider-agnostic import state. Sequence numbers make a late scan/import unable
  * to overwrite a newer project or a freshly closed overlay.
  */
-export function useImportController<TSummary, TReport>(
-	options: ImportControllerOptions<TSummary, TReport>,
-): ImportControllerState<TSummary, TReport> {
+export function useImportController<TSummary, TReport>(options: ImportControllerOptions<TSummary, TReport>): ImportControllerState<TSummary, TReport> {
 	const { projectId, scan, importSelected: importApi, selectInitial, getSourcePath } = options;
-	const pathOf = useCallback(
-		(session: TSummary) => getSourcePath?.(session) ?? (session as { sourcePath?: string }).sourcePath ?? "",
-		[getSourcePath],
-	);
+	const pathOf = useCallback((session: TSummary) => getSourcePath?.(session) ?? (session as { sourcePath?: string }).sourcePath ?? "", [getSourcePath]);
 	const [sessions, setSessions] = useState<TSummary[]>([]);
 	const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
 	const [loading, setLoading] = useState(false);
@@ -84,9 +79,7 @@ export function useImportController<TSummary, TReport>(
 	}, [projectId, refresh]);
 
 	const toggle = useCallback((sourcePath: string) => {
-		setSelectedPaths((current) => current.includes(sourcePath)
-			? current.filter((path) => path !== sourcePath)
-			: [...current, sourcePath]);
+		setSelectedPaths((current) => (current.includes(sourcePath) ? current.filter((path) => path !== sourcePath) : [...current, sourcePath]));
 	}, []);
 
 	const toggleAll = useCallback(() => {

@@ -2,17 +2,8 @@ import { existsSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join, relative, sep } from "node:path";
 import type { DisabledExtensionEntry } from "../../shared/types";
-import {
-	listActiveBuiltInExtensionPaths,
-	type BuiltInExtensionPathRoots,
-} from "./builtInExtensions";
-import {
-	applyPatterns,
-	readSettingsObject,
-	readStringArray,
-	resolveFromBase,
-	splitResourceEntries,
-} from "../resourceWhitelist";
+import { listActiveBuiltInExtensionPaths, type BuiltInExtensionPathRoots } from "./builtInExtensions";
+import { applyPatterns, readSettingsObject, readStringArray, resolveFromBase, splitResourceEntries } from "../resourceWhitelist";
 import { readProjectResourceOverrides } from "../projects/projectResourceOverrides";
 import { resolveConfiguredPackageResources } from "../packageResourceResolver";
 import { discoverExtensionEntries } from "./extensionDiscovery";
@@ -38,36 +29,18 @@ export type EnabledExtensionResolverOptions = {
  * Resolve the exact extension whitelist used with `--no-extensions`. Sources and filters mirror
  * pi 0.85, while PiDeck's scope-qualified disabled identities remain isolated from each other.
  */
-export function resolveEnabledExtensionPaths(
-	options: EnabledExtensionResolverOptions,
-): string[] | null {
+export function resolveEnabledExtensionPaths(options: EnabledExtensionResolverOptions): string[] | null {
 	const { disabled, cwd } = options;
 	const includeProjectResources = options.includeProjectResources !== false;
 	const projectBaseDir = join(cwd, CONFIG_DIR_NAME);
-	const inheritedDisabled = includeProjectResources
-		? readProjectResourceOverrides(cwd).disabledGlobalExtensions
-		: [];
-	const projectDisabled = includeProjectResources
-		? readProjectDisabledExtensionSources(projectBaseDir)
-		: [];
-	if (
-		includeProjectResources &&
-		disabled.length === 0 &&
-		inheritedDisabled.length === 0 &&
-		projectDisabled.length === 0
-	) return null;
+	const inheritedDisabled = includeProjectResources ? readProjectResourceOverrides(cwd).disabledGlobalExtensions : [];
+	const projectDisabled = includeProjectResources ? readProjectDisabledExtensionSources(projectBaseDir) : [];
+	if (includeProjectResources && disabled.length === 0 && inheritedDisabled.length === 0 && projectDisabled.length === 0) return null;
 
 	const agentDir = join(options.agentHomeDir?.trim() || homedir(), CONFIG_DIR_NAME, "agent");
-	const effectiveDisabled: DisabledExtensionEntry[] = [
-		...disabled,
-		...inheritedDisabled.map<DisabledExtensionEntry>((source) => ({ scope: "user", source })),
-		...projectDisabled.map<DisabledExtensionEntry>((source) => ({ scope: "project", source })),
-	];
-	const disabledKeys = new Set(
-		effectiveDisabled.map((entry) => `${entry.scope}:${entry.source.trim()}`),
-	);
-	const isEnabled = (scope: DisabledExtensionEntry["scope"], source: string) =>
-		!disabledKeys.has(`${scope}:${source.trim()}`);
+	const effectiveDisabled: DisabledExtensionEntry[] = [...disabled, ...inheritedDisabled.map<DisabledExtensionEntry>((source) => ({ scope: "user", source })), ...projectDisabled.map<DisabledExtensionEntry>((source) => ({ scope: "project", source }))];
+	const disabledKeys = new Set(effectiveDisabled.map((entry) => `${entry.scope}:${entry.source.trim()}`));
+	const isEnabled = (scope: DisabledExtensionEntry["scope"], source: string) => !disabledKeys.has(`${scope}:${source.trim()}`);
 
 	const paths: string[] = [];
 	const seen = new Set<string>();
@@ -81,12 +54,8 @@ export function resolveEnabledExtensionPaths(
 	const projectSettingsFile = join(projectBaseDir, "settings.json");
 	const userSettings = readSettingsObject(userSettingsFile);
 	const projectSettings = includeProjectResources ? readSettingsObject(projectSettingsFile) : {};
-	const { plain: userPlain, patterns: userPatterns } = splitResourceEntries(
-		Array.isArray(userSettings.extensions) ? userSettings.extensions : [],
-	);
-	const { plain: projectPlain, patterns: projectPatterns } = splitResourceEntries(
-		Array.isArray(projectSettings.extensions) ? projectSettings.extensions : [],
-	);
+	const { plain: userPlain, patterns: userPatterns } = splitResourceEntries(Array.isArray(userSettings.extensions) ? userSettings.extensions : []);
+	const { plain: projectPlain, patterns: projectPatterns } = splitResourceEntries(Array.isArray(projectSettings.extensions) ? projectSettings.extensions : []);
 
 	// Auto discovery uses per-scope pattern bases (`~/.pi/agent` and `<cwd>/.pi`).
 	const userExtensionDir = join(agentDir, "extensions");
@@ -132,11 +101,7 @@ function readProjectDisabledExtensionSources(projectBaseDir: string): string[] {
 	return readStringArray(readSettingsObject(join(projectBaseDir, "settings.json")), "disabledExtensions");
 }
 
-function collectSettingsExtensionPaths(
-	baseDir: string,
-	plain: string[],
-	patterns: string[],
-): Array<{ path: string; source: string }> {
+function collectSettingsExtensionPaths(baseDir: string, plain: string[], patterns: string[]): Array<{ path: string; source: string }> {
 	const candidates: Array<{ path: string; source: string }> = [];
 	for (const source of plain) {
 		const resolved = resolveFromBase(source, baseDir);
@@ -151,7 +116,11 @@ function collectSettingsExtensionPaths(
 			// Unreadable explicit paths are ignored, as in pi's package manager.
 		}
 	}
-	const enabled = applyPatterns(candidates.map((candidate) => candidate.path), patterns, baseDir);
+	const enabled = applyPatterns(
+		candidates.map((candidate) => candidate.path),
+		patterns,
+		baseDir,
+	);
 	return candidates.filter((candidate) => enabled.has(candidate.path));
 }
 
@@ -161,11 +130,7 @@ function autoExtensionSource(directory: string, path: string): string {
 }
 
 /** Match pi's automatic extension directory rules and return loader entry paths. */
-function discoverAutoExtensionEntries(
-	dir: string,
-	overridesBase = dir,
-	overrides: string[] = [],
-): string[] {
+function discoverAutoExtensionEntries(dir: string, overridesBase = dir, overrides: string[] = []): string[] {
 	const candidates = discoverExtensionEntries(dir);
 	const enabled = applyPatterns(candidates, overrides, overridesBase);
 	return candidates.filter((path) => enabled.has(path));

@@ -38,22 +38,11 @@ function collectBareImports() {
 
 test("extension runtime deps are packaged next to extensions", () => {
 	const pkg = JSON.parse(readFileSync("package.json", "utf8"));
-	const targets = new Set(
-		(pkg.build?.extraResources ?? []).map((e) => e.to),
-	);
+	const targets = new Set((pkg.build?.extraResources ?? []).map((e) => e.to));
 	for (const dep of collectBareImports()) {
-		assert.ok(
-			targets.has(`extensions/node_modules/${dep}`),
-			`扩展依赖 ${dep} 缺少 extraResources 映射 extensions/node_modules/${dep}，打包后 pi 将启动失败`,
-		);
-		assert.ok(
-			pkg.dependencies?.[dep],
-			`扩展依赖 ${dep} 必须声明在 dependencies（保证顶层 hoisting 供 extraResources 复制）`,
-		);
-		assert.ok(
-			existsSync(join("node_modules", dep, "package.json")),
-			`扩展依赖 ${dep} 未安装在顶层 node_modules`,
-		);
+		assert.ok(targets.has(`extensions/node_modules/${dep}`), `扩展依赖 ${dep} 缺少 extraResources 映射 extensions/node_modules/${dep}，打包后 pi 将启动失败`);
+		assert.ok(pkg.dependencies?.[dep], `扩展依赖 ${dep} 必须声明在 dependencies（保证顶层 hoisting 供 extraResources 复制）`);
+		assert.ok(existsSync(join("node_modules", dep, "package.json")), `扩展依赖 ${dep} 未安装在顶层 node_modules`);
 	}
 });
 
@@ -67,9 +56,5 @@ test("extension runtime deps are covered by the updater's vendored package list"
 	const { loadTsCommonJs: load } = await import("./helpers/loadTsCommonJs.mjs");
 	const updaterModule = load("src/main/extensions/builtInExtensionsUpdater.ts");
 	const vendorNames = [...updaterModule.VENDOR_DEP_PACKAGE_NAMES];
-	assert.deepEqual(
-		[...collectBareImports()].sort(),
-		[...vendorNames].sort(),
-		"VENDOR_DEP_PACKAGE_NAMES 必须与扩展运行时裸导入集合一致（缺了覆盖层解析不到，多了白占空间）",
-	);
+	assert.deepEqual([...collectBareImports()].sort(), [...vendorNames].sort(), "VENDOR_DEP_PACKAGE_NAMES 必须与扩展运行时裸导入集合一致（缺了覆盖层解析不到，多了白占空间）");
 });

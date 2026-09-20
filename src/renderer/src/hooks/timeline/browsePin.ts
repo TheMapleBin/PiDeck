@@ -12,45 +12,30 @@
 export const BROWSE_PIN_DRIFT_EPSILON_PX = 0.5;
 
 export type BrowsePin = {
-  messageId: string;
-  /** 钉住的行顶边相对视口顶的偏移（可负：行顶在视口上方）。 */
-  expectedViewportTop: number;
+	messageId: string;
+	/** 钉住的行顶边相对视口顶的偏移（可负：行顶在视口上方）。 */
+	expectedViewportTop: number;
 };
 
 /** 行相对视口多走了多少：正值 = 行在屏幕上被推下去（上方长高）。 */
-export function browsePinDrift(
-  currentViewportTop: number,
-  expectedViewportTop: number,
-): number {
-  return currentViewportTop - expectedViewportTop;
+export function browsePinDrift(currentViewportTop: number, expectedViewportTop: number): number {
+	return currentViewportTop - expectedViewportTop;
 }
 
 /** 把漂移加回 scrollTop，让钉住的行回到 expectedViewportTop。 */
-export function browsePinScrollTop(
-  scrollTop: number,
-  currentViewportTop: number,
-  expectedViewportTop: number,
-): number {
-  return scrollTop + browsePinDrift(currentViewportTop, expectedViewportTop);
+export function browsePinScrollTop(scrollTop: number, currentViewportTop: number, expectedViewportTop: number): number {
+	return scrollTop + browsePinDrift(currentViewportTop, expectedViewportTop);
 }
 
-export function shouldCompensateBrowsePin(input: {
-  following: boolean;
-  currentViewportTop: number | null;
-  expectedViewportTop: number;
-  epsilon?: number;
-}): boolean {
-  if (input.following) return false;
-  if (input.currentViewportTop === null) return false;
-  const epsilon = input.epsilon ?? BROWSE_PIN_DRIFT_EPSILON_PX;
-  return Math.abs(input.currentViewportTop - input.expectedViewportTop) > epsilon;
+export function shouldCompensateBrowsePin(input: { following: boolean; currentViewportTop: number | null; expectedViewportTop: number; epsilon?: number }): boolean {
+	if (input.following) return false;
+	if (input.currentViewportTop === null) return false;
+	const epsilon = input.epsilon ?? BROWSE_PIN_DRIFT_EPSILON_PX;
+	return Math.abs(input.currentViewportTop - input.expectedViewportTop) > epsilon;
 }
 
 /** 用户自己滚了：接受新的视口位置，不要把人焊回旧偏移。 */
-export function followBrowsePinAfterUserScroll(
-  pin: BrowsePin,
-  currentViewportTop: number | null,
-): BrowsePin {
-  if (currentViewportTop === null) return pin;
-  return { messageId: pin.messageId, expectedViewportTop: currentViewportTop };
+export function followBrowsePinAfterUserScroll(pin: BrowsePin, currentViewportTop: number | null): BrowsePin {
+	if (currentViewportTop === null) return pin;
+	return { messageId: pin.messageId, expectedViewportTop: currentViewportTop };
 }

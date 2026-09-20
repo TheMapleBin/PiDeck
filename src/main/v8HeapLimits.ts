@@ -117,12 +117,7 @@ const RENDERER_HEAP_BOUNDS = { min: 1024, max: 8192 } as const;
 export type HeapEnv = Record<string, string | undefined>;
 
 /** 读取并校验环境变量覆盖值：非法回落默认，越界夹到边界。 */
-export function resolveHeapOverrideMb(
-	env: HeapEnv,
-	name: string,
-	fallbackMb: number,
-	bounds: { min: number; max: number },
-): number {
+export function resolveHeapOverrideMb(env: HeapEnv, name: string, fallbackMb: number, bounds: { min: number; max: number }): number {
 	const raw = env?.[name];
 	if (typeof raw !== "string" || !raw.trim()) return fallbackMb;
 	const parsed = Number(raw.trim());

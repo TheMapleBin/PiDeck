@@ -4,16 +4,9 @@
  * 不依赖 RichInput，不向 controller 暴露 TipTap 类型。
  */
 
-import {
-	getTipTapComposerCaretCoords,
-	posToPlainOffset,
-	resolveComposerTipTapEditor,
-} from "./tiptap/caretBridge";
+import { getTipTapComposerCaretCoords, posToPlainOffset, resolveComposerTipTapEditor } from "./tiptap/caretBridge";
 
-export function getComposerCaretCoords(
-	root: HTMLElement,
-	plainOffset: number,
-): { top: number; left: number } {
+export function getComposerCaretCoords(root: HTMLElement, plainOffset: number): { top: number; left: number } {
 	const editor = resolveComposerTipTapEditor(root);
 	if (editor) {
 		const coords = getTipTapComposerCaretCoords(editor, plainOffset);

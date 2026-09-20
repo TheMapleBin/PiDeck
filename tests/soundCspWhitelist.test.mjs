@@ -19,10 +19,7 @@ test("CSP media-src：预设（'self'）与自定义（pideck-sound:）音效都
 	const mediaSrc = cspDirective("media-src");
 	assert.ok(mediaSrc, "CSP 缺少 media-src 指令：<audio> 会回落 default-src 'self'，pideck-sound: 被拦截");
 	assert.ok(mediaSrc.includes("'self'"), "media-src 必须含 'self'（预设音效走同源 Vite asset）");
-	assert.ok(
-		mediaSrc.includes("pideck-sound:"),
-		"media-src 必须放行 pideck-sound:（自定义音效走该协议）",
-	);
+	assert.ok(mediaSrc.includes("pideck-sound:"), "media-src 必须放行 pideck-sound:（自定义音效走该协议）");
 });
 
 test("CSP img-src：既有自定义协议放行不得被顺手删掉", () => {

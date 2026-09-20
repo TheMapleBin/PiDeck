@@ -54,10 +54,7 @@ test("startup integration warms DSH after the main window only when default back
 	// （其 onRuntimeReady 也用同一门控补预热），窗口放宽到 2400 字符；
 	// 门控条件收敛到 dshWarmupEnabled()：default backend dsh + canCreateDshSession
 	// + 未手动停止（dshManualStopped，见 tests/dshManualStopWiring.test.mjs）。
-	assert.match(
-		main,
-		/await createWindow\(\);[\s\S]{0,2400}startDshHostInBackground\(dshHost, appLogger, \{\s*enabled:\s*dshWarmupEnabled\(\),\s*\}\)/,
-	);
+	assert.match(main, /await createWindow\(\);[\s\S]{0,2400}startDshHostInBackground\(dshHost, appLogger, \{\s*enabled:\s*dshWarmupEnabled\(\),\s*\}\)/);
 	assert.match(main, /function dshWarmupEnabled\(\): boolean[\s\S]{0,400}dshManualStopped !== true/);
 	assert.match(configTab, /const restartHost = async \(\) =>/);
 	assert.match(configTab, /desktopApi\.sessions\.restartDshHost\(\)/);
@@ -72,7 +69,11 @@ test("startup integration warms DSH after the main window only when default back
 test("startDshHostInBackground logs failures without surfacing an unhandled rejection", async () => {
 	const warnings = [];
 	startDshHostInBackground(
-		{ ensureStarted: async () => { throw new Error("host boot failed"); } },
+		{
+			ensureStarted: async () => {
+				throw new Error("host boot failed");
+			},
+		},
 		{ warn: (...args) => warnings.push(args) },
 	);
 

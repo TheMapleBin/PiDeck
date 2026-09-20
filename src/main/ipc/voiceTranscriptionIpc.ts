@@ -4,13 +4,9 @@ import type { VoiceTranscriptionConfigStore } from "../voice/VoiceTranscriptionC
 import type { VoiceTranscriptionService } from "../voice/VoiceTranscriptionService";
 
 /** Register the narrow renderer-to-main voice transcription boundary. */
-export function registerVoiceTranscriptionIpc(deps: {
-	configStore: VoiceTranscriptionConfigStore;
-	service: VoiceTranscriptionService;
-}) {
+export function registerVoiceTranscriptionIpc(deps: { configStore: VoiceTranscriptionConfigStore; service: VoiceTranscriptionService }) {
 	ipcMain.handle(ipcChannels.voiceTranscriptionGetConfig, () => deps.configStore.getPublicConfig());
-	ipcMain.handle(ipcChannels.voiceTranscriptionSaveConfig, (_event, input: unknown) =>
-		deps.configStore.saveConfig(input));
+	ipcMain.handle(ipcChannels.voiceTranscriptionSaveConfig, (_event, input: unknown) => deps.configStore.saveConfig(input));
 	ipcMain.handle(ipcChannels.voiceTranscriptionTranscribe, (_event, input: unknown) => {
 		if (!isRecord(input)) return { ok: false, error: "invalidRequest" } as const;
 		const audio = input.audio;

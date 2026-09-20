@@ -2,9 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
-const { extractUserPrompts, mergePromptHistory } = loadTsCommonJs(
-	"src/renderer/src/composerBehavior.ts",
-);
+const { extractUserPrompts, mergePromptHistory } = loadTsCommonJs("src/renderer/src/composerBehavior.ts");
 
 // vm 沙箱 realm 的数组原型与宿主不同，deepStrictEqual 会因原型不等而失败，
 // 统一转成宿主数组再比较（元素为字符串原始值，跨 realm 可直接比较）。

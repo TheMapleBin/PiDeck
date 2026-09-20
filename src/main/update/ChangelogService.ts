@@ -23,12 +23,7 @@
 
 import { join } from "node:path";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import {
-	ATOMGIT_API_HOST,
-	ATOMGIT_HOST,
-	UPDATE_REPO,
-	UPDATE_REPO_OWNER,
-} from "../../shared/updateSources";
+import { ATOMGIT_API_HOST, ATOMGIT_HOST, UPDATE_REPO, UPDATE_REPO_OWNER } from "../../shared/updateSources";
 import type { UpdateSourceId } from "../../shared/types/settings";
 
 /** CHANGELOG 文件名（按语言）——仓库根目录下的两套并行文件。 */
@@ -153,12 +148,7 @@ export function decodeAtomGitContentsResponse(body: string): string {
 		throw new Error("atomgit contents response is not valid JSON");
 	}
 	const record = payload as { type?: unknown; encoding?: unknown; content?: unknown } | null;
-	if (
-		typeof record !== "object" ||
-		record === null ||
-		record.type !== "file" ||
-		typeof record.content !== "string"
-	) {
+	if (typeof record !== "object" || record === null || record.type !== "file" || typeof record.content !== "string") {
 		throw new Error("atomgit contents response has an unexpected shape");
 	}
 	if (record.encoding === "base64") {
@@ -174,20 +164,14 @@ export function decodeAtomGitContentsResponse(body: string): string {
  * AtomGit 走 OpenAPI contents 接口（匿名 raw 已被 GitCode SPA 接管，拿不到文件）；
  * GitHub 保持 raw 直链。文件名/分支做 URI 编码以容忍未来出现特殊字符。
  */
-export function buildChangelogUrls(input: {
-	source: UpdateSourceId;
-	branch?: string;
-	language: ChangelogLanguage;
-}): { id: ChangelogSourceId; url: string }[] {
+export function buildChangelogUrls(input: { source: UpdateSourceId; branch?: string; language: ChangelogLanguage }): { id: ChangelogSourceId; url: string }[] {
 	const branch = input.branch ?? DEFAULT_BRANCH;
 	const file = input.language === "zh" ? CHANGELOG_FILE_ZH : CHANGELOG_FILE_EN;
 	const repoPath = `${UPDATE_REPO_OWNER}/${UPDATE_REPO}`;
 	const candidates: { id: ChangelogSourceId; url: string }[] = [];
 	const atomgit = {
 		id: "atomgit" as const,
-		url:
-			`${ATOMGIT_API_HOST}/api/v5/repos/${repoPath}/contents/${encodeURIComponent(file)}` +
-			`?ref=${encodeURIComponent(branch)}`,
+		url: `${ATOMGIT_API_HOST}/api/v5/repos/${repoPath}/contents/${encodeURIComponent(file)}` + `?ref=${encodeURIComponent(branch)}`,
 	};
 	const github = {
 		id: "github" as const,
@@ -233,10 +217,7 @@ export class ChangelogService {
 	 * 「刷新」按钮走 forceRefresh：跳过 TTL 强制拉最新，成功即覆盖缓存；
 	 * 即便强制刷新失败，只要本地有缓存也仍然有内容可看（stale 兜底）。
 	 */
-	async getChangelog(
-		language: ChangelogLanguage = "zh",
-		options: { forceRefresh?: boolean } = {},
-	): Promise<ChangelogResult | null> {
+	async getChangelog(language: ChangelogLanguage = "zh", options: { forceRefresh?: boolean } = {}): Promise<ChangelogResult | null> {
 		const cached = await this.readCache(language);
 		if (cached && !options.forceRefresh && this.isCacheFresh(cached.fetchedAt)) {
 			return { ...cached, fromCache: true, stale: false };
@@ -251,8 +232,7 @@ export class ChangelogService {
 			try {
 				const body = await this.downloadText(candidate.url);
 				// atomgit 候选是 OpenAPI JSON（content 为 base64），github 候选是纯文本
-				const text =
-					candidate.id === "atomgit" ? decodeAtomGitContentsResponse(body) : body;
+				const text = candidate.id === "atomgit" ? decodeAtomGitContentsResponse(body) : body;
 				// 内容校验：即便走官方 API，200 也不等于拿到了合法 changelog。
 				if (!looksLikeChangelog(text)) continue;
 				const result: ChangelogResult = {
@@ -300,24 +280,14 @@ export class ChangelogService {
 			const markdown = await readFile(this.changelogCacheFile(language), "utf8");
 			// 缓存内容同样过内容校验：防止历史脏数据（例如早期版本的坏缓存）被当正文渲染。
 			if (!looksLikeChangelog(markdown)) return null;
-			const metaRaw = await readFile(join(this.cacheDir, "meta.json"), "utf8").catch(
-				() => null,
-			);
+			const metaRaw = await readFile(join(this.cacheDir, "meta.json"), "utf8").catch(() => null);
 			const meta = (JSON.parse(metaRaw ?? "{}") as Record<string, unknown>)[language];
-			const fetchedAt =
-				typeof meta === "object" && meta !== null && typeof (meta as { fetchedAt?: unknown }).fetchedAt === "string"
-					? (meta as { fetchedAt: string }).fetchedAt
-					: null;
+			const fetchedAt = typeof meta === "object" && meta !== null && typeof (meta as { fetchedAt?: unknown }).fetchedAt === "string" ? (meta as { fetchedAt: string }).fetchedAt : null;
 			if (!fetchedAt) return null;
 			return {
 				markdown,
 				fetchedAt,
-				source:
-					typeof meta === "object" && meta !== null &&
-					((meta as { source?: unknown }).source === "atomgit" ||
-						(meta as { source?: unknown }).source === "github")
-						? (meta as { source: ChangelogSourceId }).source
-						: null,
+				source: typeof meta === "object" && meta !== null && ((meta as { source?: unknown }).source === "atomgit" || (meta as { source?: unknown }).source === "github") ? (meta as { source: ChangelogSourceId }).source : null,
 				versionCount: countChangelogVersions(markdown),
 			};
 		} catch {
@@ -339,10 +309,7 @@ export class ChangelogService {
 				versionCount: result.versionCount,
 			};
 			// 正文与 meta 各自落盘；任一失败（如磁盘满）都静默——下次拉取会再写。
-			await Promise.all([
-				writeFile(this.changelogCacheFile(language), result.markdown, "utf8"),
-				writeFile(metaPath, JSON.stringify(all, null, 2), "utf8"),
-			]);
+			await Promise.all([writeFile(this.changelogCacheFile(language), result.markdown, "utf8"), writeFile(metaPath, JSON.stringify(all, null, 2), "utf8")]);
 		} catch {
 			// 缓存写失败不影响本次返回结果
 		}

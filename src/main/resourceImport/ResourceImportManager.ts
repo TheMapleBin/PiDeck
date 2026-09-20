@@ -5,44 +5,12 @@ import type { ConfigManager } from "../config/ConfigManager";
 import type { ProjectResourceManager } from "../projects/ProjectResourceManager";
 import type { SkillManager } from "../skills/SkillManager";
 import { parseMcpConfigFile, validateMcpConfigFile } from "../config/mcpConfig";
-import {
-	createProjectFileReadBoundary,
-	resolveProjectFileReadPath,
-	resolveProjectFileWritePath,
-} from "../files/projectFileAccess";
+import { createProjectFileReadBoundary, resolveProjectFileReadPath, resolveProjectFileWritePath } from "../files/projectFileAccess";
 import type { McpConfigFile } from "../../shared/types/mcp";
-import type {
-	ResourceImportApplyInput,
-	ResourceImportScanInput,
-	ResourceImportScanResult,
-	ResourceImportTarget,
-	ResourceImportReport,
-	StoredResourceImportCandidate,
-} from "../../shared/types/resourceImport";
-import {
-	addUnique,
-	hasErrorCode,
-	isConflictError,
-	isRecord,
-	ResourceImportConflictError,
-	SCAN_TTL_MS,
-	safeMessage,
-	targetKey,
-	MAX_FILE_BYTES,
-	redactSensitiveText,
-} from "./common";
-import {
-	copySkillDirectoryAtomic,
-	findSkillDirs,
-	normalizeSkillName,
-	parseSkillFrontmatter,
-} from "./skillImport";
-import {
-	ResourceImportSourceScanner,
-	type McpSourceSnapshot,
-	type ResourceImportProject,
-	type SkillSourceSnapshot,
-} from "./ResourceImportSourceScanner";
+import type { ResourceImportApplyInput, ResourceImportScanInput, ResourceImportScanResult, ResourceImportTarget, ResourceImportReport, StoredResourceImportCandidate } from "../../shared/types/resourceImport";
+import { addUnique, hasErrorCode, isConflictError, isRecord, ResourceImportConflictError, SCAN_TTL_MS, safeMessage, targetKey, MAX_FILE_BYTES, redactSensitiveText } from "./common";
+import { copySkillDirectoryAtomic, findSkillDirs, normalizeSkillName, parseSkillFrontmatter } from "./skillImport";
+import { ResourceImportSourceScanner, type McpSourceSnapshot, type ResourceImportProject, type SkillSourceSnapshot } from "./ResourceImportSourceScanner";
 
 // Keep the helpers available to the existing focused tests and to other main-process callers.
 export { normalizeSkillName, parseSkillFrontmatter } from "./skillImport";
@@ -74,11 +42,7 @@ export class ResourceImportManager {
 		private readonly isTrusted: (projectId: string, root: string) => Promise<boolean>,
 		private readonly onReport?: (report: Pick<ResourceImportReport, "kind" | "imported" | "skipped" | "failed">) => void,
 	) {
-		this.sourceScanner = new ResourceImportSourceScanner(
-			configManager,
-			projectResourceManager,
-			getProject,
-		);
+		this.sourceScanner = new ResourceImportSourceScanner(configManager, projectResourceManager, getProject);
 	}
 
 	async scan(input: ResourceImportScanInput): Promise<ResourceImportScanResult> {
@@ -86,9 +50,7 @@ export class ResourceImportManager {
 		this.pruneExpiredScans();
 		if (input.target.scope === "project") await this.assertProjectTarget(input.target);
 		const candidates = await this.sourceScanner.scan(input);
-		const existing = input.kind === "mcp"
-			? await this.existingMcpNames(input.target)
-			: await this.existingSkillNames(input.target);
+		const existing = input.kind === "mcp" ? await this.existingMcpNames(input.target) : await this.existingSkillNames(input.target);
 		this.markConflicts(candidates.stored, existing);
 		const result: ResourceImportScanResult = {
 			scanId: randomUUID(),
@@ -138,13 +100,7 @@ export class ResourceImportManager {
 		// two concurrent/replayed apply calls cannot both pass validation and race their
 		// read-modify-write operations against the same target configuration.
 		this.scans.delete(input.scanId);
-		await this.sourceScanner.assertFresh(
-			scan.input.kind,
-			scan.candidates,
-			scan.input.sourceProjectId,
-			scan.mcpSourceSnapshots,
-			scan.skillSourceSnapshots,
-		);
+		await this.sourceScanner.assertFresh(scan.input.kind, scan.candidates, scan.input.sourceProjectId, scan.mcpSourceSnapshots, scan.skillSourceSnapshots);
 
 		const results: ResourceImportReport["results"] = [];
 		try {
@@ -154,9 +110,7 @@ export class ResourceImportManager {
 						candidateId: candidate.candidateId,
 						name: redactSensitiveText(candidate.name),
 						status: "skipped",
-						reason: candidate.conflict
-							? "Target already contains this resource."
-							: redactSensitiveText(candidate.blockers.join("; ") || "Resource cannot be imported."),
+						reason: candidate.conflict ? "Target already contains this resource." : redactSensitiveText(candidate.blockers.join("; ") || "Resource cannot be imported."),
 					});
 					continue;
 				}
@@ -255,9 +209,7 @@ export class ResourceImportManager {
 		for (const group of groups.values()) {
 			if (group.length > 1) {
 				const sources = [...new Set(group.map((candidate) => candidate.sourceLabel))].join(", ");
-				const warning = sources
-					? `Duplicate name in this scan (${sources}); only one candidate can be imported.`
-					: "A duplicate name exists in this scan; only one candidate can be imported.";
+				const warning = sources ? `Duplicate name in this scan (${sources}); only one candidate can be imported.` : "A duplicate name exists in this scan; only one candidate can be imported.";
 				// Keep the warning on the winner too, so the dialog explains why another
 				// source with the same normalized name is not selectable.
 				for (const candidate of group) addUnique(candidate.warnings, warning);
@@ -348,7 +300,7 @@ export class ResourceImportManager {
 		const temporaryPath = await resolveProjectFileWritePath(boundary, temporaryLexicalPath);
 		try {
 			await writeFile(temporaryPath, `${JSON.stringify(file, null, 2)}\n`, { encoding: "utf8", flag: "wx" });
-			if (await resolveProjectFileWritePath(boundary, lexicalPath) !== safePath) {
+			if ((await resolveProjectFileWritePath(boundary, lexicalPath)) !== safePath) {
 				throw new Error("Project path is outside boundary.");
 			}
 			await rename(temporaryPath, safePath);
@@ -365,16 +317,12 @@ export class ResourceImportManager {
 			// destination.  Reuse that check during scan so a symlink/junction target is
 			// rejected before the dialog can offer candidates for an unsafe path.
 			const resolver = this.skillManager.resolveImportLocationPath;
-			const directory = typeof resolver === "function"
-				? await resolver.call(this.skillManager, target.locationId)
-				: location.path;
+			const directory = typeof resolver === "function" ? await resolver.call(this.skillManager, target.locationId) : location.path;
 			return this.readExistingSkillNames(directory, location.rootMarkdownEnabled);
 		}
 		await this.assertProjectTarget(target);
 		const resolver = this.projectResourceManager.resolveResourceDirectory;
-		const directory = typeof resolver === "function"
-			? await resolver.call(this.projectResourceManager, target.projectId, target.locationId)
-			: join(await this.assertProjectTarget(target), target.locationId === "project-pi" ? ".pi/skills" : ".agents/skills");
+		const directory = typeof resolver === "function" ? await resolver.call(this.projectResourceManager, target.projectId, target.locationId) : join(await this.assertProjectTarget(target), target.locationId === "project-pi" ? ".pi/skills" : ".agents/skills");
 		return this.readExistingSkillNames(directory, target.locationId === "project-pi");
 	}
 

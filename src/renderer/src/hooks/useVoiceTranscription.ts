@@ -5,30 +5,14 @@ import { desktopApi } from "../desktopApi";
 import { t } from "../i18n";
 import { showNotice } from "../utils/notice";
 import type { VoiceTranscriptionTarget } from "../utils/voiceTranscriptionInsert";
-import {
-	canCancelVoiceRecording,
-	canStartVoiceRecording,
-	isVoiceTranscriptionConfigured,
-	releaseVoiceRecordingResources,
-	shouldRequestVoiceMicrophone,
-	type VoiceTranscriptionState,
-} from "../utils/voiceRecorderLifecycle";
+import { canCancelVoiceRecording, canStartVoiceRecording, isVoiceTranscriptionConfigured, releaseVoiceRecordingResources, shouldRequestVoiceMicrophone, type VoiceTranscriptionState } from "../utils/voiceRecorderLifecycle";
 
 export type { VoiceTranscriptionState } from "../utils/voiceRecorderLifecycle";
 
-const MIME_CANDIDATES = [
-	"audio/webm;codecs=opus",
-	"audio/webm",
-	"audio/ogg;codecs=opus",
-	"audio/mp4",
-];
+const MIME_CANDIDATES = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus", "audio/mp4"];
 
 /** Owns the microphone and recorder lifecycle; audio is never persisted. */
-export function useVoiceTranscription(input: {
-	scopeKey: string;
-	captureTarget: () => VoiceTranscriptionTarget;
-	applyText: (target: VoiceTranscriptionTarget, text: string) => boolean;
-}) {
+export function useVoiceTranscription(input: { scopeKey: string; captureTarget: () => VoiceTranscriptionTarget; applyText: (target: VoiceTranscriptionTarget, text: string) => boolean }) {
 	const [state, setState] = useState<VoiceTranscriptionState>("idle");
 	// 配置完整性（baseUrl+model+apiKey 齐备）决定录音按钮是否显示：
 	// 未配置时整个入口隐藏，而不是点了才提示 notConfigured。
@@ -70,47 +54,46 @@ export function useVoiceTranscription(input: {
 		void desktopApi.voiceTranscription.cancel(requestId).catch(() => undefined);
 	}, []);
 
-	const transcribeAudio = useCallback(async (
-		audio: Blob,
-		target: VoiceTranscriptionTarget | null,
-		operation: number,
-	) => {
-		if (!target || audio.size === 0 || audio.size > VOICE_TRANSCRIPTION_MAX_AUDIO_BYTES) {
-			updateState("idle");
-			showNotice(t("voice.error.invalidRequest"), 4000);
-			return;
-		}
-		let dispatchedRequestId: string | null = null;
-		try {
-			const audioBuffer = await audio.arrayBuffer();
-			if (!mountedRef.current || operationRef.current !== operation) return;
-			const requestId = crypto.randomUUID();
-			dispatchedRequestId = requestId;
-			inFlightRequestIdRef.current = requestId;
-			const result = await desktopApi.voiceTranscription.transcribe({
-				requestId,
-				audio: audioBuffer,
-				mimeType: audio.type,
-			});
-			if (!mountedRef.current || operationRef.current !== operation) return;
-			if (!result.ok) {
-				showNotice(voiceErrorMessage(result.error), 4000);
+	const transcribeAudio = useCallback(
+		async (audio: Blob, target: VoiceTranscriptionTarget | null, operation: number) => {
+			if (!target || audio.size === 0 || audio.size > VOICE_TRANSCRIPTION_MAX_AUDIO_BYTES) {
+				updateState("idle");
+				showNotice(t("voice.error.invalidRequest"), 4000);
 				return;
 			}
-			if (!applyTextRef.current(target, result.text)) {
-				showNotice(t("voice.error.staleTarget"), 4000);
+			let dispatchedRequestId: string | null = null;
+			try {
+				const audioBuffer = await audio.arrayBuffer();
+				if (!mountedRef.current || operationRef.current !== operation) return;
+				const requestId = crypto.randomUUID();
+				dispatchedRequestId = requestId;
+				inFlightRequestIdRef.current = requestId;
+				const result = await desktopApi.voiceTranscription.transcribe({
+					requestId,
+					audio: audioBuffer,
+					mimeType: audio.type,
+				});
+				if (!mountedRef.current || operationRef.current !== operation) return;
+				if (!result.ok) {
+					showNotice(voiceErrorMessage(result.error), 4000);
+					return;
+				}
+				if (!applyTextRef.current(target, result.text)) {
+					showNotice(t("voice.error.staleTarget"), 4000);
+				}
+			} catch {
+				if (mountedRef.current && operationRef.current === operation) {
+					showNotice(t("voice.error.network"), 4000);
+				}
+			} finally {
+				if (inFlightRequestIdRef.current === dispatchedRequestId) {
+					inFlightRequestIdRef.current = null;
+				}
+				if (mountedRef.current && operationRef.current === operation) updateState("idle");
 			}
-		} catch {
-			if (mountedRef.current && operationRef.current === operation) {
-				showNotice(t("voice.error.network"), 4000);
-			}
-		} finally {
-			if (inFlightRequestIdRef.current === dispatchedRequestId) {
-				inFlightRequestIdRef.current = null;
-			}
-			if (mountedRef.current && operationRef.current === operation) updateState("idle");
-		}
-	}, [updateState]);
+		},
+		[updateState],
+	);
 
 	const cancel = useCallback(() => {
 		if (!canCancelVoiceRecording(stateRef.current)) return;
@@ -217,26 +200,32 @@ export function useVoiceTranscription(input: {
 		};
 	}, [cancelInFlight, releaseMedia]);
 
-	useEffect(() => () => {
-		operationRef.current += 1;
-		cancelInFlight();
-		const recorder = recorderRef.current;
-		if (recorder?.state === "recording") {
-			recorder.onstop = null;
-			recorder.stop();
-		}
-		releaseMedia();
-		updateState("idle");
-	}, [cancelInFlight, releaseMedia, scopeKey, updateState]);
+	useEffect(
+		() => () => {
+			operationRef.current += 1;
+			cancelInFlight();
+			const recorder = recorderRef.current;
+			if (recorder?.state === "recording") {
+				recorder.onstop = null;
+				recorder.stop();
+			}
+			releaseMedia();
+			updateState("idle");
+		},
+		[cancelInFlight, releaseMedia, scopeKey, updateState],
+	);
 
 	// 配置在 scope（会话/面板）切换时重新探测；getConfig 只返回脱敏字段，无泄漏风险。
 	useEffect(() => {
 		let active = true;
-		void desktopApi.voiceTranscription.getConfig().then((config) => {
-			if (active) setConfigured(isVoiceTranscriptionConfigured(config));
-		}).catch(() => {
-			if (active) setConfigured(false);
-		});
+		void desktopApi.voiceTranscription
+			.getConfig()
+			.then((config) => {
+				if (active) setConfigured(isVoiceTranscriptionConfigured(config));
+			})
+			.catch(() => {
+				if (active) setConfigured(false);
+			});
 		return () => {
 			active = false;
 		};

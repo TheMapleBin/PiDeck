@@ -1,9 +1,4 @@
-export const FEISHU_DOC_ACTION_HINT = [
-	"\n\n[PiDeck 飞书能力]",
-	"当前会话已连接飞书，PiDeck 主进程已配置可用凭证。需要创建飞书文档时，直接产出正文和动作标记。",
-	"请先给出要写入文档的完整正文，最后单独输出一行 [CREATE_DOC:文档标题]。",
-	"不要自己调用飞书 API，不要要求用户提供飞书凭证。",
-].join("\n");
+export const FEISHU_DOC_ACTION_HINT = ["\n\n[PiDeck 飞书能力]", "当前会话已连接飞书，PiDeck 主进程已配置可用凭证。需要创建飞书文档时，直接产出正文和动作标记。", "请先给出要写入文档的完整正文，最后单独输出一行 [CREATE_DOC:文档标题]。", "不要自己调用飞书 API，不要要求用户提供飞书凭证。"].join("\n");
 
 export function withFeishuDocActionHint(message: string): string {
 	return `${message}${FEISHU_DOC_ACTION_HINT}`;
@@ -48,10 +43,7 @@ export function stripHostInstruction(text: string): string {
 	let next = text.replace(/\r\n/g, "\n");
 
 	// 新格式：明确边界标记
-	next = next.replace(
-		/\[PIDECK_HOST_INSTRUCTION\][\s\S]*?\[\/PIDECK_HOST_INSTRUCTION\]\s*/g,
-		"",
-	);
+	next = next.replace(/\[PIDECK_HOST_INSTRUCTION\][\s\S]*?\[\/PIDECK_HOST_INSTRUCTION\]\s*/g, "");
 
 	// 历史格式：指令直接拼在用户消息前。
 	// 旧实现用 join("\n") 拼多行指令，再 "\n\n" + 用户原文；
@@ -81,9 +73,7 @@ export function stripHostInstruction(text: string): string {
 	}
 
 	// 飞书来源尾部宿主说明
-	next = next
-		.replace(/\n{0,2}\[这是飞书群聊消息。请直接回复用户。\]\s*$/g, "")
-		.replace(/\n{0,2}\[飞书群聊消息。请直接回复用户。\]\s*$/g, "");
+	next = next.replace(/\n{0,2}\[这是飞书群聊消息。请直接回复用户。\]\s*$/g, "").replace(/\n{0,2}\[飞书群聊消息。请直接回复用户。\]\s*$/g, "");
 
 	return next.replace(/\n{3,}/g, "\n\n").trim();
 }
@@ -133,12 +123,14 @@ export function buildFeishuTextChildren(text: string) {
 	return splitDocTextBlocks(text).map((content) => ({
 		block_type: 2,
 		text: {
-			elements: [{
-				text_run: {
-					content,
-					text_element_style: {},
+			elements: [
+				{
+					text_run: {
+						content,
+						text_element_style: {},
+					},
 				},
-			}],
+			],
 			style: {},
 		},
 	}));
@@ -147,12 +139,7 @@ export function buildFeishuTextChildren(text: string) {
 /** 从用户消息中判断是否要创建飞书文档，返回推断的文档标题。 */
 export function wantsFeishuDoc(text: string): string | undefined {
 	const t = text.toLowerCase();
-	const hasDocIntent =
-		/飞书文档/.test(text) ||
-		/feishu.?doc/.test(t) ||
-		/创建(?:一个|个|)?文档/.test(text) && /飞书|feishu/.test(t) ||
-		/(?:做|生成|写)(?:一个|个|)?(?:飞书|feishu)(?:的)?(?:文档|doc)\b/.test(t) ||
-		/(?:帮我)?(?:整理|总结|写).*(?:并|且|同时).*(?:飞书|feishu).*(?:文档|doc)/.test(text);
+	const hasDocIntent = /飞书文档/.test(text) || /feishu.?doc/.test(t) || (/创建(?:一个|个|)?文档/.test(text) && /飞书|feishu/.test(t)) || /(?:做|生成|写)(?:一个|个|)?(?:飞书|feishu)(?:的)?(?:文档|doc)\b/.test(t) || /(?:帮我)?(?:整理|总结|写).*(?:并|且|同时).*(?:飞书|feishu).*(?:文档|doc)/.test(text);
 	if (!hasDocIntent) return undefined;
 
 	const titleMatch = text.match(/(?:标题[是为叫]?|名称)[：:\s]*["""]?([^"""，,\s。.!！?？\n]{1,40})/);

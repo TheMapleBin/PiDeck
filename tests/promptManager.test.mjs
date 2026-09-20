@@ -69,7 +69,10 @@ test("内置推荐模板（builtin://）已移除：list 只返回真实落盘�
 		const manager = new PromptManager(home);
 		const { templates } = await manager.list();
 		// 内置推荐模板不再注入列表：不应出现 builtin:// 虚拟条目
-		assert.equal(templates.some((t) => t.path.startsWith("builtin://")), false);
+		assert.equal(
+			templates.some((t) => t.path.startsWith("builtin://")),
+			false,
+		);
 	});
 });
 
@@ -100,7 +103,10 @@ test("全局 prompt 文件 symlink 不能越过 prompts 目录边界", async (t)
 			return;
 		}
 		const listed = await manager.list();
-		assert.equal(listed.templates.some((template) => template.name === "linked"), false);
+		assert.equal(
+			listed.templates.some((template) => template.name === "linked"),
+			false,
+		);
 		await assert.rejects(manager.readContent(linked));
 		await assert.rejects(manager.writeContent(linked, "changed"));
 		assert.equal(readFileSync(outside, "utf8").includes("secret"), true);
@@ -178,11 +184,7 @@ test("项目 prompt 目录 junction 指向项目外时不读取或写入", async
 		await mkdir(outsideDir, { recursive: true });
 		await writeFile(join(outsideDir, "secret.md"), "---\ndescription: secret\n---\n", "utf8");
 		try {
-			symlinkSync(
-				outsideDir,
-				join(project, ".pi", "prompts"),
-				process.platform === "win32" ? "junction" : "dir",
-			);
+			symlinkSync(outsideDir, join(project, ".pi", "prompts"), process.platform === "win32" ? "junction" : "dir");
 		} catch (error) {
 			if (error instanceof Error && "code" in error && error.code === "EPERM") {
 				t.skip("The current filesystem does not permit junction creation");
@@ -192,9 +194,7 @@ test("项目 prompt 目录 junction 指向项目外时不读取或写入", async
 		}
 		const listed = await manager.listByProject(project);
 		assert.equal(listed.templates.length, 0);
-		await assert.rejects(
-			manager.createInProject(project, { name: "new", description: "new prompt" }),
-		);
+		await assert.rejects(manager.createInProject(project, { name: "new", description: "new prompt" }));
 		assert.equal(readFileSync(join(outsideDir, "secret.md"), "utf8").includes("secret"), true);
 	});
 });

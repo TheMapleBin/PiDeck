@@ -59,9 +59,15 @@ export function TitleScrollText({
 		measure();
 		// disabled 时不测溢出：不滚动的 tab 无需维持 ResizeObserver（节省常驻监听）；
 		// 激活态变化时 effect 随 disabled 重跑，切回可滚动会重新测量。
-		if (disabled) return () => { active = false; };
+		if (disabled)
+			return () => {
+				active = false;
+			};
 		// 字体加载和侧栏宽度变化都可能改变溢出量；两者统一由同一测量入口处理。
-		if (typeof ResizeObserver === "undefined") return () => { active = false; };
+		if (typeof ResizeObserver === "undefined")
+			return () => {
+				active = false;
+			};
 		const observer = new ResizeObserver(measure);
 		observer.observe(container);
 		observer.observe(content);
@@ -110,24 +116,8 @@ export function TitleScrollText({
 		: undefined;
 
 	return (
-		<strong
-			ref={containerRef}
-			className={cn(
-				"block min-w-0 flex-1 overflow-hidden whitespace-nowrap",
-				overflowing && hovering && "title-scroll-mask-narrow",
-				className,
-			)}
-			onMouseEnter={handleMouseEnter}
-			onMouseLeave={handleMouseLeave}
-		>
-			<span
-				ref={textRef}
-				className={cn(
-					"title-scroll-text inline-block whitespace-nowrap",
-					overflowing && hovering && "animate-title-scroll",
-				)}
-				style={scrollStyle}
-			>
+		<strong ref={containerRef} className={cn("block min-w-0 flex-1 overflow-hidden whitespace-nowrap", overflowing && hovering && "title-scroll-mask-narrow", className)} onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
+			<span ref={textRef} className={cn("title-scroll-text inline-block whitespace-nowrap", overflowing && hovering && "animate-title-scroll")} style={scrollStyle}>
 				{text}
 			</span>
 		</strong>

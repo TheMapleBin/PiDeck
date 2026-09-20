@@ -65,7 +65,12 @@ function resolveLogoGreen(): { fill: string; deep: string } {
 
 const TOP: Piece = {
 	color: "cyan",
-	cells: [[0, 0], [0, 1], [0, 2], [1, 2]],
+	cells: [
+		[0, 0],
+		[0, 1],
+		[0, 2],
+		[1, 2],
+	],
 	startX: 2,
 	startY: -2,
 	targetX: 2,
@@ -74,7 +79,12 @@ const TOP: Piece = {
 
 const LEFT: Piece = {
 	color: "red",
-	cells: [[0, 0], [1, 0], [1, 1], [2, 0]],
+	cells: [
+		[0, 0],
+		[1, 0],
+		[1, 1],
+		[2, 0],
+	],
 	startX: 0,
 	startY: -3,
 	targetX: 2,
@@ -83,7 +93,12 @@ const LEFT: Piece = {
 
 const RIGHT: Piece = {
 	color: "green",
-	cells: [[0, 0], [1, 0], [2, 0], [2, 1]],
+	cells: [
+		[0, 0],
+		[1, 0],
+		[2, 0],
+		[2, 1],
+	],
 	startX: 5,
 	startY: -3,
 	targetX: 5,
@@ -92,7 +107,12 @@ const RIGHT: Piece = {
 
 const BASE: Piece = {
 	color: "orange",
-	cells: [[0, 0], [0, 1], [0, 2], [0, 3]],
+	cells: [
+		[0, 0],
+		[0, 1],
+		[0, 2],
+		[0, 3],
+	],
 	startX: 1,
 	startY: -2,
 	targetX: 1,
@@ -199,15 +219,7 @@ function finalLogoCells(color: ColorKey): Cells {
 	return cells;
 }
 
-function drawBlock(
-	ctx: CanvasRenderingContext2D,
-	left: number,
-	top: number,
-	width: number,
-	height: number,
-	color: ColorKey,
-	neighbors: { top?: string; right?: string; bottom?: string; left?: string },
-) {
+function drawBlock(ctx: CanvasRenderingContext2D, left: number, top: number, width: number, height: number, color: ColorKey, neighbors: { top?: string; right?: string; bottom?: string; left?: string }) {
 	const fillColor = color === "logoGreen" ? resolveLogoGreen().fill : (COLORS[color] ?? COLORS.white);
 	const borderColor = color === "logoGreen" ? resolveLogoGreen().deep : (BORDER_COLORS[color] ?? fillColor);
 	const sameTop = neighbors.top === color;
@@ -495,12 +507,7 @@ export function PiLogoCanvas(props: PiLogoCanvasProps) {
 				}
 			}}
 		>
-			<canvas
-				ref={canvasRef}
-				className="pi-logo-canvas"
-				style={{ width: size, height: size }}
-				aria-hidden="true"
-			/>
+			<canvas ref={canvasRef} className="pi-logo-canvas" style={{ width: size, height: size }} aria-hidden="true" />
 		</button>
 	);
 }
@@ -673,11 +680,5 @@ export function PiDeckWordmarkCanvas(props: PiDeckWordmarkCanvasProps) {
 		return () => observer.disconnect();
 	}, [paint]);
 
-	return (
-		<canvas
-			ref={canvasRef}
-			className={props.className ?? "pi-deck-wordmark-canvas"}
-			aria-hidden="true"
-		/>
-	);
+	return <canvas ref={canvasRef} className={props.className ?? "pi-deck-wordmark-canvas"} aria-hidden="true" />;
 }

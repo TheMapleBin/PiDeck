@@ -13,14 +13,7 @@ export type ImportedContentBlock = ImportedTextBlock | ImportedImageBlock;
 export const IMPORTED_IMAGE_MAX_BASE64_CHARS = 350_000;
 
 /** OpenCode / ZCode 过程噪声：不是对话内容，导入时丢掉。 */
-export const IMPORTED_SKIP_PART_TYPES = new Set([
-	"step-start",
-	"step-finish",
-	"timeline",
-	"snapshot",
-	"patch",
-	"compaction",
-]);
+export const IMPORTED_SKIP_PART_TYPES = new Set(["step-start", "step-finish", "timeline", "snapshot", "patch", "compaction"]);
 
 export function importedContentHasToolCall(content: unknown[]): boolean {
 	return content.some((item) => isRecord(item) && item.type === "toolCall");
@@ -30,24 +23,13 @@ export function importedContentHasToolCall(content: unknown[]): boolean {
  * 有 toolCall 就是 toolUse。否则把源枚举映射到 pi：
  * end_turn/stop → stop，tool-calls/tool_use → toolUse，max_tokens → length。
  */
-export function normalizeImportedStopReason(input: {
-	raw?: unknown;
-	hasToolCall: boolean;
-}): ImportedStopReason {
+export function normalizeImportedStopReason(input: { raw?: unknown; hasToolCall: boolean }): ImportedStopReason {
 	if (input.hasToolCall) return "toolUse";
 	const raw = String(input.raw ?? "")
 		.trim()
 		.toLowerCase()
 		.replace(/_/g, "-");
-	if (
-		!raw ||
-		raw === "stop" ||
-		raw === "end-turn" ||
-		raw === "endturn" ||
-		raw === "unknown" ||
-		raw === "complete" ||
-		raw === "completed"
-	) {
+	if (!raw || raw === "stop" || raw === "end-turn" || raw === "endturn" || raw === "unknown" || raw === "complete" || raw === "completed") {
 		return "stop";
 	}
 	if (raw === "tooluse" || raw === "tool-use" || raw === "tool-calls" || raw === "toolcall") {
@@ -79,10 +61,7 @@ export function importedAttachmentPlaceholder(label: string): ImportedTextBlock 
 	return { type: "text", text: `[attachment: ${name}]` };
 }
 
-export function capImportedImage(
-	image: ImportedImageBlock,
-	label: string,
-): ImportedContentBlock {
+export function capImportedImage(image: ImportedImageBlock, label: string): ImportedContentBlock {
 	if (image.data.length <= IMPORTED_IMAGE_MAX_BASE64_CHARS) return image;
 	return importedImagePlaceholder(label);
 }
@@ -97,19 +76,13 @@ export function tryImportedImageBlock(block: unknown): ImportedContentBlock | nu
 	const mime = String(block.mimeType ?? block.mime_type ?? block.mime ?? "");
 	const source = isRecord(block.source) ? block.source : undefined;
 	const sourceMime = String(source?.media_type ?? source?.mimeType ?? "");
-	const looksLikeImage =
-		type === "image" ||
-		type === "input_image" ||
-		(type === "file" && mime.startsWith("image/"));
+	const looksLikeImage = type === "image" || type === "input_image" || (type === "file" && mime.startsWith("image/"));
 	if (!looksLikeImage) return null;
 
 	const label = String(block.filename ?? block.name ?? block.url ?? (mime || sourceMime || "image"));
 	const data = extractImportedImageData(block);
 	if (!data) return importedImagePlaceholder(label);
-	return capImportedImage(
-		{ type: "image", data, mimeType: mime || sourceMime || "image/png" },
-		label,
-	);
+	return capImportedImage({ type: "image", data, mimeType: mime || sourceMime || "image/png" }, label);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

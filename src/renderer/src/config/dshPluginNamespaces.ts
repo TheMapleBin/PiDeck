@@ -19,14 +19,14 @@ export const RESERVED_DSH_NAMESPACES: ReadonlySet<string> = new Set([
 /** 已知插件命名空间 → 标题文案 key；未收录的新插件回退显示 ns 原名。 */
 export const KNOWN_PLUGIN_NAMESPACE_TITLES: Readonly<Record<string, TranslationKey>> = {
 	"agent-loop": "config.dsh.pluginAgentLoop",
-	"shell": "config.dsh.pluginShell",
+	shell: "config.dsh.pluginShell",
 	"web-search-deepseek": "config.dsh.pluginWebSearch",
 };
 
 /** 已知插件命名空间 → 描述文案 key（对齐 dsh-web 插件卡片描述行）；未收录的新插件不显示描述。 */
 export const KNOWN_PLUGIN_NAMESPACE_DESCRIPTIONS: Readonly<Record<string, TranslationKey>> = {
 	"agent-loop": "config.dsh.pluginAgentLoopDesc",
-	"shell": "config.dsh.pluginShellDesc",
+	shell: "config.dsh.pluginShellDesc",
 	"web-search-deepseek": "config.dsh.pluginWebSearchDesc",
 };
 

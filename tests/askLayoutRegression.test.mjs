@@ -2,172 +2,127 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const composerArea = readFileSync(
-  "src/renderer/src/components/session/ComposerArea.tsx",
-  "utf8",
-);
-const sessionView = readFileSync(
-  "src/renderer/src/components/session/SessionView.tsx",
-  "utf8",
-);
-const timeline = readFileSync(
-  "src/renderer/src/components/session/SessionMessageTimeline.tsx",
-  "utf8",
-);
-const timelineCards = readFileSync(
-  "src/renderer/src/components/session/TimelineEventCards.tsx",
-  "utf8",
-);
-const chatContentWidth = readFileSync(
-  "src/renderer/src/components/session/chatContentWidth.ts",
-  "utf8",
-);
-const overlay = readFileSync(
-  "src/renderer/src/components/overlays/SessionRuntimeUiOverlay.tsx",
-  "utf8",
-);
-const foundation = readFileSync(
-  "src/renderer/src/styles/foundation.css",
-  "utf8",
-);
-const tailwind = readFileSync(
-  "src/renderer/src/styles/tailwind.css",
-  "utf8",
-);
-const timelineStyles = readFileSync(
-  "src/renderer/src/styles/timeline.css",
-  "utf8",
-);
-const toolCards = readFileSync(
-  "src/renderer/src/components/session/ToolCallComponents.tsx",
-  "utf8",
-);
-const webTimeline = readFileSync(
-  "src/renderer/src/web/WebTimeline.tsx",
-  "utf8",
-);
-const approvalCard = readFileSync(
-  "src/renderer/src/components/ui-shadcn/approval-card.tsx",
-  "utf8",
-);
-const securityCard = readFileSync(
-  "src/renderer/src/components/overlays/SecurityConfirmCard.tsx",
-  "utf8",
-);
-const planModeExt = readFileSync(
-  "resources/extensions/pi-deck-plan-mode.ts",
-  "utf8",
-);
+const composerArea = readFileSync("src/renderer/src/components/session/ComposerArea.tsx", "utf8");
+const sessionView = readFileSync("src/renderer/src/components/session/SessionView.tsx", "utf8");
+const timeline = readFileSync("src/renderer/src/components/session/SessionMessageTimeline.tsx", "utf8");
+const timelineCards = readFileSync("src/renderer/src/components/session/TimelineEventCards.tsx", "utf8");
+const chatContentWidth = readFileSync("src/renderer/src/components/session/chatContentWidth.ts", "utf8");
+const overlay = readFileSync("src/renderer/src/components/overlays/SessionRuntimeUiOverlay.tsx", "utf8");
+const foundation = readFileSync("src/renderer/src/styles/foundation.css", "utf8");
+const tailwind = readFileSync("src/renderer/src/styles/tailwind.css", "utf8");
+const timelineStyles = readFileSync("src/renderer/src/styles/timeline.css", "utf8");
+const toolCards = readFileSync("src/renderer/src/components/session/ToolCallComponents.tsx", "utf8");
+const webTimeline = readFileSync("src/renderer/src/web/WebTimeline.tsx", "utf8");
+const approvalCard = readFileSync("src/renderer/src/components/ui-shadcn/approval-card.tsx", "utf8");
+const securityCard = readFileSync("src/renderer/src/components/overlays/SecurityConfirmCard.tsx", "utf8");
+const planModeExt = readFileSync("resources/extensions/pi-deck-plan-mode.ts", "utf8");
 
 test("Ask cards keep long content readable in every render path", () => {
-  // 选项卡片/描述必须换行展示（break-words whitespace-normal），不能截断或裁切；
-  // 注意批量问答 tab 胶囊是例外：tab 只做单行摘要（truncate），完整问题在详情区展示。
-  assert.match(overlay, /break-words whitespace-normal/);
-  // 批量问答 tab 胶囊：单行截断 + 悬停 title 看全文，禁止多行溢出胶囊固定高度。
-  assert.match(overlay, /max-w-\[28ch\] min-w-0 truncate text-left" title=\{question\.question\}/);
-  assert.match(toolCards, /whitespace-normal break-words font-mono text-caption/);
-  assert.match(toolCards, /formatAskTitle\(item\.question/);
-  assert.match(webTimeline, /formatAskTitle\(props\.request\.title/);
-  assert.match(webTimeline, /flex-col items-start justify-center whitespace-normal/);
-  // Ask 的展开内容必须交给会话时间线滚动，卡片本身不能因固定高度裁掉步骤或说明。
-  assert.match(timelineStyles, /\.tool-card \{[\s\S]*?overflow: visible;/);
+	// 选项卡片/描述必须换行展示（break-words whitespace-normal），不能截断或裁切；
+	// 注意批量问答 tab 胶囊是例外：tab 只做单行摘要（truncate），完整问题在详情区展示。
+	assert.match(overlay, /break-words whitespace-normal/);
+	// 批量问答 tab 胶囊：单行截断 + 悬停 title 看全文，禁止多行溢出胶囊固定高度。
+	assert.match(overlay, /max-w-\[28ch\] min-w-0 truncate text-left" title=\{question\.question\}/);
+	assert.match(toolCards, /whitespace-normal break-words font-mono text-caption/);
+	assert.match(toolCards, /formatAskTitle\(item\.question/);
+	assert.match(webTimeline, /formatAskTitle\(props\.request\.title/);
+	assert.match(webTimeline, /flex-col items-start justify-center whitespace-normal/);
+	// Ask 的展开内容必须交给会话时间线滚动，卡片本身不能因固定高度裁掉步骤或说明。
+	assert.match(timelineStyles, /\.tool-card \{[\s\S]*?overflow: visible;/);
 });
 
 test("Batch input questions keep the input flexible and submit button compact", () => {
-  // Button 默认带 shrink-0；纯输入题若再叠加 w-full，会优先占满整行宽度，把输入框压成截图中的窄条。
-  // 输入框负责吸收剩余空间，提交按钮只保留自身文案宽度。
-  assert.match(overlay, /<div className="flex w-full items-center gap-2">[\s\S]*?className="h-9 flex-1[\s\S]*?className="shrink-0"\n\s*variant="default"/);
-  assert.doesNotMatch(overlay, /className="w-full"\n\s*variant="default"\n\s*disabled=\{props\.responding \|\| !props\.inputValue\.trim\(\)\}/);
+	// Button 默认带 shrink-0；纯输入题若再叠加 w-full，会优先占满整行宽度，把输入框压成截图中的窄条。
+	// 输入框负责吸收剩余空间，提交按钮只保留自身文案宽度。
+	assert.match(overlay, /<div className="flex w-full items-center gap-2">[\s\S]*?className="h-9 flex-1[\s\S]*?className="shrink-0"[\s\S]{0,40}?variant="default"/);
+	assert.doesNotMatch(overlay, /className="w-full"\n\s*variant="default"\n\s*disabled=\{props\.responding \|\| !props\.inputValue\.trim\(\)\}/);
 });
 
 test("Batch ask selected options carry a check mark for low-contrast themes", () => {
-  // 2026-12 用户反馈：部分主题色 accent 对比度低，选框只靠边框/背景变色难分辨已选项。
-  // select 选项与 confirm 按钮在选中态都要渲染 Check 图标；图标色走 success token 而非 accent。
-  assert.match(overlay, /props\.answer === value \? <Check size=\{14\} className="shrink-0 text-\[var\(--color-success\)\]" aria-hidden="true" \/> : null/);
-  assert.match(overlay, /props\.answer === true \? <Check size=\{14\} className="shrink-0 text-\[var\(--color-success\)\]" aria-hidden="true" \/> : null/);
-  assert.match(overlay, /props\.answer === false \? <Check size=\{14\} className="shrink-0 text-\[var\(--color-success\)\]" aria-hidden="true" \/> : null/);
-  assert.match(overlay, /选中态对勾标记：主题色 accent 对比度低时只靠边框\/背景变色难分辨已选项/);
+	// 2026-12 用户反馈：部分主题色 accent 对比度低，选框只靠边框/背景变色难分辨已选项。
+	// select 选项与 confirm 按钮在选中态都要渲染 Check 图标；图标色走 success token 而非 accent。
+	assert.match(overlay, /props\.answer === value \? <Check size=\{14\} className="shrink-0 text-\[var\(--color-success\)\]" aria-hidden="true" \/> : null/);
+	assert.match(overlay, /props\.answer === true \? <Check size=\{14\} className="shrink-0 text-\[var\(--color-success\)\]" aria-hidden="true" \/> : null/);
+	assert.match(overlay, /props\.answer === false \? <Check size=\{14\} className="shrink-0 text-\[var\(--color-success\)\]" aria-hidden="true" \/> : null/);
+	assert.match(overlay, /选中态对勾标记：主题色 accent 对比度低时只靠边框\/背景变色难分辨已选项/);
 });
 
 test("Plan/simple select options render as single-row optically aligned buttons", () => {
-  // 2026-12 用户反馈：上下两行（标签/说明各一行）文本对不齐。
-  // live 卡选项改为单行：固定高度 + 标签不缩 + 说明 truncate，等宽等高光学对齐。
-  // TimelineEventCards 的 AskQuestionCard 死代码与其专属 CSS 已删除（2026-08 清理），
-  // 该视觉语言现只由 SessionRuntimeUiOverlay 的 ask-inline-bar-option 承载。
-  assert.match(
-    overlay,
-    /ask-inline-bar-option h-\[30px\] w-full min-w-0 max-w-none items-center justify-start gap-2 px-2 py-0 text-left/,
-  );
-  assert.match(overlay, /max-w-\[45%\] shrink-0 truncate text-caption font-medium leading-none text-text-primary/);
-  assert.match(overlay, /min-w-0 flex-1 truncate text-micro leading-none text-text-tertiary/);
+	// 2026-12 用户反馈：上下两行（标签/说明各一行）文本对不齐。
+	// live 卡选项改为单行：固定高度 + 标签不缩 + 说明 truncate，等宽等高光学对齐。
+	// TimelineEventCards 的 AskQuestionCard 死代码与其专属 CSS 已删除（2026-08 清理），
+	// 该视觉语言现只由 SessionRuntimeUiOverlay 的 ask-inline-bar-option 承载。
+	assert.match(overlay, /ask-inline-bar-option h-\[30px\] w-full min-w-0 max-w-none items-center justify-start gap-2 px-2 py-0 text-left/);
+	assert.match(overlay, /max-w-\[45%\] shrink-0 truncate text-caption font-medium leading-none text-text-primary/);
+	assert.match(overlay, /min-w-0 flex-1 truncate text-micro leading-none text-text-tertiary/);
 });
 
 test("Plan mode prompts keep steps concise and visually separated", () => {
-  // 2026-12 用户反馈：步骤挤在一起难读。两处约束：
-  // 1) 注入模型的 PLAN MODE 提示词要求每步一句短句、独立编号行（从源头控制简洁度）；
-  // 2) 选单标题里每步之间空一行，卡片段落视觉隔离。
-  assert.match(planModeExt, /Keep plan steps concise: one short sentence per step/);
-  assert.match(planModeExt, /Put each step on its own numbered line/);
-  assert.match(planModeExt, /\.join\("\\n\\n"\)/);
-  // 摘要行带「是否执行」提问：卡片默认折叠时也能看懂下一步待确认的动作。
-  assert.match(planModeExt, /是否执行？/);
-  // 摘要第二行引导用户去上方待办条查看详细列表（2026-12 用户反馈：单一提问行不够明显）。
-  assert.match(planModeExt, /具体计划可点击下方待办查看详细列表/);
+	// 2026-12 用户反馈：步骤挤在一起难读。两处约束：
+	// 1) 注入模型的 PLAN MODE 提示词要求每步一句短句、独立编号行（从源头控制简洁度）；
+	// 2) 选单标题里每步之间空一行，卡片段落视觉隔离。
+	assert.match(planModeExt, /Keep plan steps concise: one short sentence per step/);
+	assert.match(planModeExt, /Put each step on its own numbered line/);
+	assert.match(planModeExt, /\.join\("\\n\\n"\)/);
+	// 摘要行带「是否执行」提问：卡片默认折叠时也能看懂下一步待确认的动作。
+	assert.match(planModeExt, /是否执行？/);
+	// 摘要第二行引导用户去上方待办条查看详细列表（2026-12 用户反馈：单一提问行不够明显）。
+	assert.match(planModeExt, /具体计划可点击下方待办查看详细列表/);
 });
 
 test("Long ask descriptions collapse to a preview with eye toggle", () => {
-  // 2026-12 用户反馈：plan 草案步骤太多导致卡片过高。默认折叠为 2 行摘要，
-  // hover（title）可看全文，眼睛按钮显式切换全文/摘要；不传 previewLines 时行为不变。
-  assert.match(approvalCard, /descriptionPreviewLines\?: number/);
-  assert.match(approvalCard, /descriptionClamped && "line-clamp-2"/);
-  assert.match(approvalCard, /title=\{descriptionClamped \? props\.description : undefined\}/);
-  assert.match(approvalCard, /descExpanded \? <EyeOff size=\{14\}/);
-  // live 卡与时间线卡都用 2 行预览：提问行 + 引导去待办查看详情，步骤默认隐藏。
-  // （TimelineEventCards 的 AskQuestionCard 死代码已删除，交互卡统一由 overlay 承载）
-  assert.match(overlay, /descriptionPreviewLines=\{2\}/);
-  // 「1口」乱码回归：plan 草案步骤前缀不得用 ☐（部分 Windows 字体渲染成空心方框）。
-  // widget/进度消息的 ☑/☐ 保留（agentTodoList 测试锁定，完成态语义明确）。
-  assert.doesNotMatch(planModeExt, /\$\(item\.step\)\. ☐/);
+	// 2026-12 用户反馈：plan 草案步骤太多导致卡片过高。默认折叠为 2 行摘要，
+	// hover（title）可看全文，眼睛按钮显式切换全文/摘要；不传 previewLines 时行为不变。
+	assert.match(approvalCard, /descriptionPreviewLines\?: number/);
+	assert.match(approvalCard, /descriptionClamped && "line-clamp-2"/);
+	assert.match(approvalCard, /title=\{descriptionClamped \? props\.description : undefined\}/);
+	assert.match(approvalCard, /descExpanded \? <EyeOff size=\{14\}/);
+	// live 卡与时间线卡都用 2 行预览：提问行 + 引导去待办查看详情，步骤默认隐藏。
+	// （TimelineEventCards 的 AskQuestionCard 死代码已删除，交互卡统一由 overlay 承载）
+	assert.match(overlay, /descriptionPreviewLines=\{2\}/);
+	// 「1口」乱码回归：plan 草案步骤前缀不得用 ☐（部分 Windows 字体渲染成空心方框）。
+	// widget/进度消息的 ☑/☐ 保留（agentTodoList 测试锁定，完成态语义明确）。
+	assert.doesNotMatch(planModeExt, /\$\(item\.step\)\. ☐/);
 
-  // 折叠触发器只能包 chevron：标题/描述若包进 trigger，划选结束后的 mouseup 会把选项折起来。
-  const triggerBlocks = [...approvalCard.matchAll(/<CollapsibleTrigger asChild>[\s\S]*?<\/CollapsibleTrigger>/g)];
-  assert.equal(triggerBlocks.length, 1);
-  const triggerBlock = triggerBlocks[0][0];
-  assert.match(triggerBlock, /<ChevronDown/);
-  assert.doesNotMatch(triggerBlock, /props\.title/);
-  assert.doesNotMatch(triggerBlock, /props\.description/);
-  assert.doesNotMatch(triggerBlock, /<Eye[\s\S]*EyeOff|EyeOff[\s\S]*<Eye/);
-  // 标题/描述是普通 select-text 节点，不是 button，才能原生划选复制。
-  assert.match(approvalCard, /text-foreground select-text"\s*>\s*\{props\.title\}/);
-  assert.match(approvalCard, /text-muted-foreground select-text"/);
-  // 眼睛是 trigger 的兄弟，只切 descExpanded，不得改 open。
-  assert.match(approvalCard, /onClick=\{\(\) => setDescExpanded\(\(next\) => !next\)\}/);
-  assert.match(approvalCard, /<\/CollapsibleTrigger>[\s\S]*descExpanded \? <EyeOff size=\{14\}/);
-  // 一键复制未折叠全文（clamp 只影响展示）。
-  assert.match(approvalCard, /from "\.\.\/\.\.\/utils\/clipboard"/);
-  assert.match(approvalCard, /props\.description \? `\$\{props\.title\}\\n\\n\$\{props\.description\}` : props\.title/);
-  assert.match(approvalCard, /writeClipboard\(text\)/);
-  assert.match(approvalCard, /ask\.copyPrompt/);
-  assert.match(approvalCard, /ask\.expandOptions/);
-  assert.match(approvalCard, /ask\.collapseOptions/);
+	// 折叠触发器只能包 chevron：标题/描述若包进 trigger，划选结束后的 mouseup 会把选项折起来。
+	const triggerBlocks = [...approvalCard.matchAll(/<CollapsibleTrigger asChild>[\s\S]*?<\/CollapsibleTrigger>/g)];
+	assert.equal(triggerBlocks.length, 1);
+	const triggerBlock = triggerBlocks[0][0];
+	assert.match(triggerBlock, /<ChevronDown/);
+	assert.doesNotMatch(triggerBlock, /props\.title/);
+	assert.doesNotMatch(triggerBlock, /props\.description/);
+	assert.doesNotMatch(triggerBlock, /<Eye[\s\S]*EyeOff|EyeOff[\s\S]*<Eye/);
+	// 标题/描述是普通 select-text 节点，不是 button，才能原生划选复制。
+	assert.match(approvalCard, /text-foreground select-text"\s*>\s*\{props\.title\}/);
+	assert.match(approvalCard, /text-muted-foreground select-text"/);
+	// 眼睛是 trigger 的兄弟，只切 descExpanded，不得改 open。
+	assert.match(approvalCard, /onClick=\{\(\) => setDescExpanded\(\(next\) => !next\)\}/);
+	assert.match(approvalCard, /<\/CollapsibleTrigger>[\s\S]*descExpanded \? <EyeOff size=\{14\}/);
+	// 一键复制未折叠全文（clamp 只影响展示）。
+	assert.match(approvalCard, /from "\.\.\/\.\.\/utils\/clipboard"/);
+	assert.match(approvalCard, /props\.description \? `\$\{props\.title\}\\n\\n\$\{props\.description\}` : props\.title/);
+	assert.match(approvalCard, /writeClipboard\(text\)/);
+	assert.match(approvalCard, /ask\.copyPrompt/);
+	assert.match(approvalCard, /ask\.expandOptions/);
+	assert.match(approvalCard, /ask\.collapseOptions/);
 });
 
 test("Ask option clicks skip submit while text is selected", () => {
-  // 选项/允许/拒绝是 button：划选结束后 mouseup 落在按钮上会冒充 click。
-  // overlay submitValue + BatchQuestion true/false/select、安全卡 allow/deny
-  // 都必须在提交前用按压感知守卫（shouldSuppressAskClick）判定并跳过——
-  // 只吞本次按压新拖出的选区；旧守卫直接查全局选区会把「划选复制/双击选词
-  // 之后的真实点击」也吞掉（ask 选项点很久才能勾上的根因，2026-09 修复）。
-  // TimelineEventCards 的 AskQuestionCard 死代码已删除（2026-08 清理），
-  // 交互卡片统一由 SessionRuntimeUiOverlay 承载。
-  assert.match(overlay, /shouldSuppressAskClick/);
-  assert.match(securityCard, /shouldSuppressAskClick/);
-  assert.doesNotMatch(overlay, /hasTextSelection/);
-  assert.doesNotMatch(securityCard, /hasTextSelection/);
-  const overlayGuards = overlay.match(/if \(shouldSuppressAskClick\(\)\) return;/g);
-  const securityGuards = securityCard.match(/if \(shouldSuppressAskClick\(\)\) return;/g);
-  assert.ok(overlayGuards && overlayGuards.length >= 4);
-  assert.ok(securityGuards && securityGuards.length >= 2);
+	// 选项/允许/拒绝是 button：划选结束后 mouseup 落在按钮上会冒充 click。
+	// overlay submitValue + BatchQuestion true/false/select、安全卡 allow/deny
+	// 都必须在提交前用按压感知守卫（shouldSuppressAskClick）判定并跳过——
+	// 只吞本次按压新拖出的选区；旧守卫直接查全局选区会把「划选复制/双击选词
+	// 之后的真实点击」也吞掉（ask 选项点很久才能勾上的根因，2026-09 修复）。
+	// TimelineEventCards 的 AskQuestionCard 死代码已删除（2026-08 清理），
+	// 交互卡片统一由 SessionRuntimeUiOverlay 承载。
+	assert.match(overlay, /shouldSuppressAskClick/);
+	assert.match(securityCard, /shouldSuppressAskClick/);
+	assert.doesNotMatch(overlay, /hasTextSelection/);
+	assert.doesNotMatch(securityCard, /hasTextSelection/);
+	const overlayGuards = overlay.match(/if \(shouldSuppressAskClick\(\)\) return;/g);
+	const securityGuards = securityCard.match(/if \(shouldSuppressAskClick\(\)\) return;/g);
+	assert.ok(overlayGuards && overlayGuards.length >= 4);
+	assert.ok(securityGuards && securityGuards.length >= 2);
 });
 
 /**
@@ -176,20 +131,20 @@ test("Ask option clicks skip submit while text is selected", () => {
  * timeline 负责承载它；Ask 内容也不再创建第二个纵向滚动 owner。
  */
 test("ask stays out of composer sizing and uses the session timeline as its scroll owner", () => {
-  assert.doesNotMatch(composerArea, /runtimeUi/);
-  assert.match(sessionView, /<SessionSurfaceStage[\s\S]*runtimeUi,/);
-  assert.match(timeline, /className="session-runtime-ui mx-auto w-full/);
-  assert.doesNotMatch(timeline, /session-runtime-ui sticky bottom-0/);
-  // 内容宽度：消息区/输入框 inline width，Ask 随时间线同宽。
-  // 时间线侧挂在 MessageScroller 的 contentProps（内层 [role=log]）上，
-  // 视口铺满面板、滚动条贴面板最右，内容列仍与 composer 同宽居中。
-  // 空态例外：showSurfaceEmptyState 时去掉约束（起始页自控宽度，与引导页一致）。
-  assert.match(timeline, /contentProps=\{showSurfaceEmptyState \? undefined : \{ style: chatContentWidthStyle \}\}/);
-  assert.doesNotMatch(timeline, /style=\{chatContentWidthStyle\}/);
-  assert.doesNotMatch(timeline, /--chat-inline-pad/);
-  assert.doesNotMatch(foundation, /--chat-inline-pad|--chat-side-gap/);
-  assert.doesNotMatch(overlay, /CollapsibleContent className="min-h-0 overflow-y-auto"/);
-  assert.doesNotMatch(overlay, /max-h-\[(?:55vh|180px|240px)\][^\n]*overflow-y-auto/);
+	assert.doesNotMatch(composerArea, /runtimeUi/);
+	assert.match(sessionView, /<SessionSurfaceStage[\s\S]*runtimeUi,/);
+	assert.match(timeline, /className="session-runtime-ui mx-auto w-full/);
+	assert.doesNotMatch(timeline, /session-runtime-ui sticky bottom-0/);
+	// 内容宽度：消息区/输入框 inline width，Ask 随时间线同宽。
+	// 时间线侧挂在 MessageScroller 的 contentProps（内层 [role=log]）上，
+	// 视口铺满面板、滚动条贴面板最右，内容列仍与 composer 同宽居中。
+	// 空态例外：showSurfaceEmptyState 时去掉约束（起始页自控宽度，与引导页一致）。
+	assert.match(timeline, /contentProps=\{showSurfaceEmptyState \? undefined : \{ style: chatContentWidthStyle \}\}/);
+	assert.doesNotMatch(timeline, /style=\{chatContentWidthStyle\}/);
+	assert.doesNotMatch(timeline, /--chat-inline-pad/);
+	assert.doesNotMatch(foundation, /--chat-inline-pad|--chat-side-gap/);
+	assert.doesNotMatch(overlay, /CollapsibleContent className="min-h-0 overflow-y-auto"/);
+	assert.doesNotMatch(overlay, /max-h-\[(?:55vh|180px|240px)\][^\n]*overflow-y-auto/);
 });
 
 /**
@@ -197,7 +152,7 @@ test("ask stays out of composer sizing and uses the session timeline as its scro
  * 列按固有高度撑开，Ask 不参与 composer 分配。
  */
 test("composer measurement includes the bottom breathing room after ask moves to timeline", () => {
-  assert.match(composerArea, /className="composer[^\"]*px-0 pb-2"/);
+	assert.match(composerArea, /className="composer[^\"]*px-0 pb-2"/);
 });
 
 /**
@@ -207,10 +162,10 @@ test("composer measurement includes the bottom breathing room after ask moves to
  * 不依赖写死的像素补偿。
  */
 test("composer panel reserves the same scrollbar gutter as the timeline", () => {
-  assert.match(sessionView, /session-v-composer[\s\S]*\[scrollbar-gutter:stable\]/);
-  assert.doesNotMatch(sessionView, /paddingRight/);
-  // 时间线侧：宽度约束挂在滚动内容上（视口自带 scrollbar-gutter:stable 预留槽位）；
-  // 空态例外：showSurfaceEmptyState 时去掉约束（起始页自控宽度，与引导页一致）。
-  assert.match(timeline, /contentProps=\{showSurfaceEmptyState \? undefined : \{ style: chatContentWidthStyle \}\}/);
-  assert.match(chatContentWidth, /scrollbar-gutter:stable/);
+	assert.match(sessionView, /session-v-composer[\s\S]*\[scrollbar-gutter:stable\]/);
+	assert.doesNotMatch(sessionView, /paddingRight/);
+	// 时间线侧：宽度约束挂在滚动内容上（视口自带 scrollbar-gutter:stable 预留槽位）；
+	// 空态例外：showSurfaceEmptyState 时去掉约束（起始页自控宽度，与引导页一致）。
+	assert.match(timeline, /contentProps=\{showSurfaceEmptyState \? undefined : \{ style: chatContentWidthStyle \}\}/);
+	assert.match(chatContentWidth, /scrollbar-gutter:stable/);
 });

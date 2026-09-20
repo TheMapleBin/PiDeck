@@ -18,23 +18,12 @@
  */
 import { useEffect, useRef } from "react";
 import { getDefaultStore, useAtomValue } from "jotai";
-import {
-	announcementCenterOpenAtom,
-	announcementNotificationEnabledAtom,
-	announcementStateAtom,
-	unreadAnnouncementsAtom,
-} from "../atoms/announcement-atoms";
+import { announcementCenterOpenAtom, announcementNotificationEnabledAtom, announcementStateAtom, unreadAnnouncementsAtom } from "../atoms/announcement-atoms";
 import { currentSessionRuntimeAtom } from "../atoms/session-atoms";
 import { desktopApi } from "../desktopApi";
 import { t } from "../i18n";
 import { showNotice } from "../utils/notice";
-import {
-	isBusyForAnnouncement,
-	levelToNoticeKind,
-	nextTickDelayMs,
-	pickAnnouncementBatch,
-	ANNOUNCEMENT_POLL_VISIBLE_MS,
-} from "../utils/announcementNotifyPolicy";
+import { isBusyForAnnouncement, levelToNoticeKind, nextTickDelayMs, pickAnnouncementBatch, ANNOUNCEMENT_POLL_VISIBLE_MS } from "../utils/announcementNotifyPolicy";
 import type { AnnouncementBusyContext } from "../utils/announcementNotifyPolicy";
 
 /** 单条 toast 展示时长（ms）：showNotice 的 info 默认 1.5s 太短，公告需要可读时长。 */
@@ -47,11 +36,7 @@ const ANNOUNCEMENT_TOAST_DURATION_MS = 6000;
  */
 function isCurrentAgentBusy(): boolean {
 	const runtime = getDefaultStore().get(currentSessionRuntimeAtom);
-	return (
-		runtime?.status === "running" ||
-		Boolean(runtime?.state?.isStreaming) ||
-		Boolean(runtime?.state?.isExecutingTool)
-	);
+	return runtime?.status === "running" || Boolean(runtime?.state?.isStreaming) || Boolean(runtime?.state?.isExecutingTool);
 }
 
 /**
@@ -66,8 +51,7 @@ function readAnnouncementBusyContext(): AnnouncementBusyContext {
 		// 任意 Radix 模态对话框打开（portal 渲染在 body 下）：toast 会压在弹窗上层
 		modalOpen: document.querySelector('[role="dialog"]') != null,
 		// 窗口失焦/最小化/托盘隐藏：用户不在看 PiDeck，不着急弹（hasFocus 在个别老内核可能缺失，防御一下）
-		windowInactive:
-			typeof document.hasFocus === "function" ? !document.hasFocus() : false,
+		windowInactive: typeof document.hasFocus === "function" ? !document.hasFocus() : false,
 	};
 }
 
@@ -91,9 +75,7 @@ export function useAnnouncementNotifier(): void {
 		const unread = getDefaultStore().get(unreadAnnouncementsAtom);
 		if (unread.length === 0) return;
 		for (const item of unread) sessionShownIdsRef.current.add(item.id);
-		void desktopApi.announcements
-			.markNotified(unread.map((item) => item.id))
-			.catch(() => undefined);
+		void desktopApi.announcements.markNotified(unread.map((item) => item.id)).catch(() => undefined);
 	}, [centerOpen]);
 
 	useEffect(() => {
@@ -104,10 +86,7 @@ export function useAnnouncementNotifier(): void {
 			// 开关每轮重读（见 hook 注释）：关闭后立即停止弹出，无需重挂载
 			if (!getDefaultStore().get(announcementNotificationEnabledAtom)) return;
 			// 待提醒 = 未读 ∩ 历史已提醒（主进程持久化）∩ 本周期已弹
-			const alreadyNotified = new Set([
-				...(getDefaultStore().get(announcementStateAtom)?.notifiedIds ?? []),
-				...sessionShownIdsRef.current,
-			]);
+			const alreadyNotified = new Set([...(getDefaultStore().get(announcementStateAtom)?.notifiedIds ?? []), ...sessionShownIdsRef.current]);
 			const pending = getDefaultStore()
 				.get(unreadAnnouncementsAtom)
 				.filter((item) => !alreadyNotified.has(item.id));
@@ -121,25 +100,17 @@ export function useAnnouncementNotifier(): void {
 			const consumed = [...shown, ...suppressed];
 			for (const item of consumed) sessionShownIdsRef.current.add(item.id);
 			// 先落盘再弹：即使用户弹完立刻崩溃/退出，也不会因为「还没记上」而重播
-			void desktopApi.announcements
-				.markNotified(consumed.map((item) => item.id))
-				.catch(() => undefined);
+			void desktopApi.announcements.markNotified(consumed.map((item) => item.id)).catch(() => undefined);
 			const item = shown[0];
 			if (!item) return;
 			// 正文纯文本展示（与公告中心一致，不做 markdown 渲染，控制攻击面）；
 			// 「查看」按钮打开公告中心（atom 驱动，见 announcement-atoms）。
-			showNotice(
-				item.body,
-				ANNOUNCEMENT_TOAST_DURATION_MS,
-				levelToNoticeKind(item.level),
-				item.title,
-				{
-					action: {
-						label: t("announcements.toast.view"),
-						onClick: () => getDefaultStore().set(announcementCenterOpenAtom, true),
-					},
+			showNotice(item.body, ANNOUNCEMENT_TOAST_DURATION_MS, levelToNoticeKind(item.level), item.title, {
+				action: {
+					label: t("announcements.toast.view"),
+					onClick: () => getDefaultStore().set(announcementCenterOpenAtom, true),
 				},
-			);
+			});
 		};
 		timer = setTimeout(tick, ANNOUNCEMENT_POLL_VISIBLE_MS);
 		return () => {

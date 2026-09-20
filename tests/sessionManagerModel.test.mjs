@@ -73,10 +73,7 @@ test("sessionManagerRowKey: 用稳定记录 id，空 filePath 的 DSH 行不冲�
 });
 
 test("mergeManagerArchived: pi/DSH 合并并按时间倒序", () => {
-	const merged = mergeManagerArchived(
-		[{ summary: summary({ id: "p1", filePath: "a.jsonl", updatedAt: 100 }), originalPath: "C:\\proj\\a.jsonl" }],
-		[{ dshSessionId: "session-x", cwd: "C:\\proj", archivedAt: 200 }],
-	);
+	const merged = mergeManagerArchived([{ summary: summary({ id: "p1", filePath: "a.jsonl", updatedAt: 100 }), originalPath: "C:\\proj\\a.jsonl" }], [{ dshSessionId: "session-x", cwd: "C:\\proj", archivedAt: 200 }]);
 	// VM 上下文的数组原型与测试 realm 不同，不能 deepEqual；按字符串断言
 	assert.equal(merged.map((row) => row.kind).join(","), "dsh,pi");
 	assert.equal(merged[0].kind === "dsh" && merged[0].item.dshSessionId, "session-x");
@@ -123,23 +120,14 @@ test("managerArchivedDshLabel: 标题与 cwd 均缺省才回退裸 id", () => {
 // ── worktree 家族与工作区标签 ──────────────────────────────────────────────
 
 test("worktreeFamilyProjects: 根项目 = 自己 + 全部子工作区", () => {
-	const projects = [
-		project("root", "C:/work/repo"),
-		project("wt-a", "C:/work/repo-wt-a", "root"),
-		project("wt-b", "C:/work/repo-wt-b", "root"),
-		project("other", "D:/other"),
-	];
+	const projects = [project("root", "C:/work/repo"), project("wt-a", "C:/work/repo-wt-a", "root"), project("wt-b", "C:/work/repo-wt-b", "root"), project("other", "D:/other")];
 	const family = worktreeFamilyProjects(projects, "root");
 	assert.equal(family.map((p) => p.id).join(","), "root,wt-a,wt-b");
 	assert.equal(familyRootProject(family).id, "root");
 });
 
 test("worktreeFamilyProjects: 从 worktree 子项目打开同样聚合整个家族", () => {
-	const projects = [
-		project("root", "C:/work/repo"),
-		project("wt-a", "C:/work/repo-wt-a", "root"),
-		project("wt-b", "C:/work/repo-wt-b", "root"),
-	];
+	const projects = [project("root", "C:/work/repo"), project("wt-a", "C:/work/repo-wt-a", "root"), project("wt-b", "C:/work/repo-wt-b", "root")];
 	const family = worktreeFamilyProjects(projects, "wt-b");
 	assert.equal(family.map((p) => p.id).join(","), "root,wt-a,wt-b");
 });
@@ -150,10 +138,7 @@ test("worktreeFamilyProjects: 无 worktree 的项目只含自己；未知 id 返
 });
 
 test("sessionWorkspaceLabel: 主工作区不标记，worktree 显示目录名", () => {
-	const family = [
-		project("root", "C:/work/repo"),
-		project("wt-a", "C:/work/repo-wt-a", "root"),
-	];
+	const family = [project("root", "C:/work/repo"), project("wt-a", "C:/work/repo-wt-a", "root")];
 	assert.equal(sessionWorkspaceLabel("root", family), undefined);
 	assert.equal(sessionWorkspaceLabel("wt-a", family), "repo-wt-a");
 	assert.equal(sessionWorkspaceLabel("unknown", family), undefined);
@@ -170,10 +155,7 @@ test("canonicalWorkspacePath: 统一分隔符；native 大小写不敏感，WSL 
 // ── 归档按家族过滤 ─────────────────────────────────────────────────────────
 
 test("filterArchivedPiByFamily: 原始路径前缀归属；跨家族与无索引的不进", () => {
-	const family = [
-		project("root", "C:/work/repo"),
-		project("wt-a", "C:/work/repo-wt-a", "root"),
-	];
+	const family = [project("root", "C:/work/repo"), project("wt-a", "C:/work/repo-wt-a", "root")];
 	const items = [
 		{ summary: summary({ id: "p1", wsl: false }), originalPath: "C:/work/repo/.pi/sessions/a.jsonl" },
 		{ summary: summary({ id: "p2", wsl: false }), originalPath: "C:/work/repo-wt-a/.pi/sessions/b.jsonl" },
@@ -195,10 +177,7 @@ test("filterArchivedPiByFamily: 路径边界不误中（C:/a 不中 C:/ab）", (
 });
 
 test("filterArchivedDshByFamily: cwd 精确匹配家族成员路径", () => {
-	const family = [
-		project("root", "C:/work/repo"),
-		project("wt-a", "C:/work/repo-wt-a", "root"),
-	];
+	const family = [project("root", "C:/work/repo"), project("wt-a", "C:/work/repo-wt-a", "root")];
 	const items = [
 		{ dshSessionId: "s1", cwd: "C:/work/repo", archivedAt: 1 },
 		{ dshSessionId: "s2", cwd: "C:/work/repo-wt-a", archivedAt: 2 },
@@ -211,31 +190,13 @@ test("filterArchivedDshByFamily: cwd 精确匹配家族成员路径", () => {
 // ── 归档行工作区标签 ───────────────────────────────────────────────────────
 
 test("archivedPiWorkspaceLabel: 主工作区不标记，worktree 显示目录名", () => {
-	const family = [
-		project("root", "C:/work/repo"),
-		project("wt-a", "C:/work/repo-wt-a", "root"),
-	];
-	assert.equal(
-		archivedPiWorkspaceLabel(
-			{ summary: summary({ id: "p1" }), originalPath: "C:/work/repo/.pi/sessions/a.jsonl" },
-			family,
-		),
-		undefined,
-	);
-	assert.equal(
-		archivedPiWorkspaceLabel(
-			{ summary: summary({ id: "p2" }), originalPath: "C:/work/repo-wt-a/.pi/sessions/b.jsonl" },
-			family,
-		),
-		"repo-wt-a",
-	);
+	const family = [project("root", "C:/work/repo"), project("wt-a", "C:/work/repo-wt-a", "root")];
+	assert.equal(archivedPiWorkspaceLabel({ summary: summary({ id: "p1" }), originalPath: "C:/work/repo/.pi/sessions/a.jsonl" }, family), undefined);
+	assert.equal(archivedPiWorkspaceLabel({ summary: summary({ id: "p2" }), originalPath: "C:/work/repo-wt-a/.pi/sessions/b.jsonl" }, family), "repo-wt-a");
 });
 
 test("archivedDshWorkspaceLabel: 同上（cwd 归属）", () => {
-	const family = [
-		project("root", "C:/work/repo"),
-		project("wt-a", "C:/work/repo-wt-a", "root"),
-	];
+	const family = [project("root", "C:/work/repo"), project("wt-a", "C:/work/repo-wt-a", "root")];
 	assert.equal(archivedDshWorkspaceLabel({ dshSessionId: "s1", cwd: "C:/work/repo", archivedAt: 1 }, family), undefined);
 	assert.equal(archivedDshWorkspaceLabel({ dshSessionId: "s2", cwd: "C:/work/repo-wt-a", archivedAt: 1 }, family), "repo-wt-a");
 });

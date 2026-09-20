@@ -106,9 +106,7 @@ export type CompactUsageInput = {
  * 其 CLI footer 也显示原始值；封顶会让「真实 112%」显示成 100%，与
  * ~used/window 原始数字及会话头部明细（用原始值）互相矛盾。
  */
-export function resolveCompactUsagePercent(
-	state?: CompactUsageInput | null,
-): number | null {
+export function resolveCompactUsagePercent(state?: CompactUsageInput | null): number | null {
 	if (state?.contextPercent == null) return null;
 	let percent = state.contextPercent;
 	const used = state.contextTokens;
@@ -121,10 +119,7 @@ export function resolveCompactUsagePercent(
 
 /** 圆环压缩按钮的可见交互态：压缩中禁用；无占用数据（percent 未上报）也禁用。
  * 占用达标与否不再影响可点性（随时可压缩），urgency 色阶仅作视觉提示。 */
-export function compactUiState(
-	percent: number | null | undefined,
-	compacting: boolean,
-): CompactUiState {
+export function compactUiState(percent: number | null | undefined, compacting: boolean): CompactUiState {
 	return {
 		ready: percent != null,
 		compacting,

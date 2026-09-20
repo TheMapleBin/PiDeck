@@ -82,37 +82,20 @@ test("editorLaunchSpawnOptions：win32 带 windowsHide，避免 cmd /c start 闪
 test("matchProgramsDirName matches versioned and unversioned JetBrains dirs", () => {
 	const { matchProgramsDirName } = loadEditorDetector({});
 
-	assert.equal(
-		matchProgramsDirName(["IntelliJ IDEA 2026.1", "Zed"], ["IntelliJ IDEA"]),
-		"IntelliJ IDEA 2026.1",
-	);
-	assert.equal(
-		matchProgramsDirName(["IntelliJ IDEA", "Notepad++"], ["IntelliJ IDEA"]),
-		"IntelliJ IDEA",
-	);
+	assert.equal(matchProgramsDirName(["IntelliJ IDEA 2026.1", "Zed"], ["IntelliJ IDEA"]), "IntelliJ IDEA 2026.1");
+	assert.equal(matchProgramsDirName(["IntelliJ IDEA", "Notepad++"], ["IntelliJ IDEA"]), "IntelliJ IDEA");
 	// Community Edition 前缀同源也应命中
-	assert.equal(
-		matchProgramsDirName(["IntelliJ IDEA Community Edition 2026.1"], ["IntelliJ IDEA"]),
-		"IntelliJ IDEA Community Edition 2026.1",
-	);
+	assert.equal(matchProgramsDirName(["IntelliJ IDEA Community Edition 2026.1"], ["IntelliJ IDEA"]), "IntelliJ IDEA Community Edition 2026.1");
 	// 大小写不敏感（磁盘目录名可能有大小写差异）
-	assert.equal(
-		matchProgramsDirName(["pycharm 2026.1"], ["PyCharm"]),
-		"pycharm 2026.1",
-	);
-	assert.equal(
-		matchProgramsDirName(["WebStorm 2025.3", "PhpStorm 2025.1"], ["WebStorm"]),
-		"WebStorm 2025.3",
-	);
+	assert.equal(matchProgramsDirName(["pycharm 2026.1"], ["PyCharm"]), "pycharm 2026.1");
+	assert.equal(matchProgramsDirName(["WebStorm 2025.3", "PhpStorm 2025.1"], ["WebStorm"]), "WebStorm 2025.3");
 	assert.equal(matchProgramsDirName(["Zed", "VS Code"], ["IntelliJ IDEA"]), null);
 });
 
 // ── detectExternalEditors：JetBrains 版本目录通配扫描 ─────────────────
 
 test("detectExternalEditors finds IntelliJ IDEA installed in unversioned Programs dir", async () => {
-	const existing = new Set([
-		"C:\\Users\\test\\AppData\\Local\\Programs\\IntelliJ IDEA\\bin\\idea64.exe",
-	]);
+	const existing = new Set(["C:\\Users\\test\\AppData\\Local\\Programs\\IntelliJ IDEA\\bin\\idea64.exe"]);
 	const fsStub = {
 		access: async (p) => {
 			if (!existing.has(p)) throw new Error("ENOENT");
@@ -131,17 +114,12 @@ test("detectExternalEditors finds IntelliJ IDEA installed in unversioned Program
 
 	const idea = editors.find((editor) => editor.id === "idea");
 	assert.ok(idea, "IntelliJ IDEA should be detected via Programs dir scan");
-	assert.equal(
-		idea.command,
-		"C:\\Users\\test\\AppData\\Local\\Programs\\IntelliJ IDEA\\bin\\idea64.exe",
-	);
+	assert.equal(idea.command, "C:\\Users\\test\\AppData\\Local\\Programs\\IntelliJ IDEA\\bin\\idea64.exe");
 	assert.equal(idea.detectedFrom, "common-path");
 });
 
 test("detectExternalEditors scans JetBrains subdir for versioned installs", async () => {
-	const existing = new Set([
-		"C:\\Program Files\\JetBrains\\WebStorm 2026.1\\bin\\webstorm64.exe",
-	]);
+	const existing = new Set(["C:\\Program Files\\JetBrains\\WebStorm 2026.1\\bin\\webstorm64.exe"]);
 	const fsStub = {
 		access: async (p) => {
 			if (!existing.has(p)) throw new Error("ENOENT");

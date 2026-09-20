@@ -40,9 +40,7 @@ export function readNumber(value: unknown): number {
 }
 
 export function readRecord(value: unknown): Record<string, unknown> {
-	return value && typeof value === "object" && !Array.isArray(value)
-		? (value as Record<string, unknown>)
-		: {};
+	return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
 export function normalizePath(path?: string): string {
@@ -59,9 +57,7 @@ export function normalizePath(path?: string): string {
 export function getWorkBuddyProjectDir(root: string, projectPath: string): string {
 	const normalized = projectPath.replace(/\\/g, "/").replace(/\/+$/, "");
 	const win = normalized.match(/^([A-Za-z]):\/(.+)$/);
-	const slug = win
-		? `${win[1].toLowerCase()}-${win[2].replace(/\//g, "-")}`
-		: normalized.replace(/^\//, "").replace(/\//g, "-");
+	const slug = win ? `${win[1].toLowerCase()}-${win[2].replace(/\//g, "-")}` : normalized.replace(/^\//, "").replace(/\//g, "-");
 	return join(root, slug);
 }
 
@@ -76,11 +72,7 @@ export function getProjectSessionDir(piRoot: string, projectPath: string): strin
 	return join(piRoot, safePathToken(projectPath));
 }
 
-export function getWorkBuddyTargetPath(
-	piRoot: string,
-	projectPath: string,
-	session: ParsedWorkBuddySession,
-): string {
+export function getWorkBuddyTargetPath(piRoot: string, projectPath: string, session: ParsedWorkBuddySession): string {
 	const id = session.meta.sessionId.replace(/[^a-zA-Z0-9_-]/g, "-");
 	return join(getProjectSessionDir(piRoot, projectPath), `workbuddy_${id}.jsonl`);
 }
@@ -101,11 +93,7 @@ export function sessionIdFromPath(filePath: string): string {
 /** 从 providerData 中取模型标识，取不到时逐层回退。 */
 export function readWorkBuddyModel(entry: WorkBuddyRecord): string {
 	const data = readRecord(entry.providerData);
-	return (
-		readString(data.model) ||
-		readString(data.requestModelId) ||
-		readString(data.requestModelName)
-	);
+	return readString(data.model) || readString(data.requestModelId) || readString(data.requestModelName);
 }
 
 export async function collectWorkBuddyJsonl(dir: string): Promise<string[]> {
@@ -138,10 +126,7 @@ export async function collectWorkBuddyJsonl(dir: string): Promise<string[]> {
  * entries 只含头部区间，摘要字段因此是近似值（与 Codex head-only 扫描同口径）。
  * 时间戳：firstTimestamp 取头部最早，lastTimestamp 用 mtime（头部看不到文件尾）。
  */
-export async function readWorkBuddySessionHead(
-	root: string,
-	filePath: string,
-): Promise<ParsedWorkBuddySession> {
+export async function readWorkBuddySessionHead(root: string, filePath: string): Promise<ParsedWorkBuddySession> {
 	assertWorkBuddySourcePath(root, filePath);
 	const { head, size, mtimeMs, truncated } = await readSessionSourceHead(filePath);
 
@@ -161,9 +146,7 @@ export async function readWorkBuddySessionHead(
 	const withId = entries.find((entry) => readString(entry.sessionId));
 	const sessionId = withId ? readString(withId.sessionId) : sessionIdFromPath(filePath);
 	const cwd = withId ? readString(withId.cwd) : "";
-	const timestamps = entries
-		.map((entry) => readNumber(entry.timestamp))
-		.filter((value) => value > 0);
+	const timestamps = entries.map((entry) => readNumber(entry.timestamp)).filter((value) => value > 0);
 	if (timestamps.length === 0) throw new Error("Missing WorkBuddy session metadata");
 
 	let modelId = "";
@@ -196,11 +179,8 @@ export async function readWorkBuddySessionHead(
 	};
 }
 
-
 /** 读取导入产物头部的 import 标记（有界读头部，不再整读会话文件——见 importMetaHead）。 */
-export async function readWorkBuddyImportMeta(
-	targetPath: string,
-): Promise<WorkBuddyImportMeta | undefined> {
+export async function readWorkBuddyImportMeta(targetPath: string): Promise<WorkBuddyImportMeta | undefined> {
 	return readImportMetaHead(targetPath, "workbuddy_import");
 }
 
@@ -212,12 +192,14 @@ export async function ensureProjectSessionDir(piRoot: string, projectPath: strin
 
 /** 移除平台注入的 <system-reminder> 上下文块，只保留用户真实输入。 */
 export function stripInjectedContext(value: string): string {
-	return value
-		.replace(/<system-reminder\b[^>]*>[\s\S]*?<\/system-reminder>/gi, "")
-		.replace(/<system-reminder\b[^>]*\/>/gi, "")
-		// WorkBuddy 还会把用户输入整体包进 <user_query>，标签本身不是正文，去壳留内容。
-		.replace(/<\/?user_query>/gi, "")
-		.trim();
+	return (
+		value
+			.replace(/<system-reminder\b[^>]*>[\s\S]*?<\/system-reminder>/gi, "")
+			.replace(/<system-reminder\b[^>]*\/>/gi, "")
+			// WorkBuddy 还会把用户输入整体包进 <user_query>，标签本身不是正文，去壳留内容。
+			.replace(/<\/?user_query>/gi, "")
+			.trim()
+	);
 }
 
 /** function_call.arguments 是 JSON 字符串；解析失败时保留原文而不是丢掉整次调用。 */

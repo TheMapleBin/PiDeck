@@ -1,28 +1,11 @@
 import { app, shell } from "electron";
 import { existsSync, type Dirent } from "node:fs";
-import {
-	cp,
-	lstat,
-	mkdir,
-	readdir,
-	readFile,
-	realpath,
-	rename,
-	rm,
-	stat,
-	writeFile,
-} from "node:fs/promises";
+import { cp, lstat, mkdir, readdir, readFile, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, join, relative, resolve } from "node:path";
 import { homedir } from "node:os";
 import { randomUUID } from "node:crypto";
 import { trashPath } from "../fs/trash";
-import type {
-	AppSettings,
-	CreatePiSkillInput,
-	PiSkillListResult,
-	PiSkillLocation,
-	PiSkillSummary,
-} from "../../shared/types";
+import type { AppSettings, CreatePiSkillInput, PiSkillListResult, PiSkillLocation, PiSkillSummary } from "../../shared/types";
 import type { WslEnvironment } from "../wsl/WslPaths";
 import type { MainProcessTranslationKey } from "../../shared/i18n/mainProcessCopy";
 
@@ -52,20 +35,15 @@ function hasErrorCode(error: unknown, code: string): boolean {
 function isManagedPathInside(root: string, target: string): boolean {
 	const rootResolved = resolve(root);
 	const targetResolved = resolve(target);
-	const normalize = (value: string) => process.platform === "win32" ? value.toLowerCase() : value;
+	const normalize = (value: string) => (process.platform === "win32" ? value.toLowerCase() : value);
 	const normalizedRoot = normalize(rootResolved);
 	const normalizedTarget = normalize(targetResolved);
 	if (normalizedTarget === normalizedRoot) return true;
-	const prefix = normalizedRoot.endsWith("\\") || normalizedRoot.endsWith("/")
-		? normalizedRoot
-		: `${normalizedRoot}${process.platform === "win32" ? "\\" : "/"}`;
+	const prefix = normalizedRoot.endsWith("\\") || normalizedRoot.endsWith("/") ? normalizedRoot : `${normalizedRoot}${process.platform === "win32" ? "\\" : "/"}`;
 	return normalizedTarget.startsWith(prefix);
 }
 
-type SkillCopy = (
-	key: MainProcessTranslationKey,
-	params?: Record<string, string | number>,
-) => string;
+type SkillCopy = (key: MainProcessTranslationKey, params?: Record<string, string | number>) => string;
 
 /**
  * 管理 pi 全局 Skill 目录。
@@ -98,10 +76,7 @@ export class SkillManager {
 	}
 
 	/** 注入 PiDeck 设置读写：启用后 toggle 同步持久化禁用列表（技能白名单模式的依据）。 */
-	configureSettings(
-		getSettings: () => AppSettings,
-		patchSettings: (patch: Partial<AppSettings>) => Promise<AppSettings>,
-	) {
+	configureSettings(getSettings: () => AppSettings, patchSettings: (patch: Partial<AppSettings>) => Promise<AppSettings>) {
 		this.settingsProvider = getSettings;
 		this.settingsPatcher = patchSettings;
 	}
@@ -135,9 +110,7 @@ export class SkillManager {
 	}
 
 	async list(): Promise<PiSkillListResult> {
-		const skills = (
-			await Promise.all(this.locations.map((location) => this.scanLocation(location)))
-		).flat();
+		const skills = (await Promise.all(this.locations.map((location) => this.scanLocation(location)))).flat();
 		// 按 name 去重，优先保留 pi-global 目录下的条目
 		// （避免 ~/.pi/agent/skills/ 和 ~/.agents/skills/ 不同步导致同名重复）
 		const seen = new Map<string, PiSkillSummary>();
@@ -161,11 +134,7 @@ export class SkillManager {
 		if (existsSync(skillDir)) throw new Error(this.translate("mainSkill.alreadyExists", { name }));
 		await mkdir(skillDir, { recursive: true });
 		const skillPath = join(skillDir, SKILL_FILE);
-		await writeFile(
-			skillPath,
-			`---\nname: ${name}\ndescription: ${description.replace(/\n/g, " ")}\n---\n\n# ${name}\n\n## Usage\n\nDescribe when and how to use this skill.\n`,
-			"utf8",
-		);
+		await writeFile(skillPath, `---\nname: ${name}\ndescription: ${description.replace(/\n/g, " ")}\n---\n\n# ${name}\n\n## Usage\n\nDescribe when and how to use this skill.\n`, "utf8");
 		return this.readSkill(skillPath, location, "directory");
 	}
 
@@ -175,11 +144,7 @@ export class SkillManager {
 	 * provide it over IPC. The original SKILL.md and all companion assets remain byte-for-byte
 	 * unchanged, and a temporary sibling directory prevents partial installs.
 	 */
-	async importSkillDirectory(
-		locationId: "pi-global" | "agents-global",
-		sourceDirectory: string,
-		targetName: string,
-	): Promise<void> {
+	async importSkillDirectory(locationId: "pi-global" | "agents-global", sourceDirectory: string, targetName: string): Promise<void> {
 		const location = this.requireLocation(locationId);
 		if (!targetName || this.normalizeSkillName(targetName) !== targetName || targetName.length > 64) {
 			throw new Error(this.translate("mainSkill.nameRequiredDetailed"));
@@ -193,8 +158,7 @@ export class SkillManager {
 		await mkdir(initialRoot, { recursive: true });
 		const targetRoot = await this.resolveManagedImportLocation(location);
 
-		const occupied = (await readdir(targetRoot, { withFileTypes: true }).catch(() => []))
-			.some((entry) => entry.name.toLowerCase() === targetName.toLowerCase() || this.normalizeSkillName(entry.name) === targetName);
+		const occupied = (await readdir(targetRoot, { withFileTypes: true }).catch(() => [])).some((entry) => entry.name.toLowerCase() === targetName.toLowerCase() || this.normalizeSkillName(entry.name) === targetName);
 		if (occupied) throw new Error(this.translate("mainSkill.alreadyExists", { name: targetName }));
 
 		const targetDirectory = join(targetRoot, targetName);
@@ -219,7 +183,7 @@ export class SkillManager {
 			// the managed destination free of unsafe entries.
 			await this.assertImportSkillTree(temporaryDirectory);
 			await assertTargetAbsent();
-			if (await this.resolveManagedImportLocation(location) !== targetRoot) throw new Error(UNSAFE_IMPORT_TARGET);
+			if ((await this.resolveManagedImportLocation(location)) !== targetRoot) throw new Error(UNSAFE_IMPORT_TARGET);
 			await rename(temporaryDirectory, targetDirectory);
 		} finally {
 			await rm(temporaryDirectory, { recursive: true, force: true }).catch(() => undefined);
@@ -280,11 +244,7 @@ export class SkillManager {
 		}
 	}
 
-	private async assertImportSkillTree(
-		root: string,
-		depth = 0,
-		state: ImportTreeState = { totalBytes: 0 },
-	): Promise<void> {
+	private async assertImportSkillTree(root: string, depth = 0, state: ImportTreeState = { totalBytes: 0 }): Promise<void> {
 		if (depth > IMPORT_MAX_DEPTH) throw new Error("Skill directory is too deep.");
 		const rootEntry = await lstat(root);
 		if (!rootEntry.isDirectory() || rootEntry.isSymbolicLink()) {
@@ -354,17 +314,13 @@ export class SkillManager {
 	 * 为什么抽公共实现：内置技能不止一个（usage-probe、image-gen 等），复制逻辑完全一致，
 	 * 只有技能名不同——单一 helper 避免每个技能重复一段一样的文件复制代码。
 	 */
-	private async installTemplate(skillName: string): Promise<
-		{ success: true; path: string } | { success: false; error: string }
-	> {
+	private async installTemplate(skillName: string): Promise<{ success: true; path: string } | { success: false; error: string }> {
 		try {
 			// 覆盖层优先：热更新把有差异的技能写进 userData/skills-overlay（结构同
 			// <builtin>/skills/<name>/SKILL.md），安装时读生效源，避免「更新成功但装旧模板」。
 			const overlayDir = this.skillOverlayProvider?.() ?? null;
 			const root = app.isPackaged ? process.resourcesPath : join(app.getAppPath(), "resources");
-			const templatePath = overlayDir
-				? join(overlayDir, skillName, SKILL_FILE)
-				: join(root, "skills", skillName, SKILL_FILE);
+			const templatePath = overlayDir ? join(overlayDir, skillName, SKILL_FILE) : join(root, "skills", skillName, SKILL_FILE);
 			const content = await readFile(templatePath, "utf8");
 			const targetDir = join(this.locations[0].path, skillName);
 			await mkdir(targetDir, { recursive: true });
@@ -374,16 +330,10 @@ export class SkillManager {
 			// 内置技能重置为启用（「重启后技能全部恢复」bug 的根源）。模板正文仍随
 			// 应用更新同步，仅该状态字段需回迁。
 			const previous = await readFile(targetPath, "utf8").catch(() => null);
-			const wasDisabled =
-				previous !== null &&
-				this.parseFrontmatter(previous)["disable-model-invocation"] === "true";
+			const wasDisabled = previous !== null && this.parseFrontmatter(previous)["disable-model-invocation"] === "true";
 			await writeFile(targetPath, content, "utf8");
 			if (wasDisabled) {
-				await writeFile(
-					targetPath,
-					this.setFrontmatterBoolean(content, "disable-model-invocation", true),
-					"utf8",
-				);
+				await writeFile(targetPath, this.setFrontmatterBoolean(content, "disable-model-invocation", true), "utf8");
 			}
 			return { success: true, path: targetPath };
 		} catch (error) {
@@ -391,15 +341,11 @@ export class SkillManager {
 		}
 	}
 
-	async installUsageProbeTemplate(): Promise<
-		{ success: true; path: string } | { success: false; error: string }
-	> {
+	async installUsageProbeTemplate(): Promise<{ success: true; path: string } | { success: false; error: string }> {
 		return this.installTemplate("usage-probe");
 	}
 
-	async installImageGenTemplate(): Promise<
-		{ success: true; path: string } | { success: false; error: string }
-	> {
+	async installImageGenTemplate(): Promise<{ success: true; path: string } | { success: false; error: string }> {
 		return this.installTemplate("image-gen");
 	}
 
@@ -407,9 +353,7 @@ export class SkillManager {
 	 * 安装内置的「环境诊断」技能模板（resources/skills/pideck-doctor/SKILL.md）。
 	 * 用户在问题反馈页生成诊断报告后，可让 pi 直接读报告分析排障（/skill:pideck-doctor）。
 	 */
-	async installPideckDoctorTemplate(): Promise<
-		{ success: true; path: string } | { success: false; error: string }
-	> {
+	async installPideckDoctorTemplate(): Promise<{ success: true; path: string } | { success: false; error: string }> {
 		return this.installTemplate("pideck-doctor");
 	}
 
@@ -432,10 +376,7 @@ export class SkillManager {
 		return skills.sort((a, b) => a.name.localeCompare(b.name));
 	}
 
-	private async getEntryKind(
-		fullPath: string,
-		entry: Dirent,
-	): Promise<"directory" | "file" | "other"> {
+	private async getEntryKind(fullPath: string, entry: Dirent): Promise<"directory" | "file" | "other"> {
 		if (entry.isDirectory()) return "directory";
 		if (entry.isFile()) return "file";
 		if (!entry.isSymbolicLink()) return "other";
@@ -447,12 +388,7 @@ export class SkillManager {
 		return "other";
 	}
 
-	private async collectDirectorySkills(
-		dir: string,
-		location: PiSkillLocation,
-		out: PiSkillSummary[],
-		ancestors = new Set<string>(),
-	) {
+	private async collectDirectorySkills(dir: string, location: PiSkillLocation, out: PiSkillSummary[], ancestors = new Set<string>()) {
 		const canonicalDir = await realpath(dir).catch(() => null);
 		if (!canonicalDir || ancestors.has(canonicalDir)) return;
 
@@ -474,11 +410,7 @@ export class SkillManager {
 		}
 	}
 
-	private async readSkill(
-		skillPath: string,
-		location: PiSkillLocation,
-		type: PiSkillSummary["type"],
-	): Promise<PiSkillSummary> {
+	private async readSkill(skillPath: string, location: PiSkillLocation, type: PiSkillSummary["type"]): Promise<PiSkillSummary> {
 		const raw = await readFile(skillPath, "utf8").catch(() => "");
 		const frontmatter = this.parseFrontmatter(raw);
 		const name = String(frontmatter.name ?? "").trim();
@@ -495,9 +427,7 @@ export class SkillManager {
 			type,
 			// 禁用 = PiDeck settings 禁用列表 ∪ frontmatter 标记（老版语义）；两者任一命中
 			// 都视为禁用，与技能白名单解析器的排除规则一致
-			enabled:
-				frontmatter["disable-model-invocation"] !== "true" &&
-				!this.isDisabledInSettings(name),
+			enabled: frontmatter["disable-model-invocation"] !== "true" && !this.isDisabledInSettings(name),
 			valid: warnings.length === 0,
 			warnings,
 		};
@@ -507,9 +437,7 @@ export class SkillManager {
 	private isDisabledInSettings(name: string): boolean {
 		if (!this.settingsProvider) return false;
 		const key = name.toLowerCase();
-		return (this.settingsProvider().disabledSkills ?? []).some(
-			(disabledName) => disabledName.toLowerCase() === key,
-		);
+		return (this.settingsProvider().disabledSkills ?? []).some((disabledName) => disabledName.toLowerCase() === key);
 	}
 
 	private parseFrontmatter(raw: string) {
@@ -556,9 +484,7 @@ export class SkillManager {
 	/** frontmatter 缺 name 时的回退名：markdown 取文件名（去扩展名），目录取目录名。
 	 *  不能直接用 dirname().pop()——markdown 技能会显示成父目录名「skills」。 */
 	private fallbackSkillName(skillPath: string, type: PiSkillSummary["type"]): string {
-		return type === "markdown"
-			? basename(skillPath, extname(skillPath))
-			: basename(dirname(skillPath));
+		return type === "markdown" ? basename(skillPath, extname(skillPath)) : basename(dirname(skillPath));
 	}
 
 	/** 重命名 Skill：按类型分流——目录技能重命名技能目录，markdown 技能只重命名单个文件。
@@ -575,9 +501,7 @@ export class SkillManager {
 		// parentDir 用标准库 dirname 计算，禁止手写路径分隔符拼接（POSIX 下会拼出非法路径）。
 		const oldTarget = isDirectory ? skill.dir : skill.path;
 		const parentDir = dirname(oldTarget);
-		const newTarget = isDirectory
-			? join(parentDir, normalizedNew)
-			: join(parentDir, `${normalizedNew}${extname(skill.path)}`);
+		const newTarget = isDirectory ? join(parentDir, normalizedNew) : join(parentDir, `${normalizedNew}${extname(skill.path)}`);
 
 		if (oldTarget === newTarget) throw new Error(this.translate("mainSkill.sameName"));
 		if (existsSync(newTarget)) throw new Error(this.translate("mainSkill.alreadyExists", { name: normalizedNew }));
@@ -593,11 +517,7 @@ export class SkillManager {
 		await this.migrateDisabledSkillName(skill.name, displayName);
 
 		// 找对应的 location（搜索所有 locations）
-		const reloaded = await this.readSkill(
-			newSkillPath,
-			this.locations.find((l) => newSkillPath.startsWith(l.path)) ?? this.locations[0],
-			skill.type,
-		);
+		const reloaded = await this.readSkill(newSkillPath, this.locations.find((l) => newSkillPath.startsWith(l.path)) ?? this.locations[0], skill.type);
 		return reloaded;
 	}
 
@@ -610,9 +530,7 @@ export class SkillManager {
 		if (oldKey === newKey) return;
 		const current = this.settingsProvider().disabledSkills ?? [];
 		if (!current.some((name) => name.toLowerCase() === oldKey)) return;
-		const nextList = current
-			.filter((name) => name.toLowerCase() !== oldKey)
-			.filter((name) => name.toLowerCase() !== newKey);
+		const nextList = current.filter((name) => name.toLowerCase() !== oldKey).filter((name) => name.toLowerCase() !== newKey);
 		nextList.push(newDisplayName);
 		await this.settingsPatcher({ disabledSkills: nextList });
 	}
@@ -636,7 +554,12 @@ export class SkillManager {
 
 	/** 规范化 Skill 名称：保留 Unicode 字母（含中文等）、数字和连字符 */
 	private normalizeSkillName(value: string) {
-		return value.trim().toLowerCase().replace(/[^\p{L}\p{N}-]+/gu, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+		return value
+			.trim()
+			.toLowerCase()
+			.replace(/[^\p{L}\p{N}-]+/gu, "-")
+			.replace(/-+/g, "-")
+			.replace(/^-|-$/g, "");
 	}
 
 	private requireLocation(id: PiSkillLocation["id"]) {

@@ -12,16 +12,12 @@ import { detectRendererPlatform } from "../../lib/detectRendererPlatform";
  * - pi 步：npm 就绪后可安装；安装成功后提示「重新检测」完成整个链路。
  * 每一步只展示当前需要的操作，已完成步骤折叠为一行状态，避免信息过载。
  */
-export function EnvironmentGuidePanel(props: {
-	guide: PiEnvironmentGuide;
-}) {
+export function EnvironmentGuidePanel(props: { guide: PiEnvironmentGuide }) {
 	const { guide } = props;
 	const platform = detectRendererPlatform();
 
 	// 步骤完成判定：Node 步看系统 node 或便携副本；npm 步看检测结果；pi 步看安装结果。
-	const nodeStepDone = Boolean(
-		guide.nodeStatus?.installed || guide.nodeStatus?.systemNodeAvailable,
-	);
+	const nodeStepDone = Boolean(guide.nodeStatus?.installed || guide.nodeStatus?.systemNodeAvailable);
 	const npmStepDone = Boolean(guide.npmVersion);
 	const piStepDone = guide.piInstallDone;
 
@@ -38,46 +34,21 @@ export function EnvironmentGuidePanel(props: {
 				<div className="env-guide-step-head">
 					<span className="env-guide-step-mark">{nodeStepDone ? "✓" : "1"}</span>
 					<b>{t("environment.guideStepNode")}</b>
-					{nodeStepDone && guide.nodeStatus?.systemNodeVersion && (
-						<small className="env-guide-step-state">
-							{t("environment.guideNodeSystemFound", { version: guide.nodeStatus.systemNodeVersion })}
-						</small>
-					)}
-					{nodeStepDone && !guide.nodeStatus?.systemNodeVersion && guide.nodeStatus?.version && (
-						<small className="env-guide-step-state">
-							{t("environment.guideNodePortableFound", { version: guide.nodeStatus.version })}
-						</small>
-					)}
+					{nodeStepDone && guide.nodeStatus?.systemNodeVersion && <small className="env-guide-step-state">{t("environment.guideNodeSystemFound", { version: guide.nodeStatus.systemNodeVersion })}</small>}
+					{nodeStepDone && !guide.nodeStatus?.systemNodeVersion && guide.nodeStatus?.version && <small className="env-guide-step-state">{t("environment.guideNodePortableFound", { version: guide.nodeStatus.version })}</small>}
 				</div>
 				{!nodeStepDone && (
 					<div className="env-guide-step-body">
-						<small>
-							{guide.nodeStatus?.installSupported === false
-								? t("environment.guideNodeUnsupported")
-								: t("environment.guideNodeDesc")}
-						</small>
+						<small>{guide.nodeStatus?.installSupported === false ? t("environment.guideNodeUnsupported") : t("environment.guideNodeDesc")}</small>
 						{guide.nodeStatus?.installSupported !== false && (
 							<div className="env-guide-step-actions">
-								<Button
-									variant="default"
-									size="sm"
-									className="env-card-btn primary h-auto rounded-[6px] px-4 py-[7px] text-xs shadow-none"
-									onClick={() => void guide.installNode()}
-									disabled={guide.nodeInstalling || guide.nodeChecking}
-								>
-									{guide.nodeInstalling
-										? t("environment.guideNodeInstalling")
-										: t("environment.guideNodeInstall")}
+								<Button variant="default" size="sm" className="env-card-btn primary h-auto rounded-[6px] px-4 py-[7px] text-xs shadow-none" onClick={() => void guide.installNode()} disabled={guide.nodeInstalling || guide.nodeChecking}>
+									{guide.nodeInstalling ? t("environment.guideNodeInstalling") : t("environment.guideNodeInstall")}
 								</Button>
 							</div>
 						)}
 						{guide.nodeStatus?.installSupported === false && (
-							<Button
-								variant="outline"
-								size="sm"
-								className="env-card-btn h-auto rounded-[6px] px-4 py-[7px] text-xs shadow-none"
-								onClick={() => window.piDesktop.app.openExternal("https://nodejs.org/zh-cn/download/", true)}
-							>
+							<Button variant="outline" size="sm" className="env-card-btn h-auto rounded-[6px] px-4 py-[7px] text-xs shadow-none" onClick={() => window.piDesktop.app.openExternal("https://nodejs.org/zh-cn/download/", true)}>
 								{t("environment.openNodejsOrg")}
 							</Button>
 						)}
@@ -96,23 +67,13 @@ export function EnvironmentGuidePanel(props: {
 				<div className="env-guide-step-head">
 					<span className="env-guide-step-mark">{npmStepDone ? "✓" : "2"}</span>
 					<b>{t("environment.guideStepNpm")}</b>
-					{npmStepDone && (
-						<small className="env-guide-step-state">
-							{t("environment.guideNpmVersionFound", { version: guide.npmVersion ?? "" })}
-						</small>
-					)}
+					{npmStepDone && <small className="env-guide-step-state">{t("environment.guideNpmVersionFound", { version: guide.npmVersion ?? "" })}</small>}
 				</div>
 				{!npmStepDone && activeStep === 1 && (
 					<div className="env-guide-step-body">
 						<small>{t("environment.guideNpmDesc")}</small>
 						<div className="env-guide-step-actions">
-							<Button
-								variant="default"
-								size="sm"
-								className="env-card-btn primary h-auto rounded-[6px] px-4 py-[7px] text-xs shadow-none"
-								onClick={() => void guide.checkNpmForGuide()}
-								disabled={guide.npmChecking}
-							>
+							<Button variant="default" size="sm" className="env-card-btn primary h-auto rounded-[6px] px-4 py-[7px] text-xs shadow-none" onClick={() => void guide.checkNpmForGuide()} disabled={guide.npmChecking}>
 								{guide.npmChecking ? t("environment.checking") : t("environment.guideNpmCheck")}
 							</Button>
 						</div>
@@ -131,33 +92,15 @@ export function EnvironmentGuidePanel(props: {
 					<div className="env-guide-step-body">
 						<small>{t("environment.guidePiDesc")}</small>
 						<div className="env-guide-step-actions">
-							<Button
-								variant="outline"
-								size="sm"
-								className={`env-card-btn env-mirror-btn ${guide.piUseMirror ? "active" : ""} h-auto rounded-[6px] px-4 py-[7px] text-xs shadow-none`}
-								onClick={() => guide.setPiUseMirror((prev) => !prev)}
-								disabled={guide.piInstalling}
-							>
-								{guide.piUseMirror
-									? t("environment.guidePiRemoveMirror")
-									: t("environment.guidePiUseMirror")}
+							<Button variant="outline" size="sm" className={`env-card-btn env-mirror-btn ${guide.piUseMirror ? "active" : ""} h-auto rounded-[6px] px-4 py-[7px] text-xs shadow-none`} onClick={() => guide.setPiUseMirror((prev) => !prev)} disabled={guide.piInstalling}>
+								{guide.piUseMirror ? t("environment.guidePiRemoveMirror") : t("environment.guidePiUseMirror")}
 							</Button>
-							<Button
-								variant="default"
-								size="sm"
-								className="env-card-btn primary h-auto rounded-[6px] px-4 py-[7px] text-xs shadow-none"
-								onClick={() => void guide.installPiForGuide()}
-								disabled={guide.piInstalling}
-							>
+							<Button variant="default" size="sm" className="env-card-btn primary h-auto rounded-[6px] px-4 py-[7px] text-xs shadow-none" onClick={() => void guide.installPiForGuide()} disabled={guide.piInstalling}>
 								{guide.piInstalling ? t("environment.guidePiInstalling") : t("environment.guidePiInstall")}
 							</Button>
 						</div>
 						{guide.piInstallResult && (
-							<div className={`env-guide-result ${guide.piInstallResult.success ? "success" : "error"}`}>
-								{guide.piInstallResult.success
-									? `✓ ${t("environment.guidePiDone")}`
-									: `✗ ${t("environment.guidePiFailed")}：${guide.piInstallResult.stderr?.slice(0, 300) || guide.piInstallResult.stdout?.slice(0, 300)}`}
-							</div>
+							<div className={`env-guide-result ${guide.piInstallResult.success ? "success" : "error"}`}>{guide.piInstallResult.success ? `✓ ${t("environment.guidePiDone")}` : `✗ ${t("environment.guidePiFailed")}：${guide.piInstallResult.stderr?.slice(0, 300) || guide.piInstallResult.stdout?.slice(0, 300)}`}</div>
 						)}
 					</div>
 				)}
@@ -172,12 +115,7 @@ export function EnvironmentGuidePanel(props: {
 			{/* 全部完成：给一个明确的重启出口（提示「要重启，记得提醒用户」的落地）。
 			    platform 仅用于未来按平台差异化提示；当前三平台行为一致。 */}
 			{piStepDone && platform && (
-				<Button
-					variant="default"
-					size="sm"
-					className="env-card-btn primary h-auto rounded-[6px] px-4 py-2.5 text-[13px] shadow-none"
-					onClick={() => window.piDesktop.app.restart()}
-				>
+				<Button variant="default" size="sm" className="env-card-btn primary h-auto rounded-[6px] px-4 py-2.5 text-[13px] shadow-none" onClick={() => window.piDesktop.app.restart()}>
 					{t("environment.guideRestartNow")}
 				</Button>
 			)}

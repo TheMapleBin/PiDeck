@@ -23,18 +23,21 @@ const { readImportMetaHead, IMPORT_META_HEAD_BYTES } = mod;
 async function makeImportedFile({ type = "codex_import", paddingMb = 0, marker = true } = {}) {
 	const dir = await mkdtemp(join(tmpdir(), "pideck-import-meta-"));
 	const file = join(dir, "imported.jsonl");
-	const head = [
-		JSON.stringify({ type: "session", version: 3, id: "sess_x", cwd: "/proj" }),
-		...(marker
-			? [JSON.stringify({
-				type,
-				version: 1,
-				sourcePath: "/src.jsonl",
-				sourceMtime: 1756800000000,
-				sourceSize: 998877,
-			})]
-			: []),
-	].join("\n") + "\n";
+	const head =
+		[
+			JSON.stringify({ type: "session", version: 3, id: "sess_x", cwd: "/proj" }),
+			...(marker
+				? [
+						JSON.stringify({
+							type,
+							version: 1,
+							sourcePath: "/src.jsonl",
+							sourceMtime: 1756800000000,
+							sourceSize: 998877,
+						}),
+					]
+				: []),
+		].join("\n") + "\n";
 	await writeFile(file, head);
 	if (paddingMb > 0) {
 		// 追加大量正文：模拟导入产物本身就是大会话（旧实现的触发条件）
@@ -113,10 +116,7 @@ test("readImportMetaHead: 大会话上只读头部固定字节（不得整读，
 		const meta = await headMod.readImportMetaHead(file, "codex_import");
 		assert.equal(meta?.sourceMtime, 1756800000000);
 		assert.equal(meta?.sourceSize, 998877);
-		assert.ok(
-			maxRead <= headMod.IMPORT_META_HEAD_BYTES,
-			`单次读取不得超过头部上限（实际 ${maxRead}，上限 ${headMod.IMPORT_META_HEAD_BYTES}）`,
-		);
+		assert.ok(maxRead <= headMod.IMPORT_META_HEAD_BYTES, `单次读取不得超过头部上限（实际 ${maxRead}，上限 ${headMod.IMPORT_META_HEAD_BYTES}）`);
 	} finally {
 		await rm(dir, { recursive: true, force: true });
 	}
@@ -130,14 +130,7 @@ test("头部上限足够小：与文件体积解耦（常量守卫）", () => {
 
 test("各导入器都走有界读取，源码中不再整读导入产物", async () => {
 	const { readFile } = await import("node:fs/promises");
-	const files = [
-		"src/main/sessions/CodexSessionImporter.ts",
-		"src/main/sessions/ClaudeSessionImporter.ts",
-		"src/main/sessions/OpenCodeSessionImporter.ts",
-		"src/main/sessions/ZCodeSessionImporter.ts",
-		"src/main/sessions/cursorSessionSource.ts",
-		"src/main/sessions/workbuddySessionSource.ts",
-	];
+	const files = ["src/main/sessions/CodexSessionImporter.ts", "src/main/sessions/ClaudeSessionImporter.ts", "src/main/sessions/OpenCodeSessionImporter.ts", "src/main/sessions/ZCodeSessionImporter.ts", "src/main/sessions/cursorSessionSource.ts", "src/main/sessions/workbuddySessionSource.ts"];
 	for (const file of files) {
 		const source = (await readFile(file, "utf8"))
 			// 剥掉注释与字符串，避免文档里提到的反例被误判
@@ -145,11 +138,7 @@ test("各导入器都走有界读取，源码中不再整读导入产物", async
 			.replace(/^\s*\/\/.*$/gm, "")
 			.replace(/"(?:[^"\\]|\\.)*"/g, '""');
 		// 原实现的特征写法：readFile(targetPath, "utf8") 后 split + slice(0, 8)
-		assert.doesNotMatch(
-			source,
-			/readFile\(targetPath/,
-			`${file} 仍在整读导入产物（1GB 会话会让主进程 abort）`,
-		);
+		assert.doesNotMatch(source, /readFile\(targetPath/, `${file} 仍在整读导入产物（1GB 会话会让主进程 abort）`);
 		assert.match(source, /readImportMetaHead/, `${file} 未使用有界读取`);
 	}
 });

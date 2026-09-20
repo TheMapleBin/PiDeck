@@ -4,23 +4,11 @@ import { basename, join, relative, sep } from "node:path";
 import { homedir } from "node:os";
 import { trashPath } from "../fs/trash";
 import { getAppLogger } from "../logging/sharedLogger";
-import type {
-	AppSettings,
-	DisabledExtensionEntry,
-	PiCliUpdateResult,
-	PiExtensionListResult,
-	PiExtensionSummary,
-	PiUpdateCheckResult,
-} from "../../shared/types";
+import type { AppSettings, DisabledExtensionEntry, PiCliUpdateResult, PiExtensionListResult, PiExtensionSummary, PiUpdateCheckResult } from "../../shared/types";
 import type { PiLocator } from "../pi/PiLocator";
 import { toWslLinuxPath, toWindowsHostPath, type WslEnvironment } from "../wsl/WslPaths";
 import type { MainProcessTranslationKey } from "../../shared/i18n/mainProcessCopy";
-import {
-	BUILT_IN_EXTENSIONS,
-	readEffectiveBuiltInExtensionsVersion,
-	resolveBuiltInExtensionPath,
-	type BuiltInExtensionPathRoots,
-} from "./builtInExtensions";
+import { BUILT_IN_EXTENSIONS, readEffectiveBuiltInExtensionsVersion, resolveBuiltInExtensionPath, type BuiltInExtensionPathRoots } from "./builtInExtensions";
 import { MIN_PI_MINOR_VERSION_FOR_EXTENSION_WHITELIST, parsePiMinorVersion } from "./extensionVersionGate";
 // 版本比较与应用更新检查共用同一实现（含预发布语义：beta < 同号正式版）。
 import { compareVersions } from "../utils/versionCompare";
@@ -36,10 +24,7 @@ export { BUILT_IN_EXTENSIONS } from "./builtInExtensions";
 export const FILTERED_SUFFIX = " (filtered)";
 
 type SettingsProvider = () => AppSettings;
-type ExtensionCopy = (
-	key: MainProcessTranslationKey,
-	params?: Record<string, string | number>,
-) => string;
+type ExtensionCopy = (key: MainProcessTranslationKey, params?: Record<string, string | number>) => string;
 
 /**
  * 通过 pi CLI 管理已安装扩展，避免桌面端直接改写 pi settings 导致和 CLI 行为不一致。
@@ -73,9 +58,7 @@ export class ExtensionManager {
 		/** 获取 PiDeck 桌面设置（含 removedBuiltInExtensions） */
 		private readonly getPiDeckSettings: () => AppSettings = getSettings,
 		/** 保存 PiDeck 桌面设置的部分更新 */
-		private readonly patchPiDeckSettings: (
-			patch: Partial<AppSettings>,
-		) => Promise<AppSettings> = async () => getSettings(),
+		private readonly patchPiDeckSettings: (patch: Partial<AppSettings>) => Promise<AppSettings> = async () => getSettings(),
 		private readonly translate: ExtensionCopy = () => "Extension operation failed.",
 		/** 内置扩展磁盘根：提供后可为内置扩展补齐真实路径，使「打开目录」可用。 */
 		private readonly builtInRoots: BuiltInExtensionPathRoots | undefined = undefined,
@@ -130,10 +113,7 @@ export class ExtensionManager {
 		this.listInflightForce = forceRefresh;
 		const request = this.loadList(forceRefresh)
 			.then((result) => {
-				if (
-					generation !== this.listCacheGeneration ||
-					requestSequence !== this.listRequestSequence
-				) {
+				if (generation !== this.listCacheGeneration || requestSequence !== this.listRequestSequence) {
 					// 失效前或被更强刷新取代的调用方也必须拿到最新列表，
 					// 否则慢到的轻量扫描会覆盖已包含版本信息的强制刷新缓存。
 					return this.list(forceRefresh);
@@ -157,9 +137,7 @@ export class ExtensionManager {
 		const raw = await this.runPi(["list"], 20_000);
 		const parsed = this.parseListOutput(raw);
 		// npm view 是扩展页变慢的主因；默认列表先跳过，只有手动刷新时再查更新。
-		const piInstalled = includeVersionInfo
-			? await Promise.all(parsed.map((extension) => this.enrichExtensionVersion(extension)))
-			: parsed;
+		const piInstalled = includeVersionInfo ? await Promise.all(parsed.map((extension) => this.enrichExtensionVersion(extension))) : parsed;
 
 		// 扫描本地自动发现的扩展（~/.pi/agent/extensions/ 下的 .ts/.js 文件、
 		// index.ts/index.js 目录和 pi.extensions manifest），pi list 只列出通过
@@ -184,9 +162,7 @@ export class ExtensionManager {
 				merged.push({
 					id: `local:${builtIn}`,
 					source: builtIn,
-					path: this.builtInRoots
-						? resolveBuiltInExtensionPath(builtIn, this.builtInRoots)
-						: undefined,
+					path: this.builtInRoots ? resolveBuiltInExtensionPath(builtIn, this.builtInRoots) : undefined,
 					scope: "user",
 					builtIn: true,
 				});
@@ -197,17 +173,11 @@ export class ExtensionManager {
 		// 必须在冲突检测前初始化：后续逻辑会写回 removedBuiltInExtensions 并删磁盘文件。
 		const removedBuiltIn = new Set(this.getPiDeckSettings().removedBuiltInExtensions ?? []);
 		// 用户禁用的非内置扩展：按 scope+source 匹配（同名可在 user/project 两级独立开关）。
-		const disabledExtKeys = new Set(
-			(this.getPiDeckSettings().disabledExtensions ?? []).map(
-				(entry) => `${entry.scope}:${entry.source}`,
-			),
-		);
+		const disabledExtKeys = new Set((this.getPiDeckSettings().disabledExtensions ?? []).map((entry) => `${entry.scope}:${entry.source}`));
 		// 内置扩展版本：包级版本号（extensions-manifest.json，不跟 PiDeck 应用版本走），
 		// 覆盖层（热更新）优先。逐行写入而非只在补齐分支赋值——内置条目可能来自
 		// pi list、本地目录扫描、兜底补齐三条路径，版本只认「当前生效的那一份」。
-		const builtInVersion = this.builtInRoots
-			? readEffectiveBuiltInExtensionsVersion(this.builtInRoots)
-			: null;
+		const builtInVersion = this.builtInRoots ? readEffectiveBuiltInExtensionsVersion(this.builtInRoots) : null;
 		for (const ext of merged) {
 			if (ext.builtIn) {
 				ext.enabled = !removedBuiltIn.has(ext.source);
@@ -225,12 +195,7 @@ export class ExtensionManager {
 		let removedChanged = false;
 		for (const [builtInName, keyword] of BUILT_IN_CONFLICT_KEYWORDS) {
 			if (removedBuiltIn.has(builtInName)) continue; // 已移除的不重复检测
-			const conflicting = merged.find(
-				(ext) =>
-					!ext.builtIn &&
-					ext.enabled !== false &&
-					extensionNameMatches(ext.source, keyword),
-			);
+			const conflicting = merged.find((ext) => !ext.builtIn && ext.enabled !== false && extensionNameMatches(ext.source, keyword));
 			if (conflicting) {
 				removedBuiltIn.add(builtInName);
 				removedChanged = true;
@@ -318,10 +283,7 @@ export class ExtensionManager {
 	 * 按 source 匹配）；2) PiDeck settings 的 scoped 条目——只清与本次卸载相同作用域的条目，
 	 * 避免「卸载项目版但保留用户版禁用状态」被误清。
 	 */
-	private async clearDisabledEntry(
-		source: string,
-		scope: PiExtensionSummary["scope"] = "user",
-	): Promise<void> {
+	private async clearDisabledEntry(source: string, scope: PiExtensionSummary["scope"] = "user"): Promise<void> {
 		try {
 			const settingsPath = join(this.homeDir, ".pi", "agent", "settings.json");
 			const raw = await readFile(settingsPath, "utf8");
@@ -336,9 +298,7 @@ export class ExtensionManager {
 		}
 		try {
 			const current = this.getPiDeckSettings().disabledExtensions ?? [];
-			const next = current.filter(
-				(entry) => !(entry.scope === scope && entry.source === source),
-			);
+			const next = current.filter((entry) => !(entry.scope === scope && entry.source === source));
 			if (next.length !== current.length) {
 				await this.patchPiDeckSettings({ disabledExtensions: next });
 			}
@@ -421,11 +381,7 @@ export class ExtensionManager {
 		if (this.isLocalFileExtension(normalized)) {
 			await this.removeLocalExtension(normalized);
 		} else {
-			await this.runPi([
-				"remove",
-				normalized,
-				...(scope === "project" ? ["-l"] : []),
-			], 30_000);
+			await this.runPi(["remove", normalized, ...(scope === "project" ? ["-l"] : [])], 30_000);
 		}
 		await this.clearDisabledEntry(normalized, scope);
 		// 列表已变，清缓存，避免 UI 继续读到旧安装态。
@@ -449,12 +405,7 @@ export class ExtensionManager {
 	async checkPiUpdate(): Promise<PiUpdateCheckResult> {
 		try {
 			const settings = this.getSettings();
-			const status = await this.locator.check(
-				settings.customPiPath,
-				settings.wslEnabled,
-				settings.wslDistro,
-				settings.wslUser,
-			);
+			const status = await this.locator.check(settings.customPiPath, settings.wslEnabled, settings.wslDistro, settings.wslUser);
 			if (!status.installed) return { hasUpdate: false, error: this.translate("mainExtension.piNotInstalled") };
 			const latestVersion = await this.npmViewVersion("@earendil-works/pi-coding-agent");
 			return {
@@ -473,10 +424,12 @@ export class ExtensionManager {
 		if (!check.hasUpdate) {
 			return {
 				command: "pi update pi",
-				output: check.error ?? this.translate("mainExtension.noUpdate", {
-					current: check.currentVersion ?? "unknown",
-					latest: check.latestVersion ?? "unknown",
-				}),
+				output:
+					check.error ??
+					this.translate("mainExtension.noUpdate", {
+						current: check.currentVersion ?? "unknown",
+						latest: check.latestVersion ?? "unknown",
+					}),
 				updated: false,
 			};
 		}
@@ -503,10 +456,7 @@ export class ExtensionManager {
 		if (!extension.source.toLowerCase().startsWith("npm:")) return extension;
 		const packageName = extension.source.replace(/^npm:/i, "");
 		try {
-			const [currentVersion, latestVersion] = await Promise.all([
-				this.readInstalledVersion(extension.path),
-				this.npmViewVersion(packageName),
-			]);
+			const [currentVersion, latestVersion] = await Promise.all([this.readInstalledVersion(extension.path), this.npmViewVersion(packageName)]);
 			return {
 				...extension,
 				currentVersion,
@@ -521,9 +471,7 @@ export class ExtensionManager {
 
 	private async readInstalledVersion(path?: string) {
 		if (!path) return undefined;
-		const hostPath = this.wslEnvironment
-			? toWindowsHostPath(path, this.wslEnvironment)
-			: path;
+		const hostPath = this.wslEnvironment ? toWindowsHostPath(path, this.wslEnvironment) : path;
 		const raw = await readFile(join(hostPath, "package.json"), "utf8");
 		const parsed = JSON.parse(raw) as { version?: string };
 		return parsed.version;
@@ -564,11 +512,7 @@ export class ExtensionManager {
 	 * 启动 RPC 时由白名单模式生效；enabled=true 从列表移除。
 	 * 不写 pi settings.json：pi 0.82.x 不支持 disabledExtensions，写了也不生效。
 	 */
-	async setEnabled(
-		source: string,
-		enabled: boolean,
-		scope: PiExtensionSummary["scope"] = "user",
-	): Promise<void> {
+	async setEnabled(source: string, enabled: boolean, scope: PiExtensionSummary["scope"] = "user"): Promise<void> {
 		// 禁用动作受版本门槛约束：白名单机制（--no-extensions + -e）依赖 pi >= 0.60
 		// 的目录/包源语义，过低版本禁用不生效（还会导致白名单降级），这里直接拒绝并提示。
 		// 启用/移除禁用条目无风险（只是回到默认发现），不做检查；版本未知（getPiVersion 为
@@ -577,9 +521,7 @@ export class ExtensionManager {
 			const version = await this.getPiVersion();
 			const minor = parsePiMinorVersion(version);
 			if (minor !== null && minor < MIN_PI_MINOR_VERSION_FOR_EXTENSION_WHITELIST) {
-				throw new Error(
-					this.translate("mainExtension.piVersionTooOldForDisable", { version: version ?? "?" }),
-				);
+				throw new Error(this.translate("mainExtension.piVersionTooOldForDisable", { version: version ?? "?" }));
 			}
 		}
 		const current = this.getPiDeckSettings().disabledExtensions ?? [];
@@ -641,12 +583,7 @@ export class ExtensionManager {
 	private async detectPiVersion(): Promise<string | null> {
 		try {
 			const settings = this.getSettings();
-			const status = await this.locator.check(
-				settings.customPiPath,
-				settings.wslEnabled,
-				settings.wslDistro,
-				settings.wslUser,
-			);
+			const status = await this.locator.check(settings.customPiPath, settings.wslEnabled, settings.wslDistro, settings.wslUser);
 			if (status.installed && status.version) {
 				this.piVersion = status.version;
 				return status.version;
@@ -657,14 +594,10 @@ export class ExtensionManager {
 		return null;
 	}
 
-	private async runPi(
-		args: string[],
-		timeout: number,
-		options: { offline?: boolean; cwd?: string; projectInstall?: boolean } = {},
-	): Promise<string> {
+	private async runPi(args: string[], timeout: number, options: { offline?: boolean; cwd?: string; projectInstall?: boolean } = {}): Promise<string> {
 		// 项目安装必须让 pi 读取已通过 PiDeck trust 校验的项目资源；--no-approve 会绕过该路径。
 		const finalArgs = [...args];
-		if (!options.projectInstall && await this.noApproveSupported()) {
+		if (!options.projectInstall && (await this.noApproveSupported())) {
 			finalArgs.push("--no-approve");
 		}
 		const settings = this.getSettings();
@@ -672,9 +605,7 @@ export class ExtensionManager {
 		if (settings.wslEnabled && settings.wslDistro && settings.wslUser) {
 			await this.locator.warmWslCommand(settings.wslDistro, settings.wslUser);
 		}
-		const runtimeCwd = options.cwd && this.wslEnvironment
-			? toWslLinuxPath(options.cwd, this.wslEnvironment)
-			: options.cwd;
+		const runtimeCwd = options.cwd && this.wslEnvironment ? toWslLinuxPath(options.cwd, this.wslEnvironment) : options.cwd;
 		const command = this.locator.resolveCommand(settings.customPiPath, settings.wslEnabled, settings.wslDistro, settings.wslUser);
 		const invocation = this.locator.createInvocation(command, finalArgs, {
 			wslCwd: this.wslEnvironment && runtimeCwd ? runtimeCwd : undefined,
@@ -737,9 +668,7 @@ export class ExtensionManager {
 				// source 必须剥离该后缀：卸载/更新/版本查询都以 source 为参数，
 				// 带后缀时 pi remove / pi update / npm view 都找不到目标。
 				const isFiltered = trimmed.endsWith(FILTERED_SUFFIX);
-				const source = isFiltered
-					? trimmed.slice(0, -FILTERED_SUFFIX.length)
-					: trimmed;
+				const source = isFiltered ? trimmed.slice(0, -FILTERED_SUFFIX.length) : trimmed;
 				pending = {
 					id: `${scope}:${source}`,
 					source,

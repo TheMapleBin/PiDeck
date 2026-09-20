@@ -2,30 +2,11 @@ import { app } from "electron";
 import { randomUUID } from "node:crypto";
 import { open, rm, utimes } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import type {
-	CursorImportReport,
-	CursorImportResult,
-	CursorImportStatus,
-	CursorSessionSummary,
-} from "../../shared/types";
+import type { CursorImportReport, CursorImportResult, CursorImportStatus, CursorSessionSummary } from "../../shared/types";
 import { convertCursorSession, convertCursorSessionTo } from "./cursorSessionConvert";
 import { defaultSessionImportCopy, type SessionImportCopy } from "./SessionImportCopy";
-import {
-	collectCursorTranscripts,
-	ensureProjectSessionDir,
-	getCursorProjectDir,
-	getCursorTargetPath,
-	readCursorImportMeta,
-	readCursorSessionHead,
-	type ParsedCursorSession,
-} from "./cursorSessionSource";
-import {
-	createBufferedLineSink,
-	mapWithConcurrency,
-	readJsonlObjects,
-	renameWithRetry,
-	SESSION_SCAN_CONCURRENCY,
-} from "./sessionSourceHead";
+import { collectCursorTranscripts, ensureProjectSessionDir, getCursorProjectDir, getCursorTargetPath, readCursorImportMeta, readCursorSessionHead, type ParsedCursorSession } from "./cursorSessionSource";
+import { createBufferedLineSink, mapWithConcurrency, readJsonlObjects, renameWithRetry, SESSION_SCAN_CONCURRENCY } from "./sessionSourceHead";
 
 /**
  * 导入 Cursor Agent（~/.cursor/projects/<slug>/agent-transcripts）会话为 pi 原生会话文件。
@@ -43,15 +24,9 @@ export class CursorSessionImporter {
 		const files = await collectCursorTranscripts(projectDir).catch(() => []);
 		// 有界并发 + 只读头部：源 transcript 可达几十 MB~GB，
 		// 整读（尤其是并发整读）会让主进程 384MB 堆 abort，表现为应用闪退。
-		const sessions = await mapWithConcurrency(files, SESSION_SCAN_CONCURRENCY, (file) =>
-			readCursorSessionHead(this.cursorRoot, file).catch(() => null),
-		);
+		const sessions = await mapWithConcurrency(files, SESSION_SCAN_CONCURRENCY, (file) => readCursorSessionHead(this.cursorRoot, file).catch(() => null));
 
-		const summaries = await Promise.all(
-			sessions
-				.filter((session): session is ParsedCursorSession => Boolean(session))
-				.map((session) => this.toSummary(session, projectPath)),
-		);
+		const summaries = await Promise.all(sessions.filter((session): session is ParsedCursorSession => Boolean(session)).map((session) => this.toSummary(session, projectPath)));
 
 		return summaries.sort((a, b) => b.updatedAt - a.updatedAt);
 	}
@@ -68,10 +43,7 @@ export class CursorSessionImporter {
 		};
 	}
 
-	private async importOne(
-		projectPath: string,
-		sourcePath: string,
-	): Promise<CursorImportResult> {
+	private async importOne(projectPath: string, sourcePath: string): Promise<CursorImportResult> {
 		let handle: Awaited<ReturnType<typeof open>> | undefined;
 		let tempPath: string | undefined;
 		try {
@@ -127,10 +99,7 @@ export class CursorSessionImporter {
 		}
 	}
 
-	private async toSummary(
-		session: ParsedCursorSession,
-		projectPath: string,
-	): Promise<CursorSessionSummary> {
+	private async toSummary(session: ParsedCursorSession, projectPath: string): Promise<CursorSessionSummary> {
 		const targetPath = getCursorTargetPath(this.piRoot, projectPath, session);
 		const importMeta = await readCursorImportMeta(targetPath);
 		const converted = await convertCursorSession({
@@ -138,12 +107,7 @@ export class CursorSessionImporter {
 			session,
 			translate: this.translate,
 		});
-		const status: CursorImportStatus = !importMeta
-			? "new"
-			: importMeta.sourceMtime === session.sourceMtime &&
-			  importMeta.sourceSize === session.sourceSize
-			? "current"
-			: "outdated";
+		const status: CursorImportStatus = !importMeta ? "new" : importMeta.sourceMtime === session.sourceMtime && importMeta.sourceSize === session.sourceSize ? "current" : "outdated";
 
 		return {
 			id: session.meta.sessionId,

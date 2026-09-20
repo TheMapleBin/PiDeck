@@ -1,17 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { AppFontSizeMode, PetAggregateState, PetManifest, PetMode, PetNotification } from "@shared/types";
-import {
-	NOTIFICATION_GAP,
-	NOTIFICATION_MAX_LINES,
-	NOTIFICATION_MAX_WIDTH,
-	NOTIFICATION_PAD_X,
-	NOTIFICATION_PAD_Y,
-	NOTIFICATION_STROKE,
-	NOTIFICATION_FONT_SIZE_PX,
-	PET_BASE_H,
-	PET_BASE_W,
-	layoutNotificationSegments,
-} from "@shared/petNotificationLayout";
+import { NOTIFICATION_GAP, NOTIFICATION_MAX_LINES, NOTIFICATION_MAX_WIDTH, NOTIFICATION_PAD_X, NOTIFICATION_PAD_Y, NOTIFICATION_STROKE, NOTIFICATION_FONT_SIZE_PX, PET_BASE_H, PET_BASE_W, layoutNotificationSegments } from "@shared/petNotificationLayout";
 import { type SpriteSheet, MODE_ROW, MODE_FRAMES, CELL_W, CELL_H } from "./PetSpriteSheet";
 
 /**
@@ -110,16 +99,16 @@ export function PetOverlay({ sprite, state, notification, scale, fontMode, fontS
 		const fps = mode === "idle" ? IDLE_FPS : DEFAULT_FPS;
 		// 系统偏好减少动态（prefers-reduced-motion）时降到约 1/4 帧率，接近定格：
 		// 宠物动画纯装饰，尊重偏好并省电；通知气泡是低频功能提示，不参与降帧。
-		const reducedMotion =
-			typeof window.matchMedia === "function" &&
-			window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+		const reducedMotion = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 		const frameMs = reducedMotion ? 1000 / (fps / 4) : 1000 / fps;
 		const pauseMs = PAUSE_MS[mode] ?? 0;
 
-		let col = 0, nextCol = 1;
+		let col = 0,
+			nextCol = 1;
 		let lastT = performance.now();
 		let acc = 0;
-		let paused = false, pauseAcc = 0;
+		let paused = false,
+			pauseAcc = 0;
 		let alive = true;
 		let timerId: number | undefined;
 		let notifAnimating = false;
@@ -132,17 +121,7 @@ export function PetOverlay({ sprite, state, notification, scale, fontMode, fontS
 			const sy = canvas.height - spriteH * dpr;
 			ctx.imageSmoothingEnabled = true;
 			ctx.imageSmoothingQuality = "high";
-			ctx.drawImage(
-				sprite.image,
-				c * CELL_W,
-				row * CELL_H,
-				CELL_W,
-				CELL_H,
-				sx,
-				sy,
-				spriteW * dpr,
-				spriteH * dpr,
-			);
+			ctx.drawImage(sprite.image, c * CELL_W, row * CELL_H, CELL_W, CELL_H, sx, sy, spriteW * dpr, spriteH * dpr);
 		};
 
 		const drawNotif = () => {
@@ -167,9 +146,7 @@ export function PetOverlay({ sprite, state, notification, scale, fontMode, fontS
 
 			// 分段着色：标题加中文引号（黑色）+ 状态词状态色；缺省 title/status 时退化为整行状态色
 			const displayTitle = n.title?.trim() ? `“${n.title}”` : (n.title ?? "");
-			const rows = n.title && n.status
-				? layoutNotificationSegments(measure, displayTitle, n.status, maxW - padX * 2 * dpr - stroke * 2 * dpr, NOTIFICATION_MAX_LINES)
-				: [[{ text: n.text, kind: "status" as const }]];
+			const rows = n.title && n.status ? layoutNotificationSegments(measure, displayTitle, n.status, maxW - padX * 2 * dpr - stroke * 2 * dpr, NOTIFICATION_MAX_LINES) : [[{ text: n.text, kind: "status" as const }]];
 			const lineH = fontSize * 1.5;
 			const lineMaxW = Math.max(...rows.map((segments) => segments.reduce((w, s) => w + measure(s.text), 0)));
 			const bw = Math.min(lineMaxW, maxW) + padX * 2 * dpr + stroke * 2 * dpr;
@@ -240,7 +217,11 @@ export function PetOverlay({ sprite, state, notification, scale, fontMode, fontS
 				// 暂停期画面完全静止：只计时，不重绘
 				pauseAcc += delta;
 				if (pauseAcc >= pauseMs) {
-					paused = false; pauseAcc = 0; nextCol = 1; col = 0; acc = 0;
+					paused = false;
+					pauseAcc = 0;
+					nextCol = 1;
+					col = 0;
+					acc = 0;
 					needDraw = true;
 					nextDelay = frameMs;
 				} else {
@@ -254,7 +235,11 @@ export function PetOverlay({ sprite, state, notification, scale, fontMode, fontS
 					acc -= frameMs;
 					col = nextCol;
 					nextCol = (nextCol + 1) % totalFrames;
-					if (nextCol === 0 && pauseMs > 0) { paused = true; pauseAcc = 0; break; }
+					if (nextCol === 0 && pauseMs > 0) {
+						paused = true;
+						pauseAcc = 0;
+						break;
+					}
 				}
 				needDraw = col !== prevCol;
 				nextDelay = Math.max(1, frameMs - (acc % frameMs));
@@ -270,10 +255,7 @@ export function PetOverlay({ sprite, state, notification, scale, fontMode, fontS
 			notifAnimating = false;
 			if (n) {
 				const elapsed = now - n.timestamp;
-				notifAnimating =
-					!n.persistent &&
-					elapsed >= 0 &&
-					(elapsed < FADE_IN_MS || elapsed > TOTAL_MS - FADE_OUT_MS);
+				notifAnimating = !n.persistent && elapsed >= 0 && (elapsed < FADE_IN_MS || elapsed > TOTAL_MS - FADE_OUT_MS);
 				if (notifAnimating) needDraw = true;
 			}
 
@@ -289,7 +271,10 @@ export function PetOverlay({ sprite, state, notification, scale, fontMode, fontS
 		tick();
 		lastDrawnNotif = notifRef.current;
 		timerId = window.setTimeout(check, frameMs);
-		return () => { alive = false; if (timerId !== undefined) window.clearTimeout(timerId); };
+		return () => {
+			alive = false;
+			if (timerId !== undefined) window.clearTimeout(timerId);
+		};
 	}, [sprite, mode, scale, fontMode, fontStack]);
 
 	if (mode === "hidden") return <div style={{ width: "100%", height: "100%", background: "transparent" }} />;
@@ -304,11 +289,16 @@ export function PetOverlay({ sprite, state, notification, scale, fontMode, fontS
 // ═══ 工具函数 ═══
 
 function rndRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
-	ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y);
-	ctx.arcTo(x + w, y, x + w, y + r, r); ctx.lineTo(x + w, y + h - r);
-	ctx.arcTo(x + w, y + h, x + w - r, y + h, r); ctx.lineTo(x + r, y + h);
-	ctx.arcTo(x, y + h, x, y + h - r, r); ctx.lineTo(x, y + r);
-	ctx.arcTo(x, y, x + r, y, r); ctx.closePath();
+	ctx.moveTo(x + r, y);
+	ctx.lineTo(x + w - r, y);
+	ctx.arcTo(x + w, y, x + w, y + r, r);
+	ctx.lineTo(x + w, y + h - r);
+	ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+	ctx.lineTo(x + r, y + h);
+	ctx.arcTo(x, y + h, x, y + h - r, r);
+	ctx.lineTo(x, y + r);
+	ctx.arcTo(x, y, x + r, y, r);
+	ctx.closePath();
 }
 
 // ═══ 降级（无素材时） ═══
@@ -338,9 +328,7 @@ function FallbackCanvas({ mode }: { mode: PetMode }) {
 		const fb = FALLBACK[mode] ?? FALLBACK.idle;
 		// 有意义的动画态才持续 rAF；idle/waiting/review 静止（原实现这些模式
 		// 也只是 ±3% 幅度的慢脉动，视觉可忽略，却常驻 60fps 重绘）
-		const animated =
-			mode === "running" || mode === "failed" || mode === "waving" ||
-			mode === "jumping" || mode === "running-right" || mode === "running-left";
+		const animated = mode === "running" || mode === "failed" || mode === "waving" || mode === "jumping" || mode === "running-right" || mode === "running-left";
 		let alive = true;
 		let raf = 0;
 		let ro: ResizeObserver | undefined;
@@ -348,10 +336,16 @@ function FallbackCanvas({ mode }: { mode: PetMode }) {
 		// 绘制前同步像素尺寸，跟随窗口 resize/DPI 变化（原实现只在挂载时量一次）
 		const draw = (f: number) => {
 			const dpr = window.devicePixelRatio || 1;
-			const W = Math.round(c.clientWidth * dpr), H = Math.round(c.clientHeight * dpr);
-			if (c.width !== W || c.height !== H) { c.width = W; c.height = H; }
+			const W = Math.round(c.clientWidth * dpr),
+				H = Math.round(c.clientHeight * dpr);
+			if (c.width !== W || c.height !== H) {
+				c.width = W;
+				c.height = H;
+			}
 			if (W === 0 || H === 0) return;
-			const cx = W / 2, cy = H / 2, r = Math.min(W, H) * 0.36;
+			const cx = W / 2,
+				cy = H / 2,
+				r = Math.min(W, H) * 0.36;
 			const pulse = animated ? 1 + 0.06 * Math.sin(f * 0.8) : 1;
 			ctx.clearRect(0, 0, W, H);
 			ctx.beginPath();
@@ -362,7 +356,8 @@ function FallbackCanvas({ mode }: { mode: PetMode }) {
 			ctx.globalAlpha = 1;
 			if (fb.emoji) {
 				ctx.font = `${Math.round(r * 0.9)}px system-ui, sans-serif`;
-				ctx.textAlign = "center"; ctx.textBaseline = "middle";
+				ctx.textAlign = "center";
+				ctx.textBaseline = "middle";
 				ctx.fillText(fb.emoji, cx, cy);
 			}
 		};
@@ -378,11 +373,17 @@ function FallbackCanvas({ mode }: { mode: PetMode }) {
 			// 静止模式：只画一帧；尺寸变化时重画（mode 变化会重启本 effect）
 			draw(0);
 			if (typeof ResizeObserver !== "undefined") {
-				ro = new ResizeObserver(() => { if (alive) draw(++frame.current); });
+				ro = new ResizeObserver(() => {
+					if (alive) draw(++frame.current);
+				});
 				ro.observe(c);
 			}
 		}
-		return () => { alive = false; ro?.disconnect(); cancelAnimationFrame(raf); };
+		return () => {
+			alive = false;
+			ro?.disconnect();
+			cancelAnimationFrame(raf);
+		};
 	}, [mode]);
 
 	return <canvas ref={ref} style={{ width: "100%", height: "100%", display: "block" }} />;

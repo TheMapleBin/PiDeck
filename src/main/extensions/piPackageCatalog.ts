@@ -7,11 +7,7 @@
  * 不依赖 electron，解析纯函数可单测；目录结构变动时只需改 parse 部分。
  */
 
-import type {
-	PiPackageCatalog,
-	PiPackageCatalogItem,
-	PiPackageCatalogQuery,
-} from "../../shared/types";
+import type { PiPackageCatalog, PiPackageCatalogItem, PiPackageCatalogQuery } from "../../shared/types";
 
 const CATALOG_URL = "https://pi.dev/packages";
 /** 缓存有效期：目录数据变化不频繁，10 分钟内复用上次结果，避免每次切页都打官网。 */
@@ -25,10 +21,7 @@ const DEFAULT_PAGE_SIZE = 50;
 
 export type CatalogSort = "downloads" | "recent";
 
-type CatalogFetcher = (
-	url: string,
-	init: { signal: AbortSignal; headers: Record<string, string> },
-) => Promise<{ ok: boolean; status: number; text: () => Promise<string> }>;
+type CatalogFetcher = (url: string, init: { signal: AbortSignal; headers: Record<string, string> }) => Promise<{ ok: boolean; status: number; text: () => Promise<string> }>;
 
 /** 按查询参数缓存：同参数 10 分钟内不重复请求官网。 */
 const cache = new Map<string, { atMs: number; catalog: PiPackageCatalog }>();
@@ -81,8 +74,7 @@ export function parsePackageCatalogHtml(html: string): PiPackageCatalogItem[] {
 		const card = cardTags[index]!;
 		const tag = card[0];
 		const bodyStart = (card.index ?? 0) + tag.length;
-		const bodyEnd =
-			index + 1 < cardTags.length ? (cardTags[index + 1]!.index ?? html.length) : html.length;
+		const bodyEnd = index + 1 < cardTags.length ? (cardTags[index + 1]!.index ?? html.length) : html.length;
 		const body = html.slice(bodyStart, bodyEnd);
 
 		const name = tagAttribute(tag, "data-package-name");
@@ -108,9 +100,7 @@ export function parsePackageCatalogHtml(html: string): PiPackageCatalogItem[] {
 
 		items.push({
 			name,
-			description: descriptionMatch
-				? decodeHtmlEntities(stripTags(descriptionMatch[1] ?? "")).trim()
-				: "",
+			description: descriptionMatch ? decodeHtmlEntities(stripTags(descriptionMatch[1] ?? "")).trim() : "",
 			...(author ? { author } : {}),
 			types: (tagAttribute(tag, "data-package-types") ?? "").split(/\s+/).filter(Boolean),
 			...(downloadsPerMonth !== undefined ? { downloadsPerMonth } : {}),
@@ -169,8 +159,7 @@ function cacheKey(query: PiPackageCatalogQuery): string {
 }
 
 /** 归一化查询参数：trim 搜索词，sort 只认 downloads/recent。 */
-function normalizeQuery(query: PiPackageCatalogQuery): Required<Pick<PiPackageCatalogQuery, "page">> &
-	Pick<PiPackageCatalogQuery, "query" | "type" | "sort"> {
+function normalizeQuery(query: PiPackageCatalogQuery): Required<Pick<PiPackageCatalogQuery, "page">> & Pick<PiPackageCatalogQuery, "query" | "type" | "sort"> {
 	return {
 		page: query.page ?? 1,
 		query: (query.query ?? "").trim(),
@@ -189,25 +178,11 @@ function createTimeoutSignal(ms: number): { signal: AbortSignal; dispose: () => 
 	};
 }
 
-function buildCatalog(
-	items: PiPackageCatalogItem[],
-	query: PiPackageCatalogQuery,
-	meta: ReturnType<typeof parseCatalogIndexMeta>,
-	generatedAt: number,
-	fromCache: boolean,
-): PiPackageCatalog {
-	const inferredPageSize =
-		meta.rangeEnd !== undefined && meta.rangeStart !== undefined
-			? meta.rangeEnd - meta.rangeStart + 1
-			: items.length;
+function buildCatalog(items: PiPackageCatalogItem[], query: PiPackageCatalogQuery, meta: ReturnType<typeof parseCatalogIndexMeta>, generatedAt: number, fromCache: boolean): PiPackageCatalog {
+	const inferredPageSize = meta.rangeEnd !== undefined && meta.rangeStart !== undefined ? meta.rangeEnd - meta.rangeStart + 1 : items.length;
 	const pageSize = inferredPageSize > 0 ? inferredPageSize : DEFAULT_PAGE_SIZE;
 	const total = meta.total ?? items.length;
-	const lastPage = Math.max(
-		1,
-		query.page ?? 1,
-		meta.lastPage,
-		pageSize > 0 && total > 0 ? Math.ceil(total / pageSize) : 1,
-	);
+	const lastPage = Math.max(1, query.page ?? 1, meta.lastPage, pageSize > 0 && total > 0 ? Math.ceil(total / pageSize) : 1);
 	return {
 		generatedAt,
 		fromCache,

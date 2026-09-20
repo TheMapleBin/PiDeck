@@ -24,20 +24,13 @@ export const PROBE_AGENT_DIR_ENV = "PI_CODING_AGENT_DIR";
  * 构建临时 agent 目录的文件内容。调用方负责 mkdtemp/写盘/删除。
  * settings 传正式 settings.json 的解析值；空对象时不生成 settingsJson（少写一个文件）。
  */
-export function buildProbeDraftFiles(
-	providerName: string,
-	provider: Record<string, unknown>,
-	apiKey?: string,
-	settings?: Record<string, unknown>,
-): { modelsJson: string; authJson: string; settingsJson?: string } {
+export function buildProbeDraftFiles(providerName: string, provider: Record<string, unknown>, apiKey?: string, settings?: Record<string, unknown>): { modelsJson: string; authJson: string; settingsJson?: string } {
 	const modelsFile = { providers: { [providerName]: provider } };
 	const authFile = apiKey ? { [providerName]: { type: "api_key", key: apiKey } } : {};
 	return {
 		modelsJson: JSON.stringify(modelsFile, null, 2),
 		authJson: JSON.stringify(authFile, null, 2),
-		...(settings && Object.keys(settings).length > 0
-			? { settingsJson: JSON.stringify(settings, null, 2) }
-			: {}),
+		...(settings && Object.keys(settings).length > 0 ? { settingsJson: JSON.stringify(settings, null, 2) } : {}),
 	};
 }
 

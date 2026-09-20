@@ -34,11 +34,7 @@ export const EXTENSION_ERROR_I18N_KEY = "diagnostic.extensionError";
  * 重试状态提示（已调度/成功）不是失败，每次重试都刷新同一条消息，铺到面板会反复跳动刷屏。
  * retryFailed 本身是失败，走时间线留痕。
  */
-export const TOAST_ONLY_FAILURE_KEYS = new Set([
-	"diagnostic.retryScheduled",
-	"diagnostic.retryScheduledAfterDelay",
-	"diagnostic.retrySucceeded",
-]);
+export const TOAST_ONLY_FAILURE_KEYS = new Set(["diagnostic.retryScheduled", "diagnostic.retryScheduledAfterDelay", "diagnostic.retrySucceeded"]);
 
 /** toast 里附带的 debugDetails 上限，避免整段堆栈撑爆通知。 */
 const MAX_TOAST_DETAIL_CHARS = 280;
@@ -92,10 +88,7 @@ export function failureRetrySignature(message: ChatMessage): string | undefined 
 	if (!key) return undefined;
 	const meta = message.meta as Record<string, unknown> | undefined;
 	const params = meta?.i18nParams;
-	const count =
-		typeof params === "object" && params
-			? String((params as Record<string, unknown>).count ?? meta?.attempt ?? "")
-			: String(meta?.attempt ?? "");
+	const count = typeof params === "object" && params ? String((params as Record<string, unknown>).count ?? meta?.attempt ?? "") : String(meta?.attempt ?? "");
 	return `${message.id}:${key}:${count}`;
 }
 
@@ -201,13 +194,7 @@ export function composeFailureNotice(message: ChatMessage): FailureNoticeContent
 	}
 
 	return {
-		title: t(
-			isRetry
-				? "diagnostic.retryToastTitle"
-				: isExtensionError
-					? "diagnostic.extensionErrorToastTitle"
-					: "diagnostic.failureToastTitle",
-		),
+		title: t(isRetry ? "diagnostic.retryToastTitle" : isExtensionError ? "diagnostic.extensionErrorToastTitle" : "diagnostic.failureToastTitle"),
 		body,
 		kind: isRetry ? "info" : "error",
 		duration: isRetry ? 2200 : 6000,

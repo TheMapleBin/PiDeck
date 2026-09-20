@@ -3,11 +3,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { useEffect, useState, type ReactNode } from "react";
 import { ContentTabs } from "./ContentTabs";
 import { Check, FileEdit, Pencil, ShoppingBag, Sparkles, ToggleLeft, ToggleRight, Trash2, X, Store, Globe } from "lucide-react";
-import type {
-	PiSkillListResult,
-	PiSkillSummary,
-	ProjectResourceOverrides,
-} from "../../../shared/types";
+import type { PiSkillListResult, PiSkillSummary, ProjectResourceOverrides } from "../../../shared/types";
 import { t } from "../i18n";
 import { SkillStoreTab } from "./SkillStoreTab";
 import { SkillHubStorePanel } from "./SkillHubStorePanel";
@@ -92,20 +88,15 @@ export function SkillsTab(props: {
 						compact
 						fill={false}
 						value={storeSource}
-						onValueChange={(v) => { if (v === "skillhub" || v === "promptchat") setStoreSource(v); }}
+						onValueChange={(v) => {
+							if (v === "skillhub" || v === "promptchat") setStoreSource(v);
+						}}
 						items={[
 							{ value: "skillhub", label: t("config.tabs.skillHub"), icon: <Store size={14} strokeWidth={1.8} /> },
 							{ value: "promptchat", label: "Prompt.chat", icon: <Globe size={14} strokeWidth={1.8} /> },
 						]}
 					/>
-					{storeSource === "skillhub" ? (
-						<SkillHubStorePanel projectId={props.scope === "project" ? props.projectId : undefined} />
-					) : (
-						<SkillStoreTab
-							projectId={props.scope === "project" ? props.projectId : undefined}
-							onImported={props.onRefresh}
-						/>
-					)}
+					{storeSource === "skillhub" ? <SkillHubStorePanel projectId={props.scope === "project" ? props.projectId : undefined} /> : <SkillStoreTab projectId={props.scope === "project" ? props.projectId : undefined} onImported={props.onRefresh} />}
 				</div>
 			) : (
 				<>
@@ -127,110 +118,65 @@ export function SkillsTab(props: {
 						onApplied={props.onRefresh}
 					/>
 					<div className="mb-3 flex items-center justify-between gap-3">
-				<div>
-					<span className="font-mono text-xs tabular-nums text-text-tertiary">
-						{t("config.count.skills", { count: visibleSkills.length })}
-					</span>
-					<small className="skills-restart-hint">
-						{t("config.restartHint")}
-					</small>
-				</div>
-				<div className="skills-toolbar-actions flex items-center gap-1.5">
-					{/* 与扩展页/设置页统一为 sm 控件高度 */}
-					<Button variant="outline" size="sm" onClick={props.onRefresh} disabled={props.loading}>
-						{t("common.refresh")}
-					</Button>
-					<ResourceImportDialog
-						kind="skill"
-						sourceProjectId={props.sourceProjectId ?? props.projectId}
-						projects={projects}
-						fixedProjectId={props.fixedProjectId}
-						triggerLabel={t("config.import.button")}
-						onImported={props.onRefresh}
-					/>
-					<Button variant="secondary" size="sm" onClick={props.onOpenRoot}>
-						{t("config.openFolder")}
-					</Button>
-				</div>
-			</div>
+						<div>
+							<span className="font-mono text-xs tabular-nums text-text-tertiary">{t("config.count.skills", { count: visibleSkills.length })}</span>
+							<small className="skills-restart-hint">{t("config.restartHint")}</small>
+						</div>
+						<div className="skills-toolbar-actions flex items-center gap-1.5">
+							{/* 与扩展页/设置页统一为 sm 控件高度 */}
+							<Button variant="outline" size="sm" onClick={props.onRefresh} disabled={props.loading}>
+								{t("common.refresh")}
+							</Button>
+							<ResourceImportDialog kind="skill" sourceProjectId={props.sourceProjectId ?? props.projectId} projects={projects} fixedProjectId={props.fixedProjectId} triggerLabel={t("config.import.button")} onImported={props.onRefresh} />
+							<Button variant="secondary" size="sm" onClick={props.onOpenRoot}>
+								{t("config.openFolder")}
+							</Button>
+						</div>
+					</div>
 
-			<div className="overflow-x-auto rounded-lg border border-border-subtle bg-bg-panel">
-				{visibleSkills.length === 0 ? (
-					<div className="py-12 text-center text-control text-text-tertiary">{t("config.emptySkills")}</div>
-				) : (
-					<Table className="table-fixed">
-						<TableHeader>
-							<TableRow>
-								<TableHead className="w-56">{t("config.name")}</TableHead>
-								{/* 描述列固定 40% 占比：table-fixed 忽略 min-width，窗口拉小时
+					<div className="overflow-x-auto rounded-lg border border-border-subtle bg-bg-panel">
+						{visibleSkills.length === 0 ? (
+							<div className="py-12 text-center text-control text-text-tertiary">{t("config.emptySkills")}</div>
+						) : (
+							<Table className="table-fixed">
+								<TableHeader>
+									<TableRow>
+										<TableHead className="w-56">{t("config.name")}</TableHead>
+										{/* 描述列固定 40% 占比：table-fixed 忽略 min-width，窗口拉小时
 								    无 width 的列会被压到接近 0（描述竖条）；给百分比宽度后
 								    各列按比例压缩，描述列任何窗口下都保持可读宽度 */}
-								<TableHead className="w-2/5">{t("config.description")}</TableHead>
-								<TableHead className="w-36 text-right">{t("config.actions")}</TableHead>
-							</TableRow>
-						</TableHeader>
-						<TableBody>
-							{props.scope === "project" && projectSkills.length > 0 ? (
-								<TableRow>
-									<TableCell colSpan={3} className="bg-bg-hover px-3 py-1.5 text-caption font-semibold text-foreground">
-										{t("config.resourceGroup.project")}
-									</TableCell>
-								</TableRow>
-							) : null}
-							{props.scope === "project" && projectSkills.map((skill) => (
-								<SkillTableRow
-									key={skill.id}
-									skill={skill}
-									effectiveEnabled={skill.enabled}
-									inherited={false}
-									onToggle={props.onToggle}
-									onDelete={props.onDelete}
-									onEdit={props.onEdit}
-									onRename={props.onRename}
-								/>
-							))}
-							{props.scope === "project" &&
-								uniqueDiscoverySkills
-									.filter((item) => isProjectDiscoverySource(item.sourceId))
-									.map((item) => (
-										<DiscoveredSkillRow key={item.id} item={item} />
-									))}
-							{props.scope === "project" && globalSkills.length > 0 ? (
-								<TableRow>
-									<TableCell colSpan={3} className="bg-bg-hover px-3 py-1.5 text-caption font-semibold text-foreground">
-										{t("config.resourceGroup.global")}
-									</TableCell>
-								</TableRow>
-							) : null}
-							{globalSkills.map((skill) => {
-								const inherited = props.scope === "project";
-								const disabledHere = isGlobalSkillSourceId(skill.sourceId)
-									? disabledGlobalKeys.has(globalSkillOverrideKey(skill.sourceId, skill.name))
-									: false;
-								return (
-									<SkillTableRow
-										key={skill.id}
-										skill={skill}
-										effectiveEnabled={skill.enabled && !disabledHere}
-										inherited={inherited}
-										onToggle={props.onToggle}
-										onDelete={props.onDelete}
-										onEdit={props.onEdit}
-										onRename={props.onRename}
-									/>
-								);
-							})}
-							{props.scope === "project" &&
-								uniqueDiscoverySkills
-									.filter((item) => !isProjectDiscoverySource(item.sourceId))
-									.map((item) => (
-										<DiscoveredSkillRow key={item.id} item={item} />
-									))}
-						</TableBody>
-					</Table>
-				)}
-			</div>
-		</>
+										<TableHead className="w-2/5">{t("config.description")}</TableHead>
+										<TableHead className="w-36 text-right">{t("config.actions")}</TableHead>
+									</TableRow>
+								</TableHeader>
+								<TableBody>
+									{props.scope === "project" && projectSkills.length > 0 ? (
+										<TableRow>
+											<TableCell colSpan={3} className="bg-bg-hover px-3 py-1.5 text-caption font-semibold text-foreground">
+												{t("config.resourceGroup.project")}
+											</TableCell>
+										</TableRow>
+									) : null}
+									{props.scope === "project" && projectSkills.map((skill) => <SkillTableRow key={skill.id} skill={skill} effectiveEnabled={skill.enabled} inherited={false} onToggle={props.onToggle} onDelete={props.onDelete} onEdit={props.onEdit} onRename={props.onRename} />)}
+									{props.scope === "project" && uniqueDiscoverySkills.filter((item) => isProjectDiscoverySource(item.sourceId)).map((item) => <DiscoveredSkillRow key={item.id} item={item} />)}
+									{props.scope === "project" && globalSkills.length > 0 ? (
+										<TableRow>
+											<TableCell colSpan={3} className="bg-bg-hover px-3 py-1.5 text-caption font-semibold text-foreground">
+												{t("config.resourceGroup.global")}
+											</TableCell>
+										</TableRow>
+									) : null}
+									{globalSkills.map((skill) => {
+										const inherited = props.scope === "project";
+										const disabledHere = isGlobalSkillSourceId(skill.sourceId) ? disabledGlobalKeys.has(globalSkillOverrideKey(skill.sourceId, skill.name)) : false;
+										return <SkillTableRow key={skill.id} skill={skill} effectiveEnabled={skill.enabled && !disabledHere} inherited={inherited} onToggle={props.onToggle} onDelete={props.onDelete} onEdit={props.onEdit} onRename={props.onRename} />;
+									})}
+									{props.scope === "project" && uniqueDiscoverySkills.filter((item) => !isProjectDiscoverySource(item.sourceId)).map((item) => <DiscoveredSkillRow key={item.id} item={item} />)}
+								</TableBody>
+							</Table>
+						)}
+					</div>
+				</>
 			)}
 		</div>
 	);
@@ -259,9 +205,7 @@ function DiscoveredSkillRow(props: {
 						<span className="skill-state" title={t("config.resourceManagedHint")}>
 							{t("config.source.global")}
 						</span>
-						<span className={`skill-state ${item.enabled ? "enabled" : "disabled"}`}>
-							{item.enabled ? t("common.enabled") : t("common.disabled")}
-						</span>
+						<span className={`skill-state ${item.enabled ? "enabled" : "disabled"}`}>{item.enabled ? t("common.enabled") : t("common.disabled")}</span>
 					</div>
 					<span className="truncate font-mono text-caption text-muted-foreground">{item.sourceLabel}</span>
 				</div>
@@ -279,15 +223,7 @@ function isProjectDiscoverySource(sourceId: string): boolean {
 	return sourceId === "package-project" || sourceId === "settings-project" || sourceId === "ancestor-agents";
 }
 
-function SkillTableRow(props: {
-	skill: PiSkillSummary;
-	effectiveEnabled: boolean;
-	inherited: boolean;
-	onToggle: (skill: PiSkillSummary, enabled: boolean) => void;
-	onDelete: (skill: PiSkillSummary) => void;
-	onEdit: (skill: PiSkillSummary) => void;
-	onRename: (skill: PiSkillSummary, newName: string) => Promise<void>;
-}) {
+function SkillTableRow(props: { skill: PiSkillSummary; effectiveEnabled: boolean; inherited: boolean; onToggle: (skill: PiSkillSummary, enabled: boolean) => void; onDelete: (skill: PiSkillSummary) => void; onEdit: (skill: PiSkillSummary) => void; onRename: (skill: PiSkillSummary, newName: string) => Promise<void> }) {
 	const { skill, effectiveEnabled, inherited } = props;
 	const [renaming, setRenaming] = useState(false);
 	const [renameValue, setRenameValue] = useState(skill.name);
@@ -328,7 +264,10 @@ function SkillTableRow(props: {
 						<Input
 							value={renameValue}
 							onChange={(e) => setRenameValue(e.target.value)}
-							onKeyDown={(e) => { if (e.key === "Enter") void handleRename(); if (e.key === "Escape") setRenaming(false); }}
+							onKeyDown={(e) => {
+								if (e.key === "Enter") void handleRename();
+								if (e.key === "Escape") setRenaming(false);
+							}}
 							autoFocus
 							disabled={renameBusy}
 						/>
@@ -345,9 +284,7 @@ function SkillTableRow(props: {
 							<Sparkles size={14} strokeWidth={1.8} className="shrink-0 text-text-tertiary" />
 							<strong className="truncate text-control font-medium text-foreground">{skill.name}</strong>
 							<div className="skill-badges">
-								<span className={`skill-state ${effectiveEnabled ? "enabled" : "disabled"}`}>
-									{effectiveEnabled ? t("common.enabled") : t("common.disabled")}
-								</span>
+								<span className={`skill-state ${effectiveEnabled ? "enabled" : "disabled"}`}>{effectiveEnabled ? t("common.enabled") : t("common.disabled")}</span>
 								{!skill.valid && <span className="skill-state invalid">{t("config.needsFix")}</span>}
 							</div>
 						</div>
@@ -355,7 +292,9 @@ function SkillTableRow(props: {
 						{skill.warnings.length > 0 && (
 							<div className="flex flex-col gap-0.5">
 								{skill.warnings.map((warning) => (
-									<span key={warning} className="truncate text-caption text-destructive">{warning}</span>
+									<span key={warning} className="truncate text-caption text-destructive">
+										{warning}
+									</span>
 								))}
 							</div>
 						)}
@@ -370,36 +309,27 @@ function SkillTableRow(props: {
 			</TableCell>
 			<TableCell className="text-right">
 				<div className="flex justify-end gap-1">
-					<Button
-						variant="ghost"
-						size="icon-sm"
-						className={`size-7${effectiveEnabled ? " text-primary" : ""}`}
-						disabled={inherited && !skill.enabled}
-						onClick={() => props.onToggle(skill, !effectiveEnabled)}
-						title={effectiveEnabled ? t("common.disable") : t("common.enabled")}
-					>
-						{effectiveEnabled
-							? <ToggleRight size={18} strokeWidth={1.8} />
-							: <ToggleLeft size={18} strokeWidth={1.8} />}
+					<Button variant="ghost" size="icon-sm" className={`size-7${effectiveEnabled ? " text-primary" : ""}`} disabled={inherited && !skill.enabled} onClick={() => props.onToggle(skill, !effectiveEnabled)} title={effectiveEnabled ? t("common.disable") : t("common.enabled")}>
+						{effectiveEnabled ? <ToggleRight size={18} strokeWidth={1.8} /> : <ToggleLeft size={18} strokeWidth={1.8} />}
 					</Button>
 					{!inherited ? (
 						<>
-							<Button variant="ghost" size="icon-sm" className="size-7"
-								onClick={() => props.onEdit(skill)}
-								title={t("common.edit")}
-							>
+							<Button variant="ghost" size="icon-sm" className="size-7" onClick={() => props.onEdit(skill)} title={t("common.edit")}>
 								<Pencil size={14} strokeWidth={1.8} />
 							</Button>
-							<Button variant="ghost" size="icon-sm" className="size-7"
-								onClick={() => { setRenaming(true); setRenameValue(skill.name); }}
+							<Button
+								variant="ghost"
+								size="icon-sm"
+								className="size-7"
+								onClick={() => {
+									setRenaming(true);
+									setRenameValue(skill.name);
+								}}
 								title={t("common.rename")}
 							>
 								<FileEdit size={14} strokeWidth={1.8} />
 							</Button>
-							<Button variant="ghost" size="icon-sm" className="size-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
-								onClick={() => props.onDelete(skill)}
-								title={t("common.delete")}
-							>
+							<Button variant="ghost" size="icon-sm" className="size-7 text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => props.onDelete(skill)} title={t("common.delete")}>
 								<Trash2 size={14} strokeWidth={1.8} />
 							</Button>
 						</>

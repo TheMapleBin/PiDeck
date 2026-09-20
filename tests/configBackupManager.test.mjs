@@ -4,15 +4,7 @@
  * 用真实临时目录驱动（依赖注入 getConfigDir/getUserDataDir/getAppVersion），不依赖 electron。
  */
 import assert from "node:assert/strict";
-import {
-	mkdirSync,
-	mkdtempSync,
-	existsSync,
-	readFileSync,
-	readdirSync,
-	rmSync,
-	writeFileSync,
-} from "node:fs";
+import { mkdirSync, mkdtempSync, existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -49,10 +41,7 @@ function setup(opts = {}) {
 	const configDir = join(root, "pi");
 	mkdirSync(userData, { recursive: true });
 	mkdirSync(configDir, { recursive: true });
-	writeFileSync(
-		join(configDir, "models.json"),
-		JSON.stringify({ providers: { alpha: { apiKey: "sk-test-123456789", model: "gpt-4" } } }, null, 2),
-	);
+	writeFileSync(join(configDir, "models.json"), JSON.stringify({ providers: { alpha: { apiKey: "sk-test-123456789", model: "gpt-4" } } }, null, 2));
 	writeFileSync(join(configDir, "auth.json"), JSON.stringify({ alpha: { type: "bearer", key: "sk-auth-abcdefgh" } }, null, 2));
 	writeFileSync(join(configDir, "settings.json"), JSON.stringify({ theme: "dark" }, null, 2));
 	writeFileSync(join(configDir, "mcp.json"), JSON.stringify({ mcpServers: {} }, null, 2));
@@ -83,10 +72,7 @@ test("create 生成备份文件并记录元数据（files 含 pi/* 与 pideck/* 
 		const meta = listed.backups[0];
 		assert.equal(meta.appVersion, "1.0.0");
 		assert.equal(meta.reason, "manual");
-		assert.deepEqual(
-			[...meta.files].sort(),
-			["pi/auth.json", "pi/mcp.json", "pi/models.json", "pi/settings.json", "pideck/settings.json"],
-		);
+		assert.deepEqual([...meta.files].sort(), ["pi/auth.json", "pi/mcp.json", "pi/models.json", "pi/settings.json", "pideck/settings.json"]);
 		assert.ok(meta.size > 0);
 		assert.ok(meta.configDir.includes("pi"));
 	} finally {
@@ -190,7 +176,7 @@ test("restore 单文件：只恢复指定的 key，其它文件保持当前值",
 		const { id } = ctx.manager.create("manual");
 		// 改坏两个文件，然后只恢复 models.json。
 		writeFileSync(join(ctx.configDir, "models.json"), "{}");
-		writeFileSync(join(ctx.configDir, "auth.json"), "{ \"alpha\": { \"type\": \"bearer\", \"key\": \"changed-123456\" } }");
+		writeFileSync(join(ctx.configDir, "auth.json"), '{ "alpha": { "type": "bearer", "key": "changed-123456" } }');
 
 		const result = ctx.manager.restore(id, ["pi/models.json"]);
 		assert.equal(result.ok, true);
@@ -223,7 +209,7 @@ test("restore 只写回白名单 key：未知/路径穿越 key 一律跳过", ()
 		// 篡改备份包：注入路径穿越与未知 key，模拟恶意/损坏备份。
 		const filePath = join(ctx.userData, "config-backups", id);
 		const pkg = JSON.parse(readFileSync(filePath, "utf8"));
-		pkg.files["pi/../evil.json"] = "{\"hacked\":true}";
+		pkg.files["pi/../evil.json"] = '{"hacked":true}';
 		pkg.files["unknown/file.txt"] = "x";
 		writeFileSync(filePath, JSON.stringify(pkg));
 
@@ -346,10 +332,7 @@ test("redactSecrets：非 JSON 原样返回；短值不误伤", () => {
 	const shortKey = redactSecrets(JSON.stringify({ key: "abc" }), "pi/auth.json");
 	assert.equal(shortKey.redacted, false);
 	// 嵌套数组里的 secret 也脱敏
-	const nested = redactSecrets(
-		JSON.stringify({ providers: { a: { list: [{ apiKey: "sk-long-enough-123" }] } } }),
-		"pi/models.json",
-	);
+	const nested = redactSecrets(JSON.stringify({ providers: { a: { list: [{ apiKey: "sk-long-enough-123" }] } } }), "pi/models.json");
 	assert.equal(nested.redacted, true);
 	assert.ok(!nested.text.includes("sk-long-enough-123"));
 });

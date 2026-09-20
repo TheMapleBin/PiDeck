@@ -29,22 +29,13 @@ test("normalizeTiers: keeps valid rows and sorts by threshold ascending", () => 
 });
 
 test("normalizeTiers: drops rows with missing rates (half-typed rows)", () => {
-	const result = normalizeTiers([
-		fullDraft,
-		{ ...fullDraft, output: "" },
-		{ ...emptyTierDraft(), inputTokensAbove: "100000" },
-	]);
+	const result = normalizeTiers([fullDraft, { ...fullDraft, output: "" }, { ...emptyTierDraft(), inputTokensAbove: "100000" }]);
 	assert.equal(result.length, 1);
 	assert.equal(result[0].inputTokensAbove, 272000);
 });
 
 test("normalizeTiers: drops rows with non-finite or negative numbers", () => {
-	const result = normalizeTiers([
-		fullDraft,
-		{ ...fullDraft, inputTokensAbove: "abc" },
-		{ ...fullDraft, input: "-1" },
-		{ ...fullDraft, cacheRead: "Infinity" },
-	]);
+	const result = normalizeTiers([fullDraft, { ...fullDraft, inputTokensAbove: "abc" }, { ...fullDraft, input: "-1" }, { ...fullDraft, cacheRead: "Infinity" }]);
 	assert.equal(result.length, 1);
 	assert.equal(result[0].inputTokensAbove, 272000);
 });
@@ -55,9 +46,7 @@ test("normalizeTiers: empty input yields empty list", () => {
 
 test("toTierDrafts: undefined tiers yields empty drafts; numbers become strings", () => {
 	assert.deepEqual(plain(toTierDrafts(undefined)), []);
-	assert.deepEqual(plain(toTierDrafts([{ inputTokensAbove: 272000, input: 2.5, output: 10, cacheRead: 0.25, cacheWrite: 2.5 }])), [
-		fullDraft,
-	]);
+	assert.deepEqual(plain(toTierDrafts([{ inputTokensAbove: 272000, input: 2.5, output: 10, cacheRead: 0.25, cacheWrite: 2.5 }])), [fullDraft]);
 });
 
 test("ModelsTable renders tiered pricing UI in the cost dialog (Table + add button + threshold column)", () => {

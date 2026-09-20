@@ -20,23 +20,14 @@ import { runGit } from "../src/main/git/gitProcess.ts";
 const node = process.execPath;
 
 test("runGit 成功返回 stdout/stderr", async () => {
-	const { stdout, stderr } = await runGit(
-		["-e", "console.log('hi'); console.error('warn')"],
-		{ cwd: process.cwd() },
-		node,
-	);
+	const { stdout, stderr } = await runGit(["-e", "console.log('hi'); console.error('warn')"], { cwd: process.cwd() }, node);
 	assert.equal(stdout, "hi\n");
 	assert.equal(stderr, "warn\n");
 });
 
 test("runGit 非 0 退出码 reject 且 message 对齐 execFile 格式", async () => {
 	await assert.rejects(
-		() =>
-			runGit(
-				["-e", "console.error('boom'); process.exit(3)"],
-				{ cwd: process.cwd() },
-				node,
-			),
+		() => runGit(["-e", "console.error('boom'); process.exit(3)"], { cwd: process.cwd() }, node),
 		(err) => {
 			assert.match(err.message, /^Command failed: .*\nboom/);
 			return true;

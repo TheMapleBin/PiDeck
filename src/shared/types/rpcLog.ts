@@ -6,12 +6,12 @@
 
 /** 一条 RPC 通信日志（direction: "send" 为桌面端→pi 的请求，"recv" 为 pi 侧响应/事件） */
 export interface RpcLogEntry {
-  id: string;
-  agentId: string;
-  direction: string;
-  summary: string;
-  time: number;
-  data?: unknown;
+	id: string;
+	agentId: string;
+	direction: string;
+	summary: string;
+	time: number;
+	data?: unknown;
 }
 
 /**
@@ -20,6 +20,6 @@ export interface RpcLogEntry {
  * 主进程按 agent 聚合、节流（~80ms）后一次性推送。
  */
 export interface RpcLogBatch {
-  agentId: string;
-  entries: RpcLogEntry[];
+	agentId: string;
+	entries: RpcLogEntry[];
 }

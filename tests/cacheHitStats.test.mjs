@@ -30,9 +30,7 @@ function loadCacheHitStats() {
 
 /** 构造一条 assistant 消息 JSONL；usage 缺省时不给 usage 字段 */
 function assistantLine(overrides = {}) {
-	const usage = overrides.usage === undefined
-		? { input: 100, cacheRead: 50, cacheWrite: 50 }
-		: overrides.usage;
+	const usage = overrides.usage === undefined ? { input: 100, cacheRead: 50, cacheWrite: 50 } : overrides.usage;
 	return JSON.stringify({
 		type: "message",
 		id: `e${overrides.id ?? 1}`,
@@ -150,11 +148,7 @@ test("computeCacheHitStats: messageChars 统计全部消息文本（含裸 text 
 
 test("createCacheHitStatsReader: 通过流式扫描统计，且口径与内存版一致", async () => {
 	const { createCacheHitStatsReader, computeCacheHitStats } = loadCacheHitStats();
-	const text = [
-		assistantLine({ id: 1, usage: { input: 100, cacheRead: 100, cacheWrite: 0 } }),
-		userLine(),
-		assistantLine({ id: 2, usage: { input: 100, cacheRead: 25, cacheWrite: 75 } }),
-	].join("\n");
+	const text = [assistantLine({ id: 1, usage: { input: 100, cacheRead: 100, cacheWrite: 0 } }), userLine(), assistantLine({ id: 2, usage: { input: 100, cacheRead: 25, cacheWrite: 75 } })].join("\n");
 	const { scanLines, calls } = makeScanHarness(text);
 	const reader = createCacheHitStatsReader({
 		scanLines,
@@ -233,10 +227,7 @@ test("createCacheHitStatsReader: 只追加时仅扫描尾部新增内容（不�
 		assert.equal(second.sampleCount, 2, "增量续算后应含新增样本");
 		assert.equal(second.latest, 0, "latest 应更新为新追加的那条");
 		assert.equal(second.average, 25, "增量结果需与整扫口径一致（50 与 0 的平均）");
-		assert.ok(
-			scannedBytes < 4096,
-			`只应扫描尾部新增内容（实际扫了 ${scannedBytes} 字节；退回整扫即大会话性能回归）`,
-		);
+		assert.ok(scannedBytes < 4096, `只应扫描尾部新增内容（实际扫了 ${scannedBytes} 字节；退回整扫即大会话性能回归）`);
 	} finally {
 		await rm(dir, { recursive: true, force: true });
 	}
@@ -256,8 +247,11 @@ test("createCacheHitStatsReader: 前缀被改写（rename/头部修复重写文�
 	const dir = await mkdtemp(join(tmpdir(), "pideck-cachehit-rewrite-"));
 	const file = join(dir, "s.jsonl");
 	try {
-		await writeFile(file, `${assistantLine({ id: 1, usage: { input: 100, cacheRead: 100, cacheWrite: 0 } })}
-`);
+		await writeFile(
+			file,
+			`${assistantLine({ id: 1, usage: { input: 100, cacheRead: 100, cacheWrite: 0 } })}
+`,
+		);
 		const first = await reader(file);
 		assert.equal(first.sampleCount, 1);
 
@@ -280,10 +274,7 @@ test("createCacheHitStatsReader: 前缀被改写（rename/头部修复重写文�
 
 test("createCacheHitStatsReader: 文件变小（重写/换文件）时整扫重来", async () => {
 	const { createCacheHitStatsReader } = loadCacheHitStats();
-	let text = [
-		assistantLine({ id: 1, usage: { input: 100, cacheRead: 100, cacheWrite: 0 } }),
-		assistantLine({ id: 2, usage: { input: 100, cacheRead: 100, cacheWrite: 0 } }),
-	].join("\n");
+	let text = [assistantLine({ id: 1, usage: { input: 100, cacheRead: 100, cacheWrite: 0 } }), assistantLine({ id: 2, usage: { input: 100, cacheRead: 100, cacheWrite: 0 } })].join("\n");
 	const scan = (filePath, visitor, options = {}) => makeScanHarness(text).scanLines(filePath, visitor, options);
 	let size = Buffer.byteLength(text, "utf8");
 	const reader = createCacheHitStatsReader({
@@ -337,10 +328,7 @@ test("createCacheHitStatsReader: 末尾残行不计入已消费，下次重扫�
 		assert.equal(second.sampleCount, 2, "补全的残行必须被统计到");
 		assert.equal(second.latest, 0);
 		// 续扫起点应落在第一行之后（不重扫已消费的完整行）
-		assert.ok(
-			starts[1] >= Buffer.byteLength(completeLine, "utf8"),
-			`续扫应跳过已消费的完整行（实际从 ${starts[1]} 起）`,
-		);
+		assert.ok(starts[1] >= Buffer.byteLength(completeLine, "utf8"), `续扫应跳过已消费的完整行（实际从 ${starts[1]} 起）`);
 	} finally {
 		await rm(dir, { recursive: true, force: true });
 	}
@@ -352,8 +340,7 @@ test("createCacheHitStatsReader: 不同会话各自缓存互不干扰", async ()
 		["a.jsonl", assistantLine({ id: 1, usage: { input: 100, cacheRead: 50, cacheWrite: 50 } })],
 		["b.jsonl", assistantLine({ id: 2, usage: { input: 100, cacheRead: 100, cacheWrite: 0 } })],
 	]);
-	const scan = (filePath, visitor, options = {}) =>
-		makeScanHarness(contents.get(filePath) ?? "").scanLines(filePath, visitor, options);
+	const scan = (filePath, visitor, options = {}) => makeScanHarness(contents.get(filePath) ?? "").scanLines(filePath, visitor, options);
 	const reader = createCacheHitStatsReader({
 		scanLines: scan,
 		stat: async (p) => ({ size: Buffer.byteLength(contents.get(p) ?? ""), mtimeMs: 1 }),
@@ -371,7 +358,9 @@ test("createCacheHitStatsReader: 文件不可读返回空统计且不缓存", as
 	const { scanLines } = makeScanHarness("");
 	const reader = createCacheHitStatsReader({
 		scanLines,
-		stat: async () => { throw new Error("ENOENT"); },
+		stat: async () => {
+			throw new Error("ENOENT");
+		},
 	});
 	const result = await reader("missing.jsonl");
 	assert.equal(result.sampleCount, 0);

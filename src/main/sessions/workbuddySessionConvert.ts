@@ -1,20 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { SessionImportCopy } from "./SessionImportCopy";
-import {
-	importedContentHasToolCall,
-	normalizeImportedStopReason,
-} from "./importNormalize";
-import {
-	asArray,
-	parseWorkBuddyArguments,
-	readNumber,
-	readRecord,
-	readString,
-	readWorkBuddyModel,
-	stripInjectedContext,
-	type ParsedWorkBuddySession,
-	type WorkBuddyRecord,
-} from "./workbuddySessionSource";
+import { importedContentHasToolCall, normalizeImportedStopReason } from "./importNormalize";
+import { asArray, parseWorkBuddyArguments, readNumber, readRecord, readString, readWorkBuddyModel, stripInjectedContext, type ParsedWorkBuddySession, type WorkBuddyRecord } from "./workbuddySessionSource";
 
 export type ConvertedWorkBuddySession = {
 	/** 转换结果元数据；`raw` 仅在内存模式（scan 摘要）下由调用方拼装 */
@@ -36,9 +23,7 @@ export type ConvertWorkBuddyInput = {
  * 仅供**扫描**使用（entries 是头部小数组，体积有上界）；
  * 导入路径请走 convertWorkBuddySessionTo（流式写盘）。
  */
-export async function convertWorkBuddySession(
-	input: ConvertWorkBuddyInput,
-): Promise<ConvertedWorkBuddySession> {
+export async function convertWorkBuddySession(input: ConvertWorkBuddyInput): Promise<ConvertedWorkBuddySession> {
 	const lines: string[] = [];
 	const result = await convertWorkBuddySessionTo({
 		...input,
@@ -123,13 +108,7 @@ function makeId(sessionId: string, sequence: number): string {
  * 而 pi 要求它们挂在同一个 assistant 消息的 content 数组里，因此这里用
  * pending 缓冲区聚合同一轮的推理与工具调用，遇到文本消息或工具结果时再 flush。
  */
-export async function convertWorkBuddySessionTo(input: {
-	projectPath: string;
-	session: ParsedWorkBuddySession;
-	translate: SessionImportCopy;
-	entries: Iterable<WorkBuddyRecord> | AsyncIterable<WorkBuddyRecord>;
-	sink: (line: string) => Promise<void> | void;
-}): Promise<ConvertedWorkBuddySession> {
+export async function convertWorkBuddySessionTo(input: { projectPath: string; session: ParsedWorkBuddySession; translate: SessionImportCopy; entries: Iterable<WorkBuddyRecord> | AsyncIterable<WorkBuddyRecord>; sink: (line: string) => Promise<void> | void }): Promise<ConvertedWorkBuddySession> {
 	const { projectPath, session, translate, entries, sink } = input;
 	const sessionId = session.meta.sessionId;
 	const timestamp = new Date(session.meta.firstTimestamp).toISOString();
@@ -145,12 +124,7 @@ export async function convertWorkBuddySessionTo(input: {
 		await sink(JSON.stringify(entry));
 	};
 
-	const pushMessage = async (
-		role: "user" | "assistant" | "toolResult",
-		content: PiContent[],
-		extra: Record<string, unknown> = {},
-		timestampValue?: number,
-	) => {
+	const pushMessage = async (role: "user" | "assistant" | "toolResult", content: PiContent[], extra: Record<string, unknown> = {}, timestampValue?: number) => {
 		if (content.length === 0) return;
 		const id = makeId(sessionId, sequence++);
 		const ts = new Date(timestampValue ?? session.meta.firstTimestamp).toISOString();
@@ -293,9 +267,7 @@ export async function convertWorkBuddySessionTo(input: {
 
 	await flushPending(session.meta.lastTimestamp);
 
-	const title =
-		cleanWorkBuddyTitle(titleState.title) ||
-		translate("session.importedTitle", { source: "WorkBuddy" });
+	const title = cleanWorkBuddyTitle(titleState.title) || translate("session.importedTitle", { source: "WorkBuddy" });
 	// 使用 pi 原生 session_info 格式追加在末尾，避免旧版 sessionName 行（无 type 字段）
 	// 在文件头破坏 pi 的首行校验导致会话无法加载（见 #114）。
 	await pushEntry({
@@ -309,8 +281,7 @@ export async function convertWorkBuddySessionTo(input: {
 
 	return {
 		title,
-		preview:
-			titleState.preview || translate("session.importedPreview", { source: "WorkBuddy" }),
+		preview: titleState.preview || translate("session.importedPreview", { source: "WorkBuddy" }),
 		messageCount,
 	};
 }

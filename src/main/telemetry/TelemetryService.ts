@@ -63,12 +63,7 @@ export class TelemetryService {
 		const settings = this.options.settingsStore.get();
 		const projectKey = this.options.config.projectKey?.trim();
 		const host = normalizePostHogHost(this.options.config.host);
-		if (
-			!settings.telemetryEnabled ||
-			!this.options.metadata.packaged ||
-			!projectKey ||
-			!host
-		) {
+		if (!settings.telemetryEnabled || !this.options.metadata.packaged || !projectKey || !host) {
 			return;
 		}
 

@@ -50,16 +50,7 @@ let lastRowPointerDownAt = 0;
  *    open 期间全局捕获 pointermove，指针离开「触发行 + 卡片」超过 closeDelay 即强制关闭；
  *    同时不阻止外部 pointerdown（否则点击别处也无法关掉，卡片一直占屏）。
  */
-export function SessionHoverCard({
-	children,
-	session,
-	title,
-	projectName,
-	status,
-	disabled = false,
-	openDelay = 1500,
-	closeDelay = 200,
-}: SessionHoverCardProps) {
+export function SessionHoverCard({ children, session, title, projectName, status, disabled = false, openDelay = 1500, closeDelay = 200 }: SessionHoverCardProps) {
 	const [open, setOpen] = useState(false);
 	const suppressUntilRef = useRef(0);
 	// 关闭安全网引用：trigger 经 asChild 合并到行按钮（Radix Trigger 类型声明为
@@ -108,8 +99,7 @@ export function SessionHoverCard({
 
 	// 实例自身的时间戳（覆盖本实例刚被点过）与模块级时间戳（覆盖重挂载后的新实例）
 	// 取较大者判断；点击后的窗口期内任何 hover 打开一律吞掉。
-	const isSuppressed = () =>
-		Date.now() < Math.max(suppressUntilRef.current, lastRowPointerDownAt + suppressWindowMs);
+	const isSuppressed = () => Date.now() < Math.max(suppressUntilRef.current, lastRowPointerDownAt + suppressWindowMs);
 
 	const cancelPendingOpen = () => {
 		// 点击会话是导航，不是悬停预览：立刻关掉已开卡片，并在 openDelay 窗口内吞掉 Radix 延迟 open。
@@ -138,30 +128,17 @@ export function SessionHoverCard({
 	}
 
 	// 提取并清洗标题：排除时间戳文件名、纯 Untitled 等占位符
-	const rawTitle = (
-		title ||
-		(session && "title" in session && typeof session.title === "string" ? session.title : undefined) ||
-		(session && "name" in session && typeof session.name === "string" ? session.name : undefined)
-	)?.trim();
+	const rawTitle = (title || (session && "title" in session && typeof session.title === "string" ? session.title : undefined) || (session && "name" in session && typeof session.name === "string" ? session.name : undefined))?.trim();
 	const isPlaceholderTitle = !rawTitle || looksLikePiSessionFileStem(rawTitle) || /^untitled(?: session)?$/i.test(rawTitle);
 	const validTitle = isPlaceholderTitle ? undefined : rawTitle;
 
 	// 提取并清洗正文预览：排除空会话等占位标记
 	const rawPreview = session?.preview?.trim();
-	const isPlaceholderPreview = !rawPreview ||
-		rawPreview === "空会话" ||
-		rawPreview === "Empty session" ||
-		rawPreview === t("sidebar.hoverCard.emptyPreview");
+	const isPlaceholderPreview = !rawPreview || rawPreview === "空会话" || rawPreview === "Empty session" || rawPreview === t("sidebar.hoverCard.emptyPreview");
 	const validPreview = isPlaceholderPreview ? undefined : rawPreview;
 
 	// 判断标题与预览内容是否实质相同（相同或互相包含前缀，避免卡片内重复展示相同文本）
-	const isSameContent = Boolean(
-		validTitle &&
-		validPreview &&
-		(validTitle === validPreview ||
-			validPreview.startsWith(validTitle) ||
-			validTitle.startsWith(validPreview))
-	);
+	const isSameContent = Boolean(validTitle && validPreview && (validTitle === validPreview || validPreview.startsWith(validTitle) || validTitle.startsWith(validPreview)));
 
 	const formattedTime = session?.updatedAt ? formatFullDateTime(session.updatedAt) : "";
 
@@ -170,34 +147,18 @@ export function SessionHoverCard({
 			<HoverCardTrigger asChild ref={triggerRef} onPointerDown={handleTriggerPointerDown}>
 				{children}
 			</HoverCardTrigger>
-			<HoverCardContent
-				ref={contentRef}
-				side="right"
-				align="start"
-				sideOffset={10}
-				className="w-84 max-w-[calc(100vw-320px)] p-3.5 shadow-xl select-text"
-			>
+			<HoverCardContent ref={contentRef} side="right" align="start" sideOffset={10} className="w-84 max-w-[calc(100vw-320px)] p-3.5 shadow-xl select-text">
 				{/* 1. 会话正文预览区：有明确标题和独立摘要时分层展示，否则展示主体内容；两者皆空才显示占位 */}
 				<div className="max-h-48 overflow-y-auto select-text">
 					{validTitle && validPreview && !isSameContent ? (
 						<div className="flex flex-col gap-1.5">
-							<div className="text-xs font-semibold leading-snug text-foreground break-words">
-								{validTitle}
-							</div>
-							<div className="text-xs leading-relaxed text-muted-foreground whitespace-pre-wrap break-words">
-								{validPreview}
-							</div>
+							<div className="text-xs font-semibold leading-snug text-foreground break-words">{validTitle}</div>
+							<div className="text-xs leading-relaxed text-muted-foreground whitespace-pre-wrap break-words">{validPreview}</div>
 						</div>
 					) : validTitle || validPreview ? (
-						<div className="text-xs leading-relaxed text-foreground whitespace-pre-wrap break-words font-medium">
-							{isSameContent
-								? (validPreview!.length >= validTitle!.length ? validPreview : validTitle)
-								: (validTitle ?? validPreview)}
-						</div>
+						<div className="text-xs leading-relaxed text-foreground whitespace-pre-wrap break-words font-medium">{isSameContent ? (validPreview!.length >= validTitle!.length ? validPreview : validTitle) : (validTitle ?? validPreview)}</div>
 					) : (
-						<div className="text-xs leading-relaxed text-muted-foreground/70 italic">
-							{t("sidebar.hoverCard.emptyPreview")}
-						</div>
+						<div className="text-xs leading-relaxed text-muted-foreground/70 italic">{t("sidebar.hoverCard.emptyPreview")}</div>
 					)}
 				</div>
 
@@ -218,30 +179,15 @@ export function SessionHoverCard({
 					)}
 
 					{/* 后端标识（dsh / imagegen） */}
-					{session?.backend && session.backend !== "pi" && (
-						<SessionBackendMark backend={session.backend} />
-					)}
+					{session?.backend && session.backend !== "pi" && <SessionBackendMark backend={session.backend} />}
 
 					{/* 外部导入来源（codex / claude / workbuddy 等） */}
-					{session?.source && session.source !== "pi" && (
-						<SessionSourceBadge source={session.source} />
-					)}
+					{session?.source && session.source !== "pi" && <SessionSourceBadge source={session.source} />}
 
 					{/* 运行状态（若有） */}
 					{status && (
-						<span
-							className={cn(
-								"rounded px-1.5 py-0.5 font-medium",
-								status === "running" && "bg-warning/15 text-warning",
-								status === "error" && "bg-danger/15 text-danger",
-								status === "idle" && "bg-info/15 text-info",
-							)}
-						>
-							{status === "running"
-								? t("app.statusRunning")
-								: status === "error"
-									? t("app.statusError")
-									: t("app.statusIdle")}
+						<span className={cn("rounded px-1.5 py-0.5 font-medium", status === "running" && "bg-warning/15 text-warning", status === "error" && "bg-danger/15 text-danger", status === "idle" && "bg-info/15 text-info")}>
+							{status === "running" ? t("app.statusRunning") : status === "error" ? t("app.statusError") : t("app.statusIdle")}
 						</span>
 					)}
 				</div>
@@ -250,9 +196,7 @@ export function SessionHoverCard({
 				{projectName && (
 					<div className="mt-1.5 flex items-center gap-1.5 text-micro text-muted-foreground">
 						<Folder size={11} className="shrink-0 text-muted-foreground/80" aria-hidden="true" />
-						<span className="truncate">
-							{t("sidebar.hoverCard.workspace", { name: projectName })}
-						</span>
+						<span className="truncate">{t("sidebar.hoverCard.workspace", { name: projectName })}</span>
 					</div>
 				)}
 

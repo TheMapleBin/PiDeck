@@ -95,16 +95,16 @@ export function AuthTab(props: {
 	const [selectedAuths, setSelectedAuths] = useState(new Set());
 
 	// 从预设列表获取供应商信息
-	const presetProvider = selectedProvider ? PRESET_PROVIDERS.find(p => p.value === selectedProvider) : undefined;
+	const presetProvider = selectedProvider ? PRESET_PROVIDERS.find((p) => p.value === selectedProvider) : undefined;
 
 	return (
 		<div className="config-auth-tab">
 			<div className="mb-3 flex items-center justify-between gap-3">
-				<span className="font-mono text-xs tabular-nums text-text-tertiary">
-					{t("config.count.auth", { count: allProviders.length })}
-				</span>
+				<span className="font-mono text-xs tabular-nums text-text-tertiary">{t("config.count.auth", { count: allProviders.length })}</span>
 				<div className="flex min-w-0 items-center gap-1.5">
-					<Button size="sm" variant="outline"
+					<Button
+						size="sm"
+						variant="outline"
 						onClick={() => {
 							setSelectingProvider(true);
 							setSelectedProvider("");
@@ -115,13 +115,12 @@ export function AuthTab(props: {
 					>
 						{t("config.addAuth")}
 					</Button>
-					<Button size="sm" variant="outline"
-						onClick={() => setShowGuide(!showGuide)}
-						disabled={saving}
-					>
+					<Button size="sm" variant="outline" onClick={() => setShowGuide(!showGuide)} disabled={saving}>
 						{t("config.authGuide")}
 					</Button>
-					<Button size="sm" variant="destructive"
+					<Button
+						size="sm"
+						variant="destructive"
 						onClick={() => {
 							if (batchMode) {
 								setBatchMode(false);
@@ -135,7 +134,9 @@ export function AuthTab(props: {
 						{batchMode ? t("common.cancel") : t("common.deleteBatch")}
 					</Button>
 					{batchMode && (
-						<Button size="sm" variant="destructive"
+						<Button
+							size="sm"
+							variant="destructive"
 							onClick={() => {
 								if (selectedAuths.size > 0) {
 									props.onDeleteAuths([...selectedAuths] as string[]);
@@ -156,7 +157,9 @@ export function AuthTab(props: {
 				<div className="mb-4 rounded-md border border-border-subtle bg-bg-subtle p-4">
 					<div className="mb-2.5 flex items-center justify-between">
 						<strong className="text-sm text-text-primary">{t("config.authGuideTitle")}</strong>
-						<Button variant="ghost" size="icon-sm" className="size-7" onClick={() => setShowGuide(false)}>×</Button>
+						<Button variant="ghost" size="icon-sm" className="size-7" onClick={() => setShowGuide(false)}>
+							×
+						</Button>
 					</div>
 					<div className="text-xs leading-relaxed text-text-secondary">
 						<p>{t("config.authGuideDesc")}</p>
@@ -167,11 +170,7 @@ export function AuthTab(props: {
 						</ul>
 						<p className="mt-3 border-t border-border-subtle pt-2.5 text-text-tertiary">
 							{t("config.authGuideNote")}{" "}
-							<a
-								href="https://pi.dev/docs/latest/providers#auth-file"
-								onClick={openDocsInSystemBrowser("https://pi.dev/docs/latest/providers#auth-file")}
-								className="inline-flex items-center gap-0.5 text-[color:var(--color-accent)] no-underline"
-							>
+							<a href="https://pi.dev/docs/latest/providers#auth-file" onClick={openDocsInSystemBrowser("https://pi.dev/docs/latest/providers#auth-file")} className="inline-flex items-center gap-0.5 text-[color:var(--color-accent)] no-underline">
 								pi docs <ExternalLink size={12} />
 							</a>
 						</p>
@@ -184,7 +183,9 @@ export function AuthTab(props: {
 				<div className="mb-4 rounded-lg border border-border-default bg-bg-panel p-4 shadow-[0_4px_12px_color-mix(in_srgb,var(--color-text-primary)_8%,transparent)]">
 					<div className="mb-3 flex items-center justify-between border-b border-border-subtle pb-2.5">
 						<strong className="text-sm text-text-primary">{t("config.authSelectProvider")}</strong>
-						<Button variant="ghost" size="icon-sm" className="size-7" onClick={() => setSelectingProvider(false)}>×</Button>
+						<Button variant="ghost" size="icon-sm" className="size-7" onClick={() => setSelectingProvider(false)}>
+							×
+						</Button>
 					</div>
 					<div className="grid max-h-[320px] grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-1.5 overflow-y-auto">
 						{PRESET_PROVIDERS.map((provider) => {
@@ -205,9 +206,7 @@ export function AuthTab(props: {
 									}}
 								>
 									<div className="flex w-full items-center justify-between gap-1.5">
-										<span className={`font-medium ${isSelected ? "text-[color:var(--color-accent)]" : "text-text-primary"}`}>
-											{provider.label}
-										</span>
+										<span className={`font-medium ${isSelected ? "text-[color:var(--color-accent)]" : "text-text-primary"}`}>{provider.label}</span>
 										{isSelected && (
 											<span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-[color:var(--color-accent)] text-white">
 												<Check size={11} strokeWidth={3} aria-hidden="true" />
@@ -215,9 +214,7 @@ export function AuthTab(props: {
 										)}
 									</div>
 									<span className="mt-0.5 font-mono text-[11px] text-text-tertiary">{provider.value}</span>
-									{alreadyConfigured && (
-										<span className="mt-1.5 rounded-[4px] bg-[color:color-mix(in_srgb,var(--color-accent)_10%,transparent)] px-1.5 py-px text-[11px] text-[color:var(--color-accent)]">{t("config.configured")}</span>
-									)}
+									{alreadyConfigured && <span className="mt-1.5 rounded-[4px] bg-[color:color-mix(in_srgb,var(--color-accent)_10%,transparent)] px-1.5 py-px text-[11px] text-[color:var(--color-accent)]">{t("config.configured")}</span>}
 								</button>
 							);
 						})}
@@ -247,9 +244,7 @@ export function AuthTab(props: {
 											}}
 										>
 											<div className="flex w-full items-center justify-between gap-1.5">
-												<span className={`font-medium ${isSelected ? "text-[color:var(--color-accent)]" : "text-text-primary"}`}>
-													{providerName}
-												</span>
+												<span className={`font-medium ${isSelected ? "text-[color:var(--color-accent)]" : "text-text-primary"}`}>{providerName}</span>
 												{isSelected && (
 													<span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-[color:var(--color-accent)] text-white">
 														<Check size={11} strokeWidth={3} aria-hidden="true" />
@@ -257,9 +252,7 @@ export function AuthTab(props: {
 												)}
 											</div>
 											<span className="mt-0.5 font-mono text-[11px] text-text-tertiary">{t("config.fromModels")}</span>
-											{alreadyConfigured && (
-												<span className="mt-1.5 rounded-[4px] bg-[color:color-mix(in_srgb,var(--color-accent)_10%,transparent)] px-1.5 py-px text-[11px] text-[color:var(--color-accent)]">{t("config.configured")}</span>
-											)}
+											{alreadyConfigured && <span className="mt-1.5 rounded-[4px] bg-[color:color-mix(in_srgb,var(--color-accent)_10%,transparent)] px-1.5 py-px text-[11px] text-[color:var(--color-accent)]">{t("config.configured")}</span>}
 										</button>
 									);
 								})}
@@ -283,10 +276,7 @@ export function AuthTab(props: {
 					{(selectedProvider || customProviderName.trim()) && (
 						<div className="mt-2.5 rounded-sm border border-border-subtle bg-bg-hover p-3">
 							<Label className="mb-1.5 block text-xs font-medium text-text-secondary">{t("config.field.apiKey")}</Label>
-							<SecretInput
-								value={newAuthKey}
-								onChange={setNewAuthKey}
-							/>
+							<SecretInput value={newAuthKey} onChange={setNewAuthKey} />
 						</div>
 					)}
 					<div className="mt-3 flex items-center gap-2 border-t border-border-subtle pt-2.5">
@@ -294,17 +284,15 @@ export function AuthTab(props: {
 							<div className="flex flex-1 items-center gap-1.5 text-xs text-text-tertiary">
 								{t("config.authEnvVar")}: <code className="rounded-[4px] bg-bg-hover px-1.5 py-px font-mono text-[11px]">{presetProvider.env}</code>
 								{presetProvider.url && (
-									<a
-										href={presetProvider.url}
-										onClick={openDocsInSystemBrowser(presetProvider.url)}
-										className="inline-flex items-center gap-0.5 text-[11px] text-[color:var(--color-accent)] no-underline"
-									>
+									<a href={presetProvider.url} onClick={openDocsInSystemBrowser(presetProvider.url)} className="inline-flex items-center gap-0.5 text-[11px] text-[color:var(--color-accent)] no-underline">
 										{t("config.authGetKey")} <ExternalLink size={10} />
 									</a>
 								)}
 							</div>
 						)}
-						<Button size="sm" variant="default"
+						<Button
+							size="sm"
+							variant="default"
 							onClick={() => {
 								const finalName = customProviderName.trim() || selectedProvider;
 								if (!finalName) return;
@@ -316,7 +304,7 @@ export function AuthTab(props: {
 						>
 							{t("config.authAddSelected")}
 						</Button>
-						<Button size="sm"  variant="outline" onClick={() => setSelectingProvider(false)}>
+						<Button size="sm" variant="outline" onClick={() => setSelectingProvider(false)}>
 							{t("common.cancel")}
 						</Button>
 					</div>
@@ -328,52 +316,39 @@ export function AuthTab(props: {
 					const auth = data[name];
 					const isExpanded = expandedAuth === name;
 					return (
-						<div
-							key={name}
-							className={`rounded-lg border border-border-subtle bg-bg-panel transition-[border-color,box-shadow,background-color] duration-150${isExpanded ? " border-[color-mix(in_srgb,var(--color-accent)_32%,var(--color-border-subtle))] shadow-[var(--shadow-border)]" : ""}`}
-						>
-							<div
-								className="flex cursor-pointer items-center gap-3 rounded-t-lg px-3.5 py-2 transition-colors duration-150 hover:bg-bg-hover"
-								onClick={() => props.onToggleAuth(name)}
-							>
-						{batchMode && (
-							<Label className="mr-2.5 inline-flex size-4 shrink-0 items-center justify-center" onClick={(e) => e.stopPropagation()}>
-								<Checkbox
-									checked={selectedAuths.has(name)}
-									onClick={(e) => e.stopPropagation()}
-								onCheckedChange={() => {
-										setSelectedAuths(prev => {
-											const next = new Set(prev);
-											if (next.has(name)) next.delete(name);
-											else next.add(name);
-											return next;
-										});
-									}}
-								/>
-							</Label>
-						)}
+						<div key={name} className={`rounded-lg border border-border-subtle bg-bg-panel transition-[border-color,box-shadow,background-color] duration-150${isExpanded ? " border-[color-mix(in_srgb,var(--color-accent)_32%,var(--color-border-subtle))] shadow-[var(--shadow-border)]" : ""}`}>
+							<div className="flex cursor-pointer items-center gap-3 rounded-t-lg px-3.5 py-2 transition-colors duration-150 hover:bg-bg-hover" onClick={() => props.onToggleAuth(name)}>
+								{batchMode && (
+									<Label className="mr-2.5 inline-flex size-4 shrink-0 items-center justify-center" onClick={(e) => e.stopPropagation()}>
+										<Checkbox
+											checked={selectedAuths.has(name)}
+											onClick={(e) => e.stopPropagation()}
+											onCheckedChange={() => {
+												setSelectedAuths((prev) => {
+													const next = new Set(prev);
+													if (next.has(name)) next.delete(name);
+													else next.add(name);
+													return next;
+												});
+											}}
+										/>
+									</Label>
+								)}
 								<span className="text-control font-semibold text-text-primary">{name}</span>
-								<span className="min-w-0 flex-1 truncate font-mono text-xs text-text-tertiary">
-									{auth.key
-										? `${auth.key.slice(0, 10)}••••••${auth.key.slice(-4)}`
-										: t("config.authKeyPreviewEmpty")}
-								</span>
+								<span className="min-w-0 flex-1 truncate font-mono text-xs text-text-tertiary">{auth.key ? `${auth.key.slice(0, 10)}••••••${auth.key.slice(-4)}` : t("config.authKeyPreviewEmpty")}</span>
 								{/* 用量徽章（与模型页同款）：只在已启用时显示数据，开关在右侧「用量查询」弹窗里。 */}
 								<span className="shrink-0" onClick={(event) => event.stopPropagation()}>
 									<ProviderUsageInline provider={name} variant="card" />
 								</span>
 								<div className="flex items-center gap-1">
-									<ProviderMigrationButton
-										direction="pi-to-dsh"
-										provider={name}
-									/>
+									<ProviderMigrationButton direction="pi-to-dsh" provider={name} />
 									{/* 用量查询配置（内置支持的供应商零配置自动生效，不渲染） */}
-									<UsageQueryEntryButton
-										provider={name}
-										onOpen={() => props.onOpenUsageProbeDialog(name)}
-									/>
+									<UsageQueryEntryButton provider={name} onOpen={() => props.onOpenUsageProbeDialog(name)} />
 									{onToggleHiddenAuthProvider && (
-										<Button variant="ghost" size="icon-sm" className="size-7"
+										<Button
+											variant="ghost"
+											size="icon-sm"
+											className="size-7"
 											onClick={(e) => {
 												e.stopPropagation();
 												onToggleHiddenAuthProvider(name);
@@ -383,7 +358,10 @@ export function AuthTab(props: {
 											<EyeOff size={14} className="text-muted-foreground" />
 										</Button>
 									)}
-									<Button variant="ghost" size="icon-sm" className="size-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
+									<Button
+										variant="ghost"
+										size="icon-sm"
+										className="size-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
 										onClick={(e) => {
 											e.stopPropagation();
 											props.onDeleteAuth(name);
@@ -392,33 +370,18 @@ export function AuthTab(props: {
 									>
 										<Trash2 size={14} />
 									</Button>
-									<span className="ml-1 text-control text-text-tertiary">
-										{isExpanded ? (
-											<ChevronDown size={14} />
-										) : (
-											<ChevronRight size={14} />
-										)}
-									</span>
+									<span className="ml-1 text-control text-text-tertiary">{isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</span>
 								</div>
 							</div>
 							{isExpanded && (
 								<div className="mx-4 my-3.5 grid gap-2.5 rounded-lg border border-border-subtle bg-bg-panel p-3.5">
 									<div className="grid grid-cols-[90px_1fr] items-center gap-2.5">
 										<Label className="pl-0.5 text-left text-xs font-medium text-text-secondary">{t("config.field.type")}</Label>
-										<ConfigSelect
-											value={auth.type ?? "api_key"}
-											options={AUTH_TYPE_OPTIONS}
-											onChange={(v) =>
-												props.onUpdate(name, "type", v)
-											}
-										/>
+										<ConfigSelect value={auth.type ?? "api_key"} options={AUTH_TYPE_OPTIONS} onChange={(v) => props.onUpdate(name, "type", v)} />
 									</div>
 									<div className="grid grid-cols-[90px_1fr] items-center gap-2.5">
 										<Label className="mb-1.5 block text-xs font-medium text-text-secondary">{t("config.field.apiKey")}</Label>
-										<SecretInput
-											value={auth.key ?? ""}
-											onChange={(v) => props.onUpdate(name, "key", v)}
-										/>
+										<SecretInput value={auth.key ?? ""} onChange={(v) => props.onUpdate(name, "key", v)} />
 									</div>
 								</div>
 							)}
@@ -429,38 +392,19 @@ export function AuthTab(props: {
 				{/* 已隐藏的认证供应商折叠区：眼睛按钮隐藏后移入此折叠区，可随时点击恢复显示 */}
 				{hiddenProviderNames.length > 0 && (
 					<div className="overflow-hidden rounded-lg border border-border-subtle bg-bg-panel">
-						<button
-							type="button"
-							className="flex w-full cursor-pointer items-center gap-2 px-3.5 py-2 text-left transition-colors duration-150 hover:bg-bg-hover"
-							onClick={() => setHiddenSectionOpen((prev) => !prev)}
-						>
+						<button type="button" className="flex w-full cursor-pointer items-center gap-2 px-3.5 py-2 text-left transition-colors duration-150 hover:bg-bg-hover" onClick={() => setHiddenSectionOpen((prev) => !prev)}>
 							{hiddenSectionOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
 							<EyeOff size={14} className="text-muted-foreground" aria-hidden="true" />
-							<span className="text-control font-semibold text-text-primary">
-								{t("config.hiddenAuths", { count: hiddenProviderNames.length })}
-							</span>
+							<span className="text-control font-semibold text-text-primary">{t("config.hiddenAuths", { count: hiddenProviderNames.length })}</span>
 						</button>
 						{hiddenSectionOpen && (
 							<div className="border-t border-border-subtle px-3.5 py-2">
-								<p className="mb-2 text-[11px] leading-relaxed text-text-tertiary">
-									{t("config.hiddenAuthsHint")}
-								</p>
+								<p className="mb-2 text-[11px] leading-relaxed text-text-tertiary">{t("config.hiddenAuthsHint")}</p>
 								<div className="flex flex-col gap-1">
 									{hiddenProviderNames.map((hiddenName) => (
-										<div
-											key={hiddenName}
-											className="flex items-center justify-between gap-2 rounded-sm bg-bg-muted px-2.5 py-1.5"
-										>
-											<span className="min-w-0 truncate font-mono text-control text-text-primary">
-												{hiddenName}
-											</span>
-											<Button
-												variant="ghost"
-												size="icon-sm"
-												className="size-7 shrink-0"
-												onClick={() => onToggleHiddenAuthProvider?.(hiddenName)}
-												title={t("config.showAuth")}
-											>
+										<div key={hiddenName} className="flex items-center justify-between gap-2 rounded-sm bg-bg-muted px-2.5 py-1.5">
+											<span className="min-w-0 truncate font-mono text-control text-text-primary">{hiddenName}</span>
+											<Button variant="ghost" size="icon-sm" className="size-7 shrink-0" onClick={() => onToggleHiddenAuthProvider?.(hiddenName)} title={t("config.showAuth")}>
 												<Eye size={14} />
 											</Button>
 										</div>
@@ -471,12 +415,8 @@ export function AuthTab(props: {
 					</div>
 				)}
 
-				{visibleProviders.length === 0 && hiddenProviderNames.length === 0 && (
-					<div className="py-12 text-center text-control text-text-tertiary">{t("config.authEmpty")}</div>
-				)}
+				{visibleProviders.length === 0 && hiddenProviderNames.length === 0 && <div className="py-12 text-center text-control text-text-tertiary">{t("config.authEmpty")}</div>}
 			</div>
 		</div>
 	);
 }
-
-

@@ -320,10 +320,7 @@ export type SendPromptInput = {
 };
 
 /** 主进程完成 pi prompt 预检后的明确接收结果。 */
-export type SendPromptResult =
-	| { accepted: true }
-	| ({ accepted: false; error: string; delivery?: "rejected" } & I18nDescriptor)
-	| ({ accepted: false; error: string; delivery: "unknown" } & I18nDescriptor);
+export type SendPromptResult = { accepted: true } | ({ accepted: false; error: string; delivery?: "rejected" } & I18nDescriptor) | ({ accepted: false; error: string; delivery: "unknown" } & I18nDescriptor);
 
 export type SendSessionPromptInput = Omit<SendPromptInput, "agentId"> & {
 	sessionId: string;
@@ -384,9 +381,7 @@ export type SessionCommandError = {
 	needsRestart?: boolean;
 };
 
-export type SessionCommandResult<T> =
-	| { ok: true; value: T }
-	| { ok: false; error: SessionCommandError };
+export type SessionCommandResult<T> = { ok: true; value: T } | { ok: false; error: SessionCommandError };
 
 export type SessionTargetedValue<T> = {
 	target: SessionRuntimeTarget;

@@ -104,11 +104,7 @@ export function buildExtensionsManifest(files, extensionsDir, version) {
  * 生成或校验内置扩展清单。check 模式不写盘，返回 ok=false 表示提交的清单已过期。
  * check 模式忽略 setVersion：它校验的是「当前提交的内容与清单是否一致」。
  */
-export function generateExtensionsManifest({
-	extensionsDir = DEFAULT_EXTENSIONS_DIR,
-	check = false,
-	setVersion = null,
-} = {}) {
+export function generateExtensionsManifest({ extensionsDir = DEFAULT_EXTENSIONS_DIR, check = false, setVersion = null } = {}) {
 	const resolvedDir = resolve(extensionsDir);
 	const manifestPath = join(resolvedDir, EXTENSIONS_MANIFEST_FILE_NAME);
 	const files = listExtensionFileNames(resolvedDir);
@@ -117,9 +113,7 @@ export function generateExtensionsManifest({
 		throw new Error(`invalid --set-version value: ${setVersion}`);
 	}
 	// check 模式沿用已提交的版本号，避免「只是校验」被 --set-version 改变比较基准
-	const version = check
-		? readExistingVersion(manifestPath) ?? INITIAL_EXTENSIONS_BUNDLE_VERSION
-		: setVersion ?? readExistingVersion(manifestPath) ?? INITIAL_EXTENSIONS_BUNDLE_VERSION;
+	const version = check ? (readExistingVersion(manifestPath) ?? INITIAL_EXTENSIONS_BUNDLE_VERSION) : (setVersion ?? readExistingVersion(manifestPath) ?? INITIAL_EXTENSIONS_BUNDLE_VERSION);
 
 	const manifest = buildExtensionsManifest(files, resolvedDir, version);
 	const manifestText = serializeJson(manifest);
@@ -167,14 +161,10 @@ if (isMainModule()) {
 	try {
 		const result = generateExtensionsManifest(parseArgs(process.argv.slice(2)));
 		if (!result.ok) {
-			console.error(
-				`[extensions-manifest] artifact is stale; run npm run generate:extensions-manifest (${result.manifestPath})`,
-			);
+			console.error(`[extensions-manifest] artifact is stale; run npm run generate:extensions-manifest (${result.manifestPath})`);
 			process.exitCode = 1;
 		} else {
-			console.log(
-				`[extensions-manifest] ${result.changed ? "generated" : "up to date"}: ${result.fileCount} files @ v${result.version}`,
-			);
+			console.log(`[extensions-manifest] ${result.changed ? "generated" : "up to date"}: ${result.fileCount} files @ v${result.version}`);
 		}
 	} catch (error) {
 		console.error("[extensions-manifest] generation failed", error);

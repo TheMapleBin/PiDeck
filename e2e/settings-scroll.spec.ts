@@ -18,9 +18,7 @@ test("设置弹窗内容区可滚动（pane Tabs 高度链回归）", async ({ w
 
 	// 从内容滚动容器向上遍历高度链，检查每一层是否有明确约束
 	const info = await window.evaluate(() => {
-		const content = document.querySelector(
-			'.settings-modal [data-slot="tabs-content"].settings-panel',
-		) as HTMLElement | null;
+		const content = document.querySelector('.settings-modal [data-slot="tabs-content"].settings-panel') as HTMLElement | null;
 		if (!content) return { found: false, nodes: [] };
 		const nodes: unknown[] = [];
 		let el: HTMLElement | null = content;

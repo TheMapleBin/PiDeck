@@ -3,13 +3,7 @@
  * TipTap / 旧 contentEditable 都应实现同一 props；草稿真相永远是 string。
  */
 
-import type {
-	ClipboardEvent,
-	DragEvent,
-	FocusEvent,
-	KeyboardEvent,
-	MutableRefObject,
-} from "react";
+import type { ClipboardEvent, DragEvent, FocusEvent, KeyboardEvent, MutableRefObject } from "react";
 import type { ComposerChip } from "./chips";
 
 export type { ComposerChip };

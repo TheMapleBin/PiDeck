@@ -1,10 +1,5 @@
 import { memo, useEffect, useRef, useState } from "react";
-import type {
-	AppSettings,
-	AvailableModel,
-	GitExecutableInfo,
-	ModelListReport,
-} from "../../../../../shared/types";
+import type { AppSettings, AvailableModel, GitExecutableInfo, ModelListReport } from "../../../../../shared/types";
 import { t } from "../../../i18n";
 import { desktopApi } from "../../../desktopApi";
 import { Button } from "../../ui-shadcn/button";
@@ -105,23 +100,15 @@ export const GitTab = memo(function GitTab(props: GitTabProps) {
 	};
 
 	const status = info;
-	const effectiveVersion =
-		status?.source === "not-found" ? "" : status?.version ?? "";
-	const resolvedDisplay =
-		draftPath || status?.resolvedPath || status?.system?.resolvedPath || "";
+	const effectiveVersion = status?.source === "not-found" ? "" : (status?.version ?? "");
+	const resolvedDisplay = draftPath || status?.resolvedPath || status?.system?.resolvedPath || "";
 	// 系统自动探测到的路径（不含用户配置），用作输入框占位符直观展示。
 	const detectedPath = status?.system?.resolvedPath ?? status?.resolvedPath ?? "";
 
 	return (
 		/* Git：id 供「去设置」深链滚动到摘要模型 */
 		<SettingsSection id="settings-section-git" title={t("settings.git")}>
-			<SettingSwitchRow
-				anchor="git-management"
-				title={t("settings.gitManagement")}
-				description={t("settings.gitManagementDesc")}
-				checked={draft.enableGitManagement}
-				onChange={(checked) => updateDraft({ enableGitManagement: checked })}
-			/>
+			<SettingSwitchRow anchor="git-management" title={t("settings.gitManagement")} description={t("settings.gitManagementDesc")} checked={draft.enableGitManagement} onChange={(checked) => updateDraft({ enableGitManagement: checked })} />
 			{draft.enableGitManagement && (
 				<>
 					<SettingRow
@@ -138,33 +125,18 @@ export const GitTab = memo(function GitTab(props: GitTabProps) {
 								<Input
 									className="w-56 min-w-0 flex-1 font-mono text-xs"
 									value={draftPath}
-									placeholder={
-										draftPath
-											? ""
-											: looksLikePath(detectedPath)
-												? detectedPath
-												: t("settings.gitExecutablePlaceholder")
-									}
+									placeholder={draftPath ? "" : looksLikePath(detectedPath) ? detectedPath : t("settings.gitExecutablePlaceholder")}
 									title={draftPath || (looksLikePath(detectedPath) ? detectedPath : "")}
 									onChange={(e) => updateDraft({ gitExecutablePath: e.target.value })}
 								/>
-								<Button
-									variant="outline"
-									size="sm"
-									disabled={detecting}
-									onClick={() => void runDetect(draftPath)}
-								>
+								<Button variant="outline" size="sm" disabled={detecting} onClick={() => void runDetect(draftPath)}>
 									{detecting ? t("settings.gitExecutableDetecting") : t("settings.gitExecutableDetect")}
 								</Button>
 								<Button variant="outline" size="sm" onClick={() => void chooseFile()}>
 									{t("settings.gitExecutableBrowse")}
 								</Button>
 								{draftPath && (
-									<Button
-										variant="ghost"
-										size="sm"
-										onClick={() => updateDraft({ gitExecutablePath: "" })}
-									>
+									<Button variant="ghost" size="sm" onClick={() => updateDraft({ gitExecutablePath: "" })}>
 										{t("settings.gitExecutableClear")}
 									</Button>
 								)}
@@ -177,9 +149,7 @@ export const GitTab = memo(function GitTab(props: GitTabProps) {
 								>
 									{/* 版本号放在路径前：截断只伤路径尾部，来源与版本永远可见 */}
 									{sourceLabel(status?.source ?? "path")}
-									{effectiveVersion
-										? ` · ${t("settings.gitExecutableVersion", { version: effectiveVersion })}`
-										: ""}
+									{effectiveVersion ? ` · ${t("settings.gitExecutableVersion", { version: effectiveVersion })}` : ""}
 									{" · "}
 									{resolvedDisplay}
 								</small>
@@ -219,26 +189,12 @@ export const GitTab = memo(function GitTab(props: GitTabProps) {
 							className="w-full justify-start font-mono text-xs"
 							onClick={props.onOpenGitModelPicker}
 							// title 兜底完整值：长供应商/模型在按钮内被 truncate 省略时，悬停仍可读全。
-							title={
-								draft.gitCommitMessageProvider && draft.gitCommitMessageModel
-									? `${draft.gitCommitMessageProvider}/${draft.gitCommitMessageModel}`
-									: t("settings.gitCommitMessageModelUnset")
-							}
+							title={draft.gitCommitMessageProvider && draft.gitCommitMessageModel ? `${draft.gitCommitMessageProvider}/${draft.gitCommitMessageModel}` : t("settings.gitCommitMessageModelUnset")}
 						>
-							<span className="min-w-0 truncate">
-								{draft.gitCommitMessageProvider && draft.gitCommitMessageModel
-									? `${draft.gitCommitMessageProvider}/${draft.gitCommitMessageModel}`
-									: t("settings.gitCommitMessageModelUnset")}
-							</span>
+							<span className="min-w-0 truncate">{draft.gitCommitMessageProvider && draft.gitCommitMessageModel ? `${draft.gitCommitMessageProvider}/${draft.gitCommitMessageModel}` : t("settings.gitCommitMessageModelUnset")}</span>
 						</Button>
 					</SettingRow>
-					<SettingTextarea
-						anchor="git-commit-message-prompt"
-						title={t("settings.gitCommitMessagePrompt")}
-						description={t("settings.gitCommitMessagePromptDesc")}
-						value={draft.gitCommitMessagePrompt}
-						onChange={(value) => updateDraft({ gitCommitMessagePrompt: value })}
-					/>
+					<SettingTextarea anchor="git-commit-message-prompt" title={t("settings.gitCommitMessagePrompt")} description={t("settings.gitCommitMessagePromptDesc")} value={draft.gitCommitMessagePrompt} onChange={(value) => updateDraft({ gitCommitMessagePrompt: value })} />
 					{props.gitModelPickerOpen && (
 						<ModelPicker
 							models={props.gitModels}

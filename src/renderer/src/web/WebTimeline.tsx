@@ -33,9 +33,7 @@ export const WebUserBubble = memo(function WebUserBubble(props: { message: UIMes
 	return (
 		<article className="user-turn group/user mb-4 flex w-full min-w-0 max-w-full flex-col items-end">
 			<div className="w-fit min-w-0 max-w-[min(82%,64ch)] rounded-[14px] border border-border bg-muted/60 px-3 py-2 text-sm text-foreground [overflow-wrap:anywhere] break-words">
-				<div className="text-chat text-text-primary whitespace-pre-wrap break-words">
-					{text}
-				</div>
+				<div className="text-chat text-text-primary whitespace-pre-wrap break-words">{text}</div>
 			</div>
 		</article>
 	);
@@ -52,63 +50,45 @@ export const WebThinkingBlock = memo(function WebThinkingBlock(props: {
 	if (!props.text.trim()) return null;
 	return (
 		<TimelineMarker kind="thinking" tone={props.running ? "active" : "neutral"} contentClassName="pb-1">
-		<section className="w-full min-w-0 overflow-hidden rounded-md border-0">
-			<button
-				type="button"
-				className="relative flex min-h-7 w-full min-w-0 cursor-pointer items-center gap-2 rounded-md border-0 bg-transparent px-1 py-1 text-left text-control leading-5 text-text-secondary transition-[background-color,transform] duration-150 motion-reduce:transition-none hover:bg-[color:color-mix(in_srgb,var(--color-bg-hover)_50%,transparent)] active:scale-[0.99] focus-visible:-outline-offset-2 focus-visible:outline-2 [&_svg]:shrink-0"
-				onClick={() => setExpanded((value) => !value)}
-				aria-expanded={expanded}
-				title={expanded ? t("thinking.collapse") : t("thinking.expand")}
-			>
-				{props.running && (
-					<span
-						aria-hidden
-						className="pointer-events-none absolute inset-y-0 left-[-300px] w-[300px] animate-thinking-sweep motion-reduce:animate-none bg-[linear-gradient(90deg,transparent,color-mix(in_srgb,var(--color-bg-app)_55%,transparent),transparent)]"
-					/>
-				)}
-				<Brain size={16} className="thinking-row-icon" />
-				<span className="shrink-0 font-mono text-caption tabular-nums text-text-secondary">
-					{t("thinking.title")}
-				</span>
-				{expanded ? (
-					<ChevronDown size={14} className="shrink-0 text-text-tertiary" aria-hidden="true" />
-				) : (
-					<ChevronRight size={14} className="shrink-0 text-text-tertiary" aria-hidden="true" />
-				)}
-				{!expanded && (
-					<SingleLinePreview
-						text={props.text}
-						running={props.running}
-						showSweep={false}
-						className="min-w-0 flex-[1_1_auto] font-mono text-caption text-text-secondary"
-					/>
-				)}
-			</button>
-			{expanded && (
-				<div className="relative ml-5 mt-1 mb-2 rounded-b-sm border-l-2 border-border-subtle bg-transparent pl-3 animate-in fade-in slide-in-from-top-1 duration-150">
-					<div className="markdown-body px-0 pt-1 pb-1 text-text-tertiary">
-						<MarkdownStream
-							text={props.text}
-							isStreaming={props.running}
-							onOpenExternal={(url: string) => {
-								// Web 端无系统浏览器通道，直接新窗口打开
-								window.open(url, "_blank", "noopener");
-							}}
-						/>
+			<section className="w-full min-w-0 overflow-hidden rounded-md border-0">
+				<button
+					type="button"
+					className="relative flex min-h-7 w-full min-w-0 cursor-pointer items-center gap-2 rounded-md border-0 bg-transparent px-1 py-1 text-left text-control leading-5 text-text-secondary transition-[background-color,transform] duration-150 motion-reduce:transition-none hover:bg-[color:color-mix(in_srgb,var(--color-bg-hover)_50%,transparent)] active:scale-[0.99] focus-visible:-outline-offset-2 focus-visible:outline-2 [&_svg]:shrink-0"
+					onClick={() => setExpanded((value) => !value)}
+					aria-expanded={expanded}
+					title={expanded ? t("thinking.collapse") : t("thinking.expand")}
+				>
+					{props.running && <span aria-hidden className="pointer-events-none absolute inset-y-0 left-[-300px] w-[300px] animate-thinking-sweep motion-reduce:animate-none bg-[linear-gradient(90deg,transparent,color-mix(in_srgb,var(--color-bg-app)_55%,transparent),transparent)]" />}
+					<Brain size={16} className="thinking-row-icon" />
+					<span className="shrink-0 font-mono text-caption tabular-nums text-text-secondary">{t("thinking.title")}</span>
+					{expanded ? <ChevronDown size={14} className="shrink-0 text-text-tertiary" aria-hidden="true" /> : <ChevronRight size={14} className="shrink-0 text-text-tertiary" aria-hidden="true" />}
+					{!expanded && <SingleLinePreview text={props.text} running={props.running} showSweep={false} className="min-w-0 flex-[1_1_auto] font-mono text-caption text-text-secondary" />}
+				</button>
+				{expanded && (
+					<div className="relative ml-5 mt-1 mb-2 rounded-b-sm border-l-2 border-border-subtle bg-transparent pl-3 animate-in fade-in slide-in-from-top-1 duration-150">
+						<div className="markdown-body px-0 pt-1 pb-1 text-text-tertiary">
+							<MarkdownStream
+								text={props.text}
+								isStreaming={props.running}
+								onOpenExternal={(url: string) => {
+									// Web 端无系统浏览器通道，直接新窗口打开
+									window.open(url, "_blank", "noopener");
+								}}
+							/>
+						</div>
+						<div className="flex pb-1.5">
+							<button
+								type="button"
+								className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-micro text-text-tertiary transition-colors duration-150 hover:bg-[color:color-mix(in_srgb,var(--color-bg-hover)_45%,transparent)] hover:text-text-secondary focus-visible:outline-2 focus-visible:outline-[var(--focus-ring)]"
+								onClick={() => setExpanded(false)}
+							>
+								<ChevronUp size={12} aria-hidden="true" />
+								{t("thinking.collapse")}
+							</button>
+						</div>
 					</div>
-					<div className="flex pb-1.5">
-						<button
-							type="button"
-							className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-micro text-text-tertiary transition-colors duration-150 hover:bg-[color:color-mix(in_srgb,var(--color-bg-hover)_45%,transparent)] hover:text-text-secondary focus-visible:outline-2 focus-visible:outline-[var(--focus-ring)]"
-							onClick={() => setExpanded(false)}
-						>
-							<ChevronUp size={12} aria-hidden="true" />
-							{t("thinking.collapse")}
-						</button>
-					</div>
-				</div>
-			)}
-		</section>
+				)}
+			</section>
 		</TimelineMarker>
 	);
 });
@@ -126,53 +106,38 @@ type WebToolPart = {
 export const WebToolCard = memo(function WebToolCard(props: { part: WebToolPart }) {
 	const { part } = props;
 	// 静态工具 part 不携带 toolName，名称嵌在 type 里（`tool-${name}`）；动态工具带 toolName
-	const toolName =
-		part.toolName ||
-		(typeof part.type === "string" && part.type.startsWith("tool-")
-			? part.type.slice("tool-".length)
-			: "tool");
+	const toolName = part.toolName || (typeof part.type === "string" && part.type.startsWith("tool-") ? part.type.slice("tool-".length) : "tool");
 	const state = part.state ?? "input-streaming";
 	const running = state === "input-streaming" || state === "input-available";
 	const error = state === "output-error" || state === "error" || Boolean(part.errorText);
 	return (
 		<TimelineMarker kind="tool" tone={error ? "error" : running ? "active" : "success"}>
-		<section
-			className={cn(
-				"tool-card w-full min-w-0 overflow-hidden",
-				running && "tone-running",
-				error && "tone-error",
-			)}
-			data-status={error ? "error" : running ? "running" : "done"}
-			data-tool-name={toolName}
-		>
-			<div className="relative flex min-h-7 items-center rounded-md px-1 py-1">
-				<span className="tool-card-trigger flex min-w-0 items-center gap-2 text-control leading-5 text-text-secondary">
-					<span className="tool-card-icon">
-						<Wrench size={14} aria-hidden="true" />
+			<section className={cn("tool-card w-full min-w-0 overflow-hidden", running && "tone-running", error && "tone-error")} data-status={error ? "error" : running ? "running" : "done"} data-tool-name={toolName}>
+				<div className="relative flex min-h-7 items-center rounded-md px-1 py-1">
+					<span className="tool-card-trigger flex min-w-0 items-center gap-2 text-control leading-5 text-text-secondary">
+						<span className="tool-card-icon">
+							<Wrench size={14} aria-hidden="true" />
+						</span>
+						<span className="tool-card-name truncate font-medium text-text-primary">{toolName}</span>
+						<span className={cn("tool-card-status shrink-0", running && "text-warning", error && "text-danger")}>
+							{running ? (
+								<span className="inline-flex items-center gap-1.5">
+									<span className="tool-card-spinner animate-pideck-spin" aria-hidden="true" />
+									{t("tool.statusRunning")}
+								</span>
+							) : error ? (
+								<span className="inline-flex items-center gap-1.5">{t("tool.statusError")}</span>
+							) : null}
+						</span>
 					</span>
-					<span className="tool-card-name truncate font-medium text-text-primary">{toolName}</span>
-					<span className={cn("tool-card-status shrink-0", running && "text-warning", error && "text-danger")}>
-						{running ? (
-							<span className="inline-flex items-center gap-1.5">
-								<span className="tool-card-spinner animate-pideck-spin" aria-hidden="true" />
-								{t("tool.statusRunning")}
-							</span>
-						) : error ? (
-							<span className="inline-flex items-center gap-1.5">{t("tool.statusError")}</span>
-						) : null}
-					</span>
-				</span>
-			</div>
-		</section>
+				</div>
+			</section>
 		</TimelineMarker>
 	);
 });
 
 /** 助手消息：思考 + 工具 + 正文 的扁平容器（不套气泡，左对齐全宽）。 */
-export const WebAssistantMessage = memo(function WebAssistantMessage(props: {
-	message: UIMessage;
-	isStreaming: boolean;
-}) {
+export const WebAssistantMessage = memo(function WebAssistantMessage(props: { message: UIMessage; isStreaming: boolean }) {
 	const { message, isStreaming } = props;
 	return (
 		<div className="w-full min-w-0">
@@ -183,14 +148,7 @@ export const WebAssistantMessage = memo(function WebAssistantMessage(props: {
 				if (part.type === "dynamic-tool" || (typeof part.type === "string" && part.type.startsWith("tool-"))) {
 					// v7：静态工具 part.type 为 `tool-${toolName}`（tool-input-start 无 dynamic 标志），
 					// 动态工具为 "dynamic-tool"；toolName/toolCallId/state 都直接挂在 part 上
-					return (
-						<WebToolCard
-							key={index}
-							part={
-								part as unknown as WebToolPart
-							}
-						/>
-					);
+					return <WebToolCard key={index} part={part as unknown as WebToolPart} />;
 				}
 				if (part.type === "text") {
 					return (
@@ -209,11 +167,7 @@ export const WebAssistantMessage = memo(function WebAssistantMessage(props: {
 	);
 });
 
-function WebAskCard(props: {
-	request: WebPendingUiRequest;
-	busy: boolean;
-	onRespond: (response: AgentUiResponse) => void;
-}) {
+function WebAskCard(props: { request: WebPendingUiRequest; busy: boolean; onRespond: (response: AgentUiResponse) => void }) {
 	const batchQuestions = props.request.batchQuestions;
 	const isBatch = Boolean(batchQuestions && batchQuestions.length > 0);
 
@@ -258,21 +212,16 @@ function WebAskCard(props: {
 		return (
 			<section className="mt-3 rounded-lg border border-border bg-card p-3 shadow-sm">
 				<div className="mb-2 flex items-center justify-between text-caption font-medium text-foreground">
-					<span>{t("ask.toolName")} ({batchTab + 1}/{total})</span>
+					<span>
+						{t("ask.toolName")} ({batchTab + 1}/{total})
+					</span>
 					{total > 1 ? (
 						<div className="flex gap-1">
 							{batchQuestions.map((q, idx) => (
 								<button
 									key={q.id}
 									type="button"
-									className={cn(
-										"h-5 w-5 rounded text-xs",
-										idx === batchTab
-											? "bg-primary text-primary-foreground font-semibold"
-											: batchAnswers[q.id] !== undefined
-												? "bg-muted text-foreground"
-												: "bg-muted/40 text-muted-foreground"
-									)}
+									className={cn("h-5 w-5 rounded text-xs", idx === batchTab ? "bg-primary text-primary-foreground font-semibold" : batchAnswers[q.id] !== undefined ? "bg-muted text-foreground" : "bg-muted/40 text-muted-foreground")}
 									onClick={() => {
 										setBatchTab(idx);
 										setBatchInput("");
@@ -285,9 +234,7 @@ function WebAskCard(props: {
 					) : null}
 				</div>
 
-				<p className="mb-3 whitespace-pre-wrap break-words text-sm font-medium text-foreground [overflow-wrap:anywhere]">
-					{currentQ.question}
-				</p>
+				<p className="mb-3 whitespace-pre-wrap break-words text-sm font-medium text-foreground [overflow-wrap:anywhere]">{currentQ.question}</p>
 
 				{/* 选项渲染 */}
 				{currentQ.type === "select" && currentQ.options && currentQ.options.length > 0 ? (
@@ -297,15 +244,7 @@ function WebAskCard(props: {
 							const desc = typeof opt === "string" ? undefined : opt.description;
 							const val = typeof opt === "string" ? opt : (opt.value ?? opt.label);
 							return (
-								<Button
-									key={label}
-									type="button"
-									variant={currentAns === val ? "default" : "secondary"}
-									size="sm"
-									className="h-auto min-h-9 w-full flex-col items-start justify-center whitespace-normal break-words py-2 text-left"
-									disabled={props.busy}
-									onClick={() => handleAnswerOne(val)}
-								>
+								<Button key={label} type="button" variant={currentAns === val ? "default" : "secondary"} size="sm" className="h-auto min-h-9 w-full flex-col items-start justify-center whitespace-normal break-words py-2 text-left" disabled={props.busy} onClick={() => handleAnswerOne(val)}>
 									<span className="whitespace-pre-wrap break-words">{label}</span>
 									{desc ? <span className="text-xs font-normal leading-relaxed text-muted-foreground">{desc}</span> : null}
 								</Button>
@@ -320,29 +259,16 @@ function WebAskCard(props: {
 							const val = typeof opt === "string" ? opt : (opt.value ?? opt.label);
 							const selected = Array.isArray(currentAns) && currentAns.includes(val);
 							return (
-								<Button
-									key={label}
-									type="button"
-									variant={selected ? "default" : "secondary"}
-									size="sm"
-									className="h-auto min-h-9 w-full flex-col items-start justify-center whitespace-normal break-words py-2 text-left"
-									disabled={props.busy}
-									onClick={() => handleToggleMulti(val)}
-								>
+								<Button key={label} type="button" variant={selected ? "default" : "secondary"} size="sm" className="h-auto min-h-9 w-full flex-col items-start justify-center whitespace-normal break-words py-2 text-left" disabled={props.busy} onClick={() => handleToggleMulti(val)}>
 									<span className="whitespace-pre-wrap break-words">
-										{selected ? "✓ " : "○ "}{label}
+										{selected ? "✓ " : "○ "}
+										{label}
 									</span>
 									{desc ? <span className="text-xs font-normal leading-relaxed text-muted-foreground">{desc}</span> : null}
 								</Button>
 							);
 						})}
-						<Button
-							type="button"
-							size="sm"
-							className="mt-2"
-							disabled={props.busy || !Array.isArray(currentAns) || currentAns.length === 0}
-							onClick={() => handleAnswerOne(currentAns ?? [])}
-						>
+						<Button type="button" size="sm" className="mt-2" disabled={props.busy || !Array.isArray(currentAns) || currentAns.length === 0} onClick={() => handleAnswerOne(currentAns ?? [])}>
 							{isLast ? t("ask.submit") : t("ask.batchNext")}
 						</Button>
 					</div>
@@ -357,32 +283,14 @@ function WebAskCard(props: {
 					</div>
 				) : (
 					<div className="flex flex-col gap-2">
-						<textarea
-							className="min-h-16 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
-							placeholder={currentQ.placeholder || t("ask.inputPlaceholder")}
-							value={batchInput}
-							disabled={props.busy}
-							onChange={(event) => setBatchInput(event.target.value)}
-						/>
-						<Button
-							type="button"
-							size="sm"
-							disabled={props.busy || !batchInput.trim()}
-							onClick={() => handleAnswerOne(batchInput.trim())}
-						>
+						<textarea className="min-h-16 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm" placeholder={currentQ.placeholder || t("ask.inputPlaceholder")} value={batchInput} disabled={props.busy} onChange={(event) => setBatchInput(event.target.value)} />
+						<Button type="button" size="sm" disabled={props.busy || !batchInput.trim()} onClick={() => handleAnswerOne(batchInput.trim())}>
 							{isLast ? t("ask.submit") : t("ask.batchNext")}
 						</Button>
 					</div>
 				)}
 
-				<Button
-					type="button"
-					variant="ghost"
-					size="sm"
-					className="mt-2"
-					disabled={props.busy}
-					onClick={() => props.onRespond({ cancelled: true })}
-				>
+				<Button type="button" variant="ghost" size="sm" className="mt-2" disabled={props.busy} onClick={() => props.onRespond({ cancelled: true })}>
 					{t("common.cancel")}
 				</Button>
 			</section>
@@ -394,23 +302,13 @@ function WebAskCard(props: {
 	return (
 		<section className="mt-3 rounded-lg border border-border bg-card p-3 shadow-sm">
 			<div className="mb-2 text-caption font-medium text-foreground">{t("ask.toolName")}</div>
-			<p className="mb-3 whitespace-pre-wrap break-words text-sm text-foreground [overflow-wrap:anywhere]">
-				{displayTitle}
-			</p>
+			<p className="mb-3 whitespace-pre-wrap break-words text-sm text-foreground [overflow-wrap:anywhere]">{displayTitle}</p>
 			{method === "select" && options.length > 0 ? (
 				<div className="flex flex-col gap-2">
 					{options.map((option) => {
 						const parsed = splitAskOption(option);
 						return (
-							<Button
-								key={option}
-								type="button"
-								variant="secondary"
-								size="sm"
-								className="h-auto min-h-9 w-full flex-col items-start justify-center whitespace-normal break-words py-2 text-left"
-								disabled={props.busy}
-								onClick={() => props.onRespond({ value: option })}
-							>
+							<Button key={option} type="button" variant="secondary" size="sm" className="h-auto min-h-9 w-full flex-col items-start justify-center whitespace-normal break-words py-2 text-left" disabled={props.busy} onClick={() => props.onRespond({ value: option })}>
 								<span className="whitespace-pre-wrap break-words">{parsed.label}</span>
 								{parsed.description ? <span className="text-xs font-normal leading-relaxed text-muted-foreground">{parsed.description}</span> : null}
 							</Button>
@@ -428,31 +326,13 @@ function WebAskCard(props: {
 				</div>
 			) : (
 				<div className="flex flex-col gap-2">
-					<textarea
-						className="min-h-16 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
-						placeholder={props.request.placeholder || t("ask.inputPlaceholder")}
-						value={draft}
-						disabled={props.busy}
-						onChange={(event) => setDraft(event.target.value)}
-					/>
-					<Button
-						type="button"
-						size="sm"
-						disabled={props.busy || !draft.trim()}
-						onClick={() => props.onRespond({ value: draft.trim() })}
-					>
+					<textarea className="min-h-16 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm" placeholder={props.request.placeholder || t("ask.inputPlaceholder")} value={draft} disabled={props.busy} onChange={(event) => setDraft(event.target.value)} />
+					<Button type="button" size="sm" disabled={props.busy || !draft.trim()} onClick={() => props.onRespond({ value: draft.trim() })}>
 						{t("ask.submit")}
 					</Button>
 				</div>
 			)}
-			<Button
-				type="button"
-				variant="ghost"
-				size="sm"
-				className="mt-2"
-				disabled={props.busy}
-				onClick={() => props.onRespond({ cancelled: true })}
-			>
+			<Button type="button" variant="ghost" size="sm" className="mt-2" disabled={props.busy} onClick={() => props.onRespond({ cancelled: true })}>
 				{t("common.cancel")}
 			</Button>
 		</section>
@@ -472,16 +352,7 @@ export function WebTimeline(props: {
 	onRespondUi?: (response: AgentUiResponse) => void;
 	onLoadMore: () => void;
 }) {
-	const {
-		messages,
-		hasActiveSession,
-		hasMoreHistory,
-		moreCount,
-		loadingMore,
-		streaming,
-		error,
-		onLoadMore,
-	} = props;
+	const { messages, hasActiveSession, hasMoreHistory, moreCount, loadingMore, streaming, error, onLoadMore } = props;
 	const timelineRef = useRef<HTMLDivElement | null>(null);
 	const stickToBottomRef = useRef(true);
 	const [showScrollToBottom, setShowScrollToBottom] = useState(false);
@@ -516,11 +387,7 @@ export function WebTimeline(props: {
 	}, [messages, streaming]);
 
 	return (
-		<section
-			className="message-timeline relative h-full min-h-0 flex-1 overflow-y-auto"
-			ref={timelineRef}
-			onScroll={updateScrollState}
-		>
+		<section className="message-timeline relative h-full min-h-0 flex-1 overflow-y-auto" ref={timelineRef} onScroll={updateScrollState}>
 			<div className="message-list flex flex-col gap-4 p-4">
 				{!hasActiveSession && messages.length === 0 ? (
 					<div className="empty-state">
@@ -539,18 +406,7 @@ export function WebTimeline(props: {
 				) : (
 					<>
 						{messages.map((message) => (
-							<div key={message.id}>
-								{message.role === "user" ? (
-									<WebUserBubble message={message} />
-								) : (
-									<WebAssistantMessage
-										message={message}
-										isStreaming={
-											streaming && message === messages[messages.length - 1]
-										}
-									/>
-								)}
-							</div>
+							<div key={message.id}>{message.role === "user" ? <WebUserBubble message={message} /> : <WebAssistantMessage message={message} isStreaming={streaming && message === messages[messages.length - 1]} />}</div>
 						))}
 					</>
 				)}
@@ -568,30 +424,13 @@ export function WebTimeline(props: {
 				)}
 
 				{/* 错误诊断卡 */}
-				{error ? (
-					<div className="diagnostic-card tone-error p-3 text-control text-danger">
-						{error}
-					</div>
-				) : null}
+				{error ? <div className="diagnostic-card tone-error p-3 text-control text-danger">{error}</div> : null}
 
-				{props.pendingUiRequest && props.onRespondUi ? (
-					<WebAskCard
-						request={props.pendingUiRequest}
-						busy={Boolean(props.uiResponding)}
-						onRespond={props.onRespondUi}
-					/>
-				) : null}
+				{props.pendingUiRequest && props.onRespondUi ? <WebAskCard request={props.pendingUiRequest} busy={Boolean(props.uiResponding)} onRespond={props.onRespondUi} /> : null}
 			</div>
 
 			{showScrollToBottom && (
-				<Button
-					variant="secondary"
-					size="icon"
-					className="absolute right-4 bottom-4 z-10 size-9 rounded-full border border-border bg-background/95 shadow-md"
-					onClick={scrollToBottom}
-					aria-label={t("web.scrollToBottom")}
-					title={t("web.scrollToBottom")}
-				>
+				<Button variant="secondary" size="icon" className="absolute right-4 bottom-4 z-10 size-9 rounded-full border border-border bg-background/95 shadow-md" onClick={scrollToBottom} aria-label={t("web.scrollToBottom")} title={t("web.scrollToBottom")}>
 					<ArrowDown className="size-4" aria-hidden="true" />
 				</Button>
 			)}
@@ -599,13 +438,7 @@ export function WebTimeline(props: {
 			{/* 分页加载更多 */}
 			{hasMoreHistory && (
 				<div className="flex justify-center py-3">
-					<Button
-						variant="outline"
-						size="sm"
-						disabled={loadingMore}
-						onClick={onLoadMore}
-						className="h-8 px-4 text-caption"
-					>
+					<Button variant="outline" size="sm" disabled={loadingMore} onClick={onLoadMore} className="h-8 px-4 text-caption">
 						{loadingMore ? t("timeline.loadingMore") : t("timeline.loadMoreHistory", { count: moreCount })}
 					</Button>
 				</div>

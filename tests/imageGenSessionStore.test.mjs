@@ -58,9 +58,7 @@ function makeStore(ImageBlobStore, ImageSessionStore, sessions, blobs) {
 
 /** 一轮生图记录：user（可带参考图）+ assistant（结果图） */
 function round(n, options = {}) {
-	const userImages = options.reference
-		? [{ type: "image", data: pngBytes(`ref-${n}`), mimeType: "image/png" }]
-		: undefined;
+	const userImages = options.reference ? [{ type: "image", data: pngBytes(`ref-${n}`), mimeType: "image/png" }] : undefined;
 	return [
 		{
 			id: `u-${n}`,
@@ -124,10 +122,7 @@ test("同一会话多轮追加：顺序保留（旧轮在前，新轮在后）",
 		await store.append(UUID_A, round(3));
 		const messages = await store.readMessages(UUID_A);
 		assert.equal(messages.length, 6);
-		assert.equal(
-			JSON.stringify(messages.map((m) => m.text || m.meta.imageGen.prompt)),
-			JSON.stringify(["prompt 1", "prompt 1", "prompt 2", "prompt 2", "prompt 3", "prompt 3"]),
-		);
+		assert.equal(JSON.stringify(messages.map((m) => m.text || m.meta.imageGen.prompt)), JSON.stringify(["prompt 1", "prompt 1", "prompt 2", "prompt 2", "prompt 3", "prompt 3"]));
 	} finally {
 		await cleanup(sessions, blobs);
 	}
@@ -242,9 +237,7 @@ test("字节水位：超过 4 MB 时压缩保留最新，文件回落到水位�
 		await store.append(UUID_A, bulk);
 		const info = await stat(join(sessions, `${UUID_A}.jsonl`));
 		assert.ok(info.size <= 4 * 1024 * 1024, `compacted size ${info.size}`);
-		const lines = (await readFile(join(sessions, `${UUID_A}.jsonl`), "utf8"))
-			.split("\n")
-			.filter(Boolean);
+		const lines = (await readFile(join(sessions, `${UUID_A}.jsonl`), "utf8")).split("\n").filter(Boolean);
 		assert.ok(lines.length <= 2000, `kept ${lines.length} lines`);
 		// 保留的是最新的：末行是最后一条
 		assert.match(lines.at(-1), /"id":"m-9999"/);
@@ -347,9 +340,7 @@ test("孤儿 blob 回收：无引用且过宽限期的删除，被引用的与�
 		const { store, blobStore } = makeStore(ImageBlobStore, ImageSessionStore, sessions, blobs);
 		// 带参考图的一轮：user 与 assistant 各一张图 → 两个被引用的 blob
 		await store.append(UUID_A, round(1, { reference: true }));
-		const referenced = (await store.readMessages(UUID_A)).flatMap((m) =>
-			(m.images ?? []).map((image) => image.ref),
-		);
+		const referenced = (await store.readMessages(UUID_A)).flatMap((m) => (m.images ?? []).map((image) => image.ref));
 		assert.equal(referenced.length, 2);
 
 		// 造一个无引用的旧 blob（2 小时前）

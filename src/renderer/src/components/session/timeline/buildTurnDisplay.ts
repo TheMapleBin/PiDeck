@@ -75,10 +75,7 @@ export function buildTurnDisplay(
 		// Live 时 text 可空，叶子 ThinkingStep 从 streamingThinkingByIdAtom 填。
 		const thinkingId = `msg-thinking-${item.message.id}`;
 		const isLive = Boolean(liveThinkingId && liveThinkingId === thinkingId);
-		const thinking =
-			showThinking && item.message.thinking?.trim()
-				? stripAnsi(item.message.thinking)
-				: "";
+		const thinking = showThinking && item.message.thinking?.trim() ? stripAnsi(item.message.thinking) : "";
 		if (thinking || (showThinking && isLive)) {
 			pushThinking(
 				{
@@ -87,15 +84,8 @@ export function buildTurnDisplay(
 					id: thinkingId,
 					messages: [item.message],
 					text: thinking,
-					startedAt:
-						item.message.thinkingStartedAt ??
-						item.message.timestamp ??
-						run.startedAt,
-					endedAt: isLive
-						? 0
-						: (item.message.thinkingEndedAt ??
-							item.message.timestamp ??
-							run.endedAt),
+					startedAt: item.message.thinkingStartedAt ?? item.message.timestamp ?? run.startedAt,
+					endedAt: isLive ? 0 : (item.message.thinkingEndedAt ?? item.message.timestamp ?? run.endedAt),
 				},
 				true,
 			);
@@ -122,11 +112,7 @@ export function buildTurnDisplay(
 		// - 无 stopReason / pending（骨架占位残留）：回退启发式（历史旧数据兼容）。
 		// 位置守卫防御异常数据（stop 消息后仍有条目）：保证每 run 至多一个 final-answer。
 		const isRunTail = isComplete && index === run.items.length - 1;
-		const isFinal =
-			isRunTail &&
-			(item.message.stopReason === "stop" ||
-				!item.message.stopReason ||
-				item.message.stopReason === "pending");
+		const isFinal = isRunTail && (item.message.stopReason === "stop" || !item.message.stopReason || item.message.stopReason === "pending");
 		if (isFinal) {
 			items.push({ kind: "final-answer", id: item.message.id, message: item.message });
 		} else {

@@ -9,8 +9,9 @@ import test from "node:test";
 test("AgentManager keeps per-agent streaming perf timers", () => {
 	const source = readFileSync("src/main/pi/AgentManager.ts", "utf8");
 	// 计时状态：sendPrompt 请求时刻起表（首个 message_start 消费），首 delta 记 firstDeltaAt，正文首 delta 记 firstTextAt
-	assert.match(source, /messagePerfByAgent = new Map<\s*\n\s*string,\s*\n\s*\{ startedAt: number; firstDeltaAt: number; firstTextAt: number \}\s*\n\s*>\(\)/);
-	assert.match(source, /lastPerfByAgent = new Map<\s*\n\s*string,\s*\n\s*\{ ttftMs\?: number; totalMs: number; tps\?: number; at: number \}\s*\n\s*>\(\)/);
+	// 泛型参数可整体内联为一行，断言只锁字段名与类型语义。
+	assert.match(source, /messagePerfByAgent = new Map<[\s\S]{0,20}?string,[\s\S]{0,20}?\{ startedAt: number; firstDeltaAt: number; firstTextAt: number \}[\s\S]{0,20}?>\(\)/);
+	assert.match(source, /lastPerfByAgent = new Map<[\s\S]{0,20}?string,[\s\S]{0,20}?\{ ttftMs\?: number; totalMs: number; tps\?: number; at: number \}[\s\S]{0,20}?>\(\)/);
 });
 
 test("AgentManager starts the perf timer on message_start (idempotent)", () => {

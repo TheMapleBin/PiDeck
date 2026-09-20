@@ -43,9 +43,7 @@ function atEnd(text, refs = sessions) {
 
 test("file suggestion shows basename in label and parent dir as description", () => {
 	// 无关键词：只展平第一层；根级文件 label 是文件名，description 为 "."
-	const files = [
-		{ name: "main.ts", path: "/p/main.ts", relativePath: "main.ts", type: "file" },
-	];
+	const files = [{ name: "main.ts", path: "/p/main.ts", relativePath: "main.ts", type: "file" }];
 	const items = buildSuggestionItems("看 @", 3, [], files);
 	assertJsonEqual(
 		items.map((i) => ({ label: i.label, description: i.description, value: i.value })),
@@ -69,9 +67,7 @@ test("file suggestion with keyword shows parent dir, root level uses dot", () =>
 		[{ label: "@readme.md", description: "." }],
 	);
 	// 深层目录项：description 是父目录（非自身全路径）
-	const deepFiles = [
-		{ name: "constants", path: "/p/src/app/constants", relativePath: "src/app/constants", type: "directory" },
-	];
+	const deepFiles = [{ name: "constants", path: "/p/src/app/constants", relativePath: "src/app/constants", type: "directory" }];
 	const deepItems = buildSuggestionItems("看 @con", 6, [], deepFiles);
 	assertJsonEqual(
 		deepItems.map((i) => ({ label: i.label, description: i.description })),

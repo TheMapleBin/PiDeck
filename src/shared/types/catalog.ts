@@ -35,10 +35,7 @@ export type CatalogUpdateFailCode =
 
 export type CatalogUpdateResult =
 	// updated=false 表示已是最新（或远端不高于当前生效版本），未发生覆盖写
-	| { ok: true; updated: boolean }
-	| { ok: false; code: CatalogUpdateFailCode; message: string };
+	{ ok: true; updated: boolean } | { ok: false; code: CatalogUpdateFailCode; message: string };
 
 /** 「检查更新」结果：远端 manifest 比对当前生效版本。 */
-export type CatalogCheckResult =
-	| { ok: true; remoteVersion: string; localVersion: string | null; hasUpdate: boolean }
-	| { ok: false; code: CatalogUpdateFailCode; message: string };
+export type CatalogCheckResult = { ok: true; remoteVersion: string; localVersion: string | null; hasUpdate: boolean } | { ok: false; code: CatalogUpdateFailCode; message: string };

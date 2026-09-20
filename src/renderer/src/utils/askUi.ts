@@ -16,20 +16,14 @@ export type AskRequestEntry = {
  */
 export function isPendingAskRequest(entry: AskRequestEntry | undefined): boolean {
 	if (!entry?.request?.method) return false;
-	return (
-		(entry.status === "pending" || entry.status === "responding") &&
-		["select", "confirm", "input", "editor", "batch_ask"].includes(entry.request.method)
-	);
+	return (entry.status === "pending" || entry.status === "responding") && ["select", "confirm", "input", "editor", "batch_ask"].includes(entry.request.method);
 }
 
 /**
  * 统计指定会话集合中待确认的 Ask 请求总数。
  * 纯逻辑函数，供侧栏项目行等计算待确认徽章展示。
  */
-export function countPendingAsksForSessions(
-	sessionIds: Iterable<string>,
-	sessionRuntimeUiById: Readonly<Record<string, { requests?: Record<string, AskRequestEntry> }>> | undefined,
-): number {
+export function countPendingAsksForSessions(sessionIds: Iterable<string>, sessionRuntimeUiById: Readonly<Record<string, { requests?: Record<string, AskRequestEntry> }>> | undefined): number {
 	if (!sessionRuntimeUiById) return 0;
 	let count = 0;
 	for (const sessionId of sessionIds) {
@@ -48,33 +42,22 @@ export function countPendingAsksForSessions(
  * 判断单个会话是否有待确认的 Ask 请求。
  * 供侧栏「活动会话」行等以会话为粒度展示待确认标记的入口使用。
  */
-export function hasPendingAskForSession(
-	sessionId: string | undefined,
-	sessionRuntimeUiById: Readonly<Record<string, { requests?: Record<string, AskRequestEntry> }>> | undefined,
-): boolean {
+export function hasPendingAskForSession(sessionId: string | undefined, sessionRuntimeUiById: Readonly<Record<string, { requests?: Record<string, AskRequestEntry> }>> | undefined): boolean {
 	if (!sessionId || !sessionRuntimeUiById) return false;
 	const runtimeUi = sessionRuntimeUiById[sessionId];
 	if (!runtimeUi?.requests) return false;
 	return Object.values(runtimeUi.requests).some((request) => isPendingAskRequest(request));
 }
 
-export function pickActiveAskRequest(
-	entries: Readonly<Record<string, AskRequestEntry>> | undefined,
-): AgentUiRequest | undefined {
+export function pickActiveAskRequest(entries: Readonly<Record<string, AskRequestEntry>> | undefined): AgentUiRequest | undefined {
 	if (!entries) return undefined;
-	const active = Object.values(entries).filter(
-		(entry) => entry.status === "pending" || entry.status === "responding",
-	);
+	const active = Object.values(entries).filter((entry) => entry.status === "pending" || entry.status === "responding");
 	return active[active.length - 1]?.request;
 }
 
 /** select 的选项是否可点击（有选项时才渲染选项按钮） */
 export function hasSelectableOptions(request: AgentUiRequest | undefined): boolean {
-	return Boolean(
-		request?.method === "select" &&
-		request.options &&
-		request.options.length > 0,
-	);
+	return Boolean(request?.method === "select" && request.options && request.options.length > 0);
 }
 
 /**
@@ -84,10 +67,7 @@ export function hasSelectableOptions(request: AgentUiRequest | undefined): boole
  * - waiting：仍在等待用户响应
  * cancelled 由调用方从 response 推导（answered 状态但 response.cancelled=true 视为取消）。
  */
-export function classifyAskCardStatus(
-	status: string | undefined,
-	cancelled: boolean,
-): "waiting" | "answered" | "cancelled" {
+export function classifyAskCardStatus(status: string | undefined, cancelled: boolean): "waiting" | "answered" | "cancelled" {
 	const normalized = status ?? "pending";
 	if (normalized === "answered" && !cancelled) return "answered";
 	if (normalized === "cancelled" || normalized === "error") return "cancelled";
@@ -100,11 +80,7 @@ export function classifyAskCardStatus(
  * - confirm → { confirmed, value }
  * - 取消 → { cancelled: true }
  */
-export function buildAskResponse(
-	method: string,
-	value: string | boolean | string[] | undefined,
-	options?: { confirmed?: boolean; cancelled?: boolean },
-): AgentUiResponse {
+export function buildAskResponse(method: string, value: string | boolean | string[] | undefined, options?: { confirmed?: boolean; cancelled?: boolean }): AgentUiResponse {
 	if (options?.cancelled) return { cancelled: true };
 	if (method === "confirm") {
 		const confirmed = options?.confirmed ?? Boolean(value);
@@ -206,11 +182,7 @@ export function formatAskTitle(title: string): string {
  * 主进程收到后原样作为 input 答案返回给 pi 扩展。
  * meta 提供每个问题的展示 label 与自定义标记（可选）。
  */
-export function serializeBatchAnswers(
-	questions: ReadonlyArray<{ id: string; type: string }>,
-	answers: Readonly<Record<string, BatchAnswerValue>>,
-	meta?: Readonly<Record<string, { label?: string; wasCustom?: boolean }>>,
-): string {
+export function serializeBatchAnswers(questions: ReadonlyArray<{ id: string; type: string }>, answers: Readonly<Record<string, BatchAnswerValue>>, meta?: Readonly<Record<string, { label?: string; wasCustom?: boolean }>>): string {
 	const result = questions.map((question) => {
 		const value = answers[question.id] ?? null;
 		const itemMeta = meta?.[question.id];

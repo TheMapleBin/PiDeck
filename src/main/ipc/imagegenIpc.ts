@@ -7,14 +7,7 @@
  */
 import { ipcMain } from "electron";
 import { ipcChannels } from "../../shared/ipc";
-import {
-	DEFAULT_IMAGE_GEN_OUTPUT_FORMAT,
-	DEFAULT_IMAGE_GEN_WATERMARK,
-	parseImageGenOutputFormat,
-	parseImageGenReferenceImages,
-	parseImageGenSize,
-	parseImageGenWatermark,
-} from "../../shared/imageGenParams";
+import { DEFAULT_IMAGE_GEN_OUTPUT_FORMAT, DEFAULT_IMAGE_GEN_WATERMARK, parseImageGenOutputFormat, parseImageGenReferenceImages, parseImageGenSize, parseImageGenWatermark } from "../../shared/imageGenParams";
 import type { ImageGenService } from "../imagegen/ImageGenService";
 import type { ImageGenConfigStore } from "../imagegen/ImageGenConfigStore";
 import type { ImageBlobPayload } from "../../shared/types/imagegen";

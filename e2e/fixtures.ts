@@ -58,10 +58,7 @@ export const test = base.extend<AppFixture & { seedProjects: SeedProject[] | und
 		// 都发生在启动期/懒解析，运行后再 update 存在被缓存覆盖的时序风险。
 		if (seedSettings && Object.keys(seedSettings).length > 0) {
 			mkdirSync(join(userDataRoot, "profile"), { recursive: true });
-			writeFileSync(
-				join(userDataRoot, "profile", "settings.json"),
-				JSON.stringify(seedSettings),
-			);
+			writeFileSync(join(userDataRoot, "profile", "settings.json"), JSON.stringify(seedSettings));
 		}
 		const profileDir = join(userDataRoot, "profile");
 		const env = {
@@ -75,20 +72,14 @@ export const test = base.extend<AppFixture & { seedProjects: SeedProject[] | und
 			// APPDATA isolates Electron's userData, while USERPROFILE/HOME isolate APIs
 			// such as os.homedir() used by external-resource scans. Without the latter,
 			// an E2E MCP import dialog could inspect the developer's real .claude/.codex.
-			...(process.platform === "win32"
-				? { APPDATA: userDataRoot, LOCALAPPDATA: userDataRoot, USERPROFILE: userDataRoot, HOME: userDataRoot }
-				: process.platform === "darwin"
-					? { HOME: userDataRoot }
-					: { XDG_CONFIG_HOME: userDataRoot, HOME: userDataRoot }),
+			...(process.platform === "win32" ? { APPDATA: userDataRoot, LOCALAPPDATA: userDataRoot, USERPROFILE: userDataRoot, HOME: userDataRoot } : process.platform === "darwin" ? { HOME: userDataRoot } : { XDG_CONFIG_HOME: userDataRoot, HOME: userDataRoot }),
 			// PIDECK_E2E enables both main-process profile isolation and the updater's
 			// temporary development configuration for the local generic feed.
 			PIDECK_E2E: "1",
 			CI: "1",
 		};
 		delete env.ELECTRON_RENDERER_URL;
-		const packagedExecutablePath = process.env.PIDEK_E2E_EXECUTABLE_PATH
-			? resolve(process.env.PIDEK_E2E_EXECUTABLE_PATH)
-			: undefined;
+		const packagedExecutablePath = process.env.PIDEK_E2E_EXECUTABLE_PATH ? resolve(process.env.PIDEK_E2E_EXECUTABLE_PATH) : undefined;
 		if (packagedExecutablePath && !existsSync(packagedExecutablePath)) {
 			throw new Error(`Packaged E2E executable does not exist: ${packagedExecutablePath}`);
 		}
@@ -97,9 +88,7 @@ export const test = base.extend<AppFixture & { seedProjects: SeedProject[] | und
 			// 未打包运行时应用名解析为 "Electron"，userData 默认落到真实
 			// %APPDATA%/Electron-dev（跨 E2E 运行共享、污染本机）。必须显式
 			// --user-data-dir 指向临时目录（Electron 尊重该 Chromium 开关）。
-			args: packagedExecutablePath
-				? [`--user-data-dir=${profileDir}`]
-				: [join(repoRoot, "out", "main", "index.js"), `--user-data-dir=${profileDir}`],
+			args: packagedExecutablePath ? [`--user-data-dir=${profileDir}`] : [join(repoRoot, "out", "main", "index.js"), `--user-data-dir=${profileDir}`],
 			env,
 		});
 		await use(app);

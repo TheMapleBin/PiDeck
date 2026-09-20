@@ -1,16 +1,7 @@
 import { useMemo, useState } from "react";
 import { useAtomValue } from "jotai";
-import {
-	Edit,
-	Play,
-	Plus,
-	Trash2,
-} from "lucide-react";
-import {
-	automationRunningTaskIdsAtom,
-	automationRunsAtom,
-	automationTasksAtom,
-} from "../../atoms/automation-atoms";
+import { Edit, Play, Plus, Trash2 } from "lucide-react";
+import { automationRunningTaskIdsAtom, automationRunsAtom, automationTasksAtom } from "../../atoms/automation-atoms";
 import { projectInventoryAtom } from "../../atoms/project-atoms";
 import { desktopApi } from "../../desktopApi";
 import { t } from "../../i18n";
@@ -19,19 +10,8 @@ import { Badge } from "../ui-shadcn/badge";
 import { Button } from "../ui-shadcn/button";
 import { ConfirmDialog } from "../ui-shadcn/ConfirmDialog";
 import { Switch } from "../ui-shadcn/switch";
-import {
-	Table,
-	TableBody,
-	TableCell,
-	TableHead,
-	TableHeader,
-	TableRow,
-} from "../ui-shadcn/table";
-import type {
-	AutomationRun,
-	AutomationTask,
-	AutomationTaskSummary,
-} from "../../../../shared/types";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui-shadcn/table";
+import type { AutomationRun, AutomationTask, AutomationTaskSummary } from "../../../../shared/types";
 
 interface AutomationTaskListProps {
 	/** Omit for the cross-project overview; a project page owns one task table. */
@@ -90,29 +70,17 @@ function runStatusTone(status: AutomationRun["status"]): string {
  * Project-owned automation task table. A task is durable configuration; rows show
  * its schedule and most recent run, while each trigger still creates a fresh Agent session.
  */
-export function AutomationTaskList({
-	projectId,
-	onEditTask,
-	onCreateTask,
-}: AutomationTaskListProps) {
+export function AutomationTaskList({ projectId, onEditTask, onCreateTask }: AutomationTaskListProps) {
 	const allTasks = useAtomValue(automationTasksAtom);
 	const runningTaskIds = useAtomValue(automationRunningTaskIdsAtom);
 	const runs = useAtomValue(automationRunsAtom);
 	const projects = useAtomValue(projectInventoryAtom);
-	const tasks = useMemo(
-		() => projectId ? allTasks.filter((task) => task.projectId === projectId) : allTasks,
-		[allTasks, projectId],
-	);
+	const tasks = useMemo(() => (projectId ? allTasks.filter((task) => task.projectId === projectId) : allTasks), [allTasks, projectId]);
 
 	const [deletingTask, setDeletingTask] = useState<AutomationTaskSummary | null>(null);
-	const [triggeringTaskIds, setTriggeringTaskIds] = useState<Set<string>>(
-		new Set(),
-	);
+	const [triggeringTaskIds, setTriggeringTaskIds] = useState<Set<string>>(new Set());
 
-	const projectMap = useMemo(
-		() => new Map(projects.map((project) => [project.id, project.name])),
-		[projects],
-	);
+	const projectMap = useMemo(() => new Map(projects.map((project) => [project.id, project.name])), [projects]);
 	const latestRunByTaskId = useMemo(() => {
 		const result = new Map<string, AutomationRun>();
 		for (const run of runs) {
@@ -160,12 +128,8 @@ export function AutomationTaskList({
 	if (tasks.length === 0) {
 		return (
 			<div className="flex h-64 flex-col items-center justify-center gap-3 text-center">
-				<div className="text-sm font-medium text-foreground">
-					{projectId ? t("automation.emptyProjectTasks") : t("automation.emptyTasks")}
-				</div>
-				<p className="max-w-md text-xs text-muted-foreground">
-					{t("automation.emptyTasksDesc")}
-				</p>
+				<div className="text-sm font-medium text-foreground">{projectId ? t("automation.emptyProjectTasks") : t("automation.emptyTasks")}</div>
+				<p className="max-w-md text-xs text-muted-foreground">{t("automation.emptyTasksDesc")}</p>
 				<Button size="sm" onClick={onCreateTask} className="h-8 gap-1.5 text-xs">
 					<Plus className="size-3.5" />
 					{t("automation.createTask")}
@@ -180,9 +144,7 @@ export function AutomationTaskList({
 				<span className="text-xs text-muted-foreground">
 					{t("automation.tasksTab")} ({tasks.length})
 				</span>
-				<span className="text-[11px] text-muted-foreground">
-					{t("automation.freshSessionHint")}
-				</span>
+				<span className="text-[11px] text-muted-foreground">{t("automation.freshSessionHint")}</span>
 			</div>
 
 			<div className="overflow-hidden rounded-lg border border-border/60 bg-bg-panel/30">
@@ -203,28 +165,20 @@ export function AutomationTaskList({
 							const isRunning = runningTaskIds.has(task.id);
 							const isTriggering = triggeringTaskIds.has(task.id);
 							const latestRun = latestRunByTaskId.get(task.id);
-							const schedule = task.schedule.type === "cron"
-								? task.schedule.expression
-								: t("automation.manualTrigger");
+							const schedule = task.schedule.type === "cron" ? task.schedule.expression : t("automation.manualTrigger");
 
 							return (
 								<TableRow key={task.id}>
 									<TableCell className="min-w-56 whitespace-normal">
 										<div className="flex min-w-0 flex-col gap-1">
 											<div className="flex min-w-0 items-center gap-1.5">
-												<span className="truncate text-xs font-medium text-foreground">
-													{task.name}
-												</span>
+												<span className="truncate text-xs font-medium text-foreground">{task.name}</span>
 												{task.mode === "plan" && (
 													<Badge variant="outline" className="h-5 px-1.5 text-[10px] font-normal">
 														{t("app.composerModePlan")}
 													</Badge>
 												)}
-												{task.mode === "goal" && (
-													<Badge className="h-5 border-amber-500/30 bg-amber-500/15 px-1.5 text-[10px] font-normal text-amber-600">
-														{t("app.composerModeGoal")}
-													</Badge>
-												)}
+												{task.mode === "goal" && <Badge className="h-5 border-amber-500/30 bg-amber-500/15 px-1.5 text-[10px] font-normal text-amber-600">{t("app.composerModeGoal")}</Badge>}
 											</div>
 											<p className="max-w-80 truncate font-mono text-[11px] text-muted-foreground" title={task.prompt}>
 												{task.prompt}
@@ -242,32 +196,16 @@ export function AutomationTaskList({
 										</span>
 									</TableCell>
 									<TableCell>
-										<Badge className={`h-5 border px-1.5 text-[10px] font-normal ${
-											isRunning
-												? "animate-pulse border-sky-500/30 bg-sky-500/15 text-sky-500"
-												: task.enabled
-													? "border-emerald-500/30 bg-emerald-500/15 text-emerald-500"
-													: "border-border bg-muted/50 text-muted-foreground"
-										}`}>
-											{isRunning
-												? t("automation.running")
-												: task.enabled
-													? t("automation.enabled")
-													: t("automation.disabled")}
+										<Badge className={`h-5 border px-1.5 text-[10px] font-normal ${isRunning ? "animate-pulse border-sky-500/30 bg-sky-500/15 text-sky-500" : task.enabled ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-500" : "border-border bg-muted/50 text-muted-foreground"}`}>
+											{isRunning ? t("automation.running") : task.enabled ? t("automation.enabled") : t("automation.disabled")}
 										</Badge>
 									</TableCell>
-									<TableCell className="text-[11px] text-muted-foreground">
-										{task.nextRunAt ? formatTime(task.nextRunAt) : t("automation.manualTrigger")}
-									</TableCell>
+									<TableCell className="text-[11px] text-muted-foreground">{task.nextRunAt ? formatTime(task.nextRunAt) : t("automation.manualTrigger")}</TableCell>
 									<TableCell>
 										{latestRun ? (
 											<div className="flex flex-col gap-1">
-												<Badge className={`h-5 w-fit border px-1.5 text-[10px] font-normal ${runStatusTone(latestRun.status)}`}>
-													{runStatusLabel(latestRun.status)}
-												</Badge>
-												<span className="text-[11px] text-muted-foreground">
-													{formatTime(latestRun.updatedAt)}
-												</span>
+												<Badge className={`h-5 w-fit border px-1.5 text-[10px] font-normal ${runStatusTone(latestRun.status)}`}>{runStatusLabel(latestRun.status)}</Badge>
+												<span className="text-[11px] text-muted-foreground">{formatTime(latestRun.updatedAt)}</span>
 											</div>
 										) : (
 											<span className="text-[11px] text-muted-foreground">{t("automation.neverRun")}</span>
@@ -275,43 +213,14 @@ export function AutomationTaskList({
 									</TableCell>
 									<TableCell>
 										<div className="flex items-center justify-end gap-1">
-											<Switch
-												checked={task.enabled}
-												onCheckedChange={(checked) => handleToggleEnable(task, checked)}
-												aria-label={task.enabled ? t("automation.enabled") : t("automation.disabled")}
-											/>
-											<Button
-												type="button"
-												variant="ghost"
-												size="icon-sm"
-												className="size-7 text-emerald-500 hover:bg-emerald-500/10 hover:text-emerald-500"
-												disabled={isRunning || isTriggering}
-												title={t("automation.runNow")}
-												aria-label={t("automation.runNow")}
-												onClick={() => handleRunNow(task)}
-											>
+											<Switch checked={task.enabled} onCheckedChange={(checked) => handleToggleEnable(task, checked)} aria-label={task.enabled ? t("automation.enabled") : t("automation.disabled")} />
+											<Button type="button" variant="ghost" size="icon-sm" className="size-7 text-emerald-500 hover:bg-emerald-500/10 hover:text-emerald-500" disabled={isRunning || isTriggering} title={t("automation.runNow")} aria-label={t("automation.runNow")} onClick={() => handleRunNow(task)}>
 												<Play className="size-3.5" />
 											</Button>
-											<Button
-												type="button"
-												variant="ghost"
-												size="icon-sm"
-												className="size-7 text-muted-foreground hover:bg-muted hover:text-foreground"
-												title={t("automation.editTask")}
-												aria-label={t("automation.editTask")}
-												onClick={() => onEditTask(task)}
-											>
+											<Button type="button" variant="ghost" size="icon-sm" className="size-7 text-muted-foreground hover:bg-muted hover:text-foreground" title={t("automation.editTask")} aria-label={t("automation.editTask")} onClick={() => onEditTask(task)}>
 												<Edit className="size-3.5" />
 											</Button>
-											<Button
-												type="button"
-												variant="ghost"
-												size="icon-sm"
-												className="size-7 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-												title={t("automation.deleteTask")}
-												aria-label={t("automation.deleteTask")}
-												onClick={() => setDeletingTask(task)}
-											>
+											<Button type="button" variant="ghost" size="icon-sm" className="size-7 text-muted-foreground hover:bg-destructive/10 hover:text-destructive" title={t("automation.deleteTask")} aria-label={t("automation.deleteTask")} onClick={() => setDeletingTask(task)}>
 												<Trash2 className="size-3.5" />
 											</Button>
 										</div>
@@ -323,16 +232,7 @@ export function AutomationTaskList({
 				</Table>
 			</div>
 
-			{deletingTask && (
-				<ConfirmDialog
-					title={t("automation.deleteTask")}
-					message={t("automation.deleteConfirm", { name: deletingTask.name })}
-					confirmLabel={t("automation.delete")}
-					danger
-					onConfirm={handleConfirmDelete}
-					onCancel={() => setDeletingTask(null)}
-				/>
-			)}
+			{deletingTask && <ConfirmDialog title={t("automation.deleteTask")} message={t("automation.deleteConfirm", { name: deletingTask.name })} confirmLabel={t("automation.delete")} danger onConfirm={handleConfirmDelete} onCancel={() => setDeletingTask(null)} />}
 		</div>
 	);
 }

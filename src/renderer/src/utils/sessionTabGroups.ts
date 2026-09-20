@@ -50,11 +50,7 @@ export function projectGroupColor(projectId: string): string {
 }
 
 /** 构建项目分组视图（分组开关开启时 Tab 栏的整体布局数据）。 */
-export function buildProjectTabGroups(
-	tabs: readonly string[],
-	pinned: readonly string[],
-	projectOf: (sessionId: string) => SessionProjectRef | undefined,
-): { pinned: string[]; groups: ProjectTabGroup[]; loose: string[] } {
+export function buildProjectTabGroups(tabs: readonly string[], pinned: readonly string[], projectOf: (sessionId: string) => SessionProjectRef | undefined): { pinned: string[]; groups: ProjectTabGroup[]; loose: string[] } {
 	const pinnedOut: string[] = [];
 	const loose: string[] = [];
 	const groupsByProject = new Map<string, ProjectTabGroup>();

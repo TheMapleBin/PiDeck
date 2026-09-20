@@ -7,17 +7,8 @@ import vm from "node:vm";
 const require = createRequire(import.meta.url);
 const ts = require("typescript");
 const module = { exports: {} };
-vm.runInNewContext(ts.transpileModule(
-	readFileSync("src/renderer/src/utils/voiceRecorderLifecycle.ts", "utf8"),
-	{ compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } },
-).outputText, { module, exports: module.exports });
-const {
-	canCancelVoiceRecording,
-	canStartVoiceRecording,
-	isVoiceTranscriptionConfigured,
-	releaseVoiceRecordingResources,
-	shouldRequestVoiceMicrophone,
-} = module.exports;
+vm.runInNewContext(ts.transpileModule(readFileSync("src/renderer/src/utils/voiceRecorderLifecycle.ts", "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { module, exports: module.exports });
+const { canCancelVoiceRecording, canStartVoiceRecording, isVoiceTranscriptionConfigured, releaseVoiceRecordingResources, shouldRequestVoiceMicrophone } = module.exports;
 
 test("only idle can start and only recording can cancel", () => {
 	assert.equal(canStartVoiceRecording("idle"), true);
@@ -42,7 +33,8 @@ test("microphone permission is gated by the redacted hasApiKey preflight", () =>
 	assert.ok(hookSource.indexOf("streamRef.current = stream") < hookSource.indexOf("new MediaRecorder(stream"));
 	// 渲染层入口由配置完整性控制：ComposerArea 在未配置时不渲染录音控件
 	const composerSource = readFileSync("src/renderer/src/components/session/ComposerArea.tsx", "utf8");
-	assert.match(composerSource, /composer\.voice\.configured \? \(/);
+	// formatter 会去掉单元素三元的包裹括号：用 \(? 容忍。
+	assert.match(composerSource, /composer\.voice\.configured \? \(?/);
 });
 
 test("cleanup detaches recorder handlers and stops every microphone track", () => {
@@ -53,7 +45,18 @@ test("cleanup detaches recorder handlers and stops every microphone track", () =
 		onstop: () => {},
 	};
 	const stream = {
-		getTracks: () => [{ stop: () => { stopped += 1; } }, { stop: () => { stopped += 1; } }],
+		getTracks: () => [
+			{
+				stop: () => {
+					stopped += 1;
+				},
+			},
+			{
+				stop: () => {
+					stopped += 1;
+				},
+			},
+		],
 	};
 	releaseVoiceRecordingResources({ recorder, stream });
 	assert.equal(recorder.ondataavailable, null);

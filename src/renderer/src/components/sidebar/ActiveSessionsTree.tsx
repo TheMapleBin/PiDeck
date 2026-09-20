@@ -23,8 +23,7 @@ const activeRowClass =
 
 /** 右侧「更多操作」按钮：与 SessionTree 同一套 absolute 浮层虚化模式，
  *  行 hover 出现，菜单打开期间保持点亮。 */
-const rowMoreActionsClass =
-	"row-more-actions pointer-events-none absolute top-1/2 right-1 -translate-y-1/2 opacity-0 transition-opacity group-hover/row:pointer-events-auto group-hover/row:opacity-100 group-focus-within/row:pointer-events-auto group-focus-within/row:opacity-100";
+const rowMoreActionsClass = "row-more-actions pointer-events-none absolute top-1/2 right-1 -translate-y-1/2 opacity-0 transition-opacity group-hover/row:pointer-events-auto group-hover/row:opacity-100 group-focus-within/row:pointer-events-auto group-focus-within/row:opacity-100";
 
 /**
  * 活动 Agent 会话页：跨项目收集所有已绑定 runtime 的 Agent（live + 终态），按会话更新时间排序。
@@ -34,11 +33,7 @@ const rowMoreActionsClass =
  * error/closed 是运行失败或已停止但 Tab 未关——保留它们才能从活动页直接重启/重载失败会话，
  * 而不是让失败会话在活动页消失、只能去 chats 历史页翻。
  */
-export function ActiveSessionsTree(props: {
-	controller: SidebarController;
-	actions: SidebarActions;
-	currentSessionId?: string;
-}) {
+export function ActiveSessionsTree(props: { controller: SidebarController; actions: SidebarActions; currentSessionId?: string }) {
 	const { controller } = props;
 	// 活动页以会话为粒度，待确认标记直接按本行 sessionId 判定，
 	// 避免订阅项目级聚合值导致一个会话的 ask 点亮整页。
@@ -57,9 +52,7 @@ export function ActiveSessionsTree(props: {
 		for (const agent of controller.catalog.agents) {
 			if (agent.projectId !== project.id) continue;
 			// 绑定会话：runtimeBySessionId 反查（最可靠），否则按 sessionPath 匹配历史记录。
-			const bound = sessions.find((session) =>
-				controller.catalog.runtimeBySessionId[session.id]?.agentId === agent.id,
-			) ?? sessions.find((session) => session.filePath === agent.sessionPath);
+			const bound = sessions.find((session) => controller.catalog.runtimeBySessionId[session.id]?.agentId === agent.id) ?? sessions.find((session) => session.filePath === agent.sessionPath);
 			liveRows.push({
 				agent,
 				projectId: project.id,
@@ -101,13 +94,7 @@ export function ActiveSessionsTree(props: {
 							void controller.openMenu({ kind: "agent", agentId: agent.id, x: event.clientX, y: event.clientY });
 						}}
 					>
-						<SessionHoverCard
-							session={record ?? summary}
-							title={displayTitle}
-							projectName={project?.name}
-							status={agent.status}
-							disabled={Boolean(controller.menu)}
-						>
+						<SessionHoverCard session={record ?? summary} title={displayTitle} projectName={project?.name} status={agent.status} disabled={Boolean(controller.menu)}>
 							<button
 								type="button"
 								className={cn(activeRowClass, selected && "bg-bg-active text-foreground")}
@@ -123,13 +110,7 @@ export function ActiveSessionsTree(props: {
 								}}
 								onDragEnd={() => props.actions.sessions.endDrag?.()}
 							>
-								<span
-									className={cn(
-										"size-1.5 shrink-0 rounded-full",
-										sessionStatusDotClass(agent.status),
-									)}
-									aria-hidden="true"
-								/>
+								<span className={cn("size-1.5 shrink-0 rounded-full", sessionStatusDotClass(agent.status))} aria-hidden="true" />
 								<div className="conversation-body min-w-0 flex-1 transition-[padding-right] group-hover/row:pr-7 group-focus-within/row:pr-7">
 									<div className="conversation-title flex min-w-0 items-center gap-1.5">
 										{/* 选中背景仍保留，聚焦行也允许 hover 查看完整标题 */}
@@ -138,9 +119,7 @@ export function ActiveSessionsTree(props: {
 										{/* 待确认标记：该会话正在等用户回答 ask，与项目行徽章共用同一组件 */}
 										{pendingAsk && <PendingAskBadge count={1} />}
 										{/* 相对时间常显：hover 时被右侧「⋯」浮层盖住（与历史会话行同一策略） */}
-										<span className="shrink-0 text-caption tabular-nums text-muted-foreground group-hover/row:hidden">
-											{formatRelativeTime(sortAt)}
-										</span>
+										<span className="shrink-0 text-caption tabular-nums text-muted-foreground group-hover/row:hidden">{formatRelativeTime(sortAt)}</span>
 									</div>
 								</div>
 							</button>
@@ -149,10 +128,7 @@ export function ActiveSessionsTree(props: {
 							type="button"
 							variant="ghost"
 							size="icon-xs"
-							className={cn(
-								rowMoreActionsClass,
-								controller.menu?.kind === "agent" && controller.menu.agentId === agent.id && "pointer-events-auto opacity-100",
-							)}
+							className={cn(rowMoreActionsClass, controller.menu?.kind === "agent" && controller.menu.agentId === agent.id && "pointer-events-auto opacity-100")}
 							aria-label={t("sidebar.moreActions")}
 							title={t("sidebar.moreActions")}
 							onClick={(event) => {

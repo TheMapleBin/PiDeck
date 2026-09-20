@@ -105,11 +105,7 @@ export function runtimeEntryResolvableOnDisk(pkgDir, entry) {
  * 运行时加载的是产物，src 可以整块丢掉（这是归档里最大的一块冗余）。
  */
 export function hasBuildOutput(pkgDir) {
-	return (
-		existsSync(join(pkgDir, "lib")) ||
-		existsSync(join(pkgDir, "dist")) ||
-		existsSync(join(pkgDir, "build"))
-	);
+	return existsSync(join(pkgDir, "lib")) || existsSync(join(pkgDir, "dist")) || existsSync(join(pkgDir, "build"));
 }
 
 /**

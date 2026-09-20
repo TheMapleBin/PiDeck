@@ -59,7 +59,8 @@ const zhCN = {
 	"model.readyNote": "点击按钮即可切换当前会话模型。",
 	"model.title": "切换模型",
 	"help.title": "🤖 Pi Agent 帮助",
-	"help.body": "**可用命令**\n\n`/new` 或 `/n` — 创建新会话\n`/stop` 或 `/s` — 停止当前 Agent\n`/model` — 打开模型切换按钮卡片\n`/status` — 查看当前状态\n`/whoami` — 查看你的 open_id\n`/help` 或 `/h` — 查看帮助\n\n**Agent 自主能力**\n让 Agent 帮你导出文件或写报告时，它会自动：\n• 发送文件到飞书聊天\n• 创建飞书文档并分享链接\n",
+	"help.body":
+		"**可用命令**\n\n`/new` 或 `/n` — 创建新会话\n`/stop` 或 `/s` — 停止当前 Agent\n`/model` — 打开模型切换按钮卡片\n`/status` — 查看当前状态\n`/whoami` — 查看你的 open_id\n`/help` 或 `/h` — 查看帮助\n\n**Agent 自主能力**\n让 Agent 帮你导出文件或写报告时，它会自动：\n• 发送文件到飞书聊天\n• 创建飞书文档并分享链接\n",
 	"result.completed": "⏱ {duration}s ✅ 完成",
 	"file.bridgeNotReady": "❌ 飞书连接未就绪",
 	"file.notFound": "❌ 文件不存在: {path}",
@@ -181,7 +182,8 @@ const enUS: Record<FeishuTranslationKey, string> = {
 	"model.readyNote": "Select a button to switch the model for this session.",
 	"model.title": "Switch model",
 	"help.title": "🤖 Pi Agent help",
-	"help.body": "**Available commands**\n\n`/new` or `/n` — Create a new session\n`/stop` or `/s` — Stop the current Agent\n`/model` — Open the model picker\n`/status` — View the current status\n`/whoami` — View your open_id\n`/help` or `/h` — View help\n\n**Agent capabilities**\nWhen you ask the Agent to export a file or write a report, it can automatically:\n• Send files to the Feishu chat\n• Create a Feishu document and share its link\n",
+	"help.body":
+		"**Available commands**\n\n`/new` or `/n` — Create a new session\n`/stop` or `/s` — Stop the current Agent\n`/model` — Open the model picker\n`/status` — View the current status\n`/whoami` — View your open_id\n`/help` or `/h` — View help\n\n**Agent capabilities**\nWhen you ask the Agent to export a file or write a report, it can automatically:\n• Send files to the Feishu chat\n• Create a Feishu document and share its link\n",
 	"result.completed": "⏱ {duration}s ✅ Done",
 	"file.bridgeNotReady": "❌ The Feishu connection is not ready.",
 	"file.notFound": "❌ File not found: {path}",
@@ -253,13 +255,7 @@ export function feishuLanguage(locale: FeishuLocale): "zh" | "en" {
 	return locale === "en-US" ? "en" : "zh";
 }
 
-export function feishuT(
-	locale: FeishuLocale,
-	key: FeishuTranslationKey,
-	params: TranslationParams = {},
-): string {
+export function feishuT(locale: FeishuLocale, key: FeishuTranslationKey, params: TranslationParams = {}): string {
 	const template = (locale === "en-US" ? enUS : zhCN)[key];
-	return template.replace(/\{([A-Za-z0-9_]+)\}/g, (match, name: string) => (
-		Object.prototype.hasOwnProperty.call(params, name) ? String(params[name]) : match
-	));
+	return template.replace(/\{([A-Za-z0-9_]+)\}/g, (match, name: string) => (Object.prototype.hasOwnProperty.call(params, name) ? String(params[name]) : match));
 }

@@ -68,13 +68,7 @@ export type ProviderUsageBooster = {
  * - general：通用 OpenAI 兼容 /usage（端点自定义场景的可选覆盖模板）；
  * - newapi：New API / OneAPI 中转站（需要访问令牌 + 用户 ID）。
  */
-export type UsageProbeTemplateCategory =
-	| "balance"
-	| "plan"
-	| "subscription"
-	| "general"
-	| "newapi"
-	| "cookie";
+export type UsageProbeTemplateCategory = "balance" | "plan" | "subscription" | "general" | "newapi" | "cookie";
 
 /** 声明式模板元数据（渲染层 pills 数据源；纯数据、无密钥）。 */
 export type UsageProbeTemplateMeta = {

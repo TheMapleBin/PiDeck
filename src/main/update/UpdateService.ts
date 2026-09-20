@@ -9,11 +9,7 @@
  */
 
 import type { AppSettings } from "../../shared/types/settings";
-import type {
-	AppUpdateDeliveryMode,
-	AppUpdateDownloadState,
-	AppUpdateStatusSnapshot,
-} from "../../shared/types/app";
+import type { AppUpdateDeliveryMode, AppUpdateDownloadState, AppUpdateStatusSnapshot } from "../../shared/types/app";
 import type { PiUpdateCheckResult } from "../../shared/types";
 import type { CatalogCheckResult } from "../../shared/types/catalog";
 import type { SettingsStore } from "../settings/SettingsStore";
@@ -103,10 +99,7 @@ export class UpdateService {
 		if (this.disposed) return;
 		this.applyAutoDownloadPreference();
 		this.applyUpdateSource();
-		this.scheduleNext(
-			options?.startDelayMs ?? DEFAULT_START_DELAY_MS,
-			options?.intervalMs ?? DEFAULT_CHECK_INTERVAL_MS,
-		);
+		this.scheduleNext(options?.startDelayMs ?? DEFAULT_START_DELAY_MS, options?.intervalMs ?? DEFAULT_CHECK_INTERVAL_MS);
 	}
 
 	/** 立即执行一轮检查（自动调度 / 手动「检测更新」共用；经 checkUpdate IPC）。 */
@@ -120,11 +113,7 @@ export class UpdateService {
 			this.pushSnapshot();
 		}
 		try {
-			const [appResult, piResult, catalogResult] = await Promise.allSettled([
-				this.checkApp(),
-				this.checkPi(),
-				this.checkCatalog(),
-			]);
+			const [appResult, piResult, catalogResult] = await Promise.allSettled([this.checkApp(), this.checkPi(), this.checkCatalog()]);
 			if (appResult.status === "fulfilled") this.lastApp = appResult.value;
 			if (appResult.status === "rejected") {
 				const error = toErrorMessage(appResult.reason);
@@ -143,9 +132,7 @@ export class UpdateService {
 				void this.deps.log?.("warn", "Catalog update check failed", { error });
 			}
 			// 检查时间持久化（低频写，2h 一次），供 UI 显示上次检查时间。
-			await this.deps.settingsStore
-				.update({ updateLastCheckAt: Date.now() })
-				.catch(() => undefined);
+			await this.deps.settingsStore.update({ updateLastCheckAt: Date.now() }).catch(() => undefined);
 			this.pushSnapshot();
 		} finally {
 			this.running = false;
@@ -162,9 +149,7 @@ export class UpdateService {
 			void this.deps.log?.("warn", "Ignored download request while update installation is starting");
 			return;
 		}
-		const version = this.lastApp?.hasUpdate
-			? this.download.version ?? this.lastApp.latestVersion
-			: undefined;
+		const version = this.lastApp?.hasUpdate ? (this.download.version ?? this.lastApp.latestVersion) : undefined;
 		if (!version) {
 			this.setDownloadError("No application update is available to download.");
 			return;
@@ -236,8 +221,7 @@ export class UpdateService {
 
 	/** 记录「已提示过该版本」（渲染层 toast 展示后调用，实现每版本只提示一次）。 */
 	async notifySeen(kind: "app" | "pi", version: string): Promise<void> {
-		const patch: Partial<AppSettings> =
-			kind === "app" ? { updateNotifiedVersion: version } : { updatePiNotifiedVersion: version };
+		const patch: Partial<AppSettings> = kind === "app" ? { updateNotifiedVersion: version } : { updatePiNotifiedVersion: version };
 		await this.deps.settingsStore.update(patch).catch(() => undefined);
 		this.pushSnapshot();
 	}
@@ -258,8 +242,7 @@ export class UpdateService {
 		return {
 			lastCheckAt: settings.updateLastCheckAt,
 			deliveryMode: this.deliveryMode,
-			autoDownload:
-				this.deliveryMode === "automatic" ? settings.autoDownloadUpdates !== false : null,
+			autoDownload: this.deliveryMode === "automatic" ? settings.autoDownloadUpdates !== false : null,
 			app: hasAppState
 				? {
 						latestVersion: this.lastApp?.latestVersion,
@@ -375,13 +358,14 @@ export class UpdateService {
 	private armInstallWatchdog(): void {
 		if (this.installWatchdog) clearTimeout(this.installWatchdog);
 		const timeoutMs = this.deps.installExitTimeoutMs ?? DEFAULT_INSTALL_EXIT_TIMEOUT_MS;
-		this.installWatchdog = setTimeout(() => {
-			this.installWatchdog = null;
-			if (!this.isInstallInProgress()) return;
-			this.restoreAfterInstallFailure(
-				"The update installer did not start before PiDeck finished waiting to exit.",
-			);
-		}, Math.max(0, timeoutMs));
+		this.installWatchdog = setTimeout(
+			() => {
+				this.installWatchdog = null;
+				if (!this.isInstallInProgress()) return;
+				this.restoreAfterInstallFailure("The update installer did not start before PiDeck finished waiting to exit.");
+			},
+			Math.max(0, timeoutMs),
+		);
 		// 不能让失败的安装尝试成为主进程唯一的活跃句柄。
 		this.installWatchdog.unref?.();
 	}
@@ -414,9 +398,7 @@ export class UpdateService {
 			const releaseUrl = updateSourceLatestReleaseUrl(source);
 			const result = await this.getManualChecker()(releaseUrl ?? undefined);
 			this.lastApp = result;
-			this.download = result.hasUpdate
-				? { phase: "available", version: result.latestVersion }
-				: emptyDownloadState();
+			this.download = result.hasUpdate ? { phase: "available", version: result.latestVersion } : emptyDownloadState();
 			this.pushSnapshot();
 			return result;
 		}
@@ -472,11 +454,14 @@ export class UpdateService {
 	private scheduleNext(delayMs: number, intervalMs: number): void {
 		if (this.disposed) return;
 		const jitter = Math.floor(Math.random() * DEFAULT_JITTER_MAX_MS);
-		const timer = setTimeout(() => {
-			void this.checkNow().finally(() => {
-				this.scheduleNext(intervalMs, intervalMs);
-			});
-		}, Math.max(0, delayMs + jitter));
+		const timer = setTimeout(
+			() => {
+				void this.checkNow().finally(() => {
+					this.scheduleNext(intervalMs, intervalMs);
+				});
+			},
+			Math.max(0, delayMs + jitter),
+		);
 		// 调度器不能成为 Electron 退出/Node 测试进程无法结束的唯一活跃句柄。
 		timer.unref?.();
 		this.timer = timer;

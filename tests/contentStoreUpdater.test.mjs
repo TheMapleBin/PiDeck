@@ -20,8 +20,7 @@ import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
 const promptsModule = loadTsCommonJs("src/main/prompts/promptStoreUpdater.ts");
 
-const { PromptStoreUpdater, PROMPT_OVERLAY_DIR_NAME, PROMPT_OVERLAY_BACKUP_DIR_NAME, PROMPTS_MANIFEST_FILE_NAME } =
-	promptsModule;
+const { PromptStoreUpdater, PROMPT_OVERLAY_DIR_NAME, PROMPT_OVERLAY_BACKUP_DIR_NAME, PROMPTS_MANIFEST_FILE_NAME } = promptsModule;
 
 function sha256(text) {
 	return createHash("sha256").update(Buffer.from(text, "utf8")).digest("hex");
@@ -53,15 +52,21 @@ function makeNetwork(repoFiles) {
 		const relPath = resolveRepoPath(url);
 		const content = relPath ? repoFiles[relPath] : undefined;
 		if (content === undefined) {
-			return { ok: false, status: 404, async arrayBuffer() { return new ArrayBuffer(0); } };
+			return {
+				ok: false,
+				status: 404,
+				async arrayBuffer() {
+					return new ArrayBuffer(0);
+				},
+			};
 		}
 		const isAtomGit = url.includes("api.atomgit.com");
 		const payload = isAtomGit
 			? JSON.stringify({
-				type: "file",
-				encoding: "base64",
-				content: Buffer.from(content, "utf8").toString("base64"),
-			})
+					type: "file",
+					encoding: "base64",
+					content: Buffer.from(content, "utf8").toString("base64"),
+				})
 			: content;
 		return {
 			ok: true,
@@ -192,10 +197,7 @@ test("远端清单校验失败（文件摘要与清单不符）时整份丢弃�
 			remote[`resources/prompts/${name}`] = content;
 		}
 		// 用裸名构造清单文本（远端清单的 files[].name 就是相对仓库的裸文件名，走 fileNamePattern 校验）
-		const tamperedManifest = buildManifest(
-			{ ...fixture.files, "plan-build.md": "# 计划与构建（v2）\n\n更详细的步骤。\n" },
-			"1.0.0",
-		);
+		const tamperedManifest = buildManifest({ ...fixture.files, "plan-build.md": "# 计划与构建（v2）\n\n更详细的步骤。\n" }, "1.0.0");
 		const tampered = `${JSON.stringify(tamperedManifest, null, 2)}\n`;
 		const fetchImpl = async (url) => {
 			if (url.includes(PROMPTS_MANIFEST_FILE_NAME)) {
@@ -247,10 +249,7 @@ test("restoreBuiltin 还原 + restorePrevious 恢复上一版（.bak 校验通�
 		const prev = updater.restorePrevious();
 		assert.equal(prev.ok, true);
 		assert.equal(updater.resolveEffectiveOverlayDir(), overlayDir(fixture));
-		assert.equal(
-			readFileSync(join(overlayDir(fixture), "plan-build.md"), "utf8"),
-			remote["plan-build.md"],
-		);
+		assert.equal(readFileSync(join(overlayDir(fixture), "plan-build.md"), "utf8"), remote["plan-build.md"]);
 	} finally {
 		rmSync(fixture.root, { recursive: true, force: true });
 	}

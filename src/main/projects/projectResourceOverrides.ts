@@ -1,10 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import type {
-	ProjectInheritedResourceToggleInput,
-	ProjectResourceOverrides,
-} from "../../shared/types";
+import type { ProjectInheritedResourceToggleInput, ProjectResourceOverrides } from "../../shared/types";
 
 const OVERRIDE_FIELDS = {
 	extension: "pideckDisabledGlobalExtensions",
@@ -35,9 +32,7 @@ function overridesFromRecord(settings: Record<string, unknown>): ProjectResource
 	};
 }
 
-export function projectResourceOverridesFromRecord(
-	settings: Record<string, unknown>,
-): ProjectResourceOverrides {
+export function projectResourceOverridesFromRecord(settings: Record<string, unknown>): ProjectResourceOverrides {
 	return overridesFromRecord(settings);
 }
 
@@ -52,9 +47,7 @@ export function emptyProjectResourceOverrides(): ProjectResourceOverrides {
 /** Reads PiDeck-only project overrides without treating malformed pi settings as trusted data. */
 export function readProjectResourceOverrides(projectRoot: string): ProjectResourceOverrides {
 	try {
-		const parsed: unknown = JSON.parse(
-			readFileSync(join(projectRoot, ".pi", "settings.json"), "utf8"),
-		);
+		const parsed: unknown = JSON.parse(readFileSync(join(projectRoot, ".pi", "settings.json"), "utf8"));
 		if (!isRecord(parsed)) return emptyProjectResourceOverrides();
 		return overridesFromRecord(parsed);
 	} catch {
@@ -63,13 +56,7 @@ export function readProjectResourceOverrides(projectRoot: string): ProjectResour
 }
 
 /** Persists one inherited-resource override while preserving every unrelated pi setting. */
-export async function setProjectInheritedResourceEnabled(
-	settingsFile: string,
-	kind: ProjectInheritedResourceToggleInput["kind"],
-	key: string,
-	enabled: boolean,
-	invalidJsonMessage: string,
-): Promise<ProjectResourceOverrides> {
+export async function setProjectInheritedResourceEnabled(settingsFile: string, kind: ProjectInheritedResourceToggleInput["kind"], key: string, enabled: boolean, invalidJsonMessage: string): Promise<ProjectResourceOverrides> {
 	let settings: Record<string, unknown> = {};
 	if (existsSync(settingsFile)) {
 		let parsed: unknown;
@@ -83,9 +70,7 @@ export async function setProjectInheritedResourceEnabled(
 	}
 
 	const field = OVERRIDE_FIELDS[kind];
-	const normalize = kind === "extension"
-		? (entry: string) => entry
-		: (entry: string) => entry.toLowerCase();
+	const normalize = kind === "extension" ? (entry: string) => entry : (entry: string) => entry.toLowerCase();
 	const current = stringArray(settings[field], normalize);
 	const next = current.filter((entry) => entry !== key);
 	if (!enabled) next.push(key);

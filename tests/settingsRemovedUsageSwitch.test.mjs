@@ -39,10 +39,7 @@ test("设置契约里不再有 providerUsageAutoQueryEnabled", () => {
 	assert.doesNotMatch(atoms, /providerUsageAutoQueryEnabledAtom/);
 
 	// i18n 两套文案同步删除（残留 key 会让人以为开关还在）。
-	for (const locale of [
-		"src/renderer/src/i18n/rendererCopy.zh-CN.ts",
-		"src/renderer/src/i18n/rendererCopy.en-US.ts",
-	]) {
+	for (const locale of ["src/renderer/src/i18n/rendererCopy.zh-CN.ts", "src/renderer/src/i18n/rendererCopy.en-US.ts"]) {
 		assert.doesNotMatch(read(locale), /settings\.providerUsageAutoQuery/);
 	}
 });

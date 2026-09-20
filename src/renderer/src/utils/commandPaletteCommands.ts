@@ -1,16 +1,9 @@
 import type { LucideIcon } from "lucide-react";
-import {
-	Settings2,
-	SlidersHorizontal,
-} from "lucide-react";
+import { Settings2, SlidersHorizontal } from "lucide-react";
 import type { SettingsFocusTarget } from "../atoms";
 import { t, type TranslationKey } from "../i18n";
 import type { FuzzySearchable } from "./commandPaletteFuzzy";
-import {
-	SETTINGS_TAB_KEYWORDS,
-	SETTINGS_TAB_LABEL_KEYS,
-	SETTINGS_TAB_LAYOUT,
-} from "../components/app/settings/settingsTabLayout";
+import { SETTINGS_TAB_KEYWORDS, SETTINGS_TAB_LABEL_KEYS, SETTINGS_TAB_LAYOUT } from "../components/app/settings/settingsTabLayout";
 import { SETTINGS_FIELD_ANCHORS } from "./settingsFieldAnchors";
 
 /**
@@ -87,9 +80,7 @@ const CONFIG_PAGE_COMMANDS: readonly ConfigPageCommand[] = [
  * openSettings 由调用方注入（App 层的 openSettingsAtom setter）——本模块保持纯数据，
  * 不直接依赖 jotai store，便于单测与复用。
  */
-export function buildSettingsCommands(
-	openSettings: (target: SettingsFocusTarget) => void,
-): PaletteCommand[] {
+export function buildSettingsCommands(openSettings: (target: SettingsFocusTarget) => void): PaletteCommand[] {
 	const group = t("command.groupSettings");
 	const subtitle = t("command.openSettingsHint");
 
@@ -138,12 +129,7 @@ export function buildSettingsCommands(
 }
 
 /** 分组渲染顺序：操作（最高频）→ 设置页 → 细粒度设置项 → 配置管理；未列出的分组排在最后。 */
-export const PALETTE_GROUP_ORDER: readonly TranslationKey[] = [
-	"command.groupActions",
-	"command.groupSettings",
-	"command.groupSettingsFields",
-	"command.groupConfig",
-];
+export const PALETTE_GROUP_ORDER: readonly TranslationKey[] = ["command.groupActions", "command.groupSettings", "command.groupSettingsFields", "command.groupConfig"];
 
 // 说明：原先这里还有 groupRankedCommands（把打分结果按 PALETTE_GROUP_ORDER 聚合）。
 // 迁移到 cmdk 后，分组渲染与组内排序都由 cmdk 负责，只剩「组间顺序」这一条业务约定

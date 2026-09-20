@@ -55,11 +55,7 @@ test("main.lib.entry 覆盖全部 join(__dirname) 稳定文件引用", () => {
 	const refs = collectDirnameFileRefs();
 	assert.ok(refs.length >= 4, `应能扫到 >=4 处 join(__dirname) 引用，实际 ${refs.length}`);
 	for (const ref of refs) {
-		assert.ok(
-			entryNames.has(ref.name),
-			`${ref.file} 引用了 ${ref.name}，但 electron.vite.config.ts main.lib.entry 没有对应入口`
-				+ `（缺 "${ref.name.replace(/\.js$/, "")}"）——out/main 清空重建后该文件会消失`,
-		);
+		assert.ok(entryNames.has(ref.name), `${ref.file} 引用了 ${ref.name}，但 electron.vite.config.ts main.lib.entry 没有对应入口` + `（缺 "${ref.name.replace(/\.js$/, "")}"）——out/main 清空重建后该文件会消失`);
 	}
 });
 

@@ -33,11 +33,7 @@ assert.ok(DSH_VERSION, "lock 里必须有 @deepseek-ai/dsh 条目");
 
 /** 运行 pack 脚本（dry-run，超时保护）。返回 stdout 文本。 */
 function runPack(extraArgs) {
-	return execFileSync(
-		process.execPath,
-		[packScript, "--dry-run", ...extraArgs],
-		{ cwd: projectRoot, encoding: "utf8", timeout: 10 * 60 * 1000, env: { ...process.env } },
-	);
+	return execFileSync(process.execPath, [packScript, "--dry-run", ...extraArgs], { cwd: projectRoot, encoding: "utf8", timeout: 10 * 60 * 1000, env: { ...process.env } });
 }
 
 test("默认模式（无 --target-*）保持本机平台行为", () => {
@@ -46,28 +42,39 @@ test("默认模式（无 --target-*）保持本机平台行为", () => {
 	assert.match(out, /runtime 版本: /);
 });
 
-test("交叉模式：目标平台三元组出现在输出中，且 lock 精确版本被采用", () => {
-	const out = runPack(["--target-os", "win32", "--target-arch", "x64"]);
-	assert.match(out, /平台: win32-x64（交叉解析）/);
-	// 版本钉死：runtimeVersion 必须等于 lock 里 dsh 的精确版本（不允许 ^ 漂移到更新 rc）
-	assert.match(out, new RegExp(`runtime 版本: ${DSH_VERSION.replace(/[.]/g, "\\.")} `));
-}, { timeout: 10 * 60 * 1000 });
+test(
+	"交叉模式：目标平台三元组出现在输出中，且 lock 精确版本被采用",
+	() => {
+		const out = runPack(["--target-os", "win32", "--target-arch", "x64"]);
+		assert.match(out, /平台: win32-x64（交叉解析）/);
+		// 版本钉死：runtimeVersion 必须等于 lock 里 dsh 的精确版本（不允许 ^ 漂移到更新 rc）
+		assert.match(out, new RegExp(`runtime 版本: ${DSH_VERSION.replace(/[.]/g, "\\.")} `));
+	},
+	{ timeout: 10 * 60 * 1000 },
+);
 
-test("交叉模式：临时 package.json 把平台门控包写进 optionalDependencies（EBADPLATFORM 回归）", () => {
-	// 用 --out 指到临时目录不影响 dry-run；这里直接跑一次并从输出断言 optional 数量。
-	const out = runPack(["--target-os", "win32", "--target-arch", "x64"]);
-	// 平台 optional 包数量必须 > 0：全写进 dependencies 会让 npm 在非目标平台报
-	// notsup 硬错误退出（2026-09-18 实证 @deepseek-ai/node-addon-system-darwin-arm64）。
-	const match = out.match(/临时 package\.json: (\d+) 硬依赖 \+ (\d+) 平台 optional/);
-	assert.ok(match, "输出缺少临时 package.json 统计行");
-	assert.ok(Number.parseInt(match[2], 10) > 0, "平台 optional 包数量为 0（EBADPLATFORM 回归）");
-}, { timeout: 10 * 60 * 1000 });
+test(
+	"交叉模式：临时 package.json 把平台门控包写进 optionalDependencies（EBADPLATFORM 回归）",
+	() => {
+		// 用 --out 指到临时目录不影响 dry-run；这里直接跑一次并从输出断言 optional 数量。
+		const out = runPack(["--target-os", "win32", "--target-arch", "x64"]);
+		// 平台 optional 包数量必须 > 0：全写进 dependencies 会让 npm 在非目标平台报
+		// notsup 硬错误退出（2026-09-18 实证 @deepseek-ai/node-addon-system-darwin-arm64）。
+		const match = out.match(/临时 package\.json: (\d+) 硬依赖 \+ (\d+) 平台 optional/);
+		assert.ok(match, "输出缺少临时 package.json 统计行");
+		assert.ok(Number.parseInt(match[2], 10) > 0, "平台 optional 包数量为 0（EBADPLATFORM 回归）");
+	},
+	{ timeout: 10 * 60 * 1000 },
+);
 
 test("交叉模式：非法目标平台直接报错退出（不产出任何文件）", () => {
 	assert.throws(
-		() => execFileSync(process.execPath, [packScript, "--dry-run", "--target-os", "sunos", "--target-arch", "x64"], {
-			cwd: projectRoot, encoding: "utf8", timeout: 60_000,
-		}),
+		() =>
+			execFileSync(process.execPath, [packScript, "--dry-run", "--target-os", "sunos", "--target-arch", "x64"], {
+				cwd: projectRoot,
+				encoding: "utf8",
+				timeout: 60_000,
+			}),
 		/error/i,
 	);
 });

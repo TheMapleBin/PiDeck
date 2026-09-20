@@ -51,8 +51,7 @@ async function fitNearTopBottom(app: ElectronApplication, window: Page) {
 		await window.waitForTimeout(80);
 		return geometry(window);
 	};
-	const inBand = (current: Awaited<ReturnType<typeof geometry>>) =>
-		current.maxTop > 40 && current.maxTop < current.expandThreshold - 20;
+	const inBand = (current: Awaited<ReturnType<typeof geometry>>) => current.maxTop > 40 && current.maxTop < current.expandThreshold - 20;
 	// 1）先只调 zoom：zoom 不依赖窗口可见性/可调整性（窗口被最小化时 setBounds
 	//    无效但 setZoomFactor 始终生效），CSS 视口随 zoom 缩小即可得到「内容可滚动
 	//    且底部落在自动扩窗阈值内」的几何。
@@ -69,15 +68,18 @@ async function fitNearTopBottom(app: ElectronApplication, window: Page) {
 	// 2）兜底：窗口可见时再扫窗口高度（原有策略，保留以兼容不同内容高度）。
 	for (const zoomFactor of [1, 0.95, 0.9, 0.85]) {
 		for (const height of [700, 760, 820, 880, 940, 1020, 1120, 1220]) {
-			await app.evaluate(({ BrowserWindow }, next) => {
-				const target = BrowserWindow.getAllWindows()[0];
-				if (!target) return;
-				if (target.isMinimized()) target.restore();
-				if (!target.isVisible()) target.showInactive();
-				if (target.isMaximized()) target.unmaximize();
-				target.webContents.setZoomFactor(next.zoomFactor);
-				target.setBounds({ width: 900, height: next.height });
-			}, { height, zoomFactor });
+			await app.evaluate(
+				({ BrowserWindow }, next) => {
+					const target = BrowserWindow.getAllWindows()[0];
+					if (!target) return;
+					if (target.isMinimized()) target.restore();
+					if (!target.isVisible()) target.showInactive();
+					if (target.isMaximized()) target.unmaximize();
+					target.webContents.setZoomFactor(next.zoomFactor);
+					target.setBounds({ width: 900, height: next.height });
+				},
+				{ height, zoomFactor },
+			);
 			await window.waitForTimeout(120);
 			const current = await measure();
 			if (inBand(current)) return current;
@@ -146,11 +148,7 @@ async function resizeComposerSibling(window: Page, growBy: number) {
 				scrollHeight: timeline.scrollHeight,
 				dist: timeline.scrollHeight - timeline.scrollTop - timeline.clientHeight,
 			},
-			buttonVisible: Boolean(
-				document.querySelector<HTMLElement>(
-					"button[aria-label='移动到最新'], button[aria-label='Scroll to bottom']",
-				)?.offsetParent,
-			),
+			buttonVisible: Boolean(document.querySelector<HTMLElement>("button[aria-label='移动到最新'], button[aria-label='Scroll to bottom']")?.offsetParent),
 		};
 		composer.style.minHeight = previousMinHeight;
 		await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
@@ -194,16 +192,10 @@ async function onePixelNudgeDuringLag(window: Page, lagPx = 36) {
 		timeline.scrollTop = Math.max(0, maxTop - lag);
 		await new Promise((resolve) => setTimeout(resolve, 20));
 		const content = timeline.querySelector(".turn-row") ?? timeline.querySelector("p") ?? timeline;
-		content.dispatchEvent(
-			new WheelEvent("wheel", { deltaY: -1, bubbles: true, cancelable: true }),
-		);
+		content.dispatchEvent(new WheelEvent("wheel", { deltaY: -1, bubbles: true, cancelable: true }));
 		timeline.scrollTop = Math.max(0, timeline.scrollTop - 1);
 		await new Promise((resolve) => setTimeout(resolve, 80));
-		const buttonVisible = Boolean(
-			document.querySelector<HTMLElement>(
-				"button[aria-label='移动到最新'], button[aria-label='Scroll to bottom']",
-			)?.offsetParent,
-		);
+		const buttonVisible = Boolean(document.querySelector<HTMLElement>("button[aria-label='移动到最新'], button[aria-label='Scroll to bottom']")?.offsetParent);
 		timeline.scrollTop = Math.max(0, timeline.scrollHeight - timeline.clientHeight);
 		await new Promise((resolve) => setTimeout(resolve, 20));
 		return {
@@ -220,9 +212,7 @@ async function wheel(window: Page, deltaY: number, steps = 14, stepPx = 160) {
 			const maxTop = () => Math.max(0, timeline.scrollHeight - timeline.clientHeight);
 			for (let i = 0; i < n; i += 1) {
 				const content = timeline.querySelector(".turn-row") ?? timeline.querySelector("p") ?? timeline;
-				content.dispatchEvent(
-					new WheelEvent("wheel", { deltaY: delta, bubbles: true, cancelable: true }),
-				);
+				content.dispatchEvent(new WheelEvent("wheel", { deltaY: delta, bubbles: true, cancelable: true }));
 				const next = timeline.scrollTop + (delta > 0 ? px : -px);
 				timeline.scrollTop = delta > 0 ? Math.min(maxTop(), next) : Math.max(0, next);
 				await new Promise((resolve) => setTimeout(resolve, 25));
@@ -264,26 +254,14 @@ test("go-bottom survives shrink clamp; real browsing still expands and relocks",
 	expect(bottom.dist, "after go-bottom viewport should be at the physical bottom").toBeLessThanOrEqual(2);
 
 	await dispatchCollapsedSelectionScroll(window);
-	await expect(
-		bottomButton(window),
-		"a plain click overlapping layout scroll must not show the go-bottom button",
-	).toHaveCount(0);
+	await expect(bottomButton(window), "a plain click overlapping layout scroll must not show the go-bottom button").toHaveCount(0);
 
 	// 输入栏兄弟增高只会压缩 timeline viewport，不改变消息 content 高度。旧引擎只观察
 	// contentRef，因此 clientHeight 变小后 scrollTop 留在旧值，视觉上脱离吸底。
 	const composerResize = await resizeComposerSibling(window, 72);
-	expect(
-		composerResize.after.clientHeight,
-		"composer growth must shrink the timeline viewport",
-	).toBeLessThan(composerResize.before.clientHeight);
-	expect(
-		Math.abs(composerResize.after.scrollHeight - composerResize.before.scrollHeight),
-		"the regression requires unchanged message content height",
-	).toBeLessThanOrEqual(2);
-	expect(
-		composerResize.after.dist,
-		"viewport-only resize must stay physically pinned to the bottom",
-	).toBeLessThanOrEqual(2);
+	expect(composerResize.after.clientHeight, "composer growth must shrink the timeline viewport").toBeLessThan(composerResize.before.clientHeight);
+	expect(Math.abs(composerResize.after.scrollHeight - composerResize.before.scrollHeight), "the regression requires unchanged message content height").toBeLessThanOrEqual(2);
+	expect(composerResize.after.dist, "viewport-only resize must stay physically pinned to the bottom").toBeLessThanOrEqual(2);
 	expect(composerResize.buttonVisible, "viewport-only resize must not escape follow mode").toBe(false);
 
 	// ── 活动 run 内容收缩（clamp scrollTop 上移）：不得误扩窗或弹出按钮 ──
@@ -337,17 +315,12 @@ test("go-bottom survives shrink clamp; real browsing still expands and relocks",
 	await expect(bottomButton(window)).toHaveCount(0);
 	await window.waitForTimeout(400);
 	expect(await window.locator(".turn-row").count(), "go-bottom must remain at 3 turns across later scroll events").toBe(3);
-	await expect
-		.poll(async () => Math.abs((await geometry(window)).dist), { timeout: 1_200 })
-		.toBeLessThanOrEqual(2);
+	await expect.poll(async () => Math.abs((await geometry(window)).dist), { timeout: 1_200 }).toBeLessThanOrEqual(2);
 
 	// ── 回底后再次上滚仍须上报新的 up 意图；方向去重不能吞掉新浏览周期 ──
 	const secondUpResult = await wheel(window, -160, 14, 160);
 	const secondUpButtons = await bottomButton(window).count();
-	expect(
-		await window.locator(".turn-row").count(),
-		`a second up-scroll after go-bottom must expand again; geometry=${JSON.stringify(secondUpResult)} buttons=${secondUpButtons}`,
-	).toBeGreaterThan(3);
+	expect(await window.locator(".turn-row").count(), `a second up-scroll after go-bottom must expand again; geometry=${JSON.stringify(secondUpResult)} buttons=${secondUpButtons}`).toBeGreaterThan(3);
 	await expect(bottomButton(window)).toHaveCount(1);
 
 	// ── 用户下滚回底部：重锁 + 窗口收回 3 轮 + 按钮消失 ──

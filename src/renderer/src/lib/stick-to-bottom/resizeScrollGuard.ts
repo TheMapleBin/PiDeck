@@ -6,26 +6,20 @@
  * An older cleanup must never clear the guard installed by a newer resize.
  */
 export type ResizeScrollGuardState = {
-  resizeDifference: number;
-  resizeGeneration: number;
+	resizeDifference: number;
+	resizeGeneration: number;
 };
 
 /** Mark the latest layout resize and return its unique cleanup token. */
-export function markResizeScrollGuard(
-  state: ResizeScrollGuardState,
-  difference: number,
-): number {
-  state.resizeDifference = difference;
-  state.resizeGeneration += 1;
-  return state.resizeGeneration;
+export function markResizeScrollGuard(state: ResizeScrollGuardState, difference: number): number {
+	state.resizeDifference = difference;
+	state.resizeGeneration += 1;
+	return state.resizeGeneration;
 }
 
 /** Clear only the guard that is still the latest observed resize. */
-export function clearResizeScrollGuard(
-  state: ResizeScrollGuardState,
-  generation: number,
-): void {
-  if (state.resizeGeneration === generation) {
-    state.resizeDifference = 0;
-  }
+export function clearResizeScrollGuard(state: ResizeScrollGuardState, generation: number): void {
+	if (state.resizeGeneration === generation) {
+		state.resizeDifference = 0;
+	}
 }

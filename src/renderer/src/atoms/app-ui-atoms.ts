@@ -5,38 +5,14 @@ import type { AgentBackend } from "../../../shared/types";
 import { resolveEffectiveAgentBackend } from "../../../shared/types/dshRuntime";
 import { dshRuntimeStatusAtom } from "./dsh-atoms";
 import type { SettingsFieldAnchorSlug } from "../utils/settingsFieldAnchors";
-import {
-  defaultExpandedSidebarProjects,
-  readExpandedSidebarProjects,
-} from "../utils/sidebarExpandedProjects";
-import {
-  DEFAULT_SIDEBAR_NAV_TAB,
-  readSidebarNavTab,
-  type SidebarNavTab,
-} from "../utils/sidebarNavTab";
+import { defaultExpandedSidebarProjects, readExpandedSidebarProjects } from "../utils/sidebarExpandedProjects";
+import { DEFAULT_SIDEBAR_NAV_TAB, readSidebarNavTab, type SidebarNavTab } from "../utils/sidebarNavTab";
 
 /** Settings overlay visibility is shared by Sidebar, Pi environment flow, and Session surface. */
 export const settingsOpenAtom = atom(false);
 
 /** 与 SettingsModal 侧栏 tab 对齐；深链/焦点目标用同一套 id，避免 Git 去设置落到上次记住的非「常用」页。 */
-export type SettingsTabId =
-	| "common"
-	| "shortcuts"
-	| "appearance"
-	| "proxy"
-	| "web"
-	| "editors"
-	| "git"
-	| "dev"
-	| "im"
-	| "pet"
-	| "notification"
-	| "storage"
-	| "backup"
-	| "usage"
-	| "process"
-	| "vision"
-	| "imagegen";
+export type SettingsTabId = "common" | "shortcuts" | "appearance" | "proxy" | "web" | "editors" | "git" | "dev" | "im" | "pet" | "notification" | "storage" | "backup" | "usage" | "process" | "vision" | "imagegen";
 
 /**
  * 设置页内可直达的锚点 slug（对应 DOM 上的 `id="settings-section-<slug>"`）。
@@ -50,11 +26,7 @@ export type SettingsTabId =
  * 静默放弃，不报错不提示），编译期联合是能在提交前拦住它的唯一关口。
  * 这里只 `import type`，atoms ↔ utils 的类型循环会被完全擦除，没有运行时依赖。
  */
-export type SettingsSectionId =
-	| "git"
-	| "dsh-runner-node"
-	| "dev-pi-rpc"
-	| SettingsFieldAnchorSlug;
+export type SettingsSectionId = "git" | "dsh-runner-node" | "dev-pi-rpc" | SettingsFieldAnchorSlug;
 
 /** 设置窗口顶层分区：系统设置 / 配置管理（顶部 tab，样式同配置页 Pi/DSH 分页）。 */
 export type SettingsPaneId = "settings" | "config";
@@ -109,9 +81,7 @@ export const defaultAgentBackendAtom = atom<AgentBackend>("pi");
  * （新建会话 / 并行问询 / 启动默认值）同帧收敛，不会留下「设置=dsh 但已不可用」的窗口。
  * 钳制规则是纯函数 resolveEffectiveAgentBackend（shared/types/dshRuntime，有单测）。
  */
-export const effectiveAgentBackendAtom = atom<AgentBackend>((get) =>
-	resolveEffectiveAgentBackend(get(defaultAgentBackendAtom), get(dshRuntimeStatusAtom).state),
-);
+export const effectiveAgentBackendAtom = atom<AgentBackend>((get) => resolveEffectiveAgentBackend(get(defaultAgentBackendAtom), get(dshRuntimeStatusAtom).state));
 
 /**
  * 忙碌时发送消息的默认投递行为（设置项 busySendDelivery 的渲染层快照）。
@@ -130,26 +100,17 @@ export const busySendDeliveryAtom = atom<BusySendDelivery>("steer");
  * 默认开，跨会话持久化（localStorage）。深包结构（Java/Maven、NestJS 等）用户反馈
  * 层级太深时树很丑，折叠后一行展示整条包链。
  */
-export const compactMiddlePackagesAtom = atomWithStorage<boolean>(
-	"pi-desktop:compact-middle-packages",
-	true,
-);
+export const compactMiddlePackagesAtom = atomWithStorage<boolean>("pi-desktop:compact-middle-packages", true);
 
 export const sidebarExpandedProjectIdsAtom = atom<ReadonlySet<string>>(
-  (() => {
-    const cached = readExpandedSidebarProjects(
-      typeof window === "undefined" ? undefined : window.localStorage,
-    );
-    return cached ? new Set(cached) : defaultExpandedSidebarProjects();
-  })(),
+	(() => {
+		const cached = readExpandedSidebarProjects(typeof window === "undefined" ? undefined : window.localStorage);
+		return cached ? new Set(cached) : defaultExpandedSidebarProjects();
+	})(),
 );
 
 /** 侧栏 Chats/项目分段：localStorage 首屏缓存，settings.json 作权威来源。 */
-export const sidebarNavTabAtom = atom<SidebarNavTab>(
-  readSidebarNavTab(
-    typeof window === "undefined" ? undefined : window.localStorage,
-  ) ?? DEFAULT_SIDEBAR_NAV_TAB,
-);
+export const sidebarNavTabAtom = atom<SidebarNavTab>(readSidebarNavTab(typeof window === "undefined" ? undefined : window.localStorage) ?? DEFAULT_SIDEBAR_NAV_TAB);
 
 // useStreamdownRendererAtom 已移除：Streamdown 转正为唯一 markdown 引擎（迁移 react-markdown 完成）。
 
@@ -170,4 +131,3 @@ export const turnFlowSettingsAtom = atom<TurnFlowSettings>({
 	expandInterimDuringStream: true,
 	collapsePrevRunsOnNewTurn: true,
 });
-

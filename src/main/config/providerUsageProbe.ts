@@ -17,12 +17,7 @@
  * 除内置候选外，ConfigManager 还会合并用户自定义探针（~/.pi/agent/usage-probes.json），
  * 两者共用同一套候选结构与解析器。
  */
-import type {
-	ProviderUsageBooster,
-	ProviderUsageCredits,
-	ProviderUsageKind,
-	ProviderUsagePeriod,
-} from "../../shared/types/providerUsage";
+import type { ProviderUsageBooster, ProviderUsageCredits, ProviderUsageKind, ProviderUsagePeriod } from "../../shared/types/providerUsage";
 import type { MainProcessTranslationKey } from "../../shared/i18n/mainProcessCopy";
 import { resolveCustomUsage } from "./providerUsageCustom";
 import { getByPath, toNumber } from "./providerUsagePath";
@@ -259,8 +254,26 @@ export const USAGE_PROBE_CANDIDATES: UsageProbeCandidate[] = [
 			windows: [
 				// 5h 滚动窗与周窗都要求 type 为 CREDIT_LIMIT（plan usage）：TIME_LIMIT（MCP 月额度）
 				// 也可能带 unit 3，仅按 unit 匹配会误伤，故 type+unit 双条件 AND。
-				{ key: "fiveHour", listPath: "data.limits", where: [{ path: "type", eq: "CREDIT_LIMIT" }, { path: "unit", eq: 3 }], totalPath: "usage", usedPath: "currentValue" },
-				{ key: "weekly", listPath: "data.limits", where: [{ path: "type", eq: "CREDIT_LIMIT" }, { path: "unit", eq: 6 }], totalPath: "usage", usedPath: "currentValue" },
+				{
+					key: "fiveHour",
+					listPath: "data.limits",
+					where: [
+						{ path: "type", eq: "CREDIT_LIMIT" },
+						{ path: "unit", eq: 3 },
+					],
+					totalPath: "usage",
+					usedPath: "currentValue",
+				},
+				{
+					key: "weekly",
+					listPath: "data.limits",
+					where: [
+						{ path: "type", eq: "CREDIT_LIMIT" },
+						{ path: "unit", eq: 6 },
+					],
+					totalPath: "usage",
+					usedPath: "currentValue",
+				},
 				{ key: "mcpMonthly", listPath: "data.limits", where: [{ path: "type", eq: "TIME_LIMIT" }], totalPath: "usage", usedPath: "currentValue" },
 			],
 		},
@@ -352,11 +365,7 @@ export const USAGE_PROBE_CANDIDATES: UsageProbeCandidate[] = [
 ];
 
 /** 判断候选是否适用于给定 baseUrl / apiType。 */
-export function candidateApplies(
-	candidate: UsageProbeCandidate,
-	baseUrl: string,
-	apiType: string,
-): boolean {
+export function candidateApplies(candidate: UsageProbeCandidate, baseUrl: string, apiType: string): boolean {
 	if (candidate.baseUrlContains) {
 		const lower = baseUrl.toLowerCase();
 		const hit = candidate.baseUrlContains.some((needle) => lower.includes(needle));
@@ -367,11 +376,7 @@ export function candidateApplies(
 }
 
 /** 候选适用 provider 的探测 URL 列表（含版本化 baseUrl 与原样 baseUrl 两条尝试路径）。 */
-export function usageProbeUrls(
-	candidate: Pick<UsageProbeCandidate, "path" | "absoluteUrl" | "rootPath" | "noVersionPath">,
-	baseUrl: string,
-	ensureVersionPath: (url: string) => string,
-): string[] {
+export function usageProbeUrls(candidate: Pick<UsageProbeCandidate, "path" | "absoluteUrl" | "rootPath" | "noVersionPath">, baseUrl: string, ensureVersionPath: (url: string) => string): string[] {
 	// absoluteUrl：端点与 baseUrl 不同 host（如 xAI 用量端点在 cli-chat-proxy.grok.com），
 	// 直接使用完整官方 URL，不拼 baseUrl、不走版本化补齐。
 	if (candidate.absoluteUrl) {
@@ -403,11 +408,7 @@ export function usageProbeUrls(
  * opts.noBearer（候选 noBearer / 用户探针 skipBearer）＝接口自带独立鉴权（Cookie 等）且
  * 与 apiKey 双凭证冲突时必须关闭自动补，否则服务端可能以「凭证不一致」拒绝请求。
  */
-export function buildProbeHeaders(
-	candidateHeaders: Record<string, string> | undefined,
-	apiKey: string,
-	opts?: { noBearer?: boolean },
-): Record<string, string> {
+export function buildProbeHeaders(candidateHeaders: Record<string, string> | undefined, apiKey: string, opts?: { noBearer?: boolean }): Record<string, string> {
 	const out: Record<string, string> = {};
 	const entries = Object.entries(candidateHeaders ?? {});
 	const hasAuth = entries.some(([key]) => key.toLowerCase() === "authorization");
@@ -421,11 +422,7 @@ export function buildProbeHeaders(
 }
 
 /** 解析 /usage 类响应体：三种形态都接受（宽松容错，解析不出则整体回退 raw）。 */
-export function parseUsageResponseBody(
-	body: unknown,
-	raw: string,
-	parse: UsageProbeParse = { kind: "periods" },
-): UsageProbeResponse {
+export function parseUsageResponseBody(body: unknown, raw: string, parse: UsageProbeParse = { kind: "periods" }): UsageProbeResponse {
 	if (!body || typeof body !== "object" || Array.isArray(body)) {
 		return { matched: false, raw };
 	}
@@ -448,14 +445,11 @@ export function parseUsageResponseBody(
 	// 额度点数形态：主值三路径 / windows / booster 至少命中一处；remaining 由 total-used 反推。
 	if (parse.kind === "credits") {
 		// scale（原始积分 → 主单位）：命中值先除以它；非法 scale 视作 1（不缩放）。
-		const scale =
-			parse.scale != null && Number.isFinite(parse.scale) && parse.scale > 0 ? parse.scale : 1;
+		const scale = parse.scale != null && Number.isFinite(parse.scale) && parse.scale > 0 ? parse.scale : 1;
 		const scaled = (value: number): number => (scale === 1 ? value : value / scale);
 		const total = parse.totalPath ? toNumber(getByPath(body, parse.totalPath)) : undefined;
 		const used = parse.usedPath ? toNumber(getByPath(body, parse.usedPath)) : undefined;
-		const remaining = parse.remainingPath
-			? toNumber(getByPath(body, parse.remainingPath))
-			: undefined;
+		const remaining = parse.remainingPath ? toNumber(getByPath(body, parse.remainingPath)) : undefined;
 		const scaledTotal = total !== undefined ? scaled(total) : undefined;
 		const scaledUsed = used !== undefined ? scaled(used) : undefined;
 		const scaledRemaining = remaining !== undefined ? scaled(remaining) : undefined;
@@ -464,18 +458,11 @@ export function parseUsageResponseBody(
 		// 字段路径相对元素，智谱按 unit/type 分类）。
 		const windows: NonNullable<ProviderUsageCredits["windows"]> = [];
 		for (const window of parse.windows ?? []) {
-			const resolved =
-				"listPath" in window
-					? resolveWindowByList(window, body)
-					: { key: window.key, totalPath: window.totalPath, usedPath: window.usedPath, remainingPath: window.remainingPath, scope: body };
+			const resolved = "listPath" in window ? resolveWindowByList(window, body) : { key: window.key, totalPath: window.totalPath, usedPath: window.usedPath, remainingPath: window.remainingPath, scope: body };
 			if (!resolved) continue;
 			const wTotal = toNumber(getByPath(resolved.scope, resolved.totalPath));
 			const wUsed = toNumber(getByPath(resolved.scope, resolved.usedPath));
-			const wRemaining = resolved.remainingPath
-				? toNumber(getByPath(resolved.scope, resolved.remainingPath))
-				: wTotal !== undefined && wUsed !== undefined
-					? wTotal - wUsed
-					: undefined;
+			const wRemaining = resolved.remainingPath ? toNumber(getByPath(resolved.scope, resolved.remainingPath)) : wTotal !== undefined && wUsed !== undefined ? wTotal - wUsed : undefined;
 			if (wTotal === undefined && wUsed === undefined && wRemaining === undefined) continue;
 			windows.push({
 				key: resolved.key,
@@ -488,13 +475,7 @@ export function parseUsageResponseBody(
 		const booster = parse.booster ? parseBooster(body, parse.booster) : undefined;
 		// 命中门槛覆盖三种取值来源：部分网关只给并列限额（windows-only）或独立货币（booster-only），
 		// 主值三路径全空也是合法命中，不能误判为「结构不匹配」。
-		if (
-			scaledTotal === undefined &&
-			scaledUsed === undefined &&
-			scaledRemaining === undefined &&
-			windows.length === 0 &&
-			booster === undefined
-		) {
+		if (scaledTotal === undefined && scaledUsed === undefined && scaledRemaining === undefined && windows.length === 0 && booster === undefined) {
 			return { matched: false, raw };
 		}
 		return {
@@ -503,11 +484,7 @@ export function parseUsageResponseBody(
 			credits: {
 				...(scaledTotal !== undefined ? { total: scaledTotal } : {}),
 				...(scaledUsed !== undefined ? { used: scaledUsed } : {}),
-				...(scaledRemaining !== undefined
-					? { remaining: scaledRemaining }
-					: scaledTotal !== undefined && scaledUsed !== undefined
-						? { remaining: scaledTotal - scaledUsed }
-						: {}),
+				...(scaledRemaining !== undefined ? { remaining: scaledRemaining } : scaledTotal !== undefined && scaledUsed !== undefined ? { remaining: scaledTotal - scaledUsed } : {}),
 				...(windows.length > 0 ? { windows } : {}),
 			},
 			...(booster ? { booster } : {}),
@@ -533,9 +510,17 @@ export function parseUsageResponseBody(
 		if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
 		const item = entry as Record<string, unknown>;
 		const parsed: { percent?: number; resetsAt?: string; status?: string } = {};
-		if (typeof item.percent === "number") { parsed.percent = item.percent; any = true; }
-		if (typeof item.resetsAt === "string") { parsed.resetsAt = item.resetsAt; any = true; }
-		if (typeof item.status === "string" && item.status.length > 0) { parsed.status = item.status; }
+		if (typeof item.percent === "number") {
+			parsed.percent = item.percent;
+			any = true;
+		}
+		if (typeof item.resetsAt === "string") {
+			parsed.resetsAt = item.resetsAt;
+			any = true;
+		}
+		if (typeof item.status === "string" && item.status.length > 0) {
+			parsed.status = item.status;
+		}
 		if (Object.keys(parsed).length > 0) periods[key] = parsed;
 	}
 	if (!any) return { matched: false, raw };
@@ -580,53 +565,38 @@ function parseBooster(body: unknown, spec: UsageProbeBooster): ProviderUsageBoos
 	const balanceRaw = toNumber(getByPath(body, spec.balancePath));
 	if (balanceRaw === undefined) return undefined;
 	const totalRaw = spec.totalPath ? toNumber(getByPath(body, spec.totalPath)) : undefined;
-	const monthlyUsedRaw = spec.monthlyUsedCentsPath
-		? toNumber(getByPath(body, spec.monthlyUsedCentsPath))
-		: undefined;
-	const monthlyLimitRaw = spec.monthlyChargeLimitCentsPath
-		? toNumber(getByPath(body, spec.monthlyChargeLimitCentsPath))
-		: undefined;
-	const enabledRaw = spec.monthlyChargeLimitEnabledPath
-		? getByPath(body, spec.monthlyChargeLimitEnabledPath)
-		: undefined;
+	const monthlyUsedRaw = spec.monthlyUsedCentsPath ? toNumber(getByPath(body, spec.monthlyUsedCentsPath)) : undefined;
+	const monthlyLimitRaw = spec.monthlyChargeLimitCentsPath ? toNumber(getByPath(body, spec.monthlyChargeLimitCentsPath)) : undefined;
+	const enabledRaw = spec.monthlyChargeLimitEnabledPath ? getByPath(body, spec.monthlyChargeLimitEnabledPath) : undefined;
 	// 显式 false = 服务端声明月限额不封顶（unlimited）；true/缺省则展示限额数值（有的话）。
 	const unlimitedMonthly = enabledRaw === false;
 	const currencyRaw = spec.currencyPath ? getByPath(body, spec.currencyPath) : undefined;
-	const currency =
-		typeof currencyRaw === "string" && currencyRaw.trim() !== "" ? currencyRaw.trim() : undefined;
+	const currency = typeof currencyRaw === "string" && currencyRaw.trim() !== "" ? currencyRaw.trim() : undefined;
 	return {
 		balance: toMajor(balanceRaw),
 		...(totalRaw !== undefined ? { total: toMajor(totalRaw) } : {}),
 		...(currency ? { currency } : {}),
 		...(monthlyUsedRaw !== undefined ? { monthlyUsed: monthlyUsedRaw / 100 } : {}),
-		...(monthlyLimitRaw !== undefined && !unlimitedMonthly
-			? { monthlyChargeLimit: monthlyLimitRaw / 100 }
-			: {}),
+		...(monthlyLimitRaw !== undefined && !unlimitedMonthly ? { monthlyChargeLimit: monthlyLimitRaw / 100 } : {}),
 		...(unlimitedMonthly ? { unlimitedMonthly: true } : {}),
 	};
 }
 
 /** 专用解析器表：kind:"custom" 的 resolver 名称 → 解析函数。 */
 
-
 /**
  * 单次探测失败明细（用于全部候选失败时生成可排查的错误提示）。
  * 失败分类三种：HTTP 状态码已知（status）、响应 200 但结构不符（shape）、
  * 网络层失败（超时/不可达，error 字段）。url/body 均已脱敏或截断后再写入。
  */
-export type UsageProbeAttempt =
-	| { url: string; method: string; status: number; body?: string }
-	| { url: string; method: string; kind: "shape" }
-	| { url: string; method: string; error: "timeout" | "network" };
+export type UsageProbeAttempt = { url: string; method: string; status: number; body?: string } | { url: string; method: string; kind: "shape" } | { url: string; method: string; error: "timeout" | "network" };
 
 /**
  * 失败原因归纳 hint：按「最具解释力」的状态归类，返回 i18n key；无尝试记录返回空串。
  * 优先级：结构不符（多数网关 404 才是常态，200+结构不符是最可疑的接口变更信号）
  *       → 鉴权（401/403 全量）→ 404（全量，多是地址问题）→ 5xx → 超时/网络 → 混合。
  */
-export function classifyUsageProbeFailureHint(
-	attempts: readonly UsageProbeAttempt[],
-): MainProcessTranslationKey | "" {
+export function classifyUsageProbeFailureHint(attempts: readonly UsageProbeAttempt[]): MainProcessTranslationKey | "" {
 	if (attempts.length === 0) return "";
 	// 全部为 200 但结构不匹配：端点存在，只是字段/格式对不上（接口变更或非预期响应）。
 	if (attempts.some((a) => "kind" in a && a.kind === "shape") && attempts.every((a) => "kind" in a && a.kind === "shape")) {
@@ -646,10 +616,7 @@ export function classifyUsageProbeFailureHint(
 }
 
 /** 拼接失败明细文本：尝试行（方法 + URL + 状态/错误 + 响应摘要）+ 归纳提示。 */
-export function buildProbeFailureDetail(
-	attempts: readonly UsageProbeAttempt[],
-	translate: (key: MainProcessTranslationKey) => string,
-): string {
+export function buildProbeFailureDetail(attempts: readonly UsageProbeAttempt[], translate: (key: MainProcessTranslationKey) => string): string {
 	if (attempts.length === 0) return "";
 	const lines: string[] = [translate("mainConfig.providerUsageAttemptsTitle")];
 	for (const a of attempts) {
@@ -660,13 +627,7 @@ export function buildProbeFailureDetail(
 		} else if ("kind" in a && a.kind === "shape") {
 			lines.push(`${a.method} ${a.url} → HTTP 200（响应结构与预期不符）`);
 		} else {
-			lines.push(
-				`${a.method} ${a.url} → ${translate(
-					"error" in a && a.error === "timeout"
-						? "mainConfig.providerUsageAttemptTimeout"
-						: "mainConfig.providerUsageAttemptNetwork",
-				)}`,
-			);
+			lines.push(`${a.method} ${a.url} → ${translate("error" in a && a.error === "timeout" ? "mainConfig.providerUsageAttemptTimeout" : "mainConfig.providerUsageAttemptNetwork")}`);
 		}
 	}
 	const hintKey = classifyUsageProbeFailureHint(attempts);

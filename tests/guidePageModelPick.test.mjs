@@ -33,11 +33,15 @@ function loadResolver() {
 		fileName: "launchDefaults.ts",
 	}).outputText;
 	const module = { exports: {} };
-	vm.runInNewContext(output, {
-		module,
-		exports: module.exports,
-		require: () => ({}),
-	}, { filename: "launchDefaults.ts" });
+	vm.runInNewContext(
+		output,
+		{
+			module,
+			exports: module.exports,
+			require: () => ({}),
+		},
+		{ filename: "launchDefaults.ts" },
+	);
 	return module.exports.resolveLaunchDefaultOptions;
 }
 
@@ -62,8 +66,7 @@ test("症状(a)：配置了默认模型时，引导页刚选的模型应成为�
 		models: MODELS,
 		welcomeModel: PICKED,
 	});
-	assert.deepEqual(plain(result.model), PICKED,
-		"引导页显式点选的模型被「配置默认模型」静默覆盖——用户表现为「切不动」");
+	assert.deepEqual(plain(result.model), PICKED, "引导页显式点选的模型被「配置默认模型」静默覆盖——用户表现为「切不动」");
 });
 
 test("症状(b)：无配置默认但设了 enabledModels 时，引导页刚选的模型应成为首次套用的模型", () => {
@@ -77,6 +80,5 @@ test("症状(b)：无配置默认但设了 enabledModels 时，引导页刚选�
 	// 但创建解析把 enabledModels 排在欢迎偏好之前 → 实际跑 openai/gpt-5.2，
 	// 即「页面切了、发送后变回去」。展示与套用在此分叉。
 	assert.equal(result.defaultModelConfigured, undefined, "前提：展示层会让欢迎偏好参与回退");
-	assert.deepEqual(plain(result.model), PICKED,
-		"enabledModels 把引导页点选挤掉了，导致底栏显示与实际套用不一致");
+	assert.deepEqual(plain(result.model), PICKED, "enabledModels 把引导页点选挤掉了，导致底栏显示与实际套用不一致");
 });

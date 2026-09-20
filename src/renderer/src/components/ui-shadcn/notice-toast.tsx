@@ -1,14 +1,4 @@
-import {
-	ArrowRight,
-	Bell,
-	Check,
-	CircleAlert,
-	Copy,
-	Info,
-	MessageCircleQuestion,
-	TriangleAlert,
-	X,
-} from "lucide-react";
+import { ArrowRight, Bell, Check, CircleAlert, Copy, Info, MessageCircleQuestion, TriangleAlert, X } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { t } from "../../i18n";
@@ -93,19 +83,7 @@ export async function writeClipboardText(text: string): Promise<boolean> {
 	}
 }
 
-export function NoticeToastCard({
-	toastId,
-	kind,
-	title,
-	description,
-	actions,
-}: {
-	toastId: string | number;
-	kind: NoticeToastKind;
-	title: string;
-	description?: string;
-	actions?: NoticeActions;
-}) {
+export function NoticeToastCard({ toastId, kind, title, description, actions }: { toastId: string | number; kind: NoticeToastKind; title: string; description?: string; actions?: NoticeActions }) {
 	const [copied, setCopied] = useState(false);
 	const copiedTimer = useRef<number | null>(null);
 	const { Icon, className: iconColor } = KIND_ICON[kind];
@@ -167,35 +145,29 @@ export function NoticeToastCard({
 			</span>
 
 			<div className="min-w-0 flex-1">
-				<p ref={titleRef} className="max-h-[60px] overflow-hidden text-[13px] font-medium leading-5 break-words text-text-primary">{title}</p>
-				{description ? <p ref={descriptionRef} className="mt-0.5 max-h-[64px] overflow-hidden text-xs leading-4 break-words text-text-secondary">{description}</p> : null}
+				<p ref={titleRef} className="max-h-[60px] overflow-hidden text-[13px] font-medium leading-5 break-words text-text-primary">
+					{title}
+				</p>
+				{description ? (
+					<p ref={descriptionRef} className="mt-0.5 max-h-[64px] overflow-hidden text-xs leading-4 break-words text-text-secondary">
+						{description}
+					</p>
+				) : null}
 				{truncated ? (
 					// 截断兜底入口：完整内容进详情弹窗（复制按钮始终复制全文，不受截断影响）
-					<button
-						type="button"
-						onClick={openDetails}
-						className="mt-1 text-xs text-info underline-offset-2 transition-colors hover:underline"
-					>
+					<button type="button" onClick={openDetails} className="mt-1 text-xs text-info underline-offset-2 transition-colors hover:underline">
 						{t("notice.viewDetails")}
 					</button>
 				) : null}
 				{hasActions ? (
 					<div className="mt-2 flex items-center justify-end gap-2">
 						{actions?.cancel ? (
-							<button
-								type="button"
-								onClick={() => runAction(actions.cancel?.onClick)}
-								className="inline-flex h-7 items-center rounded-md border border-border-subtle bg-bg-muted px-2.5 text-xs font-medium text-text-secondary transition-colors hover:bg-bg-hover hover:text-text-primary"
-							>
+							<button type="button" onClick={() => runAction(actions.cancel?.onClick)} className="inline-flex h-7 items-center rounded-md border border-border-subtle bg-bg-muted px-2.5 text-xs font-medium text-text-secondary transition-colors hover:bg-bg-hover hover:text-text-primary">
 								{actions.cancel.label}
 							</button>
 						) : null}
 						{actions?.action ? (
-							<button
-								type="button"
-								onClick={() => runAction(actions.action?.onClick)}
-								className="inline-flex h-7 items-center gap-1 rounded-md bg-primary pl-2.5 pr-2 text-xs font-medium text-primary-foreground transition-colors hover:opacity-90"
-							>
+							<button type="button" onClick={() => runAction(actions.action?.onClick)} className="inline-flex h-7 items-center gap-1 rounded-md bg-primary pl-2.5 pr-2 text-xs font-medium text-primary-foreground transition-colors hover:opacity-90">
 								{actions.action.label}
 								{/* 箭头强化「前往/跳转」语义，让长标题 toast 里的操作一眼可识别 */}
 								<ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
@@ -206,22 +178,10 @@ export function NoticeToastCard({
 			</div>
 
 			<div className="flex shrink-0 items-center gap-0.5">
-				<button
-					type="button"
-					onClick={handleCopy}
-					aria-label={copied ? t("copy.success") : t("common.copy")}
-					title={copied ? t("copy.success") : t("common.copy")}
-					className="inline-flex h-6 w-6 items-center justify-center rounded-md text-text-tertiary transition-colors hover:bg-bg-hover hover:text-text-primary"
-				>
+				<button type="button" onClick={handleCopy} aria-label={copied ? t("copy.success") : t("common.copy")} title={copied ? t("copy.success") : t("common.copy")} className="inline-flex h-6 w-6 items-center justify-center rounded-md text-text-tertiary transition-colors hover:bg-bg-hover hover:text-text-primary">
 					{copied ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
 				</button>
-				<button
-					type="button"
-					onClick={closeToast}
-					aria-label={t("common.close")}
-					title={t("common.close")}
-					className="inline-flex h-6 w-6 items-center justify-center rounded-md text-text-tertiary transition-colors hover:bg-bg-hover hover:text-text-primary"
-				>
+				<button type="button" onClick={closeToast} aria-label={t("common.close")} title={t("common.close")} className="inline-flex h-6 w-6 items-center justify-center rounded-md text-text-tertiary transition-colors hover:bg-bg-hover hover:text-text-primary">
 					<X className="h-3.5 w-3.5" />
 				</button>
 			</div>
@@ -233,13 +193,7 @@ export function NoticeToastCard({
  * 长文本详情弹窗宿主：由 Toaster 常驻挂载（不随单条 toast 生命周期销毁），
  * 展示 showNotice 传入的完整标题与正文。复制按钮复制全文，与 toast 卡片一致。
  */
-export function NoticeDetailsDialog({
-	payload,
-	onOpenChange,
-}: {
-	payload: NoticeDetailsPayload | null;
-	onOpenChange: (open: boolean) => void;
-}) {
+export function NoticeDetailsDialog({ payload, onOpenChange }: { payload: NoticeDetailsPayload | null; onOpenChange: (open: boolean) => void }) {
 	const [copied, setCopied] = useState(false);
 	const copiedTimer = useRef<number | null>(null);
 	const { Icon, className: iconColor } = KIND_ICON[payload?.kind ?? "neutral"];
@@ -275,9 +229,7 @@ export function NoticeDetailsDialog({
 						</span>
 						<div className="min-w-0 flex-1 select-text">
 							<p className="text-[13px] font-medium leading-5 break-words whitespace-pre-wrap text-text-primary">{payload.title}</p>
-							{payload.description ? (
-								<p className="mt-1 text-xs leading-4 break-words whitespace-pre-wrap text-text-secondary">{payload.description}</p>
-							) : null}
+							{payload.description ? <p className="mt-1 text-xs leading-4 break-words whitespace-pre-wrap text-text-secondary">{payload.description}</p> : null}
 						</div>
 					</div>
 				) : null}

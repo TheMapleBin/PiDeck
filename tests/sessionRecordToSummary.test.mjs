@@ -2,9 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
-const { sessionRecordToSummary } = loadTsCommonJs(
-	"src/renderer/src/atoms/session-selectors.ts",
-);
+const { sessionRecordToSummary } = loadTsCommonJs("src/renderer/src/atoms/session-selectors.ts");
 
 const baseRecord = {
 	id: "session-1",

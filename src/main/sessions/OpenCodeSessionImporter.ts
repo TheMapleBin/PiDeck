@@ -4,26 +4,11 @@ import { existsSync } from "node:fs";
 import { mkdir, stat, utimes, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import type {
-	OpenCodeImportReport,
-	OpenCodeImportResult,
-	OpenCodeImportStatus,
-	OpenCodeSessionSummary,
-} from "../../shared/types";
-import {
-	defaultSessionImportCopy,
-	type SessionImportCopy,
-} from "./SessionImportCopy";
+import type { OpenCodeImportReport, OpenCodeImportResult, OpenCodeImportStatus, OpenCodeSessionSummary } from "../../shared/types";
+import { defaultSessionImportCopy, type SessionImportCopy } from "./SessionImportCopy";
 import { normalizeImportedToolArguments } from "./importToolArguments";
 import { readImportMetaHead } from "./importMetaHead";
-import {
-	IMPORTED_SKIP_PART_TYPES,
-	importedAttachmentPlaceholder,
-	importedContentHasToolCall,
-	importedUnknownBlockAsText,
-	normalizeImportedStopReason,
-	tryImportedImageBlock,
-} from "./importNormalize";
+import { IMPORTED_SKIP_PART_TYPES, importedAttachmentPlaceholder, importedContentHasToolCall, importedUnknownBlockAsText, normalizeImportedStopReason, tryImportedImageBlock } from "./importNormalize";
 
 type OpenCodeMessage = {
 	id: string;
@@ -116,11 +101,7 @@ export class OpenCodeSessionImporter {
 		const targetPath = this.getTargetPath(projectPath, session);
 		const importMeta = await this.readImportMeta(targetPath);
 		const converted = this.convertToPiSession(projectPath, session);
-		const status: OpenCodeImportStatus = !importMeta
-			? "new"
-			: importMeta.sourceMtime === session.sourceMtime && importMeta.sourceSize === session.sourceSize
-				? "current"
-				: "outdated";
+		const status: OpenCodeImportStatus = !importMeta ? "new" : importMeta.sourceMtime === session.sourceMtime && importMeta.sourceSize === session.sourceSize ? "current" : "outdated";
 
 		return {
 			id: String(session.meta.id),
@@ -216,19 +197,22 @@ export class OpenCodeSessionImporter {
 						content.push({ type: "toolCall", id: toolCallId, name, arguments: args });
 						toolQueue.push({ part, callId: toolCallId, name });
 					} else {
-						pushMessage("toolResult", [{ type: "text", text: this.extractToolOutput(partData) }], {
-							toolCallId,
-							toolName: name,
-							isError: partData.state?.status === "error",
-						}, part.time_created);
+						pushMessage(
+							"toolResult",
+							[{ type: "text", text: this.extractToolOutput(partData) }],
+							{
+								toolCallId,
+								toolName: name,
+								isError: partData.state?.status === "error",
+							},
+							part.time_created,
+						);
 					}
 				} else if (IMPORTED_SKIP_PART_TYPES.has(String(partData.type ?? ""))) {
 					continue;
 				} else if (partData.type === "file") {
 					const image = tryImportedImageBlock(partData);
-					content.push(
-						image ?? importedAttachmentPlaceholder(String(partData.filename ?? partData.url ?? "")),
-					);
+					content.push(image ?? importedAttachmentPlaceholder(String(partData.filename ?? partData.url ?? "")));
 				} else if (partData.type) {
 					const image = tryImportedImageBlock(partData);
 					content.push(image ?? importedUnknownBlockAsText(partData));
@@ -238,16 +222,21 @@ export class OpenCodeSessionImporter {
 			if (role === "user") {
 				pushMessage("user", content, {}, message.time_created);
 			} else if (role === "assistant") {
-				pushMessage("assistant", content, {
-					api: "opencode-import",
-					provider: messageData.providerID ?? model.providerID ?? "opencode",
-					model: messageData.modelID ?? model.id ?? model.modelID ?? "opencode",
-					stopReason: normalizeImportedStopReason({
-						raw: messageData.finish,
-						hasToolCall: importedContentHasToolCall(content),
-					}),
-					tokens: messageData.tokens,
-				}, message.time_created);
+				pushMessage(
+					"assistant",
+					content,
+					{
+						api: "opencode-import",
+						provider: messageData.providerID ?? model.providerID ?? "opencode",
+						model: messageData.modelID ?? model.id ?? model.modelID ?? "opencode",
+						stopReason: normalizeImportedStopReason({
+							raw: messageData.finish,
+							hasToolCall: importedContentHasToolCall(content),
+						}),
+						tokens: messageData.tokens,
+					},
+					message.time_created,
+				);
 			}
 			for (const { part, callId, name } of toolQueue) {
 				pushMessage(
@@ -263,20 +252,20 @@ export class OpenCodeSessionImporter {
 			}
 		}
 
-		const title = this.cleanTitle(String(session.meta.title ?? "")) || titleState.title ||
-			this.cleanTitle(basename(session.sourcePath)) ||
-			this.translate("session.importedTitle", { source: "OpenCode" });
+		const title = this.cleanTitle(String(session.meta.title ?? "")) || titleState.title || this.cleanTitle(basename(session.sourcePath)) || this.translate("session.importedTitle", { source: "OpenCode" });
 		// 使用 pi 原生 session_info 格式追加在末尾，避免旧版 sessionName 行（无 type 字段）
 		// 在文件头破坏 pi 的首行校验导致会话无法加载（见 #114）。
 		const sessionInfoId = randomUUID().slice(0, 8);
-		lines.push(JSON.stringify({
-			type: "session_info",
-			id: sessionInfoId,
-			parentId,
-			timestamp: new Date().toISOString(),
-			name: title,
-			cwd: projectPath,
-		}));
+		lines.push(
+			JSON.stringify({
+				type: "session_info",
+				id: sessionInfoId,
+				parentId,
+				timestamp: new Date().toISOString(),
+				name: title,
+				cwd: projectPath,
+			}),
+		);
 		return {
 			raw: `${lines.join("\n")}\n`,
 			title,
@@ -290,7 +279,8 @@ export class OpenCodeSessionImporter {
 		const normalizedProject = this.normalize(projectPath);
 		const db = new DatabaseSync(this.openCodeDb, { readOnly: true });
 		try {
-			const sessions = db.prepare(`
+			const sessions = db
+				.prepare(`
 				select s.*, p.worktree
 				from session s
 				join project p on p.id = s.project_id
@@ -298,7 +288,8 @@ export class OpenCodeSessionImporter {
 				   or lower(replace(s.directory, '\\', '/')) = lower(?)
 				   or lower(replace(s.directory, '\\', '/')) like lower(? || '/%')
 				order by s.time_updated desc
-			`).all(normalizedProject, normalizedProject, normalizedProject) as Array<Record<string, any>>;
+			`)
+				.all(normalizedProject, normalizedProject, normalizedProject) as Array<Record<string, any>>;
 
 			return sessions.map((session) => {
 				const messages = db.prepare("select id, time_created, time_updated, data from message where session_id = ? order by time_created asc").all(session.id) as Array<Record<string, any>>;
@@ -331,7 +322,7 @@ export class OpenCodeSessionImporter {
 	}
 
 	private parseJson(value: unknown) {
-		if (typeof value !== "string") return value && typeof value === "object" ? value as Record<string, any> : {};
+		if (typeof value !== "string") return value && typeof value === "object" ? (value as Record<string, any>) : {};
 		try {
 			return JSON.parse(value);
 		} catch {
@@ -351,7 +342,7 @@ export class OpenCodeSessionImporter {
 
 	private parseModel(value: unknown) {
 		if (typeof value === "string") return this.parseJson(value);
-		return value && typeof value === "object" ? value as Record<string, any> : {};
+		return value && typeof value === "object" ? (value as Record<string, any>) : {};
 	}
 
 	private toUsage(tokens: any) {
@@ -398,7 +389,10 @@ export class OpenCodeSessionImporter {
 	}
 
 	private extractPiText(content: unknown[]) {
-		return content.map((item: any) => item?.text ?? item?.thinking ?? item?.name ?? "").filter(Boolean).join(" ");
+		return content
+			.map((item: any) => item?.text ?? item?.thinking ?? item?.name ?? "")
+			.filter(Boolean)
+			.join(" ");
 	}
 
 	private cleanTitle(value?: string) {
@@ -416,6 +410,9 @@ export class OpenCodeSessionImporter {
 	}
 
 	private normalize(path?: string) {
-		return String(path ?? "").replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+		return String(path ?? "")
+			.replace(/\\/g, "/")
+			.replace(/\/+$/, "")
+			.toLowerCase();
 	}
 }

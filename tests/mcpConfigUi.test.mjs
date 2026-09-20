@@ -15,9 +15,7 @@ test("ConfigModal wires an MCP tab without bloating loadConfig into MCP CRUD", (
 });
 
 test("dirty-mark helpers include config:mcp", () => {
-	const { dirtyKeysClearedByReload, ALL_CONFIG_DIRTY_KEYS } = loadTsCommonJs(
-		"src/renderer/src/config/configDirtyMarks.ts",
-	);
+	const { dirtyKeysClearedByReload, ALL_CONFIG_DIRTY_KEYS } = loadTsCommonJs("src/renderer/src/config/configDirtyMarks.ts");
 	assert.deepEqual(new Set(dirtyKeysClearedByReload("mcp")), new Set(["config:mcp", "config:raw"]));
 	assert.ok(Array.from(ALL_CONFIG_DIRTY_KEYS).includes("config:mcp"));
 });

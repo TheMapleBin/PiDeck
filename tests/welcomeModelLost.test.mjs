@@ -24,11 +24,15 @@ function loadFunction() {
 		fileName: "chatSessionBootstrap.ts",
 	}).outputText;
 	const module = { exports: {} };
-	vm.runInNewContext(output, {
-		module,
-		exports: module.exports,
-		require: () => ({}),
-	}, { filename: "chatSessionBootstrap.ts" });
+	vm.runInNewContext(
+		output,
+		{
+			module,
+			exports: module.exports,
+			require: () => ({}),
+		},
+		{ filename: "chatSessionBootstrap.ts" },
+	);
 	return module.exports;
 }
 
@@ -40,17 +44,11 @@ const CATALOG = [
 ];
 
 test("偏好模型仍在目录：未失效，继续作为默认展示", () => {
-	assert.equal(
-		isWelcomeModelLost({ provider: "thetoken", modelId: "deepseek-v4-flash-0731" }, CATALOG),
-		false,
-	);
+	assert.equal(isWelcomeModelLost({ provider: "thetoken", modelId: "deepseek-v4-flash-0731" }, CATALOG), false);
 });
 
 test("偏好模型已被删除：失效", () => {
-	assert.equal(
-		isWelcomeModelLost({ provider: "thetoken", modelId: "old-deleted-model" }, CATALOG),
-		true,
-	);
+	assert.equal(isWelcomeModelLost({ provider: "thetoken", modelId: "old-deleted-model" }, CATALOG), true);
 });
 
 test("偏好供应商整体已被删除：失效", () => {
@@ -62,10 +60,7 @@ test("无偏好：不判定（不误伤空场景）", () => {
 });
 
 test("目录为空（未就绪/加载失败）：不判定，避免误清仍有效的偏好", () => {
-	assert.equal(
-		isWelcomeModelLost({ provider: "thetoken", modelId: "deepseek-v4-flash-0731" }, []),
-		false,
-	);
+	assert.equal(isWelcomeModelLost({ provider: "thetoken", modelId: "deepseek-v4-flash-0731" }, []), false);
 });
 
 // ---- shouldClearWelcomePreference：销毁偏好的保守判定 ----
@@ -77,10 +72,7 @@ const PICK = { provider: "thetoken", modelId: "deepseek-v4-flash-0731" };
 const GLOBAL_OK = { models: CATALOG, catalogLoaded: true, catalogIsGlobal: true };
 
 test("全局目录加载成功且确实缺项：清掉残留偏好", () => {
-	assert.equal(
-		shouldClearWelcomePreference({ ...GLOBAL_OK, welcomeModel: { provider: "thetoken", modelId: "old-deleted" } }),
-		true,
-	);
+	assert.equal(shouldClearWelcomePreference({ ...GLOBAL_OK, welcomeModel: { provider: "thetoken", modelId: "old-deleted" } }), true);
 });
 
 test("目录尚未加载成功（加载中/IPC 失败）：不得销毁偏好", () => {
@@ -108,10 +100,7 @@ test("项目范围目录缺项：不得判死全局偏好", () => {
 });
 
 test("目录为空：不销毁偏好（与展示判定同样宽容）", () => {
-	assert.equal(
-		shouldClearWelcomePreference({ ...GLOBAL_OK, models: [], welcomeModel: PICK }),
-		false,
-	);
+	assert.equal(shouldClearWelcomePreference({ ...GLOBAL_OK, models: [], welcomeModel: PICK }), false);
 });
 
 test("无偏好 / 偏好仍在目录：不销毁", () => {

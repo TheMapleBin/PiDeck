@@ -10,9 +10,7 @@ function loadLocator({ execFile, platform = "linux" } = {}) {
 				execFile,
 				// 回归护栏：readLoginShellPath 的 execFileSync 必须被删（M1 根因）。
 				execFileSync: () => {
-					throw new Error(
-						"execFileSync must never be called: it blocks the Electron main loop",
-					);
+					throw new Error("execFileSync must never be called: it blocks the Electron main loop");
 				},
 			},
 		},

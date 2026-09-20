@@ -1,14 +1,6 @@
 import { ipcMain } from "electron";
 import { ipcChannels } from "../../shared/ipc";
-import type {
-	ResourceImportApplyInput,
-	ResourceImportApplyResponse,
-	ResourceImportError,
-	ResourceImportErrorCode,
-	ResourceImportScanInput,
-	ResourceImportScanResponse,
-	ResourceImportTarget,
-} from "../../shared/types/resourceImport";
+import type { ResourceImportApplyInput, ResourceImportApplyResponse, ResourceImportError, ResourceImportErrorCode, ResourceImportScanInput, ResourceImportScanResponse, ResourceImportTarget } from "../../shared/types/resourceImport";
 import type { ResourceImportManager } from "../resourceImport/ResourceImportManager";
 
 export function isTarget(value: unknown): value is ResourceImportTarget {
@@ -16,15 +8,16 @@ export function isTarget(value: unknown): value is ResourceImportTarget {
 	const record = value;
 	if (!("scope" in record) || !("locationId" in record)) return false;
 	if (record.scope === "global") {
-		return Object.keys(record).every((key) => key === "scope" || key === "locationId")
-			&& (record.locationId === "pi-global" || record.locationId === "agents-global");
+		return Object.keys(record).every((key) => key === "scope" || key === "locationId") && (record.locationId === "pi-global" || record.locationId === "agents-global");
 	}
-	return Object.keys(record).every((key) => key === "scope" || key === "locationId" || key === "projectId")
-		&& record.scope === "project"
-		&& typeof record.projectId === "string"
-		&& record.projectId.trim().length > 0
-		&& record.projectId.length <= 256
-		&& (record.locationId === "project-pi" || record.locationId === "project-agents");
+	return (
+		Object.keys(record).every((key) => key === "scope" || key === "locationId" || key === "projectId") &&
+		record.scope === "project" &&
+		typeof record.projectId === "string" &&
+		record.projectId.trim().length > 0 &&
+		record.projectId.length <= 256 &&
+		(record.locationId === "project-pi" || record.locationId === "project-agents")
+	);
 }
 
 export function isScanInput(value: unknown): value is ResourceImportScanInput {

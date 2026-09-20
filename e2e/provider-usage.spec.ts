@@ -23,45 +23,42 @@ type UsageStubSeed = {
 
 /** 在主进程把配置域 IPC 换成确定性 stub；保存的探针配置记录在 main 全局（跨 evaluate 可读）。 */
 async function stubUsageIpc(app: ElectronApplication, seed: UsageStubSeed): Promise<void> {
-	await app.evaluate(
-		(electron, { modelsResult, authResult, usageByProvider, recognizedByProvider, testResult }) => {
-			// 注意：app.evaluate 只把函数体序列化到主进程执行——闭包里的模块导入
-			// （如 shared/ipc 的通道常量）在目标环境不存在，通道名必须就地字面量；
-			// 参数位解构也会被 TS 编译出临时变量，只能在函数体内解构。
-			const { ipcMain } = electron;
-			const g = globalThis as unknown as {
-				__usageE2E?: { saved: Record<string, unknown>; saveCount: number };
-			};
-			g.__usageE2E = { saved: {}, saveCount: 0 };
-			ipcMain.removeHandler("config:get-models");
-			ipcMain.handle("config:get-models", () => modelsResult);
-			ipcMain.removeHandler("config:get-auth");
-			ipcMain.handle("config:get-auth", () => authResult ?? { parsed: {}, raw: "{}", diagnostic: null });
-			ipcMain.removeHandler("config:fetch-usage");
-			ipcMain.handle("config:fetch-usage", (_event, payload: { provider?: string }) => {
-				const hit = payload?.provider ? usageByProvider[payload.provider] : undefined;
-				return hit ?? { success: false, error: "unsupported provider (e2e stub)" };
-			});
-			ipcMain.removeHandler("config:get-usage-probes");
-			ipcMain.handle("config:get-usage-probes", (_event, payload: { provider?: string }) => ({
-				config: payload?.provider ? g.__usageE2E?.saved[payload.provider] : undefined,
-				recognized: payload?.provider ? (recognizedByProvider[payload.provider] ?? null) : null,
-				templates: [],
-				errors: [],
-			}));
-			ipcMain.removeHandler("config:save-usage-probes");
-			ipcMain.handle("config:save-usage-probes", (_event, payload: { provider?: string; config?: unknown }) => {
-				if (g.__usageE2E && payload?.provider) {
-					g.__usageE2E.saved[payload.provider] = payload.config ?? {};
-					g.__usageE2E.saveCount += 1;
-				}
-				return { ok: true };
-			});
-			ipcMain.removeHandler("config:test-usage-probe");
-			ipcMain.handle("config:test-usage-probe", () => testResult);
-		},
-		seed,
-	);
+	await app.evaluate((electron, { modelsResult, authResult, usageByProvider, recognizedByProvider, testResult }) => {
+		// 注意：app.evaluate 只把函数体序列化到主进程执行——闭包里的模块导入
+		// （如 shared/ipc 的通道常量）在目标环境不存在，通道名必须就地字面量；
+		// 参数位解构也会被 TS 编译出临时变量，只能在函数体内解构。
+		const { ipcMain } = electron;
+		const g = globalThis as unknown as {
+			__usageE2E?: { saved: Record<string, unknown>; saveCount: number };
+		};
+		g.__usageE2E = { saved: {}, saveCount: 0 };
+		ipcMain.removeHandler("config:get-models");
+		ipcMain.handle("config:get-models", () => modelsResult);
+		ipcMain.removeHandler("config:get-auth");
+		ipcMain.handle("config:get-auth", () => authResult ?? { parsed: {}, raw: "{}", diagnostic: null });
+		ipcMain.removeHandler("config:fetch-usage");
+		ipcMain.handle("config:fetch-usage", (_event, payload: { provider?: string }) => {
+			const hit = payload?.provider ? usageByProvider[payload.provider] : undefined;
+			return hit ?? { success: false, error: "unsupported provider (e2e stub)" };
+		});
+		ipcMain.removeHandler("config:get-usage-probes");
+		ipcMain.handle("config:get-usage-probes", (_event, payload: { provider?: string }) => ({
+			config: payload?.provider ? g.__usageE2E?.saved[payload.provider] : undefined,
+			recognized: payload?.provider ? (recognizedByProvider[payload.provider] ?? null) : null,
+			templates: [],
+			errors: [],
+		}));
+		ipcMain.removeHandler("config:save-usage-probes");
+		ipcMain.handle("config:save-usage-probes", (_event, payload: { provider?: string; config?: unknown }) => {
+			if (g.__usageE2E && payload?.provider) {
+				g.__usageE2E.saved[payload.provider] = payload.config ?? {};
+				g.__usageE2E.saveCount += 1;
+			}
+			return { ok: true };
+		});
+		ipcMain.removeHandler("config:test-usage-probe");
+		ipcMain.handle("config:test-usage-probe", () => testResult);
+	}, seed);
 }
 
 /** 打开设置 → 配置管理分区 → 模型页（无 pi 环境下由 stub 提供供应商列表）。 */

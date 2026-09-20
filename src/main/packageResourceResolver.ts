@@ -2,13 +2,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, globSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import {
-	applyAutoloadDisabledPatterns,
-	applyPatterns,
-	isOverridePattern,
-	readSettingsObject,
-	resolveFromBase,
-} from "./resourceWhitelist";
+import { applyAutoloadDisabledPatterns, applyPatterns, isOverridePattern, readSettingsObject, resolveFromBase } from "./resourceWhitelist";
 
 export type PackageResourceType = "extensions" | "skills" | "prompts";
 export type PackageResourceScope = "user" | "project";
@@ -40,10 +34,7 @@ type ConfiguredPackage = {
 	filter: Record<string, unknown> | null;
 };
 
-type ParsedPackageSource =
-	| { type: "npm"; name: string }
-	| { type: "git"; host: string; path: string }
-	| { type: "local"; path: string };
+type ParsedPackageSource = { type: "npm"; name: string } | { type: "git"; host: string; path: string } | { type: "local"; path: string };
 
 type PiManifest = Partial<Record<PackageResourceType, string[]>>;
 
@@ -155,11 +146,7 @@ const pnpmPackagePathCache = new Map<string, Map<string, string>>();
 
 function npmCommand(settingsFile: string): string[] {
 	const configured = readSettingsObject(settingsFile).npmCommand;
-	if (
-		Array.isArray(configured) &&
-		configured.length > 0 &&
-		configured.every((entry) => typeof entry === "string" && entry.trim().length > 0)
-	) {
+	if (Array.isArray(configured) && configured.length > 0 && configured.every((entry) => typeof entry === "string" && entry.trim().length > 0)) {
 		return configured;
 	}
 	return ["npm"];
@@ -168,7 +155,9 @@ function npmCommand(settingsFile: string): string[] {
 function packageManagerName(command: string[]): string {
 	const separatorIndex = command.lastIndexOf("--");
 	const executable = separatorIndex >= 0 ? command[separatorIndex + 1] : command[0];
-	return basename(executable ?? "").replace(/\.(?:cmd|exe)$/i, "").toLowerCase();
+	return basename(executable ?? "")
+		.replace(/\.(?:cmd|exe)$/i, "")
+		.toLowerCase();
 }
 
 function runPackageManagerSync(command: string[], args: string[]): string {
@@ -187,9 +176,7 @@ function pnpmGlobalPackagePath(command: string[], packageName: string): string |
 	let packages = pnpmPackagePathCache.get(key);
 	if (!packages) {
 		packages = new Map();
-		const parsed: unknown = JSON.parse(
-			runPackageManagerSync(command, ["list", "-g", "--depth", "0", "--json"]),
-		);
+		const parsed: unknown = JSON.parse(runPackageManagerSync(command, ["list", "-g", "--depth", "0", "--json"]));
 		if (Array.isArray(parsed)) {
 			for (const entry of parsed) {
 				if (!isRecord(entry) || !isRecord(entry.dependencies)) continue;
@@ -244,9 +231,7 @@ function resolveInstalledPath(entry: ConfiguredPackage): { path: string; parsed:
 	if (parsed.type === "npm") {
 		const managed = managedPath(join(baseDir, "npm", "node_modules"), ...parsed.name.split("/"));
 		if (managed && existsSync(managed)) return { path: managed, parsed };
-		const legacy = entry.scope === "user"
-			? legacyGlobalNpmPackagePath(entry.settingsFile, parsed.name)
-			: null;
+		const legacy = entry.scope === "user" ? legacyGlobalNpmPackagePath(entry.settingsFile, parsed.name) : null;
 		candidate = legacy && existsSync(legacy) ? legacy : managed;
 	} else if (parsed.type === "git") {
 		candidate = managedPath(join(baseDir, "git"), parsed.host, ...parsed.path.split("/"));
@@ -311,19 +296,18 @@ function expandManifestSource(entry: string, root: string): string[] {
 	try {
 		return globSync(entry, { cwd: root })
 			.map((match) => resolve(root, match))
-			.filter((path) => relative(root, path)
-				.split(sep)
-				.every((segment) => segment === ".." || !segment.startsWith(".")))
+			.filter((path) =>
+				relative(root, path)
+					.split(sep)
+					.every((segment) => segment === ".." || !segment.startsWith(".")),
+			)
 			.sort((left, right) => left.localeCompare(right));
 	} catch {
 		return [];
 	}
 }
 
-function collectFilesFromPaths(
-	paths: string[],
-	collectDirectory: (directory: string) => string[],
-): string[] {
+function collectFilesFromPaths(paths: string[], collectDirectory: (directory: string) => string[]): string[] {
 	const files: string[] = [];
 	const seen = new Set<string>();
 	for (const path of paths) {
@@ -344,11 +328,7 @@ function collectFilesFromPaths(
 	return files;
 }
 
-function collectManifestFiles(
-	packageRoot: string,
-	entries: string[],
-	collectDirectory: (directory: string) => string[],
-): string[] {
+function collectManifestFiles(packageRoot: string, entries: string[], collectDirectory: (directory: string) => string[]): string[] {
 	const sourceEntries = entries.filter((entry) => !isOverridePattern(entry));
 	const paths = sourceEntries.flatMap((entry) => expandManifestSource(entry, packageRoot));
 	const allFiles = collectFilesFromPaths(paths, collectDirectory);
@@ -357,33 +337,17 @@ function collectManifestFiles(
 	return allFiles.filter((path) => enabled.has(path));
 }
 
-function conventionFiles(
-	packageRoot: string,
-	resourceType: PackageResourceType,
-	collectDirectory: (directory: string) => string[],
-): string[] {
+function conventionFiles(packageRoot: string, resourceType: PackageResourceType, collectDirectory: (directory: string) => string[]): string[] {
 	const directory = join(packageRoot, resourceType);
 	return existsSync(directory) ? collectDirectory(directory) : [];
 }
 
-function allFilterableFiles(
-	packageRoot: string,
-	resourceType: PackageResourceType,
-	manifest: PiManifest | null,
-	collectDirectory: (directory: string) => string[],
-): string[] {
+function allFilterableFiles(packageRoot: string, resourceType: PackageResourceType, manifest: PiManifest | null, collectDirectory: (directory: string) => string[]): string[] {
 	const entries = manifest?.[resourceType];
-	return entries && entries.length > 0
-		? collectManifestFiles(packageRoot, entries, collectDirectory)
-		: conventionFiles(packageRoot, resourceType, collectDirectory);
+	return entries && entries.length > 0 ? collectManifestFiles(packageRoot, entries, collectDirectory) : conventionFiles(packageRoot, resourceType, collectDirectory);
 }
 
-function resolveOnePackage(
-	entry: ConfiguredPackage,
-	physicalEntry: ConfiguredPackage,
-	resourceType: PackageResourceType,
-	collectDirectory: (directory: string) => string[],
-): Array<{ path: string; enabled: boolean }> {
+function resolveOnePackage(entry: ConfiguredPackage, physicalEntry: ConfiguredPackage, resourceType: PackageResourceType, collectDirectory: (directory: string) => string[]): Array<{ path: string; enabled: boolean }> {
 	const installed = resolveInstalledPath(physicalEntry);
 	if (!installed) return [];
 	const packageRoot = installed.path;
@@ -399,41 +363,27 @@ function resolveOnePackage(
 
 	const manifest = readPiManifest(packageRoot);
 	const patternsValue = entry.filter?.[resourceType];
-	const patterns = Array.isArray(patternsValue)
-		? patternsValue.filter((item): item is string => typeof item === "string")
-		: undefined;
+	const patterns = Array.isArray(patternsValue) ? patternsValue.filter((item): item is string => typeof item === "string") : undefined;
 	let resolved: Array<{ path: string; enabled: boolean }>;
 	if (entry.filter?.autoload === false) {
 		if (!patterns || patterns.length === 0) return [];
 		const allFiles = allFilterableFiles(packageRoot, resourceType, manifest, collectDirectory);
-		resolved = [...applyAutoloadDisabledPatterns(allFiles, patterns, packageRoot)]
-			.map(([path, enabled]) => ({ path, enabled }));
+		resolved = [...applyAutoloadDisabledPatterns(allFiles, patterns, packageRoot)].map(([path, enabled]) => ({ path, enabled }));
 	} else if (patterns !== undefined) {
 		const allFiles = allFilterableFiles(packageRoot, resourceType, manifest, collectDirectory);
 		const enabled = patterns.length > 0 ? applyPatterns(allFiles, patterns, packageRoot) : new Set<string>();
 		resolved = allFiles.map((path) => ({ path, enabled: enabled.has(path) }));
 	} else if (entry.filter !== null) {
 		const entries = manifest?.[resourceType];
-		resolved = entries !== undefined
-			? collectManifestFiles(packageRoot, entries, collectDirectory).map((path) => ({ path, enabled: true }))
-			: conventionFiles(packageRoot, resourceType, collectDirectory).map((path) => ({ path, enabled: true }));
+		resolved = entries !== undefined ? collectManifestFiles(packageRoot, entries, collectDirectory).map((path) => ({ path, enabled: true })) : conventionFiles(packageRoot, resourceType, collectDirectory).map((path) => ({ path, enabled: true }));
 	} else if (manifest) {
 		const entries = manifest[resourceType];
-		resolved = entries
-			? collectManifestFiles(packageRoot, entries, collectDirectory).map((path) => ({ path, enabled: true }))
-			: [];
+		resolved = entries ? collectManifestFiles(packageRoot, entries, collectDirectory).map((path) => ({ path, enabled: true })) : [];
 	} else {
 		resolved = conventionFiles(packageRoot, resourceType, collectDirectory).map((path) => ({ path, enabled: true }));
 	}
 
-	if (
-		resolved.length === 0 &&
-		resourceType === "extensions" &&
-		installed.parsed.type === "local" &&
-		entry.filter === null &&
-		manifest === null &&
-		!["extensions", "skills", "prompts", "themes"].some((name) => existsSync(join(packageRoot, name)))
-	) {
+	if (resolved.length === 0 && resourceType === "extensions" && installed.parsed.type === "local" && entry.filter === null && manifest === null && !["extensions", "skills", "prompts", "themes"].some((name) => existsSync(join(packageRoot, name)))) {
 		return [{ path: packageRoot, enabled: true }];
 	}
 	return resolved;
@@ -454,9 +404,7 @@ function canonicalResourceKey(path: string): string {
  * retains disabled delta entries so a lower-precedence user package cannot add them back.
  */
 export function resolveConfiguredPackageResources(options: PackageResourceOptions): ResolvedPackageResource[] {
-	const projectEntries = options.projectSettingsFile && options.projectBaseDir
-		? configuredPackages(options.projectSettingsFile, "project", options.projectBaseDir)
-		: [];
+	const projectEntries = options.projectSettingsFile && options.projectBaseDir ? configuredPackages(options.projectSettingsFile, "project", options.projectBaseDir) : [];
 	const userEntries = configuredPackages(options.userSettingsFile, "user", options.userBaseDir);
 	const allEntries = [...projectEntries, ...userEntries];
 	const entries = dedupePackages(allEntries);
@@ -468,12 +416,7 @@ export function resolveConfiguredPackageResources(options: PackageResourceOption
 			const identity = packageIdentity(entry);
 			physicalEntry = userEntries.find((candidate) => packageIdentity(candidate) === identity) ?? entry;
 		}
-		for (const resource of resolveOnePackage(
-			entry,
-			physicalEntry,
-			options.resourceType,
-			options.collectDirectory,
-		)) {
+		for (const resource of resolveOnePackage(entry, physicalEntry, options.resourceType, options.collectDirectory)) {
 			const path = resolve(resource.path);
 			const resourceKey = canonicalResourceKey(path);
 			if (!resources.has(resourceKey)) {

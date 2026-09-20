@@ -4,10 +4,7 @@ import { readFileSync } from "node:fs";
 import ts from "typescript";
 import vm from "node:vm";
 import { parseTodoSnapshotData } from "../src/shared/sessionTodo.ts";
-import {
-	runtimeTodosToItems,
-	sessionTodoSnapshotToItems,
-} from "../src/renderer/src/components/session/agentTodoParser.ts";
+import { runtimeTodosToItems, sessionTodoSnapshotToItems } from "../src/renderer/src/components/session/agentTodoParser.ts";
 
 // 与 piDeckTodoExtension.test.mjs 相同的编译替身：resources/extensions 不在 tsconfig
 // include 内，测试期才 transpile；本文件用它验证两条解码链对同一输入的 parity。
@@ -27,12 +24,16 @@ function compileStateModule() {
 	const localRequire = (specifier) => {
 		throw new Error(`pi-deck-todo-state must stay dependency-free, got require("${specifier}")`);
 	};
-	vm.runInNewContext(output, {
-		module,
-		exports: module.exports,
-		require: localRequire,
-		console,
-	}, { filename: statePath });
+	vm.runInNewContext(
+		output,
+		{
+			module,
+			exports: module.exports,
+			require: localRequire,
+			console,
+		},
+		{ filename: statePath },
+	);
 	return module.exports;
 }
 
@@ -77,11 +78,7 @@ test("decode 链 parity：扩展 decodeTodoState 与历史 parseTodoSnapshotData
 		// undefined——两边都表达「无计划」，结论一致但返回值形态不同，属设计内差异。
 		const hasPlan = decoded?.activePlan !== undefined;
 		const parsedHasPlan = parsed !== undefined;
-		assert.equal(
-			hasPlan,
-			parsedHasPlan,
-			`decoders disagree on input ${JSON.stringify(data)}`,
-		);
+		assert.equal(hasPlan, parsedHasPlan, `decoders disagree on input ${JSON.stringify(data)}`);
 	}
 	// 合法 v3 两份解码都必须恢复（非 undefined / 带 activePlan）
 	assert.ok(decodeTodoState(cases[0])?.activePlan);
@@ -114,10 +111,7 @@ test("parseTodoSnapshotData: version-3 快照解析出计划与三态待办", ()
 
 test("parseTodoSnapshotData: 旧格式（legacy/v2/未知版本）解析为 undefined 且不抛错", () => {
 	// legacy {todos,nextId}（无 version 字段）
-	assert.equal(
-		parseTodoSnapshotData({ todos: [{ id: 4, text: "旧任务", done: false }], nextId: 5 }),
-		undefined,
-	);
+	assert.equal(parseTodoSnapshotData({ todos: [{ id: 4, text: "旧任务", done: false }], nextId: 5 }), undefined);
 	// v2 done 布尔
 	assert.equal(
 		parseTodoSnapshotData({
@@ -210,14 +204,17 @@ test("sessionTodoSnapshotToItems: undefined / 空快照返回空数组", () => {
 });
 
 test("runtimeTodosToItems: DSH 结构化 todo 保留三态并为重复正文生成稳定 key", () => {
-	assert.deepEqual(runtimeTodosToItems([
-		{ content: "读取会话", status: "pending" },
-		{ content: "读取会话", status: "in_progress" },
-		{ content: "补充测试", status: "completed" },
-	]), [
-		{ id: "读取会话", title: "读取会话", status: "pending" },
-		{ id: "读取会话#2", title: "读取会话", status: "in-progress" },
-		{ id: "补充测试", title: "补充测试", status: "completed" },
-	]);
+	assert.deepEqual(
+		runtimeTodosToItems([
+			{ content: "读取会话", status: "pending" },
+			{ content: "读取会话", status: "in_progress" },
+			{ content: "补充测试", status: "completed" },
+		]),
+		[
+			{ id: "读取会话", title: "读取会话", status: "pending" },
+			{ id: "读取会话#2", title: "读取会话", status: "in-progress" },
+			{ id: "补充测试", title: "补充测试", status: "completed" },
+		],
+	);
 	assert.deepEqual(runtimeTodosToItems(null), []);
 });

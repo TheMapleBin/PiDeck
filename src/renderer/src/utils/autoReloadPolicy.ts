@@ -27,10 +27,7 @@ export type CrashReloadPlan = {
  * @param stored 上次存储的计数（{count, at}）；无存储/解析失败传 null 视为首次。
  * @param now 当前时间戳（测试注入固定值）。
  */
-export function computeCrashReloadPlan(params: {
-	stored: { count: number; at: number } | null;
-	now: number;
-}): CrashReloadPlan {
+export function computeCrashReloadPlan(params: { stored: { count: number; at: number } | null; now: number }): CrashReloadPlan {
 	const { stored, now } = params;
 	// 窗口内（距上次崩溃 < 60s）继续累计；窗口外或首次 → 重置为 1。
 	const withinWindow = stored !== null && now - stored.at < CRASH_AUTO_RELOAD_WINDOW_MS;

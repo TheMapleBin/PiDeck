@@ -16,10 +16,7 @@ export function getCodexSessionThreadInfo(meta: Record<string, unknown>): CodexS
 	const spawn = source?.subagent?.thread_spawn;
 	// 子代理判断：thread_source 明确标记、或旧格式缺字段时靠 parent_thread_id 回退检测。
 	// 显式为 "user" 时即使有 parent_thread_id 也不判定为子代理，避免误判。
-	const isSubagent =
-		meta.thread_source === "subagent" ||
-		(meta.thread_source !== "user" && Boolean(meta.parent_thread_id)) ||
-		Boolean(source?.subagent);
+	const isSubagent = meta.thread_source === "subagent" || (meta.thread_source !== "user" && Boolean(meta.parent_thread_id)) || Boolean(source?.subagent);
 
 	if (!isSubagent) {
 		return {
@@ -32,10 +29,7 @@ export function getCodexSessionThreadInfo(meta: Record<string, unknown>): CodexS
 
 	return {
 		threadSource: "subagent",
-		parentThreadId:
-			stringValue(meta.parent_thread_id) ??
-			stringValue(spawn?.parent_thread_id) ??
-			stringValue(meta.session_id),
+		parentThreadId: stringValue(meta.parent_thread_id) ?? stringValue(spawn?.parent_thread_id) ?? stringValue(meta.session_id),
 		agentRole: stringValue(meta.agent_role) ?? stringValue(spawn?.agent_role),
 		agentNickname: stringValue(meta.agent_nickname) ?? stringValue(spawn?.agent_nickname),
 	};

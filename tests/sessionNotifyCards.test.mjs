@@ -22,9 +22,7 @@ import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
 const { SessionHistoryReader } = loadTsCommonJs("src/main/pi/SessionHistoryReader.ts");
 const { AgentMessageProjector } = loadTsCommonJs("src/main/pi/AgentMessageProjector.ts");
-const { isNotifiableCustomType } = loadTsCommonJs(
-	"src/renderer/src/components/session/notifySummary.ts",
-);
+const { isNotifiableCustomType } = loadTsCommonJs("src/renderer/src/components/session/notifySummary.ts");
 
 /** 用真实投影器（而非字段回显 stub），保证卡片偏移与压缩卡片 meta 口径一致。 */
 function createReader() {
@@ -34,8 +32,7 @@ function createReader() {
 	});
 	return new SessionHistoryReader({
 		toHostPath: (sessionPath) => sessionPath,
-		convertMessages: (agentId, rawMessages, entryIds) =>
-			projector.convert(agentId, rawMessages, entryIds),
+		convertMessages: (agentId, rawMessages, entryIds) => projector.convert(agentId, rawMessages, entryIds),
 		trimMessages: (messages) => messages,
 		translate: (key) => String(key),
 	});
@@ -100,21 +97,10 @@ function outline(messages) {
 }
 
 test("通知条目投影为 system 卡片并插在下一条消息之前", async () => {
-	const filePath = writeSession("notify-basic.jsonl", [
-		header(),
-		userMessage("u1", "session-1", "q1"),
-		assistantMessage("a1", "u1", "a1"),
-		customMessage("cm1", "a1", { display: true }),
-		assistantMessage("a2", "cm1", "a2"),
-	]);
+	const filePath = writeSession("notify-basic.jsonl", [header(), userMessage("u1", "session-1", "q1"), assistantMessage("a1", "u1", "a1"), customMessage("cm1", "a1", { display: true }), assistantMessage("a2", "cm1", "a2")]);
 	const window = await createReader().readLoadWindow(filePath, "agent-1", 20, 500);
 
-	assert.deepEqual(outline(window.messages), [
-		"user:q1",
-		"assistant:a1",
-		"custom:subagent-notify",
-		"assistant:a2",
-	]);
+	assert.deepEqual(outline(window.messages), ["user:q1", "assistant:a1", "custom:subagent-notify", "assistant:a2"]);
 	const card = window.messages[2];
 	assert.equal(card.role, "system");
 	assert.equal(card.meta.display, true);
@@ -124,31 +110,14 @@ test("通知条目投影为 system 卡片并插在下一条消息之前", async 
 });
 
 test("尾部通知（最后一条消息之后）排在列表末尾", async () => {
-	const filePath = writeSession("notify-tail.jsonl", [
-		header(),
-		userMessage("u1", "session-1", "q1"),
-		assistantMessage("a1", "u1", "a1"),
-		customMessage("cm-tail", "a1"),
-	]);
+	const filePath = writeSession("notify-tail.jsonl", [header(), userMessage("u1", "session-1", "q1"), assistantMessage("a1", "u1", "a1"), customMessage("cm-tail", "a1")]);
 	const window = await createReader().readLoadWindow(filePath, "agent-1", 20, 500);
 
-	assert.deepEqual(outline(window.messages), [
-		"user:q1",
-		"assistant:a1",
-		"custom:subagent-notify",
-	]);
+	assert.deepEqual(outline(window.messages), ["user:q1", "assistant:a1", "custom:subagent-notify"]);
 });
 
 test("分页：通知卡片在所有页里恰好出现一次（不重复、不丢失）", async () => {
-	const filePath = writeSession("notify-pages.jsonl", [
-		header(),
-		userMessage("u1", "session-1", "q1"),
-		assistantMessage("a1", "u1", "a1"),
-		customMessage("cm1", "a1"),
-		assistantMessage("a2", "cm1", "a2"),
-		assistantMessage("a3", "a2", "a3"),
-		customMessage("cm-tail", "a3"),
-	]);
+	const filePath = writeSession("notify-pages.jsonl", [header(), userMessage("u1", "session-1", "q1"), assistantMessage("a1", "u1", "a1"), customMessage("cm1", "a1"), assistantMessage("a2", "cm1", "a2"), assistantMessage("a3", "a2", "a3"), customMessage("cm-tail", "a3")]);
 	const reader = createReader();
 
 	// 逐页上翻（turnCount=1 让页边界尽量贴到回合边界，专门探边界处的卡片）
@@ -164,17 +133,8 @@ test("分页：通知卡片在所有页里恰好出现一次（不重复、不�
 	// 页按「新 → 旧」返回，倒序拼接后应与整段消息序列一致：
 	// 卡片归属唯一一页（半开区间），既不会在相邻两页各插一张，也不会丢。
 	const flat = pages.reverse().flatMap((page) => outline(page.messages));
-	assert.deepEqual(flat, [
-		"user:q1",
-		"assistant:a1",
-		"custom:subagent-notify",
-		"assistant:a2",
-		"assistant:a3",
-		"custom:subagent-notify",
-	]);
-	const cardIds = pages.flatMap((page) =>
-		[...page.messages].filter((message) => message.meta?.type === "customMessage").map((m) => m.id),
-	);
+	assert.deepEqual(flat, ["user:q1", "assistant:a1", "custom:subagent-notify", "assistant:a2", "assistant:a3", "custom:subagent-notify"]);
+	const cardIds = pages.flatMap((page) => [...page.messages].filter((message) => message.meta?.type === "customMessage").map((m) => m.id));
 	assert.equal(new Set(cardIds).size, cardIds.length, "同一通知不能在多页重复出现");
 });
 
@@ -198,13 +158,7 @@ test("与压缩卡片共存时按 +1 补偿，不错位", async () => {
 	const window = await createReader().readLoadWindow(filePath, "agent-1", 20, 500);
 
 	// 压缩卡片插在 a1 之前（firstKeptEntryId），通知在 a1 之后 → 必须排在压缩卡片之后
-	assert.deepEqual(outline(window.messages), [
-		"user:q1",
-		"compaction",
-		"assistant:a1",
-		"custom:subagent-notify",
-		"assistant:a2",
-	]);
+	assert.deepEqual(outline(window.messages), ["user:q1", "compaction", "assistant:a1", "custom:subagent-notify", "assistant:a2"]);
 });
 
 test("白名单外的 custom_message 也生成条目，但渲染层白名单判定为不展示", async () => {
@@ -221,12 +175,7 @@ test("白名单外的 custom_message 也生成条目，但渲染层白名单判�
 	]);
 	const window = await createReader().readLoadWindow(filePath, "agent-1", 20, 500);
 
-	assert.deepEqual(outline(window.messages), [
-		"user:q1",
-		"assistant:a1",
-		"custom:pi-deck-plan-mode-context",
-		"assistant:a2",
-	]);
+	assert.deepEqual(outline(window.messages), ["user:q1", "assistant:a1", "custom:pi-deck-plan-mode-context", "assistant:a2"]);
 	const card = window.messages[2];
 	assert.equal(card.meta.display, false);
 	// 卡片不展示，但它标记的回合边界仍然存在（渲染层按 meta.type === "customMessage" 断轮）
@@ -234,13 +183,7 @@ test("白名单外的 custom_message 也生成条目，但渲染层白名单判�
 });
 
 test("空正文通知不占位", async () => {
-	const filePath = writeSession("notify-empty.jsonl", [
-		header(),
-		userMessage("u1", "session-1", "q1"),
-		assistantMessage("a1", "u1", "a1"),
-		customMessage("cm-empty", "a1", { content: "   " }),
-		assistantMessage("a2", "cm-empty", "a2"),
-	]);
+	const filePath = writeSession("notify-empty.jsonl", [header(), userMessage("u1", "session-1", "q1"), assistantMessage("a1", "u1", "a1"), customMessage("cm-empty", "a1", { content: "   " }), assistantMessage("a2", "cm-empty", "a2")]);
 	const window = await createReader().readLoadWindow(filePath, "agent-1", 20, 500);
 
 	assert.deepEqual(outline(window.messages), ["user:q1", "assistant:a1", "assistant:a2"]);

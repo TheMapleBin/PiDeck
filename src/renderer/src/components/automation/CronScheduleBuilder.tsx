@@ -5,22 +5,8 @@ import { cn } from "../../lib/utils";
 import { Button } from "../ui-shadcn/button";
 import { Input } from "../ui-shadcn/input";
 import { Label } from "../ui-shadcn/label";
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "../ui-shadcn/select";
-import {
-	buildCronExpression,
-	CRON_MINUTE_INTERVALS,
-	CRON_VISUAL_KINDS,
-	parseCronVisualState,
-	switchCronKind,
-	type CronVisualKind,
-	type CronVisualState,
-} from "./cronScheduleModel";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui-shadcn/select";
+import { buildCronExpression, CRON_MINUTE_INTERVALS, CRON_VISUAL_KINDS, parseCronVisualState, switchCronKind, type CronVisualKind, type CronVisualState } from "./cronScheduleModel";
 
 const CRON_KIND_VALUES = new Set<string>(CRON_VISUAL_KINDS);
 
@@ -45,15 +31,7 @@ const CRON_KIND_LABELS: Record<CronVisualKind, TranslationKey> = {
 	custom: "automation.cronMode.custom",
 };
 
-const WEEKDAY_LABELS: TranslationKey[] = [
-	"automation.cronWeekday.0",
-	"automation.cronWeekday.1",
-	"automation.cronWeekday.2",
-	"automation.cronWeekday.3",
-	"automation.cronWeekday.4",
-	"automation.cronWeekday.5",
-	"automation.cronWeekday.6",
-];
+const WEEKDAY_LABELS: TranslationKey[] = ["automation.cronWeekday.0", "automation.cronWeekday.1", "automation.cronWeekday.2", "automation.cronWeekday.3", "automation.cronWeekday.4", "automation.cronWeekday.5", "automation.cronWeekday.6"];
 
 const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
 const MINUTES = Array.from({ length: 60 }, (_, minute) => minute);
@@ -84,12 +62,7 @@ interface CronScheduleBuilderProps {
  * 定时任务调度选择器：预设 + 可视化频率，必要时才露出原始 Cron 输入。
  * 业务规则：父组件只存 5 段表达式；本组件用本地状态记住「自定义」以免合法表达式被重新推断回每天/工作日。
  */
-export function CronScheduleBuilder({
-	value,
-	onChange,
-	previews,
-	error,
-}: CronScheduleBuilderProps) {
+export function CronScheduleBuilder({ value, onChange, previews, error }: CronScheduleBuilderProps) {
 	const [state, setState] = useState<CronVisualState>(() => parseCronVisualState(value));
 	const lastEmittedRef = useRef(value);
 
@@ -119,14 +92,7 @@ export function CronScheduleBuilder({
 				</Label>
 				<div className="flex flex-wrap items-center gap-1">
 					{CRON_PRESETS.map((preset) => (
-						<Button
-							key={preset.expr}
-							type="button"
-							variant="ghost"
-							size="sm"
-							className="h-6 px-1.5 text-[11px] text-muted-foreground hover:text-foreground"
-							onClick={() => commit(parseCronVisualState(preset.expr))}
-						>
+						<Button key={preset.expr} type="button" variant="ghost" size="sm" className="h-6 px-1.5 text-[11px] text-muted-foreground hover:text-foreground" onClick={() => commit(parseCronVisualState(preset.expr))}>
 							{t(preset.label)}
 						</Button>
 					))}
@@ -169,16 +135,13 @@ export function CronScheduleBuilder({
 									key={label}
 									type="button"
 									aria-pressed={selected}
-									className={cn(
-										"size-7 rounded-md text-[11px] font-medium transition-colors",
-										selected
-											? "bg-primary text-primary-foreground"
-											: "bg-muted/70 text-muted-foreground hover:bg-muted hover:text-foreground",
-									)}
-									onClick={() => commit({
-										...state,
-										days: toggleDay(state.days, day),
-									})}
+									className={cn("size-7 rounded-md text-[11px] font-medium transition-colors", selected ? "bg-primary text-primary-foreground" : "bg-muted/70 text-muted-foreground hover:bg-muted hover:text-foreground")}
+									onClick={() =>
+										commit({
+											...state,
+											days: toggleDay(state.days, day),
+										})
+									}
 								>
 									{t(label)}
 								</button>
@@ -188,15 +151,7 @@ export function CronScheduleBuilder({
 				</div>
 			)}
 
-			{state.kind === "custom" && (
-				<Input
-					id="cron-expr"
-					value={state.expression}
-					onChange={(event) => commit({ kind: "custom", expression: event.target.value })}
-					placeholder="0 9 * * 1-5"
-					className="h-8 font-mono text-xs"
-				/>
-			)}
+			{state.kind === "custom" && <Input id="cron-expr" value={state.expression} onChange={(event) => commit({ kind: "custom", expression: event.target.value })} placeholder="0 9 * * 1-5" className="h-8 font-mono text-xs" />}
 
 			<div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground">
 				<span className="font-mono text-foreground/80">
@@ -218,84 +173,35 @@ export function CronScheduleBuilder({
 	);
 }
 
-function renderKindFields(
-	state: CronVisualState,
-	intervalOptions: number[],
-	commit: (next: CronVisualState) => void,
-) {
+function renderKindFields(state: CronVisualState, intervalOptions: number[], commit: (next: CronVisualState) => void) {
 	if (state.kind === "every-minutes") {
-		return (
-			<NumberSelect
-				label={t("automation.cronEveryNMinutes")}
-				value={state.interval}
-				options={intervalOptions}
-				onChange={(interval) => commit({ kind: "every-minutes", interval })}
-			/>
-		);
+		return <NumberSelect label={t("automation.cronEveryNMinutes")} value={state.interval} options={intervalOptions} onChange={(interval) => commit({ kind: "every-minutes", interval })} />;
 	}
 	if (state.kind === "hourly") {
-		return (
-			<NumberSelect
-				label={t("automation.cronAtMinute")}
-				value={state.minute}
-				options={MINUTES}
-				format={pad2}
-				onChange={(minute) => commit({ kind: "hourly", minute })}
-			/>
-		);
+		return <NumberSelect label={t("automation.cronAtMinute")} value={state.minute} options={MINUTES} format={pad2} onChange={(minute) => commit({ kind: "hourly", minute })} />;
 	}
 	if (state.kind === "custom") {
-		return (
-			<div className="flex flex-col justify-end text-[11px] text-muted-foreground">
-				{t("automation.cronHelp")}
-			</div>
-		);
+		return <div className="flex flex-col justify-end text-[11px] text-muted-foreground">{t("automation.cronHelp")}</div>;
 	}
 
 	return (
 		<div className="flex flex-col gap-1">
 			<span className="text-[11px] text-muted-foreground">{t("automation.cronAtTime")}</span>
 			<div className="flex items-center gap-1.5">
-				<NumberSelect
-					value={state.hour}
-					options={HOURS}
-					format={pad2}
-					onChange={(hour) => commit({ ...state, hour })}
-				/>
+				<NumberSelect value={state.hour} options={HOURS} format={pad2} onChange={(hour) => commit({ ...state, hour })} />
 				<span className="text-xs text-muted-foreground">:</span>
-				<NumberSelect
-					value={state.minute}
-					options={MINUTES}
-					format={pad2}
-					onChange={(minute) => commit({ ...state, minute })}
-				/>
-				{state.kind === "monthly" && (
-					<NumberSelect
-						label={t("automation.cronDayOfMonth")}
-						value={state.day}
-						options={MONTH_DAYS}
-						onChange={(day) => commit({ ...state, day })}
-					/>
-				)}
+				<NumberSelect value={state.minute} options={MINUTES} format={pad2} onChange={(minute) => commit({ ...state, minute })} />
+				{state.kind === "monthly" && <NumberSelect label={t("automation.cronDayOfMonth")} value={state.day} options={MONTH_DAYS} onChange={(day) => commit({ ...state, day })} />}
 			</div>
 		</div>
 	);
 }
 
-function NumberSelect(props: {
-	label?: string;
-	value: number;
-	options: number[];
-	format?: (value: number) => string;
-	onChange: (value: number) => void;
-}) {
+function NumberSelect(props: { label?: string; value: number; options: number[]; format?: (value: number) => string; onChange: (value: number) => void }) {
 	return (
 		<div className="flex min-w-0 flex-1 flex-col gap-1">
 			{props.label && <span className="text-[11px] text-muted-foreground">{props.label}</span>}
-			<Select
-				value={String(props.value)}
-				onValueChange={(next) => props.onChange(Number(next))}
-			>
+			<Select value={String(props.value)} onValueChange={(next) => props.onChange(Number(next))}>
 				<SelectTrigger className="h-8 text-xs">
 					<SelectValue />
 				</SelectTrigger>

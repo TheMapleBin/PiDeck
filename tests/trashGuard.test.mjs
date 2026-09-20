@@ -77,12 +77,7 @@ function makeFakeSpawn() {
 
 test("splitShellSegments 按 && ; | & 换行分段且引号内不切", () => {
 	const ext = compileExtension(() => ({}));
-	assert.deepEqual([...ext.splitShellSegments("rm a.txt && rm b.txt; rm c.txt | wc -l")], [
-		"rm a.txt",
-		"rm b.txt",
-		"rm c.txt",
-		"wc -l",
-	]);
+	assert.deepEqual([...ext.splitShellSegments("rm a.txt && rm b.txt; rm c.txt | wc -l")], ["rm a.txt", "rm b.txt", "rm c.txt", "wc -l"]);
 	assert.deepEqual([...ext.splitShellSegments('rm "a;b.txt"')], ['rm "a;b.txt"']);
 	assert.deepEqual([...ext.splitShellSegments("echo hi")], ["echo hi"]);
 	assert.deepEqual([...ext.splitShellSegments("   ")], []);
@@ -131,18 +126,11 @@ test("expandGlobTarget 只展开最后一段通配且遵循隐藏文件语义", 
 
 		const rel = (p) => [...p].sort().map((x) => x.replace(/\\/g, "/"));
 		// 普通通配不匹配隐藏文件
-		assert.deepEqual(rel(ext.expandGlobTarget(join(dir, "*.log"), dir)), [
-			join(dir, "a.log").replace(/\\/g, "/"),
-			join(dir, "b.log").replace(/\\/g, "/"),
-		]);
+		assert.deepEqual(rel(ext.expandGlobTarget(join(dir, "*.log"), dir)), [join(dir, "a.log").replace(/\\/g, "/"), join(dir, "b.log").replace(/\\/g, "/")]);
 		// 显式点开头匹配隐藏
-		assert.deepEqual(rel(ext.expandGlobTarget(join(dir, ".h*"), dir)), [
-			join(dir, ".hidden.log").replace(/\\/g, "/"),
-		]);
+		assert.deepEqual(rel(ext.expandGlobTarget(join(dir, ".h*"), dir)), [join(dir, ".hidden.log").replace(/\\/g, "/")]);
 		// 子目录通配（??.log 匹配两字符文件名）
-		assert.deepEqual(rel(ext.expandGlobTarget(join(dir, "sub", "??.log"), dir)), [
-			join(dir, "sub", "cc.log").replace(/\\/g, "/"),
-		]);
+		assert.deepEqual(rel(ext.expandGlobTarget(join(dir, "sub", "??.log"), dir)), [join(dir, "sub", "cc.log").replace(/\\/g, "/")]);
 		// ** 不支持 → 空匹配（照常删除但不备份）
 		assert.deepEqual([...ext.expandGlobTarget(join(dir, "**"), dir)], []);
 		// 无通配原样返回
@@ -185,10 +173,7 @@ test("tool_call: rm 前把副本送回收站（spawn 收到暂存路径），原
 	assert.ok(handlers.tool_call, "应注册 tool_call 处理器");
 
 	try {
-		const result = await handlers.tool_call(
-			{ toolName: "bash", input: { command: `rm "${target}"` } },
-			{ cwd: dir },
-		);
+		const result = await handlers.tool_call({ toolName: "bash", input: { command: `rm "${target}"` } }, { cwd: dir });
 		// 一律放行
 		assert.equal(result, undefined);
 		// 原文件仍然存在（只备份，不代删）

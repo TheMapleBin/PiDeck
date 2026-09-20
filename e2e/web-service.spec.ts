@@ -112,9 +112,7 @@ test("web service: switching sessions keeps history in per-id cache", async ({ a
 	// 切回会话 A：会话列表排序不固定，直接点「非激活」的那一行（新建的 B 是激活的）
 	const rows = page.locator(".chat-list-pane .session-row");
 	await expect(rows).toHaveCount(2, { timeout: 20_000 });
-	const inactiveIndex = await rows.evaluateAll((elements) =>
-		elements.findIndex((el) => !el.classList.contains("active")),
-	);
+	const inactiveIndex = await rows.evaluateAll((elements) => elements.findIndex((el) => !el.classList.contains("active")));
 	expect(inactiveIndex).toBeGreaterThanOrEqual(0);
 	await rows.nth(inactiveIndex).click();
 	await expect(page.locator(".user-turn")).toContainText("会话 A 的第一条消息", { timeout: 20_000 });
@@ -132,9 +130,7 @@ test("web service: dark mode follows prefers-color-scheme", async ({ app }) => {
 	await page.emulateMedia({ colorScheme: "dark" });
 	await page.goto(baseUrl);
 	await expect(page.locator(".app")).toBeVisible({ timeout: 20_000 });
-	await expect
-		.poll(() => page.evaluate(() => document.documentElement.dataset.theme))
-		.toBe("dark");
+	await expect.poll(() => page.evaluate(() => document.documentElement.dataset.theme)).toBe("dark");
 });
 
 test("web service: mobile viewport does not overflow horizontally", async ({ app }) => {

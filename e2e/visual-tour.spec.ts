@@ -54,7 +54,9 @@ async function closeSettings(window: Page) {
 	const modal = window.locator(".settings-modal");
 	if (await modal.count()) {
 		await modal.getByRole("button", { name: "关闭" }).first().click();
-		await expect(modal).toHaveCount(0, { timeout: 3000 }).catch(() => {});
+		await expect(modal)
+			.toHaveCount(0, { timeout: 3000 })
+			.catch(() => {});
 	}
 }
 
@@ -119,11 +121,16 @@ test("visual tour: light + dark", async ({ window }) => {
 	// 文件抽屉 + tab 条（横排 rail 回归验证）
 	const rail = window.locator(".drawer-activity-rail");
 	if (await rail.count()) {
-		await window.locator(".detail-drawer").first().screenshot({ path: join(OUT_DIR, "11-drawer-files-light.png") });
+		await window
+			.locator(".detail-drawer")
+			.first()
+			.screenshot({ path: join(OUT_DIR, "11-drawer-files-light.png") });
 	}
 
 	// ── 暗色：直接切 data-theme（应用主题机制） ──
-	await window.evaluate(() => { document.documentElement.dataset.theme = "dark"; });
+	await window.evaluate(() => {
+		document.documentElement.dataset.theme = "dark";
+	});
 	await window.waitForTimeout(400);
 	await shot(window, "20-workbench-dark");
 	await openContextMenu(window, ".project-group", "21-menu-project-dark");

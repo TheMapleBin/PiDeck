@@ -15,9 +15,7 @@ function makeStore() {
 	const storeDir = join(root, "sessions");
 	const blobsDir = join(root, "blobs");
 	mkdirSync(storeDir, { recursive: true });
-	const { ImageBlobStore, IMAGE_BLOB_MAX_BYTES } = loadTsCommonJs(
-		"src/main/imagegen/ImageBlobStore.ts",
-	);
+	const { ImageBlobStore, IMAGE_BLOB_MAX_BYTES } = loadTsCommonJs("src/main/imagegen/ImageBlobStore.ts");
 	const { ImageSessionStore } = loadTsCommonJs("src/main/imagegen/ImageSessionStore.ts");
 	const store = new ImageSessionStore({
 		getStorePath: () => storeDir,
@@ -38,8 +36,7 @@ function legacyLine(id, data) {
 }
 
 /** 1×1 真实 PNG 的 base64（put 成功，可正常迁移）。 */
-const TINY_PNG =
-	"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+const TINY_PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 
 it("无法落库的图片（非法 base64）所在行必须原样保留（M5）", async () => {
 	const { store, storeDir } = makeStore();
@@ -63,14 +60,8 @@ it("超过 IMAGE_BLOB_MAX_BYTES 的图片所在行必须原样保留（M5，备�
 	await store.readMessages(SESSION_ID); // 触发自愈迁移
 
 	const raw = readFileSync(file, "utf8");
-	assert.ok(
-		raw.includes(hugeData.slice(0, 64)),
-		"超限图片必须原样保留，不得丢弃后用无图行原子覆盖原文件",
-	);
-	assert.ok(
-		!existsSync(blobsDir) || readdirSync(blobsDir).length === 0,
-		"超限图片不应产生 blob 文件",
-	);
+	assert.ok(raw.includes(hugeData.slice(0, 64)), "超限图片必须原样保留，不得丢弃后用无图行原子覆盖原文件");
+	assert.ok(!existsSync(blobsDir) || readdirSync(blobsDir).length === 0, "超限图片不应产生 blob 文件");
 });
 
 it("可正常落库的小图仍照常迁移为 ref 引用（回归守卫）", async () => {

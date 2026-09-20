@@ -49,31 +49,28 @@ export const SESSION_SCAN_CONCURRENCY = 6;
  * 调用方按「坏行跳过」处理即可（与既有 head-only 解析同策略）；
  * 需要精确取某行的调用方应容忍最后一行不完整。
  */
-export async function readSessionSourceHead(
-  filePath: string,
-  limit: number = SESSION_SCAN_HEAD_BYTES,
-): Promise<{ head: string; size: number; mtimeMs: number; truncated: boolean }> {
-  const info = await stat(filePath);
-  const handle = await open(filePath, "r");
-  try {
-    const buffer = Buffer.allocUnsafe(limit);
-    const { bytesRead } = await handle.read(buffer, 0, limit, 0);
-    return {
-      head: bytesRead > 0 ? buffer.subarray(0, bytesRead).toString("utf8") : "",
-      size: info.size,
-      mtimeMs: info.mtimeMs,
-      /**
-       * 头部是否被截断（文件比上限大）。
-       *
-       * 调用方据此选时间口径：**未截断时头部就是全文件**，首末时间用内容里的真实
-       * 时间戳（列表排序靠它，用 mtime 会让同一批导出的会话时间全部相同）；
-       * 截断时才退化用 mtime（看不到文件尾，mtime 比头部最大值更接近真实末次活动）。
-       */
-      truncated: info.size > bytesRead,
-    };
-  } finally {
-    await handle.close();
-  }
+export async function readSessionSourceHead(filePath: string, limit: number = SESSION_SCAN_HEAD_BYTES): Promise<{ head: string; size: number; mtimeMs: number; truncated: boolean }> {
+	const info = await stat(filePath);
+	const handle = await open(filePath, "r");
+	try {
+		const buffer = Buffer.allocUnsafe(limit);
+		const { bytesRead } = await handle.read(buffer, 0, limit, 0);
+		return {
+			head: bytesRead > 0 ? buffer.subarray(0, bytesRead).toString("utf8") : "",
+			size: info.size,
+			mtimeMs: info.mtimeMs,
+			/**
+			 * 头部是否被截断（文件比上限大）。
+			 *
+			 * 调用方据此选时间口径：**未截断时头部就是全文件**，首末时间用内容里的真实
+			 * 时间戳（列表排序靠它，用 mtime 会让同一批导出的会话时间全部相同）；
+			 * 截断时才退化用 mtime（看不到文件尾，mtime 比头部最大值更接近真实末次活动）。
+			 */
+			truncated: info.size > bytesRead,
+		};
+	} finally {
+		await handle.close();
+	}
 }
 
 /**
@@ -85,28 +82,22 @@ export async function readSessionSourceHead(
  * 单个任务抛错由调用方在 task 内自行吞掉（既有实现都是 `.catch(() => null)`），
  * 本函数不吞错——避免把真实故障静默成「没有会话」。
  */
-export async function mapWithConcurrency<T, R>(
-  items: readonly T[],
-  limit: number,
-  task: (item: T, index: number) => Promise<R>,
-): Promise<R[]> {
-  const size = Math.max(1, Math.floor(limit));
-  const results = new Array<R>(items.length);
-  let next = 0;
+export async function mapWithConcurrency<T, R>(items: readonly T[], limit: number, task: (item: T, index: number) => Promise<R>): Promise<R[]> {
+	const size = Math.max(1, Math.floor(limit));
+	const results = new Array<R>(items.length);
+	let next = 0;
 
-  const worker = async () => {
-    for (;;) {
-      const index = next;
-      next += 1;
-      if (index >= items.length) return;
-      results[index] = await task(items[index], index);
-    }
-  };
+	const worker = async () => {
+		for (;;) {
+			const index = next;
+			next += 1;
+			if (index >= items.length) return;
+			results[index] = await task(items[index], index);
+		}
+	};
 
-  await Promise.all(
-    Array.from({ length: Math.min(size, items.length) }, () => worker()),
-  );
-  return results;
+	await Promise.all(Array.from({ length: Math.min(size, items.length) }, () => worker()));
+	return results;
 }
 
 /**
@@ -118,32 +109,26 @@ export async function mapWithConcurrency<T, R>(
  * 坏行即抛错（与旧全量实现一致：导入要严格，不能静默丢消息）；
  * 错误信息截取行前缀，避免把整行内容刷进日志。
  */
-export async function* readJsonlObjects(
-  filePath: string,
-): AsyncGenerator<Record<string, any>> {
-  const rl = createInterface({
-    input: createReadStream(filePath, { encoding: "utf8" }),
-    crlfDelay: Infinity,
-  });
-  try {
-    for await (const line of rl) {
-      if (!line.trim()) continue;
-      try {
-        const parsed = JSON.parse(line) as unknown;
-        if (parsed && typeof parsed === "object") {
-          yield parsed as Record<string, any>;
-        }
-      } catch (error) {
-        throw new Error(
-          `Invalid JSON line in ${filePath}: ${line.slice(0, 120)} (${
-            error instanceof Error ? error.message : String(error)
-          })`,
-        );
-      }
-    }
-  } finally {
-    rl.close();
-  }
+export async function* readJsonlObjects(filePath: string): AsyncGenerator<Record<string, any>> {
+	const rl = createInterface({
+		input: createReadStream(filePath, { encoding: "utf8" }),
+		crlfDelay: Infinity,
+	});
+	try {
+		for await (const line of rl) {
+			if (!line.trim()) continue;
+			try {
+				const parsed = JSON.parse(line) as unknown;
+				if (parsed && typeof parsed === "object") {
+					yield parsed as Record<string, any>;
+				}
+			} catch (error) {
+				throw new Error(`Invalid JSON line in ${filePath}: ${line.slice(0, 120)} (${error instanceof Error ? error.message : String(error)})`);
+			}
+		}
+	} finally {
+		rl.close();
+	}
 }
 
 /**
@@ -153,12 +138,12 @@ export async function* readJsonlObjects(
  * 与 SessionScanner.renameWithRetry 观察一致）；重试一次即可，仍失败则让错误抛出。
  */
 export async function renameWithRetry(from: string, to: string): Promise<void> {
-  try {
-    await rename(from, to);
-  } catch {
-    await new Promise((resolve) => setTimeout(resolve, 60));
-    await rename(from, to);
-  }
+	try {
+		await rename(from, to);
+	} catch {
+		await new Promise((resolve) => setTimeout(resolve, 60));
+		await rename(from, to);
+	}
 }
 
 /**
@@ -167,20 +152,17 @@ export async function renameWithRetry(from: string, to: string): Promise<void> {
  * 巨型会话可达几十万行，逐行 `handle.write` 系统调用太慢（实测占比可观）；
  * 这里按 1MB 聚合再写。调用方必须在结束前 `await flush()`，否则尾部缓冲会丢。
  */
-export function createBufferedLineSink(
-  handle: Pick<FileHandle, "write">,
-  flushBytes: number = 1024 * 1024,
-): { sink: (line: string) => Promise<void>; flush: () => Promise<void> } {
-  let buffer = "";
-  const flush = async () => {
-    if (!buffer) return;
-    const payload = buffer;
-    buffer = "";
-    await handle.write(payload, null, "utf8");
-  };
-  const sink = async (line: string) => {
-    buffer += `${line}\n`;
-    if (buffer.length >= flushBytes) await flush();
-  };
-  return { sink, flush };
+export function createBufferedLineSink(handle: Pick<FileHandle, "write">, flushBytes: number = 1024 * 1024): { sink: (line: string) => Promise<void>; flush: () => Promise<void> } {
+	let buffer = "";
+	const flush = async () => {
+		if (!buffer) return;
+		const payload = buffer;
+		buffer = "";
+		await handle.write(payload, null, "utf8");
+	};
+	const sink = async (line: string) => {
+		buffer += `${line}\n`;
+		if (buffer.length >= flushBytes) await flush();
+	};
+	return { sink, flush };
 }

@@ -3,14 +3,7 @@ import test from "node:test";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-	allEntryCandidates,
-	hasBuildOutput,
-	isExcluded,
-	isNpmHashedLeftoverDir,
-	isSrcPrunable,
-	runtimeEntryResolvableOnDisk,
-} from "../scripts/runtime-prune-rules.mjs";
+import { allEntryCandidates, hasBuildOutput, isExcluded, isNpmHashedLeftoverDir, isSrcPrunable, runtimeEntryResolvableOnDisk } from "../scripts/runtime-prune-rules.mjs";
 
 /**
  * DSH runtime 打包裁剪规则的回归测试。

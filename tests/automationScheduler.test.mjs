@@ -18,12 +18,15 @@ test("AutomationScheduler discovers due tasks, advances lastScheduledAt, and ski
 		// Baseline: 2026-03-30 08:59:00 local time
 		const baselineTime = new Date(2026, 2, 30, 8, 59, 0).getTime();
 
-		const task = await store.createTask({
-			name: "Morning Check",
-			projectId: "p1",
-			prompt: "Check morning status",
-			schedule: { type: "cron", expression: "0 9 * * *" }, // At 09:00 daily
-		}, baselineTime);
+		const task = await store.createTask(
+			{
+				name: "Morning Check",
+				projectId: "p1",
+				prompt: "Check morning status",
+				schedule: { type: "cron", expression: "0 9 * * *" }, // At 09:00 daily
+			},
+			baselineTime,
+		);
 
 		const triggered = [];
 		const scheduler = new AutomationScheduler(store);
@@ -50,12 +53,15 @@ test("AutomationScheduler discovers due tasks, advances lastScheduledAt, and ski
 
 		// Now simulate that the run is still in-progress when the next day 09:00 arrives
 		// Create an active running run for this task
-		await store.createRun({
-			task,
-			trigger: "schedule",
-			scheduledFor: new Date(2026, 2, 31, 9, 0, 0).getTime(),
-			status: "running",
-		}, runTime);
+		await store.createRun(
+			{
+				task,
+				trigger: "schedule",
+				scheduledFor: new Date(2026, 2, 31, 9, 0, 0).getTime(),
+				status: "running",
+			},
+			runTime,
+		);
 
 		// Tick at next day 09:00:02
 		const nextDayTime = new Date(2026, 2, 31, 9, 0, 2).getTime();
@@ -85,12 +91,15 @@ test("AutomationScheduler performs latest-only catch-up when waking up after dow
 		// App went offline on Monday at 08:00
 		const offlineTime = new Date(2026, 2, 30, 8, 0, 0).getTime();
 
-		const task = await store.createTask({
-			name: "Hourly Task",
-			projectId: "p1",
-			prompt: "Check hourly",
-			schedule: { type: "cron", expression: "0 * * * *" }, // every hour
-		}, offlineTime);
+		const task = await store.createTask(
+			{
+				name: "Hourly Task",
+				projectId: "p1",
+				prompt: "Check hourly",
+				schedule: { type: "cron", expression: "0 * * * *" }, // every hour
+			},
+			offlineTime,
+		);
 
 		const triggered = [];
 		const scheduler = new AutomationScheduler(store);

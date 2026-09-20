@@ -8,9 +8,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
-const { selectWarmupProviders, warmupDelayMs, PROVIDER_USAGE_WARMUP_GAP_MS } = loadTsCommonJs(
-	"src/renderer/src/hooks/providerUsageWarmup.ts",
-);
+const { selectWarmupProviders, warmupDelayMs, PROVIDER_USAGE_WARMUP_GAP_MS } = loadTsCommonJs("src/renderer/src/hooks/providerUsageWarmup.ts");
 
 // loadTsCommonJs 用 vm 加载模块，产物是跨 realm 对象；deepStrictEqual 会按原型判等。
 // 统一走 JSON 序列化比较（与 userUsageProbes.test.mjs 同一约定）。
@@ -41,10 +39,7 @@ test("dsh 缓存 key 反解为原始 provider 名 + backend=dsh", () => {
 		"dsh:opencode-go": state(true),
 		deepseek: state(true),
 	});
-	assert.equal(
-		json(targets.map((t) => `${t.backend}:${t.provider}`)),
-		json(["pi:deepseek", "dsh:deepseek", "dsh:opencode-go"]),
-	);
+	assert.equal(json(targets.map((t) => `${t.backend}:${t.provider}`)), json(["pi:deepseek", "dsh:deepseek", "dsh:opencode-go"]));
 });
 
 test("顺序稳定：pi 在前、各自按名字排序（每次启动请求顺序可预期）", () => {

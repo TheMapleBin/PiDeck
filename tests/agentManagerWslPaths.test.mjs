@@ -33,12 +33,9 @@ const piSandbox = createTsSandbox();
 const nodeRequire = createRequire(import.meta.url);
 
 function resolveUnstubbedRequire(specifier) {
-  if (!specifier.startsWith(".")) return nodeRequire(specifier);
-  const target = path.resolve(
-    "src/main/pi",
-    /\.(ts|tsx|js)$/.test(specifier) ? specifier : `${specifier}.ts`,
-  );
-  return piSandbox(target);
+	if (!specifier.startsWith(".")) return nodeRequire(specifier);
+	const target = path.resolve("src/main/pi", /\.(ts|tsx|js)$/.test(specifier) ? specifier : `${specifier}.ts`);
+	return piSandbox(target);
 }
 
 function transpile(filePath) {
@@ -90,7 +87,9 @@ function loadAgentManager(existsPredicate = () => false) {
 	};
 	const sessionJsonl = `${JSON.stringify({ id: "entry-user", type: "message", message: { role: "user", content: "hello" } })}\n`;
 	const fsPromises = {
-		copyFile: async (...args) => { calls.copyFile.push(args); },
+		copyFile: async (...args) => {
+			calls.copyFile.push(args);
+		},
 		readFile: async (...args) => {
 			calls.readFile.push(args);
 			return sessionJsonl;
@@ -115,34 +114,44 @@ function loadAgentManager(existsPredicate = () => false) {
 			calls.readdir.push(args);
 			return [];
 		},
-		unlink: async (...args) => { calls.unlink.push(args); },
-		writeFile: async (...args) => { calls.writeFile.push(args); },
+		unlink: async (...args) => {
+			calls.unlink.push(args);
+		},
+		writeFile: async (...args) => {
+			calls.writeFile.push(args);
+		},
 	};
 	const historyReaderModule = { exports: {} };
-	vm.runInNewContext(transpile("src/main/pi/SessionHistoryReader.ts"), {
-		Buffer,
-		console: { log() {}, warn() {}, error() {} },
-		exports: historyReaderModule.exports,
-		module: historyReaderModule,
-		Promise,
-		require: (id) => id === "node:fs/promises" ? fsPromises
-			// 停止身份缓存（72fe93da 起 SessionHistoryReader 依赖）：真实加载保持身份核对行为
-			: id === "./stoppedMessageIdentity"
-			? loadTsCommonJs("src/main/pi/stoppedMessageIdentity.ts")
-			: id === "../../shared/sessionTodo"
-			// todo 快照解析纯函数：本测试不覆盖，空实现满足依赖契约
-			? { parseTodoSnapshotData: () => undefined }
-			// 工具推导纯函数：本测试不覆盖（另有 sessionAcpDelegateDerive.test.mjs），空实现满足依赖契约
-			: id === "./derivedSubagents"
-			? { deriveToolSubagentEntries: () => [] }
-			// 会话 JSONL 流式行扫描器：真实加载，但注入被断言的 fs 替身（读到 host 路径）
-			: id === "../sessions/jsonlLineStream"
-			? loadTsCommonJs("src/main/sessions/jsonlLineStream.ts", { stubs: { "node:fs/promises": fsPromises } })
-			// 会话文件汇总纯函数：本测试不覆盖，空实现满足 AgentManager 依赖契约
-			: id === "../../shared/fileChanges"
-			? { collectLatestTurnFileChanges: () => [] }
-			: require(id),
-	}, { filename: "SessionHistoryReader.ts" });
+	vm.runInNewContext(
+		transpile("src/main/pi/SessionHistoryReader.ts"),
+		{
+			Buffer,
+			console: { log() {}, warn() {}, error() {} },
+			exports: historyReaderModule.exports,
+			module: historyReaderModule,
+			Promise,
+			require: (id) =>
+				id === "node:fs/promises"
+					? fsPromises
+					: // 停止身份缓存（72fe93da 起 SessionHistoryReader 依赖）：真实加载保持身份核对行为
+						id === "./stoppedMessageIdentity"
+						? loadTsCommonJs("src/main/pi/stoppedMessageIdentity.ts")
+						: id === "../../shared/sessionTodo"
+							? // todo 快照解析纯函数：本测试不覆盖，空实现满足依赖契约
+								{ parseTodoSnapshotData: () => undefined }
+							: // 工具推导纯函数：本测试不覆盖（另有 sessionAcpDelegateDerive.test.mjs），空实现满足依赖契约
+								id === "./derivedSubagents"
+								? { deriveToolSubagentEntries: () => [] }
+								: // 会话 JSONL 流式行扫描器：真实加载，但注入被断言的 fs 替身（读到 host 路径）
+									id === "../sessions/jsonlLineStream"
+									? loadTsCommonJs("src/main/sessions/jsonlLineStream.ts", { stubs: { "node:fs/promises": fsPromises } })
+									: // 会话文件汇总纯函数：本测试不覆盖，空实现满足 AgentManager 依赖契约
+										id === "../../shared/fileChanges"
+										? { collectLatestTurnFileChanges: () => [] }
+										: require(id),
+		},
+		{ filename: "SessionHistoryReader.ts" },
+	);
 	class SessionFileEditor {
 		async truncateForResend({ file }) {
 			const content = await fsPromises.readFile(file.hostPath, "utf8");
@@ -202,7 +211,9 @@ function loadAgentManager(existsPredicate = () => false) {
 			if (id === "./agentUtils") {
 				return {
 					stripAnsi: (text) => text,
-					pickNumber: (...values) => { for (const v of values) if (typeof v === "number") return v; },
+					pickNumber: (...values) => {
+						for (const v of values) if (typeof v === "number") return v;
+					},
 					clampPercent: (v) => v,
 					trimHistoryMessages: (msgs) => msgs,
 					cleanTitle: (t) => t,
@@ -229,9 +240,7 @@ function loadAgentManager(existsPredicate = () => false) {
 			}
 			if (id === "./compactRpc") {
 				return {
-					createCompactRpcRequest: (prompt) => prompt
-						? { type: "compact", prompt, customInstructions: prompt }
-						: { type: "compact" },
+					createCompactRpcRequest: (prompt) => (prompt ? { type: "compact", prompt, customInstructions: prompt } : { type: "compact" }),
 				};
 			}
 			// 上下文接管探测：本测试不涉及压缩归属，按「没有接管者」透传（会退回原生 compact RPC）
@@ -304,14 +313,8 @@ test("maps WSL Session file operations to host paths while retaining Linux proto
 	manager.configureWsl(wslPaths.createWslEnvironment("Ubuntu-24.04", "root", "/root"));
 	const sessionPath = "/root/.pi/agent/sessions/session.jsonl";
 
-	assert.equal(
-		wslPaths.toWslLinuxPath("//wsl$/Ubuntu-24.04/root/.pi/agent/sessions/session.jsonl", manager.wslEnvironment),
-		sessionPath,
-	);
-	assert.notEqual(
-		wslPaths.toWslLinuxPath("/root/.pi/agent/sessions/Session.jsonl", manager.wslEnvironment),
-		wslPaths.toWslLinuxPath("/root/.pi/agent/sessions/session.jsonl", manager.wslEnvironment),
-	);
+	assert.equal(wslPaths.toWslLinuxPath("//wsl$/Ubuntu-24.04/root/.pi/agent/sessions/session.jsonl", manager.wslEnvironment), sessionPath);
+	assert.notEqual(wslPaths.toWslLinuxPath("/root/.pi/agent/sessions/Session.jsonl", manager.wslEnvironment), wslPaths.toWslLinuxPath("/root/.pi/agent/sessions/session.jsonl", manager.wslEnvironment));
 	const loadDecision = manager.getHistoryAutoLoadDecision(sessionPath);
 	assert.equal(loadDecision.shouldLoad, true);
 	assert.equal(loadDecision.sizeBytes, 128);
@@ -327,9 +330,7 @@ test("maps WSL Session file operations to host paths while retaining Linux proto
 			sessionPath,
 		},
 	});
-	manager.messages.set("agent", [
-		{ id: "message", agentId: "agent", role: "user", text: "hello", meta: { entryId: "entry-user" } },
-	]);
+	manager.messages.set("agent", [{ id: "message", agentId: "agent", role: "user", text: "hello", meta: { entryId: "entry-user" } }]);
 	manager.reloadSession = async () => {};
 	manager.loadMessages = async () => {};
 	await manager.prepareResendFromMessage("agent", "message");
@@ -349,15 +350,19 @@ test("keeps switch_session RPC paths in Linux form", async () => {
 	manager.configureWsl(wslPaths.createWslEnvironment("Ubuntu-24.04", "root", "/root"));
 	const requests = [];
 	manager.agents.set("agent", {
-		process: { client: { request: async (request) => { requests.push(request); return { success: true }; } } },
+		process: {
+			client: {
+				request: async (request) => {
+					requests.push(request);
+					return { success: true };
+				},
+			},
+		},
 		tab: { id: "agent", projectId: "project", title: "Agent", status: "idle", createdAt: 1 },
 	});
 	manager.refreshRuntimeAfterSessionReplacement = async () => {};
 
-	await manager.switchSession(
-		"agent",
-		"\\\\wsl.localhost\\Ubuntu-24.04\\root\\.pi\\agent\\sessions\\session.jsonl",
-	);
+	await manager.switchSession("agent", "\\\\wsl.localhost\\Ubuntu-24.04\\root\\.pi\\agent\\sessions\\session.jsonl");
 
 	assert.equal(requests[0].sessionPath, "/root/.pi/agent/sessions/session.jsonl");
 });
@@ -374,7 +379,9 @@ test("uses host paths for trust resource checks and Linux paths for trust keys",
 	const { AgentManager, calls, wslPaths } = loadAgentManager();
 	const trustedDirectories = [];
 	const manager = createManager(AgentManager, {
-		ensureTrustedDirectory: async (cwd) => { trustedDirectories.push(cwd); },
+		ensureTrustedDirectory: async (cwd) => {
+			trustedDirectories.push(cwd);
+		},
 	});
 	manager.configureWsl(wslPaths.createWslEnvironment("Ubuntu-24.04", "root", "/root"));
 

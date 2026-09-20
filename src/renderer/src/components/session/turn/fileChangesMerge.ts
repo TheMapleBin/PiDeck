@@ -9,10 +9,7 @@
  */
 import type { SessionFileChange } from "../../../../../shared/types";
 
-export function mergeRunFileChanges(
-	full: SessionFileChange[],
-	runEntries: SessionFileChange[],
-): SessionFileChange[] {
+export function mergeRunFileChanges(full: SessionFileChange[], runEntries: SessionFileChange[]): SessionFileChange[] {
 	if (runEntries.length === 0) return full;
 	const map = new Map(full.map((f) => [f.path, f]));
 	for (const r of runEntries) {

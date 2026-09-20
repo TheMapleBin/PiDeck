@@ -62,35 +62,23 @@ async function captureArgs(call) {
 }
 
 test("session/prompt：request.requestId 必填且为 UUID（host 幂等键，缺失即被 gateway 拒绝）", async () => {
-	const { endpoint, args } = await captureArgs((remote) =>
-		remote.sessionsPrompt({ sessionId: "s1", mode: "queue", content: [{ type: "text", text: "hi" }] }),
-	);
+	const { endpoint, args } = await captureArgs((remote) => remote.sessionsPrompt({ sessionId: "s1", mode: "queue", content: [{ type: "text", text: "hi" }] }));
 	assert.equal(endpoint, "session/prompt");
 	assert.equal(typeof args.request.requestId, "string");
-	assert.match(
-		args.request.requestId,
-		/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-		"requestId 必须是 UUID",
-	);
+	assert.match(args.request.requestId, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/, "requestId 必须是 UUID");
 	assert.equal(args.request.sessionId, "s1");
 	assert.equal(args.request.mode, "queue");
 	assert.deepEqual(args.request.content, [{ type: "text", text: "hi" }]);
 });
 
 test("session/prompt：每次调用生成新的 requestId（幂等键不能复用）", async () => {
-	const first = await captureArgs((remote) =>
-		remote.sessionsPrompt({ sessionId: "s1", mode: "queue", content: [{ type: "text", text: "a" }] }),
-	);
-	const second = await captureArgs((remote) =>
-		remote.sessionsPrompt({ sessionId: "s1", mode: "queue", content: [{ type: "text", text: "b" }] }),
-	);
+	const first = await captureArgs((remote) => remote.sessionsPrompt({ sessionId: "s1", mode: "queue", content: [{ type: "text", text: "a" }] }));
+	const second = await captureArgs((remote) => remote.sessionsPrompt({ sessionId: "s1", mode: "queue", content: [{ type: "text", text: "b" }] }));
 	assert.notEqual(first.args.request.requestId, second.args.request.requestId);
 });
 
 test("session/page：载荷包在 request 内（描述符 wire），且地址/区间字段齐全", async () => {
-	const { endpoint, args } = await captureArgs((remote) =>
-		remote.sessionsHistory({ sessionId: "s1", throughSeq: 42, maxMessages: 10 }),
-	);
+	const { endpoint, args } = await captureArgs((remote) => remote.sessionsHistory({ sessionId: "s1", throughSeq: 42, maxMessages: 10 }));
 	assert.equal(endpoint, "session/page");
 	assert.deepEqual(args.request.address, { kind: "session", sessionId: "s1" });
 	assert.equal(args.request.maxMessages, 10);
@@ -101,9 +89,7 @@ test("session/page：载荷包在 request 内（描述符 wire），且地址/�
 });
 
 test("subagentsHistory：同 session/page，地址为 subagent 形态", async () => {
-	const { args } = await captureArgs((remote) =>
-		remote.subagentsHistory({ parentSessionId: "p1", childSessionId: "c1", throughSeq: 7 }),
-	);
+	const { args } = await captureArgs((remote) => remote.subagentsHistory({ parentSessionId: "p1", childSessionId: "c1", throughSeq: 7 }));
 	assert.equal(args.request.address.kind, "subagent");
 	assert.equal(args.request.address.parentSessionId, "p1");
 	assert.equal(args.request.address.childSessionId, "c1");

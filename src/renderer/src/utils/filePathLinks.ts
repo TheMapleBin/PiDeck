@@ -16,8 +16,7 @@
  *   一般标点区（\u{2030}-\u{205E}）——避免 "src/a.ts，" 把全角逗号吞进路径
  * - 目录段与扩展名支持 Unicode 字母（中文/日文文件名）
  */
-export const FILE_PATH_RE =
-	/(?:[A-Za-z]:[\\/]|~[\\/]|(?:\.\.?[\\/]|[\\/])|(?:[\p{L}_][\p{L}\p{N}_.-]*[\\/])+)[^\s<>"'`|?*\[\](){}，。；：！？、（）【】《》「」『』“”‘’·…—～￥×÷→←↑↓⇒／\u{FF00}-\u{FFEF}\u{2010}-\u{2027}\u{2030}-\u{205E}]+\.[\p{L}\p{N}]+/gu;
+export const FILE_PATH_RE = /(?:[A-Za-z]:[\\/]|~[\\/]|(?:\.\.?[\\/]|[\\/])|(?:[\p{L}_][\p{L}\p{N}_.-]*[\\/])+)[^\s<>"'`|?*\[\](){}，。；：！？、（）【】《》「」『』“”‘’·…—～￥×÷→←↑↓⇒／\u{FF00}-\u{FFEF}\u{2010}-\u{2027}\u{2030}-\u{205E}]+\.[\p{L}\p{N}]+/gu;
 
 /** 完整 URL（含 scheme 的任意协议）。打码用，只认形态不验证协议合法性。 */
 const URL_RE = /\b[A-Za-z][A-Za-z0-9+.-]*:\/\/[^\s<>"'`)\]]+/g;
@@ -196,8 +195,7 @@ export function isFilePathInsideRoot(target: string, root: string): boolean {
 		if (!rootWsl || !targetWsl) return false;
 		if (rootWsl.distro.toLowerCase() !== targetWsl.distro.toLowerCase()) return false;
 		// WSL 的 host/distro 是 Windows 名称；其后的 Linux 路径必须保留大小写。
-		return targetWsl.linuxPath === rootWsl.linuxPath
-			|| targetWsl.linuxPath.startsWith(`${rootWsl.linuxPath.replace(/\/$/, "")}/`);
+		return targetWsl.linuxPath === rootWsl.linuxPath || targetWsl.linuxPath.startsWith(`${rootWsl.linuxPath.replace(/\/$/, "")}/`);
 	}
 
 	const rootIsWindows = usesWindowsPathSyntax(alignedRoot);
@@ -241,11 +239,7 @@ export function relativeFilePathWithinRoot(target: string, root: string): string
  * - 主进程仍会按 ProjectStore 根目录 + realpath 再校验，渲染层判断只负责尽早拒绝和改善提示；
  * - `~` 保持用户家目录语义；在有 projectRoot 的会话入口中通常会因越界而被拒绝。
  */
-export function resolveFileLinkPath(
-	path: string,
-	basePath?: string,
-	projectRoot?: string,
-): string | null {
+export function resolveFileLinkPath(path: string, basePath?: string, projectRoot?: string): string | null {
 	const normalized = normalizeFileLinkPath(path);
 	if (!normalized) return null;
 
@@ -256,10 +250,7 @@ export function resolveFileLinkPath(
 		if (!basePath) return null;
 		const windowsStyle = usesWindowsPathSyntax(basePath);
 		const separator = windowsStyle ? "\\" : "/";
-		resolved = normalizeLexicalFilePath(
-			`${basePath.replace(/[\\/]+$/, "")}${separator}${normalized.replace(/^[\\/]+/, "")}`,
-			windowsStyle,
-		);
+		resolved = normalizeLexicalFilePath(`${basePath.replace(/[\\/]+$/, "")}${separator}${normalized.replace(/^[\\/]+/, "")}`, windowsStyle);
 	}
 
 	if (projectRoot) {

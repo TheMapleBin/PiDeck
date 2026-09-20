@@ -44,9 +44,7 @@ export type ExtensionFallbackDecision = {
  * WSL 不可用。
  * 重试：明确扩展加载失败，或进程已非 0 退出 / 报 pi exited。
  */
-export function decideExtensionFallback(
-	input: ExtensionFallbackDecisionInput,
-): ExtensionFallbackDecision {
+export function decideExtensionFallback(input: ExtensionFallbackDecisionInput): ExtensionFallbackDecision {
 	const text = `${input.stderr ?? ""}\n${input.errorMessage ?? ""}`;
 	const spawnLikeFailure = input.spawnFailed === true || (/\bENOENT\b/.test(text) && /spawn/i.test(text));
 
@@ -87,10 +85,7 @@ export type DisabledExtensionsReason = "setting" | "fallback";
  * 设置开关优先：它是会被后续所有会话继承的持久成因，用户最需要被提醒的就是它；
  * 两者理论上互斥（设置已开时 decideExtensionFallback 不会再回退），同时为真时按设置归属更贴近用户可操作项。
  */
-export function resolveDisabledExtensionsReason(input: {
-	settingDisabled: boolean;
-	fallbackFromExtensions: boolean;
-}): DisabledExtensionsReason | null {
+export function resolveDisabledExtensionsReason(input: { settingDisabled: boolean; fallbackFromExtensions: boolean }): DisabledExtensionsReason | null {
 	if (input.settingDisabled) return "setting";
 	if (input.fallbackFromExtensions) return "fallback";
 	return null;
@@ -125,23 +120,17 @@ export function resolveDisabledExtensionsCopy(reason: DisabledExtensionsReason):
 	if (reason === "fallback") {
 		return {
 			diagnosticKey: "diagnostic.extensionsDisabledFallback",
-			diagnosticFallback:
-				"扩展加载失败，本次运行已临时禁用扩展（不写入设置，「禁用扩展启动」开关保持原样），下次启动会重新尝试加载扩展。" +
-				"可在本会话把下面的错误信息发给 AI，协助排查扩展问题。",
+			diagnosticFallback: "扩展加载失败，本次运行已临时禁用扩展（不写入设置，「禁用扩展启动」开关保持原样），下次启动会重新尝试加载扩展。" + "可在本会话把下面的错误信息发给 AI，协助排查扩展问题。",
 			noticeKey: "notice.extensionsDisabledFallback",
-			noticeFallback:
-				"扩展加载失败，本次运行已临时禁用扩展（不会写入设置）。可把本会话的错误详情发给 AI 排查扩展问题。",
+			noticeFallback: "扩展加载失败，本次运行已临时禁用扩展（不会写入设置）。可把本会话的错误详情发给 AI 排查扩展问题。",
 			noticeDurationMs: 10_000,
 		};
 	}
 	return {
 		diagnosticKey: "diagnostic.extensionsDisabledBySetting",
-		diagnosticFallback:
-			"本次启动未加载任何扩展：设置 → 开发设置 的「禁用扩展启动」处于开启状态，todo/plan/ask 等扩展能力不可用。" +
-			"如非排查扩展问题需要，请关闭该开关后重启会话。",
+		diagnosticFallback: "本次启动未加载任何扩展：设置 → 开发设置 的「禁用扩展启动」处于开启状态，todo/plan/ask 等扩展能力不可用。" + "如非排查扩展问题需要，请关闭该开关后重启会话。",
 		noticeKey: "notice.extensionsDisabledBySetting",
-		noticeFallback:
-			"「禁用扩展启动」已开启：本次会话未加载任何扩展，todo/plan/ask 等能力不可用。不需要排查扩展时请去设置关闭该开关。",
+		noticeFallback: "「禁用扩展启动」已开启：本次会话未加载任何扩展，todo/plan/ask 等能力不可用。不需要排查扩展时请去设置关闭该开关。",
 		noticeDurationMs: 12_000,
 		noticeAction: "openDevExtensionsSettings",
 	};
@@ -153,9 +142,7 @@ export function shouldRetryWithoutExtensions(input: ExtensionFallbackDecisionInp
 }
 
 /** 未回退时的人话原因（会回退或无法归因时返回 null）。 */
-export function describeExtensionFallbackSkip(
-	input: ExtensionFallbackDecisionInput,
-): string | null {
+export function describeExtensionFallbackSkip(input: ExtensionFallbackDecisionInput): string | null {
 	return decideExtensionFallback(input).skipReason;
 }
 
@@ -175,11 +162,7 @@ export function extractExtensionLoadHints(stderr: string): string[] {
 }
 
 /** 回退成功后写入系统消息 debugDetails 的原文（不走 i18n，给 AI/Issue 看）。 */
-export function formatExtensionFallbackDebug(input: {
-	rawMessage: string;
-	stderr: string;
-	exitCode?: number | null;
-}): string {
+export function formatExtensionFallbackDebug(input: { rawMessage: string; stderr: string; exitCode?: number | null }): string {
 	const lines: string[] = [];
 	if (input.exitCode !== null && input.exitCode !== undefined) {
 		lines.push(`First start exit code: ${input.exitCode}`);

@@ -44,11 +44,7 @@ test("三类白名单跳过各自映射到独立 i18n key，兜底文案带条�
 
 test("新增的白名单跳过文案在中英文两侧都已定义", () => {
 	const source = readFileSync("src/shared/i18n/mainProcessCopy.ts", "utf8");
-	for (const key of [
-		"diagnostic.extensionWhitelistSkipped",
-		"diagnostic.promptWhitelistSkipped",
-		"diagnostic.skillWhitelistSkipped",
-	]) {
+	for (const key of ["diagnostic.extensionWhitelistSkipped", "diagnostic.promptWhitelistSkipped", "diagnostic.skillWhitelistSkipped"]) {
 		const occurrences = source.split(`"${key}"`).length - 1;
 		assert.equal(occurrences, 2, `${key} 应在 zh-CN 与 en-US 各定义一次`);
 	}

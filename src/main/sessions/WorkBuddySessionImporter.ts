@@ -2,30 +2,11 @@ import { app } from "electron";
 import { randomUUID } from "node:crypto";
 import { open, rm, utimes } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import type {
-	WorkBuddyImportReport,
-	WorkBuddyImportResult,
-	WorkBuddyImportStatus,
-	WorkBuddySessionSummary,
-} from "../../shared/types";
+import type { WorkBuddyImportReport, WorkBuddyImportResult, WorkBuddyImportStatus, WorkBuddySessionSummary } from "../../shared/types";
 import { convertWorkBuddySession, convertWorkBuddySessionTo } from "./workbuddySessionConvert";
 import { defaultSessionImportCopy, type SessionImportCopy } from "./SessionImportCopy";
-import {
-	collectWorkBuddyJsonl,
-	ensureProjectSessionDir,
-	getWorkBuddyProjectDir,
-	getWorkBuddyTargetPath,
-	readWorkBuddyImportMeta,
-	readWorkBuddySessionHead,
-	type ParsedWorkBuddySession,
-} from "./workbuddySessionSource";
-import {
-	createBufferedLineSink,
-	mapWithConcurrency,
-	readJsonlObjects,
-	renameWithRetry,
-	SESSION_SCAN_CONCURRENCY,
-} from "./sessionSourceHead";
+import { collectWorkBuddyJsonl, ensureProjectSessionDir, getWorkBuddyProjectDir, getWorkBuddyTargetPath, readWorkBuddyImportMeta, readWorkBuddySessionHead, type ParsedWorkBuddySession } from "./workbuddySessionSource";
+import { createBufferedLineSink, mapWithConcurrency, readJsonlObjects, renameWithRetry, SESSION_SCAN_CONCURRENCY } from "./sessionSourceHead";
 
 /**
  * 导入 WorkBuddy（~/.workbuddy/projects）会话为 pi 原生会话文件。
@@ -43,15 +24,9 @@ export class WorkBuddySessionImporter {
 		const files = await collectWorkBuddyJsonl(projectDir).catch(() => []);
 		// 有界并发 + 只读头部：源 transcript 可达几十 MB~GB，
 		// 整读（尤其是并发整读）会让主进程 384MB 堆 abort，表现为应用闪退。
-		const sessions = await mapWithConcurrency(files, SESSION_SCAN_CONCURRENCY, (file) =>
-			readWorkBuddySessionHead(this.workbuddyRoot, file).catch(() => null),
-		);
+		const sessions = await mapWithConcurrency(files, SESSION_SCAN_CONCURRENCY, (file) => readWorkBuddySessionHead(this.workbuddyRoot, file).catch(() => null));
 
-		const summaries = await Promise.all(
-			sessions
-				.filter((session): session is ParsedWorkBuddySession => Boolean(session))
-				.map((session) => this.toSummary(session, projectPath)),
-		);
+		const summaries = await Promise.all(sessions.filter((session): session is ParsedWorkBuddySession => Boolean(session)).map((session) => this.toSummary(session, projectPath)));
 
 		return summaries.sort((a, b) => b.updatedAt - a.updatedAt);
 	}
@@ -68,10 +43,7 @@ export class WorkBuddySessionImporter {
 		};
 	}
 
-	private async importOne(
-		projectPath: string,
-		sourcePath: string,
-	): Promise<WorkBuddyImportResult> {
+	private async importOne(projectPath: string, sourcePath: string): Promise<WorkBuddyImportResult> {
 		let handle: Awaited<ReturnType<typeof open>> | undefined;
 		let tempPath: string | undefined;
 		try {
@@ -127,10 +99,7 @@ export class WorkBuddySessionImporter {
 		}
 	}
 
-	private async toSummary(
-		session: ParsedWorkBuddySession,
-		projectPath: string,
-	): Promise<WorkBuddySessionSummary> {
+	private async toSummary(session: ParsedWorkBuddySession, projectPath: string): Promise<WorkBuddySessionSummary> {
 		const targetPath = getWorkBuddyTargetPath(this.piRoot, projectPath, session);
 		const importMeta = await readWorkBuddyImportMeta(targetPath);
 		const converted = await convertWorkBuddySession({
@@ -138,12 +107,7 @@ export class WorkBuddySessionImporter {
 			session,
 			translate: this.translate,
 		});
-		const status: WorkBuddyImportStatus = !importMeta
-			? "new"
-			: importMeta.sourceMtime === session.sourceMtime &&
-			  importMeta.sourceSize === session.sourceSize
-			? "current"
-			: "outdated";
+		const status: WorkBuddyImportStatus = !importMeta ? "new" : importMeta.sourceMtime === session.sourceMtime && importMeta.sourceSize === session.sourceSize ? "current" : "outdated";
 
 		return {
 			id: session.meta.sessionId,

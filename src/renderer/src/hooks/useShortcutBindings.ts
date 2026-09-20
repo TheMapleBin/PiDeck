@@ -1,9 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { AppSettings } from "../../../shared/types";
-import {
-	resolveShortcutBindings,
-	type ShortcutId,
-} from "../../../shared/shortcuts";
+import { resolveShortcutBindings, type ShortcutId } from "../../../shared/shortcuts";
 import { desktopApi } from "../desktopApi";
 
 /**
@@ -40,12 +37,6 @@ export function useShortcutBindings(): {
 		});
 	}, []);
 
-	const bindings = useMemo(
-		() =>
-			settings
-				? resolveShortcutBindings(settings.shortcuts ?? {}, platform)
-				: null,
-		[settings, platform],
-	);
+	const bindings = useMemo(() => (settings ? resolveShortcutBindings(settings.shortcuts ?? {}, platform) : null), [settings, platform]);
 	return { bindings, platform };
 }

@@ -10,13 +10,7 @@
 import { app, dialog, type BrowserWindow } from "electron";
 import { copyFile, mkdir, readdir, stat, unlink } from "node:fs/promises";
 import { basename, extname, join, resolve, sep } from "node:path";
-import {
-	CUSTOM_SOUND_EXTENSIONS,
-	isAllowedCustomSoundName,
-	MAX_CUSTOM_SOUND_BYTES,
-	type CustomSoundInfo,
-	type SoundImportResult,
-} from "../../shared/types/soundAlert";
+import { CUSTOM_SOUND_EXTENSIONS, isAllowedCustomSoundName, MAX_CUSTOM_SOUND_BYTES, type CustomSoundInfo, type SoundImportResult } from "../../shared/types/soundAlert";
 
 /** 受管目录：userData/sounds/（与背景图/粘贴文件同一「应用数据目录」边界）。 */
 export function customSoundsDir(): string {
@@ -63,13 +57,9 @@ export function resolveCustomSoundPath(name: string): string | null {
  * 打开文件选择框并导入自定义音频到 userData/sounds/。
  * 同名文件追加数字后缀（导入两次不覆盖）；取消/非法/超限返回结构化错误。
  */
-export async function importCustomSound(
-	parent: BrowserWindow | null,
-): Promise<SoundImportResult> {
+export async function importCustomSound(parent: BrowserWindow | null): Promise<SoundImportResult> {
 	try {
-		const result = parent
-			? await dialog.showOpenDialog(parent, openDialogOptions)
-			: await dialog.showOpenDialog(openDialogOptions);
+		const result = parent ? await dialog.showOpenDialog(parent, openDialogOptions) : await dialog.showOpenDialog(openDialogOptions);
 		if (result.canceled || result.filePaths.length === 0) {
 			return { ok: false, error: "canceled" };
 		}

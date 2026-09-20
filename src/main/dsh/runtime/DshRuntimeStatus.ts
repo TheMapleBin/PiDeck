@@ -11,26 +11,18 @@
 import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import type {
-	DshRuntimeSource,
-	DshRuntimeState,
-	DshRuntimeStatus,
-} from "../../../shared/types/dshRuntime";
+import type { DshRuntimeSource, DshRuntimeState, DshRuntimeStatus } from "../../../shared/types/dshRuntime";
 import { isDshRuntimeVersionMismatch } from "../../../shared/types/dshRuntime";
 
 /** 探测结果：ok 时给出 runtime node_modules 锚点（appRoot，与 DshHost 的 appRoot 同源）。 */
-export type DshRuntimeProbeResult =
-	| { ok: true; appRoot: string; runtimeVersion?: string }
-	| { ok: false; error: string };
+export type DshRuntimeProbeResult = { ok: true; appRoot: string; runtimeVersion?: string } | { ok: false; error: string };
 
 /**
  * 一次完整的 runtime 探测结果（外部 runtime 优先，兼容性内置回退）。
  * appRoot 语义与阶段 1 一致：包含 node_modules 的那个目录（DshHost 拿它拼
  * `--dsh-node-modules`，hostEntry 再从它建 createRequire）。
  */
-export type DshRuntimeProbe =
-	| { ok: true; appRoot: string; source: DshRuntimeSource; runtimeVersion?: string; installDir?: string }
-	| { ok: false; error: string };
+export type DshRuntimeProbe = { ok: true; appRoot: string; source: DshRuntimeSource; runtimeVersion?: string; installDir?: string } | { ok: false; error: string };
 
 /**
  * 组合探测：外部已安装 runtime 优先，未安装时按兼容开关回退 app 内置 node_modules。
@@ -134,9 +126,7 @@ export class DshRuntimeStatusService {
 	constructor(
 		private readonly getAppPath: () => string,
 		private readonly log: (scope: string, message: string, detail?: unknown) => void = () => {},
-		private readonly resolveManaged: () =>
-			| { nodeModules: string; runtimeVersion: string }
-			| undefined = () => undefined,
+		private readonly resolveManaged: () => { nodeModules: string; runtimeVersion: string } | undefined = () => undefined,
 		private readonly allowBundledFallback: () => boolean = () => true,
 		// 保留旧构造参数，避免外部装配/测试升级时发生位置错位；来源策略不再读取它。
 		private readonly _isPackaged: () => boolean = () => true,
@@ -181,10 +171,7 @@ export class DshRuntimeStatusService {
 	 */
 	refresh(): DshRuntimeStatus {
 		const next = this.probeOnce();
-		const changed =
-			this.current?.state !== next.state ||
-			this.current?.runtimeVersion !== next.runtimeVersion ||
-			this.current?.source !== next.source;
+		const changed = this.current?.state !== next.state || this.current?.runtimeVersion !== next.runtimeVersion || this.current?.source !== next.source;
 		this.current = next;
 		if (changed) {
 			this.log("dsh-runtime", `runtime status changed: ${next.state}`, { source: next.source });
@@ -204,9 +191,7 @@ export class DshRuntimeStatusService {
 		return probeDshRuntime({
 			managed: this.resolveManaged(),
 			// 由装配层显式关闭兼容性内置回退；项目 node_modules 不是已发布 runtime。
-			bundled: this.allowBundledFallback()
-				? probeBundledDshRuntime(this.getAppPath())
-				: { ok: false, error: "bundled fallback disabled" },
+			bundled: this.allowBundledFallback() ? probeBundledDshRuntime(this.getAppPath()) : { ok: false, error: "bundled fallback disabled" },
 		});
 	}
 

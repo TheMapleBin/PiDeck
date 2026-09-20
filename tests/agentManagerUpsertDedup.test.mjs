@@ -57,10 +57,7 @@ function seedProjectedMessages(manager, text = "好的，我来画", thinking = 
 
 const assistantEvent = (text, stopReason = "stop", thinking) => ({
 	role: "assistant",
-	content: [
-		...(thinking ? [{ type: "thinking", thinking }] : []),
-		{ type: "text", text },
-	],
+	content: [...(thinking ? [{ type: "thinking", thinking }] : []), { type: "text", text }],
 	stopReason,
 	timestamp: 2_000,
 });
@@ -100,11 +97,7 @@ test("tool_execution_end 迟到：按 toolCallId 更新已有工具消息，不 
 	// 重载前运行期 toolMessageIds 登记的原 id（重载后列表里不存在）
 	manager.toolMessageIds.set("agent-1", new Map([["tc-1", "run-tool-uuid"]]));
 
-	manager.upsertToolMessage(
-		"agent-1",
-		{ toolName: "image_gen", toolCallId: "tc-1", result: { content: [{ text: "done" }] } },
-		"done",
-	);
+	manager.upsertToolMessage("agent-1", { toolName: "image_gen", toolCallId: "tc-1", result: { content: [{ text: "done" }] } }, "done");
 
 	const list = manager.messages.get("agent-1");
 	assert.equal(list.length, 1, "工具消息不得双份");
@@ -168,11 +161,7 @@ test("rebindInFlightMessages：流式中间态重载后身份重定向到投影�
 
 	assert.equal(next.length, 1, "骨架被移除，不残留双份");
 	assert.equal(next[0].id, projected.id, "保留投影版（位置正确、带 entryId）");
-	assert.equal(
-		manager.activeAssistantMessageIds.get("agent-1"),
-		projected.id,
-		"后续 message_end 事件命中投影版，不再 append 副本",
-	);
+	assert.equal(manager.activeAssistantMessageIds.get("agent-1"), projected.id, "后续 message_end 事件命中投影版，不再 append 副本");
 	const segment = manager.thinkingSegmentByAgent.get("agent-1");
 	assert.equal(segment.assistantMessageId, projected.id, "思考段身份同步重定向");
 	assert.equal(segment.id, `msg-thinking-${projected.id}`);

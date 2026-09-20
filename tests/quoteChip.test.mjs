@@ -22,9 +22,7 @@ const {
 	truncateQuoteLabel,
 	buildDraftWithAppendedQuote,
 	pruneUnreferencedQuotes,
-} = loadTsCommonJs(
-	"src/renderer/src/components/session/composer/quoteChip.ts",
-);
+} = loadTsCommonJs("src/renderer/src/components/session/composer/quoteChip.ts");
 
 /** vm 跨 realm 时 deepEqual 会因原型不同误报，统一 JSON 比较（同 composerChips.test.mjs）。 */
 function assertJsonEqual(actual, expected) {
@@ -72,55 +70,36 @@ test("stripQuoteTokens removes tokens and cleans leftover spaces", () => {
 });
 
 test("expandQuoteTokens returns null when no token present", () => {
-	assert.equal(expandQuoteTokens("普通问题", () => undefined), null);
+	assert.equal(
+		expandQuoteTokens("普通问题", () => undefined),
+		null,
+	);
 });
 
 test("expandQuoteTokens preserves quote-question order and dedupes repeated ids", () => {
 	const text = "#qbbbbbb02 问题二 #qaaaaaa01 问题一 #qbbbbbb02 补充";
-	const expanded = expandQuoteTokens(text, (id) =>
-		snippet(id, `${id} 内容`),
-	);
+	const expanded = expandQuoteTokens(text, (id) => snippet(id, `${id} 内容`));
 	// 自包含 XML 标记块：label/messageId/全文都编码在文本里，气泡可直接解析渲染 chip
-	assert.equal(
-		expanded,
-		'<quoted_context label="qbbbbbb02 内容" message_id="m1">\nqbbbbbb02 内容\n</quoted_context>\n\n问题二\n\n<quoted_context label="qaaaaaa01 内容" message_id="m1">\nqaaaaaa01 内容\n</quoted_context>\n\n问题一\n\n补充',
-	);
+	assert.equal(expanded, '<quoted_context label="qbbbbbb02 内容" message_id="m1">\nqbbbbbb02 内容\n</quoted_context>\n\n问题二\n\n<quoted_context label="qaaaaaa01 内容" message_id="m1">\nqaaaaaa01 内容\n</quoted_context>\n\n问题一\n\n补充');
 });
 
 test("expandQuoteTokens drops orphan tokens silently", () => {
-	const expanded = expandQuoteTokens(
-		"#qdeadbeef 加上正文",
-		() => undefined,
-	);
+	const expanded = expandQuoteTokens("#qdeadbeef 加上正文", () => undefined);
 	assert.equal(expanded, "加上正文");
 });
 
 test("expandQuoteTokens keeps multi-line structure inside block", () => {
-	const expanded = expandQuoteTokens(
-		"#qaaaaaa01 这段为什么错",
-		() => snippet("qaaaaaa01", "\n第一行\n\n第三行\n"),
-	);
-	assert.equal(
-		expanded,
-		'<quoted_context label="第一行" message_id="m1">\n第一行\n\n第三行\n</quoted_context>\n\n这段为什么错',
-	);
+	const expanded = expandQuoteTokens("#qaaaaaa01 这段为什么错", () => snippet("qaaaaaa01", "\n第一行\n\n第三行\n"));
+	assert.equal(expanded, '<quoted_context label="第一行" message_id="m1">\n第一行\n\n第三行\n</quoted_context>\n\n这段为什么错');
 });
 
 test("expandQuoteTokens with only quotes yields block-only message", () => {
-	const expanded = expandQuoteTokens("#qaaaaaa01", () =>
-		snippet("qaaaaaa01", "只有引用"),
-	);
-	assert.equal(
-		expanded,
-		'<quoted_context label="只有引用" message_id="m1">\n只有引用\n</quoted_context>',
-	);
+	const expanded = expandQuoteTokens("#qaaaaaa01", () => snippet("qaaaaaa01", "只有引用"));
+	assert.equal(expanded, '<quoted_context label="只有引用" message_id="m1">\n只有引用\n</quoted_context>');
 });
 
 test("parseExpandedQuoteBlocks extracts self-contained blocks (roundtrip)", () => {
-	const drafts = [
-		"#qbbbbbb02 问题二 #qaaaaaa01 问题一",
-		"#qaaaaaa01 这段为什么错",
-	];
+	const drafts = ["#qbbbbbb02 问题二 #qaaaaaa01 问题一", "#qaaaaaa01 这段为什么错"];
 	const snippets = new Map([
 		["qbbbbbb02", snippet("qbbbbbb02", "qbbbbbb02 内容")],
 		["qaaaaaa01", snippet("qaaaaaa01", "\n第一行\n\n第三行\n")],
@@ -139,8 +118,7 @@ test("parseExpandedQuoteBlocks extracts self-contained blocks (roundtrip)", () =
 });
 
 test("parseExpandedSessionBlocks extracts <referenced_session> blocks", () => {
-	const text =
-		"帮我看看\n\n<referenced_session name=\"拉取最新的代码\">\n[User]: 拉取最新的代码\n[Assistant]: ok\n</referenced_session>\n\n为什么";
+	const text = '帮我看看\n\n<referenced_session name="拉取最新的代码">\n[User]: 拉取最新的代码\n[Assistant]: ok\n</referenced_session>\n\n为什么';
 	const blocks = parseExpandedSessionBlocks(text);
 	assert.equal(blocks.length, 1);
 	assert.equal(blocks[0].name, "拉取最新的代码");
@@ -150,8 +128,7 @@ test("parseExpandedSessionBlocks extracts <referenced_session> blocks", () => {
 });
 
 test("parseExpandedRefBlocks merges quote + session blocks in order", () => {
-	const text =
-		"<quoted_context label=\"引文\" message_id=\"m1\">\n引文内容\n</quoted_context>\n\n<referenced_session name=\"会话A\">\n[User]: 你好\n</referenced_session>\n\n正文";
+	const text = '<quoted_context label="引文" message_id="m1">\n引文内容\n</quoted_context>\n\n<referenced_session name="会话A">\n[User]: 你好\n</referenced_session>\n\n正文';
 	const blocks = parseExpandedRefBlocks(text);
 	assert.equal(blocks.length, 2);
 	assert.equal(blocks[0].kind, "quote");
@@ -175,15 +152,11 @@ test("expanded skill and prompt template blocks restore slash chip labels", () =
 			{ kind: "skill", label: "review-pr" },
 		],
 	);
-	assert.equal(
-		replaceExpandedRefBlocksWithLabels(`${skillText}\n\n${templateText}`),
-		"/skill:cv-project-writer\n\n/review-pr",
-	);
+	assert.equal(replaceExpandedRefBlocksWithLabels(`${skillText}\n\n${templateText}`), "/skill:cv-project-writer\n\n/review-pr");
 });
 
 test("outer referenced session blocks suppress nested reference chips", () => {
-	const text =
-		'<referenced_session name="会话A">\n<quoted_context label="内部引用" message_id="m1">\n引用正文\n</quoted_context>\n</referenced_session>';
+	const text = '<referenced_session name="会话A">\n<quoted_context label="内部引用" message_id="m1">\n引用正文\n</quoted_context>\n</referenced_session>';
 	const blocks = parseExpandedRefBlocks(text);
 	assert.equal(blocks.length, 1);
 	assert.equal(blocks[0].kind, "session");
@@ -193,8 +166,7 @@ test("outer referenced session blocks suppress nested reference chips", () => {
 
 test("buildBubbleRefSegments keeps chips inline by trimming block-adjacent whitespace", () => {
 	// 单块 + 正文：块前的 \n\n 被裁掉，正文不再掉到第二行
-	const quoted =
-		'<quoted_context label="引文" message_id="m1">\n引文内容\n</quoted_context>\n\n你好';
+	const quoted = '<quoted_context label="引文" message_id="m1">\n引文内容\n</quoted_context>\n\n你好';
 	assertJsonEqual(
 		buildBubbleRefSegments(quoted).map((segment) => segment.kind),
 		["chip", "text"],
@@ -202,16 +174,17 @@ test("buildBubbleRefSegments keeps chips inline by trimming block-adjacent white
 	assert.equal(buildBubbleRefSegments(quoted)[1].value, "你好");
 
 	// 中间块：正文内部段落换行保留，仅块两侧空白被裁
-	const middle =
-		'第一段\n\n第二段\n\n<quoted_context label="引文" message_id="m1">\n内容\n</quoted_context>\n\n问题';
+	const middle = '第一段\n\n第二段\n\n<quoted_context label="引文" message_id="m1">\n内容\n</quoted_context>\n\n问题';
 	const segments = buildBubbleRefSegments(middle);
-	assertJsonEqual(segments.map((segment) => segment.kind), ["text", "chip", "text"]);
+	assertJsonEqual(
+		segments.map((segment) => segment.kind),
+		["text", "chip", "text"],
+	);
 	assert.equal(segments[0].value, "第一段\n\n第二段");
 	assert.equal(segments[2].value, "问题");
 
 	// 纯空白分隔的连续块：不产生空文本片段（否则会多出空行）
-	const adjacent =
-		'<quoted_context label="a" message_id="m1">\nA\n</quoted_context>\n\n<referenced_session name="会话A">\n[User]: x\n</referenced_session>';
+	const adjacent = '<quoted_context label="a" message_id="m1">\nA\n</quoted_context>\n\n<referenced_session name="会话A">\n[User]: x\n</referenced_session>';
 	assertJsonEqual(
 		buildBubbleRefSegments(adjacent).map((segment) => segment.kind),
 		["chip", "chip"],
@@ -223,9 +196,7 @@ test("buildBubbleRefSegments keeps chips inline by trimming block-adjacent white
 
 test("buildBubbleRefSegments keeps quote/description pairing in original order", () => {
 	// 回归（用户实测）：引用A + 描述A + 引用B + 描述B 不能被重排成「两个引用都在最上面」。
-	const text =
-		'<quoted_context label="引用A" message_id="m1">\nA 全文\n</quoted_context>\n\ndd\n\n' +
-		'<quoted_context label="引用B" message_id="m2">\nB 全文\n</quoted_context>\n\nde3d';
+	const text = '<quoted_context label="引用A" message_id="m1">\nA 全文\n</quoted_context>\n\ndd\n\n' + '<quoted_context label="引用B" message_id="m2">\nB 全文\n</quoted_context>\n\nde3d';
 	const segments = buildBubbleRefSegments(text);
 	assertJsonEqual(
 		segments.map((segment) => (segment.kind === "text" ? segment.value : segment.block.label)),
@@ -233,19 +204,12 @@ test("buildBubbleRefSegments keeps quote/description pairing in original order",
 	);
 
 	// 无块：整段作为一个文本片段
-	assertJsonEqual(buildBubbleRefSegments("普通消息"), [
-		{ kind: "text", value: "普通消息" },
-	]);
+	assertJsonEqual(buildBubbleRefSegments("普通消息"), [{ kind: "text", value: "普通消息" }]);
 });
 
 test("rehydrateDraftFromMessage restores chips instead of raw XML", () => {
 	let seq = 0;
-	const text =
-		'<quoted_context label="引文" message_id="m1">\n引用正文\n</quoted_context>\n\n' +
-		'<referenced_session name="会话A">\n[User]: x\n</referenced_session>\n\n' +
-		'<skill name="cv-writer">\n指令正文\n</skill>\n\n' +
-		formatPromptTemplateBlock("review", "模板正文") +
-		"\n\n@src/a.ts 帮我看下";
+	const text = '<quoted_context label="引文" message_id="m1">\n引用正文\n</quoted_context>\n\n' + '<referenced_session name="会话A">\n[User]: x\n</referenced_session>\n\n' + '<skill name="cv-writer">\n指令正文\n</skill>\n\n' + formatPromptTemplateBlock("review", "模板正文") + "\n\n@src/a.ts 帮我看下";
 	const { draft, quotes } = rehydrateDraftFromMessage(text, () => `q${++seq}0000000`);
 
 	// quote → 快照 + #q token（全文/出处不丢，重发时会再展开）
@@ -280,10 +244,7 @@ test("parseExpandedRefBlocks leaves plain text untouched", () => {
 });
 
 test("formatQuoteBlock escapes XML attributes and guards closing tag", () => {
-	const block = formatQuoteBlock(
-		'有 </quoted_context> 注入的文本',
-		{ label: 'a"b<c>', messageId: "m&1" },
-	);
+	const block = formatQuoteBlock("有 </quoted_context> 注入的文本", { label: 'a"b<c>', messageId: "m&1" });
 	assert.ok(block.includes('label="a&quot;b&lt;c&gt;"'));
 	assert.ok(block.includes('message_id="m&amp;1"'));
 	// 注入的闭合标签被改写，解析不会提前截断
@@ -299,10 +260,7 @@ test("formatQuoteBlock escapes XML attributes and guards closing tag", () => {
 test("truncateQuoteLabel uses first non-empty line and truncates", () => {
 	assert.equal(truncateQuoteLabel("\n  \n第二行内容"), "第二行内容");
 	assert.equal(truncateQuoteLabel("短"), "短");
-	assert.equal(
-		truncateQuoteLabel("一".repeat(40)),
-		`${"一".repeat(18)}…`,
-	);
+	assert.equal(truncateQuoteLabel("一".repeat(40)), `${"一".repeat(18)}…`);
 });
 
 test("buildDraftWithAppendedQuote appends with spacing and trims tail", () => {

@@ -35,10 +35,7 @@ test("security gate extension is self-contained (no PiDeck src imports)", () => 
 	// 只允许 @earendil-works 与 node 内置模块
 	const imports = [...source.matchAll(/^\s*import[^"']*["']([^"']+)["']/gm)].map((m) => m[1]);
 	for (const spec of imports) {
-		assert.ok(
-			spec.startsWith("@earendil-works/") || spec.startsWith("node:") || spec.startsWith("node/"),
-			`不允许的扩展依赖: ${spec}`,
-		);
+		assert.ok(spec.startsWith("@earendil-works/") || spec.startsWith("node:") || spec.startsWith("node/"), `不允许的扩展依赖: ${spec}`);
 	}
 });
 

@@ -58,14 +58,10 @@ export function validateDshDeepseekModels(value: unknown): DshDeepseekModelValid
 		if (model.name !== undefined && (typeof model.name !== "string" || model.name.length === 0)) {
 			return { index, issue: "nameInvalid" };
 		}
-		if (model.contextWindow !== undefined && (
-			typeof model.contextWindow !== "number" || !Number.isInteger(model.contextWindow) || model.contextWindow <= 0
-		)) {
+		if (model.contextWindow !== undefined && (typeof model.contextWindow !== "number" || !Number.isInteger(model.contextWindow) || model.contextWindow <= 0)) {
 			return { index, issue: "contextInvalid" };
 		}
-		if (model.maxTokens !== undefined && (
-			typeof model.maxTokens !== "number" || !Number.isInteger(model.maxTokens) || model.maxTokens <= 0
-		)) {
+		if (model.maxTokens !== undefined && (typeof model.maxTokens !== "number" || !Number.isInteger(model.maxTokens) || model.maxTokens <= 0)) {
 			return { index, issue: "maxTokensInvalid" };
 		}
 	}
@@ -74,11 +70,7 @@ export function validateDshDeepseekModels(value: unknown): DshDeepseekModelValid
 
 function cloneModelRows(rows: unknown): DshModelLike[] {
 	if (!Array.isArray(rows)) return [];
-	return rows.map((row) =>
-		row && typeof row === "object" && !Array.isArray(row)
-			? { ...(row as DshModelLike) }
-			: { id: "" },
-	);
+	return rows.map((row) => (row && typeof row === "object" && !Array.isArray(row) ? { ...(row as DshModelLike) } : { id: "" }));
 }
 
 function isNonEmptyModelList(rows: unknown): rows is unknown[] {
@@ -123,11 +115,13 @@ export function appendBlankDshModel(input: DshModelSeedInput): DshModelLike[] {
 }
 
 /** 改某一行字段前先按同样优先级铺底，避免只写 draft 时把其它行冲掉。 */
-export function updateDshModelAt(input: DshModelSeedInput & {
-	index: number;
-	field: string;
-	value: unknown;
-}): DshModelLike[] {
+export function updateDshModelAt(
+	input: DshModelSeedInput & {
+		index: number;
+		field: string;
+		value: unknown;
+	},
+): DshModelLike[] {
 	const models = seedDshModelsForCustomEdit(input);
 	const entry = { ...(models[input.index] ?? {}) };
 	if (input.value === undefined || input.value === "") {
@@ -140,17 +134,21 @@ export function updateDshModelAt(input: DshModelSeedInput & {
 }
 
 /** 删除一行前同样先铺底，避免 inherited / 已保存列表被当成空数组。 */
-export function removeDshModelAt(input: DshModelSeedInput & {
-	index: number;
-}): DshModelLike[] {
+export function removeDshModelAt(
+	input: DshModelSeedInput & {
+		index: number;
+	},
+): DshModelLike[] {
 	return seedDshModelsForCustomEdit(input).filter((_, index) => index !== input.index);
 }
 
 /** 把勾选的拉取结果追加到已有模型，跳过 id 重复。 */
-export function appendFetchedDshModels(input: DshModelSeedInput & {
-	fetched: FetchedModel[];
-	selectedIds: string[];
-}): DshModelLike[] {
+export function appendFetchedDshModels(
+	input: DshModelSeedInput & {
+		fetched: FetchedModel[];
+		selectedIds: string[];
+	},
+): DshModelLike[] {
 	const existing = seedDshModelsForCustomEdit(input);
 	const existingItems = existing.map((row) => ({
 		id: typeof row.id === "string" ? row.id : "",

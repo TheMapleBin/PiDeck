@@ -61,10 +61,7 @@ export function extractVersionedBaseFromRequestUrl(requestUrl: string): string |
  * 检测侧若对用户配置做了版本路径补齐，会话侧仍用原始 baseUrl。
  * 返回 true 时 UI 应自动改写 baseUrl（或至少提示）。
  */
-export function needsSessionBaseUrlVersionHint(
-	configuredBaseUrl: string,
-	effectiveRequestUrl?: string,
-): boolean {
+export function needsSessionBaseUrlVersionHint(configuredBaseUrl: string, effectiveRequestUrl?: string): boolean {
 	if (!configuredBaseUrl.trim()) return false;
 	// 用户已经写了版本路径 → 无需改写
 	if (hasApiVersionPath(configuredBaseUrl)) return false;
@@ -78,18 +75,12 @@ export function needsSessionBaseUrlVersionHint(
  * 在检测成功且走了版本路径时，给出应写入配置的 baseUrl。
  * 返回 null 表示无需改动。
  */
-export function suggestNormalizedBaseUrl(
-	configuredBaseUrl: string,
-	effectiveRequestUrl?: string,
-	apiType?: string,
-): string | null {
+export function suggestNormalizedBaseUrl(configuredBaseUrl: string, effectiveRequestUrl?: string, apiType?: string): string | null {
 	if (!needsSessionBaseUrlVersionHint(configuredBaseUrl, effectiveRequestUrl)) {
 		return null;
 	}
 
-	const fromRequest = effectiveRequestUrl
-		? extractVersionedBaseFromRequestUrl(effectiveRequestUrl)
-		: null;
+	const fromRequest = effectiveRequestUrl ? extractVersionedBaseFromRequestUrl(effectiveRequestUrl) : null;
 	if (fromRequest) {
 		const current = configuredBaseUrl.replace(/\/+$/, "");
 		return fromRequest === current ? null : fromRequest;

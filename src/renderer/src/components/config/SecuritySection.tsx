@@ -14,14 +14,7 @@
 
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState } from "react";
 import { Trash2 } from "lucide-react";
-import {
-	createDefaultSecurityConfig,
-	type SecurityAction,
-	type SecurityConfig,
-	type SecurityLevelConfig,
-	type SecurityPathPolicy,
-	type SecurityToolName,
-} from "../../../../shared/types";
+import { createDefaultSecurityConfig, type SecurityAction, type SecurityConfig, type SecurityLevelConfig, type SecurityPathPolicy, type SecurityToolName } from "../../../../shared/types";
 import { Button } from "../ui-shadcn/button";
 import { Input } from "../ui-shadcn/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui-shadcn/select";
@@ -29,10 +22,16 @@ import { Switch } from "../ui-shadcn/switch";
 import { Textarea } from "../ui-shadcn/textarea";
 import { t } from "../../i18n";
 
-const api = (window as unknown as { piDesktop: { security: {
-	getConfig: () => Promise<SecurityConfig>;
-	updateConfig: (patch: Partial<SecurityConfig>) => Promise<{ ok: true; config: SecurityConfig } | { ok: false; error: string }>;
-} } }).piDesktop;
+const api = (
+	window as unknown as {
+		piDesktop: {
+			security: {
+				getConfig: () => Promise<SecurityConfig>;
+				updateConfig: (patch: Partial<SecurityConfig>) => Promise<{ ok: true; config: SecurityConfig } | { ok: false; error: string }>;
+			};
+		};
+	}
+).piDesktop;
 
 const TOOL_ORDER: SecurityToolName[] = ["read", "write", "edit", "bash", "grep", "find", "ls", "ask_question"];
 
@@ -64,50 +63,47 @@ function cloneLevel(level: SecurityLevelConfig): SecurityLevelConfig {
 	};
 }
 
-export const SecuritySection = forwardRef<SecuritySectionHandle, SecuritySectionProps>(
-	function SecuritySection({ onDirtyChange }, ref) {
-		const [config, setConfig] = useState<SecurityConfig>(() => createDefaultSecurityConfig());
-		const [loading, setLoading] = useState(true);
-		const [saving, setSaving] = useState(false);
-		const [dirty, setDirty] = useState(false);
-		const [expandedLevelId, setExpandedLevelId] = useState<string | null>(null);
-		const [error, setError] = useState<string | null>(null);
+export const SecuritySection = forwardRef<SecuritySectionHandle, SecuritySectionProps>(function SecuritySection({ onDirtyChange }, ref) {
+	const [config, setConfig] = useState<SecurityConfig>(() => createDefaultSecurityConfig());
+	const [loading, setLoading] = useState(true);
+	const [saving, setSaving] = useState(false);
+	const [dirty, setDirty] = useState(false);
+	const [expandedLevelId, setExpandedLevelId] = useState<string | null>(null);
+	const [error, setError] = useState<string | null>(null);
 
-		useEffect(() => {
-			let cancelled = false;
-			api.security
-				.getConfig()
-				.then((loaded) => {
-					if (cancelled) return;
-					setConfig(loaded);
-				})
-				.catch((e: unknown) => {
-					if (!cancelled) setError(e instanceof Error ? e.message : String(e));
-				})
-				.finally(() => {
-					if (!cancelled) setLoading(false);
-				});
-			return () => {
-				cancelled = true;
-			};
-		}, []);
+	useEffect(() => {
+		let cancelled = false;
+		api.security
+			.getConfig()
+			.then((loaded) => {
+				if (cancelled) return;
+				setConfig(loaded);
+			})
+			.catch((e: unknown) => {
+				if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+			})
+			.finally(() => {
+				if (!cancelled) setLoading(false);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, []);
 
-		// dirty 变化上报父级（ConfigModal 顶部统一保存按钮的黄点/可用态依赖它）
-		useEffect(() => {
-			onDirtyChange?.(dirty);
-		}, [dirty, onDirtyChange]);
+	// dirty 变化上报父级（ConfigModal 顶部统一保存按钮的黄点/可用态依赖它）
+	useEffect(() => {
+		onDirtyChange?.(dirty);
+	}, [dirty, onDirtyChange]);
 
-		// 组件卸载（切换 tab / 关闭弹框）时上报 false，避免父级残留“假脏”标记
-		useEffect(() => {
-			return () => onDirtyChange?.(false);
-		}, [onDirtyChange]);
+	// 组件卸载（切换 tab / 关闭弹框）时上报 false，避免父级残留“假脏”标记
+	useEffect(() => {
+		return () => onDirtyChange?.(false);
+	}, [onDirtyChange]);
 
 	const updateLevel = useCallback((levelId: string, patch: Partial<SecurityLevelConfig>) => {
 		setConfig((current) => ({
 			...current,
-			levels: current.levels.map((level) =>
-				level.id === levelId ? { ...cloneLevel(level), ...patch } : level,
-			),
+			levels: current.levels.map((level) => (level.id === levelId ? { ...cloneLevel(level), ...patch } : level)),
 		}));
 		setDirty(true);
 	}, []);
@@ -165,17 +161,13 @@ export const SecuritySection = forwardRef<SecuritySectionHandle, SecuritySection
 		setConfig((current) => {
 			const levels = current.levels.filter((level) => level.id !== levelId);
 			// 删除的等级若为默认等级，回退 standard（保证 defaultLevelId 始终有效）
-			const defaultLevelId =
-				current.defaultLevelId === levelId ? "standard" : current.defaultLevelId;
+			const defaultLevelId = current.defaultLevelId === levelId ? "standard" : current.defaultLevelId;
 			return { ...current, levels, defaultLevelId };
 		});
 		setDirty(true);
 	}, []);
 
-	const builtinCount = useMemo(
-		() => config.levels.filter((level) => level.builtin).length,
-		[config.levels],
-	);
+	const builtinCount = useMemo(() => config.levels.filter((level) => level.builtin).length, [config.levels]);
 
 	if (loading) {
 		return <div className="py-12 text-center text-control text-muted-foreground">{t("common.loading")}</div>;
@@ -186,12 +178,8 @@ export const SecuritySection = forwardRef<SecuritySectionHandle, SecuritySection
 			{/* 总开关 */}
 			<div className="security-header flex items-start justify-between gap-3 rounded-md border border-border/60 bg-muted/30 p-3.5">
 				<div className="min-w-0">
-					<div className="flex items-center gap-2 text-control font-semibold">
-						{t("security.enabledTitle")}
-					</div>
-					<p className="mt-1 text-micro leading-relaxed text-muted-foreground">
-						{t("security.enabledHint")}
-					</p>
+					<div className="flex items-center gap-2 text-control font-semibold">{t("security.enabledTitle")}</div>
+					<p className="mt-1 text-micro leading-relaxed text-muted-foreground">{t("security.enabledHint")}</p>
 				</div>
 				<Switch
 					checked={config.enabled}
@@ -254,11 +242,7 @@ export const SecuritySection = forwardRef<SecuritySectionHandle, SecuritySection
 				))}
 			</div>
 
-			{error && (
-				<div className="rounded-sm border border-danger/20 bg-danger-soft px-3.5 py-2.5 text-control leading-relaxed text-danger whitespace-pre-line">
-					{error}
-				</div>
-			)}
+			{error && <div className="rounded-sm border border-danger/20 bg-danger-soft px-3.5 py-2.5 text-control leading-relaxed text-danger whitespace-pre-line">{error}</div>}
 		</div>
 	);
 });
@@ -282,33 +266,13 @@ function SecurityLevelCard(props: {
 	return (
 		<div className="security-level-card rounded-md border border-border/60 bg-card">
 			<div className="flex items-center gap-2 px-3 py-2">
-				<button
-					type="button"
-					className="flex min-w-0 flex-1 items-center gap-2 text-left"
-					onClick={onToggle}
-				>
+				<button type="button" className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={onToggle}>
 					<span className="truncate text-control font-semibold">{level.name}</span>
-					{level.builtin && (
-						<span className="shrink-0 rounded-sm bg-muted px-1.5 py-0.5 text-micro text-muted-foreground">
-							{t("security.builtinBadge")}
-						</span>
-					)}
-					{!expanded && (
-						<span className="min-w-0 flex-1 truncate text-micro text-muted-foreground">
-							{level.description || toolSummary}
-						</span>
-					)}
+					{level.builtin && <span className="shrink-0 rounded-sm bg-muted px-1.5 py-0.5 text-micro text-muted-foreground">{t("security.builtinBadge")}</span>}
+					{!expanded && <span className="min-w-0 flex-1 truncate text-micro text-muted-foreground">{level.description || toolSummary}</span>}
 				</button>
 				{!level.builtin && (
-					<Button
-						variant="ghost"
-						size="icon-sm"
-						className="size-6 text-muted-foreground hover:text-danger"
-						aria-label={t("common.delete")}
-						title={t("common.delete")}
-						disabled={props.isOnlyBuiltin}
-						onClick={props.onDelete}
-					>
+					<Button variant="ghost" size="icon-sm" className="size-6 text-muted-foreground hover:text-danger" aria-label={t("common.delete")} title={t("common.delete")} disabled={props.isOnlyBuiltin} onClick={props.onDelete}>
 						<Trash2 size={13} aria-hidden="true" />
 					</Button>
 				)}
@@ -319,18 +283,11 @@ function SecurityLevelCard(props: {
 					<div className="grid grid-cols-2 gap-3">
 						<div className="flex flex-col gap-1">
 							<label className="text-micro text-muted-foreground">{t("security.levelName")}</label>
-							<Input
-								value={level.name}
-								onChange={(e) => onChange({ name: e.target.value })}
-								disabled={level.builtin}
-							/>
+							<Input value={level.name} onChange={(e) => onChange({ name: e.target.value })} disabled={level.builtin} />
 						</div>
 						<div className="flex flex-col gap-1">
 							<label className="text-micro text-muted-foreground">{t("security.levelDescription")}</label>
-							<Input
-								value={level.description}
-								onChange={(e) => onChange({ description: e.target.value })}
-							/>
+							<Input value={level.description} onChange={(e) => onChange({ description: e.target.value })} />
 						</div>
 					</div>
 
@@ -340,15 +297,8 @@ function SecurityLevelCard(props: {
 						<div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
 							{TOOL_ORDER.map((tool) => (
 								<div key={tool} className="flex items-center justify-between gap-2">
-									<span className="text-control text-muted-foreground">
-										{t(`security.tool.${tool}`)}
-									</span>
-									<Select
-										value={level.toolActions[tool] ?? level.defaultAction}
-										onValueChange={(value) =>
-											onChange({ toolActions: { ...level.toolActions, [tool]: value as SecurityAction } })
-										}
-									>
+									<span className="text-control text-muted-foreground">{t(`security.tool.${tool}`)}</span>
+									<Select value={level.toolActions[tool] ?? level.defaultAction} onValueChange={(value) => onChange({ toolActions: { ...level.toolActions, [tool]: value as SecurityAction } })}>
 										<SelectTrigger className="h-7 w-24">
 											<SelectValue />
 										</SelectTrigger>
@@ -383,9 +333,7 @@ function SecurityLevelCard(props: {
 							value={level.denyBashPatterns.join("\n")}
 							onChange={(e) =>
 								onChange({
-									denyBashPatterns: e.target.value
-										.split("\n")
-										.map((line) => line.trim())
+									denyBashPatterns: e.target.value.split("\n").map((line) => line.trim()),
 								})
 							}
 						/>
@@ -395,10 +343,7 @@ function SecurityLevelCard(props: {
 					<div className="grid grid-cols-2 gap-3">
 						<div className="flex flex-col gap-1">
 							<label className="text-micro text-muted-foreground">{t("security.pathPolicyTitle")}</label>
-							<Select
-								value={level.pathPolicy}
-								onValueChange={(value) => onChange({ pathPolicy: value as SecurityPathPolicy })}
-							>
+							<Select value={level.pathPolicy} onValueChange={(value) => onChange({ pathPolicy: value as SecurityPathPolicy })}>
 								<SelectTrigger className="h-8">
 									<SelectValue />
 								</SelectTrigger>
@@ -411,10 +356,7 @@ function SecurityLevelCard(props: {
 						</div>
 						<div className="flex flex-col gap-1">
 							<label className="text-micro text-muted-foreground">{t("security.defaultActionTitle")}</label>
-							<Select
-								value={level.defaultAction}
-								onValueChange={(value) => onChange({ defaultAction: value as SecurityAction })}
-							>
+							<Select value={level.defaultAction} onValueChange={(value) => onChange({ defaultAction: value as SecurityAction })}>
 								<SelectTrigger className="h-8">
 									<SelectValue />
 								</SelectTrigger>
@@ -439,9 +381,7 @@ function SecurityLevelCard(props: {
 								value={level.customAllowDirs.join("\n")}
 								onChange={(e) =>
 									onChange({
-										customAllowDirs: e.target.value
-											.split("\n")
-											.map((line) => line.trim())
+										customAllowDirs: e.target.value.split("\n").map((line) => line.trim()),
 									})
 								}
 							/>
@@ -457,9 +397,7 @@ function SecurityLevelCard(props: {
 							value={level.denyDirs.join("\n")}
 							onChange={(e) =>
 								onChange({
-									denyDirs: e.target.value
-										.split("\n")
-										.map((line) => line.trim())
+									denyDirs: e.target.value.split("\n").map((line) => line.trim()),
 								})
 							}
 						/>
@@ -467,10 +405,7 @@ function SecurityLevelCard(props: {
 
 					<div className="flex items-center justify-between gap-3 rounded-sm bg-muted/30 px-3 py-2">
 						<span className="text-control text-muted-foreground">{t("security.protectSensitiveTitle")}</span>
-						<Switch
-							checked={level.protectSensitivePaths}
-							onCheckedChange={(checked) => onChange({ protectSensitivePaths: checked })}
-						/>
+						<Switch checked={level.protectSensitivePaths} onCheckedChange={(checked) => onChange({ protectSensitivePaths: checked })} />
 					</div>
 				</div>
 			)}

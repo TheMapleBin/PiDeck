@@ -2,19 +2,7 @@ import { app } from "electron";
 import { existsSync, readFileSync, unlinkSync, watch, writeFileSync, type FSWatcher } from "node:fs";
 import { basename } from "node:path";
 import { getAppLogger } from "./logging/sharedLogger";
-import {
-	claimVersionLock,
-	collectStaleLockFiles,
-	ensureLocksDir,
-	focusPathIn,
-	lockPathIn,
-	locksDirIn,
-	markLockReady,
-	readLockPayload,
-	sleepSync,
-	takeOverVersionLock,
-	type ClaimOutcome,
-} from "./instanceLockFile";
+import { claimVersionLock, collectStaleLockFiles, ensureLocksDir, focusPathIn, lockPathIn, locksDirIn, markLockReady, readLockPayload, sleepSync, takeOverVersionLock, type ClaimOutcome } from "./instanceLockFile";
 
 /**
  * 按「应用版本」隔离的单实例锁。
@@ -117,11 +105,7 @@ function noopDispose(): void {
  * @param version app.getVersion()
  * @param onFocusRequest 同版本次实例请求前置窗口时回调（携带次实例的 argv，可解析通知激活参数）
  */
-export function acquireVersionSingleInstance(
-	enabled: boolean,
-	version: string,
-	onFocusRequest: (payload: FocusPayload) => void,
-): VersionSingleInstanceResult {
+export function acquireVersionSingleInstance(enabled: boolean, version: string, onFocusRequest: (payload: FocusPayload) => void): VersionSingleInstanceResult {
 	if (!enabled) {
 		return { isPrimary: true, dispose: noopDispose };
 	}
@@ -293,4 +277,3 @@ export function acquireVersionSingleInstance(
 
 	return { isPrimary: true, dispose };
 }
-

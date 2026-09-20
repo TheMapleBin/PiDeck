@@ -13,9 +13,7 @@ import { remarkGfmNoSingleTilde } from "../../utils/markdownPlugins";
 import { CodeMirrorEditor } from "./CodeMirrorEditor";
 // CodeDiffView 静态链上挂着 @pierre/diffs + shiki（WASM 重库），懒加载后这些模块
 // 移出首屏初始 chunk（约 -500KB 解析量），仅在用户打开 diff 时才拉取。
-const CodeDiffView = lazy(() =>
-	import("./CodeDiffView").then((m) => ({ default: m.CodeDiffView })),
-);
+const CodeDiffView = lazy(() => import("./CodeDiffView").then((m) => ({ default: m.CodeDiffView })));
 import { formatFilePathRef } from "../session/composer/chips";
 
 import { isBinaryExtension, isImageFile, isPdfFile } from "../../utils/isTextFile";
@@ -56,11 +54,7 @@ export function FileDiffViewer(props: {
 	onCloseTab?: (id: string) => void;
 	/** 双击预览 Tab → 常驻 */
 	onPromotePreviewTab?: (id: string) => void;
-	readContent: (
-		path: string,
-		maxBytes?: number,
-		scope?: ProjectFileAccessScope,
-	) => Promise<string>;
+	readContent: (path: string, maxBytes?: number, scope?: ProjectFileAccessScope) => Promise<string>;
 	/** 项目文件读取授权；存在时 read/stat/base64 都由主进程限制到该项目根。 */
 	fileAccessScope?: ProjectFileAccessScope;
 	/** 从会话消息 meta 中提取的工具执行前原始内容，优先于 Git HEAD。 */
@@ -69,11 +63,7 @@ export function FileDiffViewer(props: {
 	modifiedContent?: string;
 	/** 读取文件的 Git HEAD 原始内容，供差异模式左侧基准列使用。 */
 	readOriginalContent?: (path: string) => Promise<string>;
-	saveContent?: (
-		path: string,
-		content: string,
-		scope?: ProjectFileAccessScope,
-	) => Promise<void>;
+	saveContent?: (path: string, content: string, scope?: ProjectFileAccessScope) => Promise<void>;
 	/** HTML 文件点击预览时，切换到内置浏览器面板预览。 */
 	onPreviewHtml?: (filePath: string) => void;
 	theme?: "light" | "dark";
@@ -152,19 +142,9 @@ export function FileDiffViewer(props: {
 				// 差异模式优先使用会话缓存原始内容（originalContent），
 				// 没有时降级到 Git HEAD；两者都无则左侧显示空（新增文件）。
 				// 修改后内容优先使用会话记录（modifiedContent），历史会话恢复时磁盘可能已变化。
-				const contentPromise = props.modifiedContent !== undefined
-					? Promise.resolve(props.modifiedContent)
-					: props.readContent(props.filePath, maxFileSize, props.fileAccessScope);
-				const originalPromise =
-					isDiffMode && props.originalContent !== undefined
-						? Promise.resolve(props.originalContent)
-						: isDiffMode && props.readOriginalContent
-							? props.readOriginalContent(props.filePath).catch(() => "")
-							: Promise.resolve("");
-				const [result, originalResult] = await Promise.all([
-					contentPromise,
-					originalPromise,
-				]);
+				const contentPromise = props.modifiedContent !== undefined ? Promise.resolve(props.modifiedContent) : props.readContent(props.filePath, maxFileSize, props.fileAccessScope);
+				const originalPromise = isDiffMode && props.originalContent !== undefined ? Promise.resolve(props.originalContent) : isDiffMode && props.readOriginalContent ? props.readOriginalContent(props.filePath).catch(() => "") : Promise.resolve("");
+				const [result, originalResult] = await Promise.all([contentPromise, originalPromise]);
 				if (!cancelled) {
 					const largestContentSize = Math.max(result.length, originalResult.length);
 					// Diff 任一侧超过上限都不加载编辑器；删除文件虽右侧为空，左侧仍可能很大。
@@ -187,16 +167,9 @@ export function FileDiffViewer(props: {
 					// ENOENT 返回 ""（为「新建文件」流程保留的语义），死链直接渲染就是
 					// 一片空白。但 AI 回复链接打开的路径必须给明确反馈——已解析成绝对路径
 					// 仍读到空串，大概率是模型给的路径本就不存在；再确认一次并展示错误态。
-					if (
-						result === "" &&
-						!isDiffMode &&
-						/^([A-Za-z]:[\\/]|\/)/.test(props.filePath)
-					) {
+					if (result === "" && !isDiffMode && /^([A-Za-z]:[\\/]|\/)/.test(props.filePath)) {
 						try {
-							const [exists] = await window.piDesktop.files.pathsExist(
-								[props.filePath],
-								props.fileAccessScope,
-							);
+							const [exists] = await window.piDesktop.files.pathsExist([props.filePath], props.fileAccessScope);
 							if (!exists && !cancelled) {
 								setError(t("editor.fileNotFound", { path: props.filePath }));
 							}
@@ -222,11 +195,7 @@ export function FileDiffViewer(props: {
 				return;
 			}
 			try {
-				const base64 = await readBinary(
-					props.filePath,
-					undefined,
-					props.fileAccessScope,
-				);
+				const base64 = await readBinary(props.filePath, undefined, props.fileAccessScope);
 				// 读取完成后重新读取闭包里的取消标记；传入 boolean 会冻结为调用时的 false，
 				// 旧 tab 的结果就可能 revoke 并覆盖新 tab 刚创建的 Blob URL。
 				if (cancelled || !base64) {
@@ -244,10 +213,12 @@ export function FileDiffViewer(props: {
 			}
 		}
 		void load();
-		return () => { cancelled = true; };
-	// readContent/readOriginalContent 是稳定的 API 回调（上层已 useCallback），
-	// 不参与 effect deps，避免父组件因其他状态变化重渲染时反复加载文件导致编辑器重置到顶部。
-	// 两侧缓存内容都需要监听：同一路径可在多个历史提交 Diff tab 之间切换。
+		return () => {
+			cancelled = true;
+		};
+		// readContent/readOriginalContent 是稳定的 API 回调（上层已 useCallback），
+		// 不参与 effect deps，避免父组件因其他状态变化重渲染时反复加载文件导致编辑器重置到顶部。
+		// 两侧缓存内容都需要监听：同一路径可在多个历史提交 Diff tab 之间切换。
 	}, [props.filePath, props.activeTabId, props.originalContent, props.modifiedContent, props.fileAccessScope?.projectId, isDiffMode, maxFileSize]);
 
 	const handleClose = useCallback(() => {
@@ -348,12 +319,15 @@ export function FileDiffViewer(props: {
 
 	// Ctrl+S / Cmd+S：立即保存（取消挂起的自动保存，避免重复写盘）。
 	// 仅 view 模式生效：diff 是只读对比，不存在保存。
-	const handleKeyDown = useCallback((e: KeyboardEvent) => {
-		if ((e.ctrlKey || e.metaKey) && e.key === "s") {
-			e.preventDefault();
-			void saveNow();
-		}
-	}, [saveNow]);
+	const handleKeyDown = useCallback(
+		(e: KeyboardEvent) => {
+			if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+				e.preventDefault();
+				void saveNow();
+			}
+		},
+		[saveNow],
+	);
 
 	useEffect(() => {
 		if (!isDiffMode) {
@@ -373,49 +347,46 @@ export function FileDiffViewer(props: {
 		};
 	}, []);
 
-	const handleEditorChange = useCallback((value: string) => {
-		// 先写 ref 再触发 React 更新，保证 debounce timer 不会保存上一个 render 的值。
-		contentRef.current = value;
-		setContent(value);
-		setDirty(true);
-		scheduleAutoSave();
-	}, [scheduleAutoSave]);
+	const handleEditorChange = useCallback(
+		(value: string) => {
+			// 先写 ref 再触发 React 更新，保证 debounce timer 不会保存上一个 render 的值。
+			contentRef.current = value;
+			setContent(value);
+			setDirty(true);
+			scheduleAutoSave();
+		},
+		[scheduleAutoSave],
+	);
 
 	// 编辑器选中文本 → 右键「引用选中内容」：以 pi 的 read 语法 @path:start-end 派发到输入框。
 	// 与文件树右键 onAttach 共用同一追加语义（composer-attach-refs 由 App 监听后插入 draft）。
-	const handleAttachSelection = useCallback((startLine: number, endLine: number) => {
-		const range = startLine === endLine ? String(startLine) : `${startLine}-${endLine}`;
-		const ref = `${formatFilePathRef(props.filePath)}:${range}`;
-		window.dispatchEvent(new CustomEvent("composer-attach-refs", { detail: { refs: [ref] } }));
-	}, [props.filePath]);
+	const handleAttachSelection = useCallback(
+		(startLine: number, endLine: number) => {
+			const range = startLine === endLine ? String(startLine) : `${startLine}-${endLine}`;
+			const ref = `${formatFilePathRef(props.filePath)}:${range}`;
+			window.dispatchEvent(new CustomEvent("composer-attach-refs", { detail: { refs: [ref] } }));
+		},
+		[props.filePath],
+	);
 
 	const language = ext;
 
 	const displayMode = props.displayMode ?? "drawer";
 	const isWorkbenchPane = displayMode === "split" || displayMode === "maximize";
-	const showInlineTabs =
-		!props.chromeTabsExternal && Boolean(props.tabs && props.tabs.length > 0);
+	const showInlineTabs = !props.chromeTabsExternal && Boolean(props.tabs && props.tabs.length > 0);
 	const headerContent = (
 		<>
 			{showInlineTabs && props.tabs && (
 				<div className="file-diff-tab-bar" role="tablist">
 					{props.tabs.map((tab) => {
-						const tabLabel =
-							tab.label ?? tab.filePath.split(/[/\\]/).pop() ?? tab.filePath;
-						const showDirty =
-							tab.id === props.activeTabId && dirty
-								? t("editor.unsavedMarker")
-								: "";
+						const tabLabel = tab.label ?? tab.filePath.split(/[/\\]/).pop() ?? tab.filePath;
+						const showDirty = tab.id === props.activeTabId && dirty ? t("editor.unsavedMarker") : "";
 						return (
 							<div
 								key={tab.id}
 								role="tab"
 								aria-selected={tab.id === props.activeTabId}
-								className={cn(
-									"file-diff-tab",
-									tab.id === props.activeTabId && "active",
-									tab.preview && "italic text-muted-foreground",
-								)}
+								className={cn("file-diff-tab", tab.id === props.activeTabId && "active", tab.preview && "italic text-muted-foreground")}
 								onClick={() => props.onSelectTab?.(tab.id)}
 								onDoubleClick={() => props.onPromotePreviewTab?.(tab.id)}
 								onKeyDown={(e) => {
@@ -449,13 +420,7 @@ export function FileDiffViewer(props: {
 			)}
 			<div className="file-diff-header">
 				{props.onBack && displayMode === "drawer" && (
-					<Button
-						variant="ghost"
-						size="icon-sm"
-						onClick={props.onBack}
-						title={t("common.back")}
-						aria-label={t("common.back")}
-					>
+					<Button variant="ghost" size="icon-sm" onClick={props.onBack} title={t("common.back")} aria-label={t("common.back")}>
 						<ArrowLeft size={18} />
 					</Button>
 				)}
@@ -482,12 +447,7 @@ export function FileDiffViewer(props: {
 						</Button>
 					)}
 					{isDiffMode && !loading && !error && displayMode !== "drawer" && (
-						<Button
-							variant="ghost"
-							size="icon-sm"
-							title={sideBySide ? t("app.showSingle") : t("app.showSplit")}
-							onClick={() => setSideBySide(!sideBySide)}
-						>
+						<Button variant="ghost" size="icon-sm" title={sideBySide ? t("app.showSingle") : t("app.showSplit")} onClick={() => setSideBySide(!sideBySide)}>
 							{/* 图标随模式变化：分栏时显示「单栏」图标（点击合并），单栏时显示「分栏」图标（点击分栏），
 							   与 title 的目标状态一致，两种模式按钮一眼可辨 */}
 							{sideBySide ? <Rows2 size={15} /> : <SquareSplitHorizontal size={15} />}
@@ -496,34 +456,13 @@ export function FileDiffViewer(props: {
 					{/* 编辑/退出编辑按钮已移除：diff 为只读对比（第三方渲染库），
 					   view 模式源码即编辑（切到源码即可改），均无需独立的编辑按钮。 */}
 					{props.onToggleMode && (
-						<Button
-							variant="ghost"
-							size="icon-sm"
-							title={
-								isWorkbenchPane
-									? displayMode === "maximize"
-										? t("app.restoreSplit")
-										: t("app.maximizeInWorkbench")
-									: displayMode === "modal"
-										? t("app.minimizeToDrawer")
-										: t("app.expandToModal")
-							}
-							onClick={props.onToggleMode}
-						>
-							{(isWorkbenchPane ? displayMode === "maximize" : displayMode === "modal")
-								? <Minimize2 size={15} />
-								: <Maximize size={15} />}
+						<Button variant="ghost" size="icon-sm" title={isWorkbenchPane ? (displayMode === "maximize" ? t("app.restoreSplit") : t("app.maximizeInWorkbench")) : displayMode === "modal" ? t("app.minimizeToDrawer") : t("app.expandToModal")} onClick={props.onToggleMode}>
+							{(isWorkbenchPane ? displayMode === "maximize" : displayMode === "modal") ? <Minimize2 size={15} /> : <Maximize size={15} />}
 						</Button>
 					)}
 					{/* 关闭按钮：无论 Tab 是否上收总栏都保留，保证 DIFF/文件预览右上角
 					   始终有关闭入口（Tab 栏小叉在窄栏下不易点中）。 */}
-					<Button
-						variant="ghost"
-							size="icon-sm"
-							onClick={handleClose}
-						aria-label={t("common.close")}
-						title={t("common.close")}
-					>
+					<Button variant="ghost" size="icon-sm" onClick={handleClose} aria-label={t("common.close")} title={t("common.close")}>
 						<X size={15} />
 					</Button>
 				</div>
@@ -540,21 +479,11 @@ export function FileDiffViewer(props: {
 							</div>
 						)}
 						{/* PDF 预览：Blob URL + Chromium 内置 PDF viewer */}
-						{!isDiffMode && isPdf && mediaUrl && (
-							<iframe
-								className="file-diff-pdf-preview"
-								src={mediaUrl}
-								title={t("editor.pdfPreview")}
-								referrerPolicy="no-referrer"
-							/>
-						)}
+						{!isDiffMode && isPdf && mediaUrl && <iframe className="file-diff-pdf-preview" src={mediaUrl} title={t("editor.pdfPreview")} referrerPolicy="no-referrer" />}
 						{/* SVG 预览：文本内容直接编码为 data URL（无 Blob 生命周期管理） */}
 						{!isDiffMode && preview && isSvg && (
 							<div className="file-diff-media-preview">
-								<img
-									src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(content)}`}
-									alt={fileName}
-								/>
+								<img src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(content)}`} alt={fileName} />
 							</div>
 						)}
 						{/* Markdown 预览：仅 view 模式且 preview 启用（静态渲染，与会话正文同一 Streamdown 引擎）。
@@ -562,29 +491,14 @@ export function FileDiffViewer(props: {
 						   由 markdown-preview-chrome utility 提供（tailwind.css @utility，不再自建 parallel 样式）。 */}
 						{!isDiffMode && preview && isMarkdown && (
 							<div className="markdown-body markdown-preview-chrome h-full overflow-y-auto px-6 py-6 text-body text-text-primary font-sans">
-								<MarkdownStream
-									text={content}
-									onOpenExternal={() => undefined}
-									remarkPlugins={[remarkGfmNoSingleTilde]}
-									rehypePlugins={[defaultRehypePlugins.raw, rehypeKatex]}
-									urlTransform={defaultUrlTransform}
-								/>
+								<MarkdownStream text={content} onOpenExternal={() => undefined} remarkPlugins={[remarkGfmNoSingleTilde]} rehypePlugins={[defaultRehypePlugins.raw, rehypeKatex]} urlTransform={defaultUrlTransform} />
 							</div>
 						)}
-						{!isDiffMode && preview && isHtml && (
-							<HtmlPreview content={content} />
-						)}
+						{!isDiffMode && preview && isHtml && <HtmlPreview content={content} />}
 						{/* view 模式、非预览：常规编辑器（CodeMirror 6） */}
 						{!isDiffMode && !preview && (
 							<div style={{ height: "100%", flexDirection: "column" }}>
-								<CodeMirrorEditor
-									value={content}
-									language={language}
-									readOnly={false}
-									initialLine={props.initialLine}
-									onChange={handleEditorChange}
-									onAttachSelection={handleAttachSelection}
-								/>
+								<CodeMirrorEditor value={content} language={language} readOnly={false} initialLine={props.initialLine} onChange={handleEditorChange} onAttachSelection={handleAttachSelection} />
 							</div>
 						)}
 						{/* diff 模式：只读差异对比（分栏 / 单栏由 sideBySide 切换），
@@ -606,14 +520,7 @@ export function FileDiffViewer(props: {
 										</div>
 									}
 								>
-									<CodeDiffView
-										key={sideBySide ? "split" : "unified"}
-										oldContent={original}
-										newContent={content}
-										filePath={props.filePath}
-										viewMode={sideBySide ? "split" : "unified"}
-										theme={props.theme}
-									/>
+									<CodeDiffView key={sideBySide ? "split" : "unified"} oldContent={original} newContent={content} filePath={props.filePath} viewMode={sideBySide ? "split" : "unified"} theme={props.theme} />
 								</Suspense>
 							</div>
 						)}
@@ -633,11 +540,7 @@ export function FileDiffViewer(props: {
 		);
 	}
 
-	return (
-		<div className="file-diff-viewer">
-			{headerContent}
-		</div>
-	);
+	return <div className="file-diff-viewer">{headerContent}</div>;
 }
 
 /**
@@ -648,21 +551,17 @@ export function FileDiffViewer(props: {
 /** 图片扩展名 → MIME（Blob 类型；Chromium 按内容解码，类型仅作提示） */
 function mimeFromImageExt(ext: string): string {
 	const map: Record<string, string> = {
-		png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif",
-		webp: "image/webp", bmp: "image/bmp", ico: "image/x-icon",
+		png: "image/png",
+		jpg: "image/jpeg",
+		jpeg: "image/jpeg",
+		gif: "image/gif",
+		webp: "image/webp",
+		bmp: "image/bmp",
+		ico: "image/x-icon",
 	};
 	return map[ext] ?? "application/octet-stream";
 }
 
 function HtmlPreview({ content }: { content: string }) {
-	return (
-		<iframe
-			className="h-full w-full border-0 bg-[var(--color-bg-panel)]"
-			srcDoc={content}
-			title={t("editor.htmlPreview")}
-			sandbox="allow-scripts allow-forms"
-			referrerPolicy="no-referrer"
-			style={{ width: "100%", height: "100%", border: "none" }}
-		/>
-	);
+	return <iframe className="h-full w-full border-0 bg-[var(--color-bg-panel)]" srcDoc={content} title={t("editor.htmlPreview")} sandbox="allow-scripts allow-forms" referrerPolicy="no-referrer" style={{ width: "100%", height: "100%", border: "none" }} />;
 }

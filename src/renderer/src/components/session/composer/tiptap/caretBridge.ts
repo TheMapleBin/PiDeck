@@ -7,23 +7,16 @@ import type { Editor } from "@tiptap/core";
 
 const editorByDom = new WeakMap<HTMLElement, Editor>();
 
-export function registerComposerTipTapEditor(
-	dom: HTMLElement,
-	editor: Editor | null,
-): void {
+export function registerComposerTipTapEditor(dom: HTMLElement, editor: Editor | null): void {
 	if (editor) editorByDom.set(dom, editor);
 	else editorByDom.delete(dom);
 }
 
-export function resolveComposerTipTapEditor(
-	root: HTMLElement | null,
-): Editor | null {
+export function resolveComposerTipTapEditor(root: HTMLElement | null): Editor | null {
 	if (!root) return null;
 	const direct = editorByDom.get(root);
 	if (direct) return direct;
-	const pm = root.classList.contains("ProseMirror")
-		? root
-		: root.querySelector<HTMLElement>(".ProseMirror");
+	const pm = root.classList.contains("ProseMirror") ? root : root.querySelector<HTMLElement>(".ProseMirror");
 	if (pm) {
 		const fromPm = editorByDom.get(pm);
 		if (fromPm) return fromPm;
@@ -124,10 +117,7 @@ export function posToPlainOffset(editor: Editor, pos: number): number {
 	return offset;
 }
 
-export function getTipTapComposerCaretCoords(
-	editor: Editor,
-	plainOffset: number,
-): { top: number; left: number; bottom: number } | null {
+export function getTipTapComposerCaretCoords(editor: Editor, plainOffset: number): { top: number; left: number; bottom: number } | null {
 	try {
 		const pos = plainOffsetToPos(editor, plainOffset);
 		const coords = editor.view.coordsAtPos(pos);

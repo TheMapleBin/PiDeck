@@ -105,13 +105,7 @@ function createLocator(invocationCalls) {
 			invocationCalls.push({ args: [...args], options: { ...options } });
 			return {
 				command: "wsl.exe",
-				args: [
-					"-d", "Ubuntu-24.04",
-					"-u", "root",
-					...(options.wslCwd ? ["--cd", options.wslCwd] : []),
-					"pi",
-					...args,
-				],
+				args: ["-d", "Ubuntu-24.04", "-u", "root", ...(options.wslCwd ? ["--cd", options.wslCwd] : []), "pi", ...args],
 				shell: false,
 				wsl: { distro: "Ubuntu-24.04", user: "root", piCommand: "pi" },
 			};
@@ -133,45 +127,22 @@ test("starts WSL pi with Linux cwd/session while keeping a Windows-accessible sp
 	const spawnCalls = [];
 	const invocationCalls = [];
 	const { PiProcess } = loadPiProcess(spawnCalls);
-	const process = new PiProcess(
-		"//wsl.localhost/Ubuntu-24.04/root/ba_cli",
-		settings,
-		createLocator(invocationCalls),
-	);
+	const process = new PiProcess("//wsl.localhost/Ubuntu-24.04/root/ba_cli", settings, createLocator(invocationCalls));
 
 	await process.start("\\\\wsl$\\Ubuntu-24.04\\root\\.pi\\agent\\sessions\\session.jsonl");
 
 	assert.equal(invocationCalls[0].options.wslCwd, "/root/ba_cli");
-	assert.deepEqual(
-		invocationCalls[0].args,
-		["--mode", "rpc", "--no-themes", "--offline", "--session", "/root/.pi/agent/sessions/session.jsonl"],
-	);
+	assert.deepEqual(invocationCalls[0].args, ["--mode", "rpc", "--no-themes", "--offline", "--session", "/root/.pi/agent/sessions/session.jsonl"]);
 	assert.equal(spawnCalls[0].options.cwd, "\\\\wsl.localhost\\Ubuntu-24.04\\root\\ba_cli");
-	assert.deepEqual(
-		spawnCalls[0].args,
-		[
-			"-d", "Ubuntu-24.04",
-			"-u", "root",
-			"--cd", "/root/ba_cli",
-			"pi", "--mode", "rpc", "--no-themes", "--offline",
-			"--session", "/root/.pi/agent/sessions/session.jsonl",
-		],
-	);
+	assert.deepEqual(spawnCalls[0].args, ["-d", "Ubuntu-24.04", "-u", "root", "--cd", "/root/ba_cli", "pi", "--mode", "rpc", "--no-themes", "--offline", "--session", "/root/.pi/agent/sessions/session.jsonl"]);
 	assert.equal(process.getDiagnostics().cwd, "/root/ba_cli");
 });
 
 test("rejects a project UNC from another distro before spawning pi", async () => {
 	const spawnCalls = [];
 	const { PiProcess } = loadPiProcess(spawnCalls);
-	const process = new PiProcess(
-		"\\\\wsl.localhost\\Debian\\root\\ba_cli",
-		settings,
-		createLocator([]),
-	);
+	const process = new PiProcess("\\\\wsl.localhost\\Debian\\root\\ba_cli", settings, createLocator([]));
 
-	await assert.rejects(
-		process.start(),
-		(error) => error.code === "WSL_DISTRO_MISMATCH",
-	);
+	await assert.rejects(process.start(), (error) => error.code === "WSL_DISTRO_MISMATCH");
 	assert.equal(spawnCalls.length, 0);
 });

@@ -1,20 +1,6 @@
-import {
-	existsSync,
-	mkdirSync,
-	readFileSync,
-	readdirSync,
-	statSync,
-	unlinkSync,
-	writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { join, basename } from "node:path";
-import type {
-	ConfigBackupActionResult,
-	ConfigBackupDetail,
-	ConfigBackupListResult,
-	ConfigBackupMeta,
-	ConfigBackupReason,
-} from "../../shared/types/backup";
+import type { ConfigBackupActionResult, ConfigBackupDetail, ConfigBackupListResult, ConfigBackupMeta, ConfigBackupReason } from "../../shared/types/backup";
 
 /**
  * 配置备份管理器：把 pi 配置文件（~/.pi/agent/ 下 models.json / auth.json / settings.json / mcp.json）
@@ -41,13 +27,7 @@ export type ConfigBackupManagerDeps = {
 };
 
 /** 备份文件命名空间前缀：pi 文件与 pideck 文件分开，避免两个 settings.json 同名冲突。 */
-export const BACKUP_FILE_KEYS = [
-	"pi/models.json",
-	"pi/auth.json",
-	"pi/settings.json",
-	"pi/mcp.json",
-	"pideck/settings.json",
-] as const;
+export const BACKUP_FILE_KEYS = ["pi/models.json", "pi/auth.json", "pi/settings.json", "pi/mcp.json", "pideck/settings.json"] as const;
 
 const BACKUP_DIR_NAME = "config-backups";
 const BACKUP_FILE_PREFIX = "backup-";
@@ -58,17 +38,7 @@ const BACKUP_FILE_PREFIX = "backup-";
 export const MAX_BACKUPS = 5;
 
 /** 递归脱敏时命中的字段名（值必须为 string 且足够长才替换，避免误伤短标识符）。 */
-const SECRET_KEY_NAMES = new Set([
-	"key",
-	"apiKey",
-	"api_key",
-	"token",
-	"accessToken",
-	"refreshToken",
-	"secret",
-	"password",
-	"authorization",
-]);
+const SECRET_KEY_NAMES = new Set(["key", "apiKey", "api_key", "token", "accessToken", "refreshToken", "secret", "password", "authorization"]);
 
 type BackupPackage = {
 	version: 1;
@@ -340,10 +310,7 @@ export class ConfigBackupManager {
 	private prune(): void {
 		const listed = this.list();
 		if (!listed.ok) return;
-		const automatic = listed.backups.filter(
-			(meta) =>
-				meta.reason === "pre-restore" || meta.reason === "on-save" || meta.reason === "upgrade",
-		);
+		const automatic = listed.backups.filter((meta) => meta.reason === "pre-restore" || meta.reason === "on-save" || meta.reason === "upgrade");
 		for (const meta of automatic.slice(MAX_BACKUPS)) {
 			try {
 				unlinkSync(join(this.backupDir(), meta.id));

@@ -42,18 +42,15 @@ function modelsFile(providers) {
 }
 
 test("listUsageProbeStates：内置识别命中也不自动开（默认关，显式开启才查）", async () => {
-	await withConfigDir(
-		{ "models.json": modelsFile({ deepseek: { baseUrl: "https://api.deepseek.com/v1" } }) },
-		async (dir) => {
-			const states = await new ConfigManager(dir, (key) => key).listUsageProbeStates("pi");
-			const state = states.providers.deepseek;
-			assert.equal(state.enabled, false);
-			assert.equal(state.recognized, true);
-			assert.equal(state.configured, false);
-			assert.equal(state.template, "deepseek-balance");
-			assert.equal(state.intervalMinutes, 5);
-		},
-	);
+	await withConfigDir({ "models.json": modelsFile({ deepseek: { baseUrl: "https://api.deepseek.com/v1" } }) }, async (dir) => {
+		const states = await new ConfigManager(dir, (key) => key).listUsageProbeStates("pi");
+		const state = states.providers.deepseek;
+		assert.equal(state.enabled, false);
+		assert.equal(state.recognized, true);
+		assert.equal(state.configured, false);
+		assert.equal(state.template, "deepseek-balance");
+		assert.equal(state.intervalMinutes, 5);
+	});
 });
 
 test("listUsageProbeStates：显式 enabled=true 才生效（内置识别与已配模板都不算开）", async () => {
@@ -124,8 +121,7 @@ test("通道只在 shared/ipc.ts、主进程 handler、preload 三处同步（�
 	assert.doesNotMatch(systemIpc, /configSetUsageProbeEnabled/);
 	assert.doesNotMatch(preload, /setUsageProbeEnabled/);
 	// 状态表 handler 只透传 backend + provider 名数组（路径/目录不接受渲染层输入）。
-	const listHandler =
-		systemIpc.match(/ipcMain\.handle\(ipcChannels\.configListUsageProbeStates,[\s\S]*?\n\t\}\);/)?.[0] ?? "";
+	const listHandler = systemIpc.match(/ipcMain\.handle\(ipcChannels\.configListUsageProbeStates,[\s\S]*?\n\t\}\);/)?.[0] ?? "";
 	assert.match(listHandler, /configManager\.listUsageProbeStates\(backend, providers\)/);
 	// 共享契约：状态表类型在 shared/types/providerUsage.ts。
 	assert.match(sharedTypes, /export type UsageProbeProviderState = \{/);

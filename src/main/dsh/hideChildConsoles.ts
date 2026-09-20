@@ -97,10 +97,7 @@ export interface DshHostConsolePolicy {
 	rewriteRunnerToSidecar: boolean;
 }
 
-export function decideDshHostConsolePolicy(input: {
-	platform: NodeJS.Platform;
-	sidecarPath?: string;
-}): DshHostConsolePolicy {
+export function decideDshHostConsolePolicy(input: { platform: NodeJS.Platform; sidecarPath?: string }): DshHostConsolePolicy {
 	if (input.platform !== "win32") {
 		return { allocHostConsole: false, injectWindowsHide: false, rewriteRunnerToSidecar: false };
 	}
@@ -117,10 +114,7 @@ export function decideDshHostConsolePolicy(input: {
  * ffi 参数保留是为了兼容旧调用/测试签名，现行路径不会加载 koffi。
  * 返回 false：没有「已分配的可继承隐藏控制台」，补丁应注入 windowsHide。
  */
-export function installHostHiddenConsole(
-	platform: NodeJS.Platform = process.platform,
-	_ffi?: Win32Ffi,
-): boolean {
+export function installHostHiddenConsole(platform: NodeJS.Platform = process.platform, _ffi?: Win32Ffi): boolean {
 	hostHiddenConsoleActive = false;
 	if (platform !== "win32") {
 		hiddenConsoleMode = "off";
@@ -131,9 +125,7 @@ export function installHostHiddenConsole(
 }
 
 /** 未显式指定 windowsHide 时注入 true；已指定则尊重原值（Node 默认 false）。 */
-export function hiddenConsoleOptions<T extends { windowsHide?: boolean }>(
-	options: T | undefined,
-): T | undefined {
+export function hiddenConsoleOptions<T extends { windowsHide?: boolean }>(options: T | undefined): T | undefined {
 	if (!options) return undefined;
 	return options.windowsHide === undefined ? { ...options, windowsHide: true } : options;
 }
@@ -210,10 +202,7 @@ function withPwshExitAppend(args: readonly string[]): readonly string[] {
  *
  * @returns 还原函数（测试用；生产调用方不还原）。
  */
-export function installRunnerNodeModeEnv(
-	env: NodeJS.ProcessEnv = process.env,
-	platform: NodeJS.Platform = process.platform,
-): () => void {
+export function installRunnerNodeModeEnv(env: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = process.platform): () => void {
 	if (platform !== "win32") return () => undefined;
 	const previous = env.ELECTRON_RUN_AS_NODE;
 	env.ELECTRON_RUN_AS_NODE = "1";
@@ -250,11 +239,7 @@ export function installRunnerNodeModeEnv(
  *
  * @returns 还原函数（测试用；生产调用方不还原）。
  */
-export function installRunnerPreloadEnv(
-	env: NodeJS.ProcessEnv = process.env,
-	platform: NodeJS.Platform = process.platform,
-	runnerPreloadPath: string = join(__dirname, "runnerConsolePreload.js"),
-): () => void {
+export function installRunnerPreloadEnv(env: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = process.platform, runnerPreloadPath: string = join(__dirname, "runnerConsolePreload.js")): () => void {
 	if (platform !== "win32") return () => undefined;
 	const previous = env.NODE_OPTIONS;
 	if (!includesRunnerPreload(previous, runnerPreloadPath)) {
@@ -275,10 +260,7 @@ export function installRunnerPreloadEnv(
  * 2. `-Command` 命令末尾追加换行 + `exit $LASTEXITCODE`：无论挂起原因，
  *    命令执行完都强制退出。
  */
-function withPwshHangGuard(
-	args: readonly string[],
-	options: childProcessModule.SpawnOptions | undefined,
-): { args: readonly string[]; options: childProcessModule.SpawnOptions | undefined } {
+function withPwshHangGuard(args: readonly string[], options: childProcessModule.SpawnOptions | undefined): { args: readonly string[]; options: childProcessModule.SpawnOptions | undefined } {
 	const nextArgs = withPwshExitAppend(args);
 	let nextOptions = options;
 	if (options !== undefined && Array.isArray(options.stdio) && options.stdio[0] === "pipe") {
@@ -290,10 +272,7 @@ function withPwshHangGuard(
 }
 
 /** 给 pwsh 相关 spawn 注入启动优化环境变量（env 缺失时跳过：真实链路恒带 env）。 */
-function withPwshStartupEnv(
-	options: childProcessModule.SpawnOptions | undefined,
-	isPwsh: boolean,
-): childProcessModule.SpawnOptions | undefined {
+function withPwshStartupEnv(options: childProcessModule.SpawnOptions | undefined, isPwsh: boolean): childProcessModule.SpawnOptions | undefined {
 	if (!isPwsh || options === undefined || options.env === undefined) return options;
 	return { ...options, env: { ...options.env, ...PWSH_STARTUP_ENV } };
 }
@@ -317,10 +296,7 @@ function includesRunnerPreload(existing: string | undefined, runnerPreloadPath: 
  * 幂等：env 里已有同一 preload（如 installRunnerPreloadEnv 写进 host env 后，
  * options.env 由 host env 派生）则不重复 append，避免 Node 加载两遍。
  */
-function withRunnerPreload(
-	options: childProcessModule.SpawnOptions | undefined,
-	runnerPreloadPath: string,
-): childProcessModule.SpawnOptions | undefined {
+function withRunnerPreload(options: childProcessModule.SpawnOptions | undefined, runnerPreloadPath: string): childProcessModule.SpawnOptions | undefined {
 	if (options === undefined || options.env === undefined) return options;
 	const existing = options.env.NODE_OPTIONS;
 	if (includesRunnerPreload(existing, runnerPreloadPath)) return options;
@@ -349,9 +325,7 @@ function withRunnerPreload(
  * 事件循环清空正常退出（复现实验：缺变量 3/3 挂、注入后 2/2 正常）。
  * env 缺失时跳过（真实链路恒带 env）。
  */
-function withRunnerRunAsNode(
-	options: childProcessModule.SpawnOptions | undefined,
-): childProcessModule.SpawnOptions | undefined {
+function withRunnerRunAsNode(options: childProcessModule.SpawnOptions | undefined): childProcessModule.SpawnOptions | undefined {
 	if (options === undefined || options.env === undefined) return options;
 	if (options.env.ELECTRON_RUN_AS_NODE === "1") return options;
 	return { ...options, env: { ...options.env, ELECTRON_RUN_AS_NODE: "1" } };
@@ -373,10 +347,7 @@ function isElectronLikeExec(command: string): boolean {
  * 沙箱 runner 若仍由 electron.exe 拉起，改写成 CUI node sidecar。
  * sidecar 未配置或 command 已经是 node 时原样返回。
  */
-function rewriteRunnerExecutable(
-	command: string,
-	args: readonly string[],
-): { command: string; args: readonly string[] } {
+function rewriteRunnerExecutable(command: string, args: readonly string[]): { command: string; args: readonly string[] } {
 	if (!decideDshHostConsolePolicy({ platform: "win32", sidecarPath: dshRunnerNodeSidecarPath }).rewriteRunnerToSidecar) {
 		return { command, args };
 	}
@@ -400,10 +371,7 @@ function rewriteRunnerExecutable(
  * 该属性 configurable=true，且 ESM 侧 `import { spawn } from "node:child_process"`
  * 是 live binding——defineProperty 替换后，后续动态 import 的 dsh 包读到的就是补丁版。
  */
-export function installHiddenConsolePatch(
-	platform: NodeJS.Platform = process.platform,
-	runnerPreloadPath: string = join(__dirname, "runnerConsolePreload.js"),
-): () => void {
+export function installHiddenConsolePatch(platform: NodeJS.Platform = process.platform, runnerPreloadPath: string = join(__dirname, "runnerConsolePreload.js")): () => void {
 	if (platform !== "win32") return () => undefined;
 	const originals = {
 		spawn: childProcess.spawn,
@@ -415,10 +383,7 @@ export function installHiddenConsolePatch(
 	};
 
 	/** 用 defineProperty 替换导出（兼容 Node 24 只读 getter 语义）。 */
-	function replaceExport<K extends keyof typeof childProcess>(
-		name: K,
-		value: typeof childProcess[K],
-	): void {
+	function replaceExport<K extends keyof typeof childProcess>(name: K, value: (typeof childProcess)[K]): void {
 		Object.defineProperty(childProcess, name, {
 			value,
 			writable: true,
@@ -430,32 +395,19 @@ export function installHiddenConsolePatch(
 	 * 一次 spawn 的 options 决策：runner spawn 恒注入 preload + pwsh 启动环境；
 	 * 本地 pwsh 注入启动环境；win32 子进程一律 windowsHide。
 	 */
-	function resolveSpawnOptions(
-		command: string,
-		args: readonly string[] | undefined,
-		options: childProcessModule.SpawnOptions | undefined,
-	): childProcessModule.SpawnOptions | undefined {
+	function resolveSpawnOptions(command: string, args: readonly string[] | undefined, options: childProcessModule.SpawnOptions | undefined): childProcessModule.SpawnOptions | undefined {
 		if (isRunnerSpawn(command, args)) {
 			// 诊断（一次性）：确认沙箱 runner spawn 的可执行文件与控制台策略。
 			if (!runnerPolicyLogged) {
 				runnerPolicyLogged = true;
-				console.error(
-					`[dsh-host-entry] runner spawn policy: hostHiddenConsoleActive=${String(hostHiddenConsoleActive)} ` +
-						`sidecar=${dshRunnerNodeSidecarPath ?? "none"} ` +
-						`command=${command} preload=${runnerPreloadPath}`,
-				);
+				console.error(`[dsh-host-entry] runner spawn policy: hostHiddenConsoleActive=${String(hostHiddenConsoleActive)} ` + `sidecar=${dshRunnerNodeSidecarPath ?? "none"} ` + `command=${command} preload=${runnerPreloadPath}`);
 			}
 			// CUI node sidecar：CREATE_NO_WINDOW 自建无窗口可继承控制台，不再依赖 host AllocConsole。
 			if (dshRunnerNodeSidecarPath) {
 				const hidden = { ...(options ?? {}), windowsHide: true };
 				return withRunnerPreload(withPwshStartupEnv(hidden, true), runnerPreloadPath);
 			}
-			return withRunnerPreload(
-				withRunnerRunAsNode(
-					withPwshStartupEnv(hostHiddenConsoleActive ? options : withHiddenOptions(options), true),
-				),
-				runnerPreloadPath,
-			);
+			return withRunnerPreload(withRunnerRunAsNode(withPwshStartupEnv(hostHiddenConsoleActive ? options : withHiddenOptions(options), true)), runnerPreloadPath);
 		}
 		if (isPwshCommand(command)) {
 			return withPwshStartupEnv(hostHiddenConsoleActive ? options : withHiddenOptions(options), true);
@@ -475,15 +427,9 @@ export function installHiddenConsolePatch(
 			// electron.exe 形态运行、事件循环永不退出——见 installRunnerNodeModeEnv。
 			// 注意 stdio 不动：runner 可能用 stdin pipe 向受限命令传数据。
 			const rewritten = rewriteRunnerExecutable(command, argsOrOptions);
-			const guarded = isPwshCommand(rewritten.command)
-				? withPwshHangGuard(rewritten.args, maybeOptions)
-				: isRunnerSpawn(rewritten.command, rewritten.args)
-					? { args: withPwshExitAppend(rewritten.args), options: maybeOptions }
-					: { args: rewritten.args, options: maybeOptions };
+			const guarded = isPwshCommand(rewritten.command) ? withPwshHangGuard(rewritten.args, maybeOptions) : isRunnerSpawn(rewritten.command, rewritten.args) ? { args: withPwshExitAppend(rewritten.args), options: maybeOptions } : { args: rewritten.args, options: maybeOptions };
 			const next = resolveSpawnOptions(rewritten.command, guarded.args, guarded.options);
-			return next === undefined
-				? originals.spawn(rewritten.command, guarded.args)
-				: originals.spawn(rewritten.command, guarded.args, next);
+			return next === undefined ? originals.spawn(rewritten.command, guarded.args) : originals.spawn(rewritten.command, guarded.args, next);
 		}
 		const next = resolveSpawnOptions(command, undefined, argsOrOptions as SpawnOptions | undefined);
 		return next === undefined ? originals.spawn(command) : originals.spawn(command, next);
@@ -493,15 +439,9 @@ export function installHiddenConsolePatch(
 	replaceExport("spawnSync", ((command: string, argsOrOptions?: readonly string[] | SpawnOptions, maybeOptions?: SpawnOptions) => {
 		if (Array.isArray(argsOrOptions)) {
 			const rewritten = rewriteRunnerExecutable(command, argsOrOptions);
-			const guarded = isPwshCommand(rewritten.command)
-				? withPwshHangGuard(rewritten.args, maybeOptions)
-				: isRunnerSpawn(rewritten.command, rewritten.args)
-					? { args: withPwshExitAppend(rewritten.args), options: maybeOptions }
-					: { args: rewritten.args, options: maybeOptions };
+			const guarded = isPwshCommand(rewritten.command) ? withPwshHangGuard(rewritten.args, maybeOptions) : isRunnerSpawn(rewritten.command, rewritten.args) ? { args: withPwshExitAppend(rewritten.args), options: maybeOptions } : { args: rewritten.args, options: maybeOptions };
 			const next = resolveSpawnOptions(rewritten.command, guarded.args, guarded.options);
-			return next === undefined
-				? originals.spawnSync(rewritten.command, guarded.args)
-				: originals.spawnSync(rewritten.command, guarded.args, next);
+			return next === undefined ? originals.spawnSync(rewritten.command, guarded.args) : originals.spawnSync(rewritten.command, guarded.args, next);
 		}
 		const next = resolveSpawnOptions(command, undefined, argsOrOptions as SpawnOptions | undefined);
 		return next === undefined ? originals.spawnSync(command) : originals.spawnSync(command, next);
@@ -543,15 +483,11 @@ export function installHiddenConsolePatch(
 			const args = rest[0] as readonly string[];
 			const options = rest[1] as childProcessModule.ExecFileOptions | undefined;
 			const next = hostHiddenConsoleActive ? options : withHiddenOptions(options);
-			return callback === undefined
-				? execFileLike(file, args, next)
-				: execFileLike(file, args, next, callback);
+			return callback === undefined ? execFileLike(file, args, next) : execFileLike(file, args, next, callback);
 		}
 		const options = rest[0] as childProcessModule.ExecFileOptions | undefined;
 		const next = hostHiddenConsoleActive ? options : withHiddenOptions(options);
-		return callback === undefined
-			? execFileLike(file, next)
-			: execFileLike(file, next, callback);
+		return callback === undefined ? execFileLike(file, next) : execFileLike(file, next, callback);
 	}) as typeof childProcess.execFile);
 
 	// execFileSync(file[, args][, options])：与 execFile 同形态（无 callback）。
@@ -560,7 +496,7 @@ export function installHiddenConsolePatch(
 			const next = hostHiddenConsoleActive ? maybeOptions : withHiddenOptions(maybeOptions);
 			return originals.execFileSync(file, argsOrOptions, next);
 		}
-		const next = hostHiddenConsoleActive ? argsOrOptions as childProcessModule.ExecFileSyncOptions | undefined : withHiddenOptions(argsOrOptions as childProcessModule.ExecFileSyncOptions | undefined);
+		const next = hostHiddenConsoleActive ? (argsOrOptions as childProcessModule.ExecFileSyncOptions | undefined) : withHiddenOptions(argsOrOptions as childProcessModule.ExecFileSyncOptions | undefined);
 		return originals.execFileSync(file, next);
 	}) as typeof childProcess.execFileSync);
 

@@ -21,19 +21,9 @@
 import { useEffect, useState } from "react";
 import { Check } from "lucide-react";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
-import {
-	sessionRecordByIdAtomFamily,
-	sessionRuntimeByIdAtom,
-	sessionRuntimeBySessionIdAtomFamily,
-	upsertSessionAtom,
-} from "../../atoms";
+import { sessionRecordByIdAtomFamily, sessionRuntimeByIdAtom, sessionRuntimeBySessionIdAtomFamily, upsertSessionAtom } from "../../atoms";
 import { Button } from "../ui-shadcn/button";
-import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuItem,
-	DropdownMenuTrigger,
-} from "../ui-shadcn/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../ui-shadcn/dropdown-menu";
 import { ConfirmDialog } from "../app/AppParts";
 import { desktopApi } from "../../desktopApi";
 import { t } from "../../i18n";
@@ -77,14 +67,17 @@ export function DshPermissionMenu(props: { sessionId: string; disabled?: boolean
 
 	useEffect(() => {
 		let cancelled = false;
-		void desktopApi.sessions.describeDshSettings().then((result) => {
-			if (cancelled) return;
-			const permission = result.namespaces.find((ns) => ns.ns === "permission");
-			const value = permission?.value as { defaultPreset?: unknown } | undefined;
-			if (value && typeof value.defaultPreset === "string") {
-				setDefaultPreset(value.defaultPreset);
-			}
-		}).catch(() => undefined);
+		void desktopApi.sessions
+			.describeDshSettings()
+			.then((result) => {
+				if (cancelled) return;
+				const permission = result.namespaces.find((ns) => ns.ns === "permission");
+				const value = permission?.value as { defaultPreset?: unknown } | undefined;
+				if (value && typeof value.defaultPreset === "string") {
+					setDefaultPreset(value.defaultPreset);
+				}
+			})
+			.catch(() => undefined);
 		return () => {
 			cancelled = true;
 		};
@@ -124,9 +117,7 @@ export function DshPermissionMenu(props: { sessionId: string; disabled?: boolean
 			}
 			// 权限是 runtime 控制命令，不是聊天 prompt：专用 IPC 会校验 runtime
 			// generation，并等待 DSH 的 permission/preset 事件确认真正生效。
-			const result = requireSessionCommand(
-				await desktopApi.sessions.setRuntimePermission(target, preset),
-			);
+			const result = requireSessionCommand(await desktopApi.sessions.setRuntimePermission(target, preset));
 			// Targeted commands wrap the state in { target, value }; only merge the
 			// returned AgentRuntimeState into the session-scoped atom.
 			const agentState = result.value;
@@ -139,9 +130,7 @@ export function DshPermissionMenu(props: { sessionId: string; disabled?: boolean
 					...store.get(sessionRuntimeByIdAtom),
 					[props.sessionId]: {
 						...current,
-						state: current.state
-							? { ...current.state, ...agentState }
-							: agentState,
+						state: current.state ? { ...current.state, ...agentState } : agentState,
 					},
 				});
 			}
@@ -173,61 +162,39 @@ export function DshPermissionMenu(props: { sessionId: string; disabled?: boolean
 		<>
 			<DropdownMenu open={open} onOpenChange={setOpen}>
 				<DropdownMenuTrigger asChild>
-					<Button
-						variant="ghost"
-						size="icon"
-						className="composer-bar-btn security dsh size-7 rounded-md text-foreground hover:bg-muted/60"
-						disabled={props.disabled || sending}
-						aria-label={t("dshPermission.menuTitle")}
-						title={`${t("dshPermission.menuTitle")}: ${presetLabel(effectivePreset)}`}
-					>
+					<Button variant="ghost" size="icon" className="composer-bar-btn security dsh size-7 rounded-md text-foreground hover:bg-muted/60" disabled={props.disabled || sending} aria-label={t("dshPermission.menuTitle")} title={`${t("dshPermission.menuTitle")}: ${presetLabel(effectivePreset)}`}>
 						<Icon size={15} strokeWidth={2} aria-hidden="true" />
 					</Button>
 				</DropdownMenuTrigger>
 				<DropdownMenuContent align="start" sideOffset={4} className="dsh-permission-menu min-w-72">
 					{/* 顶部状态提示行：与 pi 安全等级菜单同款 */}
-					<div className="border-b border-border/60 px-2.5 py-2 text-caption leading-relaxed text-muted-foreground">
-						{t("dshPermission.menuHint")}
-					</div>
+					<div className="border-b border-border/60 px-2.5 py-2 text-caption leading-relaxed text-muted-foreground">{t("dshPermission.menuHint")}</div>
 					{DSH_PERMISSION_PRESETS.map((preset) => {
 						const selected = effectivePreset === preset.id;
 						const ItemIcon = presetIcon(preset.id);
 						return (
-							<DropdownMenuItem
-								key={preset.id}
-								data-picker-value={preset.id}
-								disabled={sending}
-								onSelect={() => pick(preset.id)}
-								title={t(preset.descriptionKey)}
-								className="min-h-9 gap-2 px-2.5 py-1"
-							>
+							<DropdownMenuItem key={preset.id} data-picker-value={preset.id} disabled={sending} onSelect={() => pick(preset.id)} title={t(preset.descriptionKey)} className="min-h-9 gap-2 px-2.5 py-1">
 								<span className={`grid size-6 shrink-0 place-items-center rounded-md ${selected ? "bg-primary/12 text-primary" : "bg-muted text-muted-foreground"}`}>
 									<ItemIcon size={14} strokeWidth={2} aria-hidden="true" />
 								</span>
-								<span className="min-w-0 flex-1 truncate text-control font-semibold text-foreground">
-									{t(preset.labelKey)}
-								</span>
+								<span className="min-w-0 flex-1 truncate text-control font-semibold text-foreground">{t(preset.labelKey)}</span>
 								{selected ? <Check size={14} strokeWidth={2} className="shrink-0 text-primary" aria-hidden="true" /> : null}
 							</DropdownMenuItem>
 						);
 					})}
-					{effectivePreset && !DSH_PERMISSION_PRESETS.some((item) => item.id === effectivePreset) && (() => {
-						const CustomIcon = presetIcon(effectivePreset);
-						return (
-							<DropdownMenuItem
-								data-picker-value="custom"
-								disabled
-								className="min-h-9 gap-2 px-2.5 py-1 opacity-60"
-							>
-								<span className="grid size-6 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground">
-									<CustomIcon size={14} strokeWidth={2} aria-hidden="true" />
-								</span>
-								<span className="min-w-0 flex-1 truncate text-control font-semibold text-foreground">
-									{t("dshPermission.custom")}
-								</span>
-							</DropdownMenuItem>
-						);
-					})()}
+					{effectivePreset &&
+						!DSH_PERMISSION_PRESETS.some((item) => item.id === effectivePreset) &&
+						(() => {
+							const CustomIcon = presetIcon(effectivePreset);
+							return (
+								<DropdownMenuItem data-picker-value="custom" disabled className="min-h-9 gap-2 px-2.5 py-1 opacity-60">
+									<span className="grid size-6 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground">
+										<CustomIcon size={14} strokeWidth={2} aria-hidden="true" />
+									</span>
+									<span className="min-w-0 flex-1 truncate text-control font-semibold text-foreground">{t("dshPermission.custom")}</span>
+								</DropdownMenuItem>
+							);
+						})()}
 				</DropdownMenuContent>
 			</DropdownMenu>
 			{confirmingFull && (

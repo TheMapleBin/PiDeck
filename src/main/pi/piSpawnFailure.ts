@@ -47,9 +47,7 @@ export function describeSpawnFailure(context: SpawnFailureContext): string | nul
 			// 与 spawn 报错逐字对应的实测结论：目录不存在才是这条 ENOENT 的真实原因。
 			return [
 				`项目工作目录不存在：${context.cwd}`,
-				context.isWindows
-					? "（Windows 会把「工作目录无效」误报成 spawn <cmd.exe> ENOENT，真正原因不是 pi 或 cmd.exe 缺失）"
-					: "（进程启动时无法切换到该目录）",
+				context.isWindows ? "（Windows 会把「工作目录无效」误报成 spawn <cmd.exe> ENOENT，真正原因不是 pi 或 cmd.exe 缺失）" : "（进程启动时无法切换到该目录）",
 				`原始错误：${raw}`,
 				"处理：确认项目路径是否被移动/重命名/删除，或磁盘（含网络盘）是否已挂载；",
 				"在 PiDeck 中重新指定该项目的目录后重启会话。",
@@ -62,9 +60,7 @@ export function describeSpawnFailure(context: SpawnFailureContext): string | nul
 			return [
 				`pi 路径不存在：${context.piCommand}`,
 				`原始错误：${raw}`,
-				context.isWindows
-					? "处理：版本管理器（nvm/fnm/nvm4w）切换 Node 版本后，旧版本目录下的 pi.cmd 会失效；"
-					: "处理：重新安装 pi，或在设置中指向当前有效的可执行文件；",
+				context.isWindows ? "处理：版本管理器（nvm/fnm/nvm4w）切换 Node 版本后，旧版本目录下的 pi.cmd 会失效；" : "处理：重新安装 pi，或在设置中指向当前有效的可执行文件；",
 				"在终端执行 `pi --version` 确认；若终端可用，把设置里的 pi 路径改成终端实际命中的那个完整路径。",
 			].join("\n");
 		}
@@ -72,19 +68,13 @@ export function describeSpawnFailure(context: SpawnFailureContext): string | nul
 			`找不到可执行文件：${context.spawnedCommand}`,
 			`pi 路径：${context.piCommand}`,
 			`原始错误：${raw}`,
-			context.isWindows
-				? "处理：确认 pi 已全局安装（npm i -g @earendil-works/pi-coding-agent），或在设置中填写 pi 的完整路径；"
-				: "处理：确认 pi 已安装且可执行（which pi / 设置中填写完整路径）；",
+			context.isWindows ? "处理：确认 pi 已全局安装（npm i -g @earendil-works/pi-coding-agent），或在设置中填写 pi 的完整路径；" : "处理：确认 pi 已安装且可执行（which pi / 设置中填写完整路径）；",
 			"如果在终端里 `pi --version` 正常，多半是桌面端没有继承到同一套 PATH。",
 		].join("\n");
 	}
 
 	if (code === "EACCES" || code === "EPERM") {
-		return [
-			`没有权限启动：${context.spawnedCommand}`,
-			`原始错误：${raw}`,
-			"处理：检查安全软件/组策略是否拦截了该程序，或该文件是否被占用、只读。",
-		].join("\n");
+		return [`没有权限启动：${context.spawnedCommand}`, `原始错误：${raw}`, "处理：检查安全软件/组策略是否拦截了该程序，或该文件是否被占用、只读。"].join("\n");
 	}
 
 	return null;
@@ -93,9 +83,7 @@ export function describeSpawnFailure(context: SpawnFailureContext): string | nul
 /**
  * 把 spawn 失败包装成带原因的错误。无法归因时原样返回，调用方行为不变。
  */
-export function createSpawnFailureError(
-	context: SpawnFailureContext,
-): { error: Error; described: boolean } {
+export function createSpawnFailureError(context: SpawnFailureContext): { error: Error; described: boolean } {
 	const described = describeSpawnFailure(context);
 	if (!described) {
 		return {

@@ -58,16 +58,25 @@ test("有禁用项时：npm 包按 manifest 入口注入，禁用的剔除、未
 	const { resolveEnabledExtensionPaths } = loadResolverModule();
 	const { root, home, cwd, put, mkdir } = setupFixtures();
 	try {
-		put(".pi/agent/settings.json", JSON.stringify({
-			packages: ["npm:pi-web-access", "npm:pi-mcp-adapter", "npm:pi-missing"],
-		}));
-		put(".pi/agent/npm/node_modules/pi-web-access/package.json", JSON.stringify({
-			pi: { extensions: ["src/index.ts"] },
-		}));
+		put(
+			".pi/agent/settings.json",
+			JSON.stringify({
+				packages: ["npm:pi-web-access", "npm:pi-mcp-adapter", "npm:pi-missing"],
+			}),
+		);
+		put(
+			".pi/agent/npm/node_modules/pi-web-access/package.json",
+			JSON.stringify({
+				pi: { extensions: ["src/index.ts"] },
+			}),
+		);
 		put(".pi/agent/npm/node_modules/pi-web-access/src/index.ts", "// extension");
-		put(".pi/agent/npm/node_modules/pi-mcp-adapter/package.json", JSON.stringify({
-			pi: { extensions: ["index.ts"] },
-		}));
+		put(
+			".pi/agent/npm/node_modules/pi-mcp-adapter/package.json",
+			JSON.stringify({
+				pi: { extensions: ["index.ts"] },
+			}),
+		);
 		put(".pi/agent/npm/node_modules/pi-mcp-adapter/index.ts", "// extension");
 
 		const result = resolveEnabledExtensionPaths({
@@ -89,14 +98,20 @@ test("project packages 从项目 .pi/npm 注入，且 user/project 同名禁用�
 	const { root, home, cwd, put, mkdir } = setupFixtures();
 	try {
 		put(".pi/agent/settings.json", JSON.stringify({ packages: ["npm:pi-web-access"] }));
-		put(".pi/agent/npm/node_modules/pi-web-access/package.json", JSON.stringify({
-			pi: { extensions: ["index.ts"] },
-		}));
+		put(
+			".pi/agent/npm/node_modules/pi-web-access/package.json",
+			JSON.stringify({
+				pi: { extensions: ["index.ts"] },
+			}),
+		);
 		put(".pi/agent/npm/node_modules/pi-web-access/index.ts", "// extension");
 		put("project/.pi/settings.json", JSON.stringify({ packages: ["npm:pi-project-tool"] }));
-		put("project/.pi/npm/node_modules/pi-project-tool/package.json", JSON.stringify({
-			pi: { extensions: ["index.ts"] },
-		}));
+		put(
+			"project/.pi/npm/node_modules/pi-project-tool/package.json",
+			JSON.stringify({
+				pi: { extensions: ["index.ts"] },
+			}),
+		);
 		put("project/.pi/npm/node_modules/pi-project-tool/index.ts", "// extension");
 
 		// 只禁用 user 级 pi-web-access：project 条目不受牵连
@@ -138,10 +153,7 @@ test("本地 .ts 文件扩展：user/project 目录都扫，禁用按文件名�
 			removedBuiltInExtensions: [],
 			builtInRoots: { appPath: root, resourcesPath: root, isDev: true },
 		});
-		same(result, [
-			join(home, ".pi", "agent", "extensions", "orca.ts"),
-			join(cwd, ".pi", "extensions", "proj-ext.ts"),
-		]);
+		same(result, [join(home, ".pi", "agent", "extensions", "orca.ts"), join(cwd, ".pi", "extensions", "proj-ext.ts")]);
 	} finally {
 		rmSync(root, { recursive: true, force: true });
 	}
@@ -152,9 +164,12 @@ test("目录扩展（index.ts / pi manifest）解析为入口文件路径", () =
 	const { root, home, cwd, put } = setupFixtures();
 	try {
 		put(".pi/agent/extensions/my-dir/index.ts", "// entry");
-		put(".pi/agent/extensions/pi-manifest-dir/package.json", JSON.stringify({
-			pi: { extensions: ["src/main.ts"] },
-		}));
+		put(
+			".pi/agent/extensions/pi-manifest-dir/package.json",
+			JSON.stringify({
+				pi: { extensions: ["src/main.ts"] },
+			}),
+		);
 		put(".pi/agent/extensions/pi-manifest-dir/src/main.ts", "// entry");
 
 		const result = resolveEnabledExtensionPaths({
@@ -229,10 +244,7 @@ test("特殊字符扩展名（空格/中文/&）按字面匹配：spawn 数组�
 		});
 		// 含特殊字符的禁用源被精确剔除，其余字面注入（pi 侧 resolvePath 只做 Unicode 空格规范化，
 		// 普通空格/中文/& 均按字面处理）
-		same(result, [
-			join(home, ".pi", "agent", "extensions", chinese),
-			join(home, ".pi", "agent", "extensions", "plain.ts"),
-		]);
+		same(result, [join(home, ".pi", "agent", "extensions", chinese), join(home, ".pi", "agent", "extensions", "plain.ts")]);
 	} finally {
 		rmSync(root, { recursive: true, force: true });
 	}
@@ -265,9 +277,12 @@ test("项目继承覆盖只禁用全局 extension，保留同 source 项目资�
 	try {
 		put(".pi/agent/extensions/shared.ts", "export default () => {};");
 		const projectPath = put("project/.pi/extensions/shared.ts", "export default () => {};");
-		put("project/.pi/settings.json", JSON.stringify({
-			pideckDisabledGlobalExtensions: ["shared.ts"],
-		}));
+		put(
+			"project/.pi/settings.json",
+			JSON.stringify({
+				pideckDisabledGlobalExtensions: ["shared.ts"],
+			}),
+		);
 		const result = resolveEnabledExtensionPaths({
 			agentHomeDir: home,
 			cwd,
@@ -307,13 +322,19 @@ test("package extensions empty filter disables every manifest entry", () => {
 	const { resolveEnabledExtensionPaths } = loadResolverModule();
 	const { root, home, cwd, put } = setupFixtures();
 	try {
-		put(".pi/agent/npm/node_modules/ext-pack/package.json", JSON.stringify({
-			pi: { extensions: ["src/*.ts"] },
-		}));
+		put(
+			".pi/agent/npm/node_modules/ext-pack/package.json",
+			JSON.stringify({
+				pi: { extensions: ["src/*.ts"] },
+			}),
+		);
 		put(".pi/agent/npm/node_modules/ext-pack/src/a.ts", "// a");
-		put(".pi/agent/settings.json", JSON.stringify({
-			packages: [{ source: "npm:ext-pack", extensions: [] }],
-		}));
+		put(
+			".pi/agent/settings.json",
+			JSON.stringify({
+				packages: [{ source: "npm:ext-pack", extensions: [] }],
+			}),
+		);
 		const result = resolveEnabledExtensionPaths({
 			agentHomeDir: home,
 			cwd,
@@ -332,17 +353,25 @@ test("package extension filters apply glob then exact force overrides", () => {
 	const { root, home, cwd, put } = setupFixtures();
 	try {
 		const packageRoot = join(home, ".pi", "agent", "npm", "node_modules", "ext-pack");
-		put(".pi/agent/npm/node_modules/ext-pack/package.json", JSON.stringify({
-			pi: { extensions: ["src/*.ts"] },
-		}));
+		put(
+			".pi/agent/npm/node_modules/ext-pack/package.json",
+			JSON.stringify({
+				pi: { extensions: ["src/*.ts"] },
+			}),
+		);
 		put(".pi/agent/npm/node_modules/ext-pack/src/a.ts", "// a");
 		put(".pi/agent/npm/node_modules/ext-pack/src/b.ts", "// b");
-		put(".pi/agent/settings.json", JSON.stringify({
-			packages: [{
-				source: "npm:ext-pack",
-				extensions: ["src/*.ts", "!src/b.ts", "+src/b.ts", "-src/a.ts"],
-			}],
-		}));
+		put(
+			".pi/agent/settings.json",
+			JSON.stringify({
+				packages: [
+					{
+						source: "npm:ext-pack",
+						extensions: ["src/*.ts", "!src/b.ts", "+src/b.ts", "-src/a.ts"],
+					},
+				],
+			}),
+		);
 		const result = resolveEnabledExtensionPaths({
 			agentHomeDir: home,
 			cwd,
@@ -361,15 +390,21 @@ test("project autoload:false extension package applies a delta over the user ins
 	const { root, home, cwd, put } = setupFixtures();
 	try {
 		const packageRoot = join(home, ".pi", "agent", "npm", "node_modules", "ext-pack");
-		put(".pi/agent/npm/node_modules/ext-pack/package.json", JSON.stringify({
-			pi: { extensions: ["src/*.ts"] },
-		}));
+		put(
+			".pi/agent/npm/node_modules/ext-pack/package.json",
+			JSON.stringify({
+				pi: { extensions: ["src/*.ts"] },
+			}),
+		);
 		put(".pi/agent/npm/node_modules/ext-pack/src/a.ts", "// a");
 		put(".pi/agent/npm/node_modules/ext-pack/src/b.ts", "// b");
 		put(".pi/agent/settings.json", JSON.stringify({ packages: ["npm:ext-pack"] }));
-		put("project/.pi/settings.json", JSON.stringify({
-			packages: [{ source: "npm:ext-pack", extensions: ["!src/b.ts"], autoload: false }],
-		}));
+		put(
+			"project/.pi/settings.json",
+			JSON.stringify({
+				packages: [{ source: "npm:ext-pack", extensions: ["!src/b.ts"], autoload: false }],
+			}),
+		);
 		const result = resolveEnabledExtensionPaths({
 			agentHomeDir: home,
 			cwd,

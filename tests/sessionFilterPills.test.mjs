@@ -27,15 +27,7 @@ function loadModule() {
 	return sandbox.exports;
 }
 
-const {
-	sessionPillOf,
-	filterSessionsByPills,
-	pillsPresentIn,
-	isSessionFilterPill,
-	parseSessionFilterState,
-	serializeSessionFilterState,
-	SESSION_FILTER_PILLS,
-} = loadModule();
+const { sessionPillOf, filterSessionsByPills, pillsPresentIn, isSessionFilterPill, parseSessionFilterState, serializeSessionFilterState, SESSION_FILTER_PILLS } = loadModule();
 
 test("sessionPillOf: DSH 会话按 backend 归属，不落入 Pi 类别", () => {
 	assert.equal(sessionPillOf({ source: "pi", backend: "dsh" }), "dsh");

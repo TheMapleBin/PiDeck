@@ -23,7 +23,7 @@ function loadTranspiledModule(filePath, overrides = new Map()) {
 		// jsonlLineStream（会话 JSONL 流式扫描）运行时需要 Buffer
 		Buffer,
 		process,
-		require: (id) => overrides.has(id) ? overrides.get(id) : require(id),
+		require: (id) => (overrides.has(id) ? overrides.get(id) : require(id)),
 		setTimeout,
 	};
 	vm.runInNewContext(outputText, sandbox, { filename: filePath });
@@ -65,10 +65,7 @@ function loadSessionScanner(homePath) {
 		},
 	});
 	const codexMeta = loadCodexMetaModule();
-	const messageContent = loadTranspiledModule(
-		"src/main/pi/messageContent.ts",
-		new Map([["../feishu/docActions", { stripFeishuDocActionHint: (text) => text }]]),
-	);
+	const messageContent = loadTranspiledModule("src/main/pi/messageContent.ts", new Map([["../feishu/docActions", { stripFeishuDocActionHint: (text) => text }]]));
 	const fsRetry = loadTranspiledModule("src/main/utils/fsRetry.ts");
 	const sessionSummaryCache = loadTranspiledModule(
 		"src/main/sessions/sessionSummaryCache.ts",
@@ -152,7 +149,10 @@ test("archive moves the session into .pideck-archive and list no longer returns 
 
 		// 归档列表能看到它（带归档前原始路径，供弹窗按项目归属过滤）
 		const archivedList = await scanner.listArchived();
-		assert.ok(archivedList.some((s) => s.summary.filePath === archived), "archived session must appear in listArchived");
+		assert.ok(
+			archivedList.some((s) => s.summary.filePath === archived),
+			"archived session must appear in listArchived",
+		);
 		const item = archivedList.find((s) => s.summary.filePath === archived);
 		assert.equal(item?.originalPath, sessionPath, "listArchived must carry the original path from index.json");
 	} finally {
@@ -201,7 +201,10 @@ test("unarchive restores the session to its original path", async () => {
 		assert.ok(existsSync(sessionPath), "original file must be back");
 
 		const summaries = await scanner.list();
-		assert.ok(summaries.some((s) => s.filePath === sessionPath), "restored session must appear in list again");
+		assert.ok(
+			summaries.some((s) => s.filePath === sessionPath),
+			"restored session must appear in list again",
+		);
 		const archivedList = await scanner.listArchived();
 		assert.ok(!archivedList.some((s) => s.filePath === archived), "restored session must leave the archive list");
 	} finally {

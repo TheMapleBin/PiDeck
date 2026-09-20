@@ -2,23 +2,8 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import ignore from "ignore";
-import {
-	addIgnoreRules,
-	applyPatterns,
-	isDirEntry,
-	isFileEntry,
-	passesOverrides,
-	readSettingsObject,
-	readStringArray,
-	resolveFromBase,
-	SKILL_FILE,
-	splitResourceEntries,
-	toPosixPath,
-} from "../resourceWhitelist";
-import {
-	globalSkillOverrideKey,
-	type GlobalSkillSourceId,
-} from "../../shared/resourceIdentity";
+import { addIgnoreRules, applyPatterns, isDirEntry, isFileEntry, passesOverrides, readSettingsObject, readStringArray, resolveFromBase, SKILL_FILE, splitResourceEntries, toPosixPath } from "../resourceWhitelist";
+import { globalSkillOverrideKey, type GlobalSkillSourceId } from "../../shared/resourceIdentity";
 import { readProjectResourceOverrides } from "../projects/projectResourceOverrides";
 import { resolveConfiguredPackageResources } from "../packageResourceResolver";
 
@@ -47,9 +32,7 @@ import { resolveConfiguredPackageResources } from "../packageResourceResolver";
  * Package sources use their managed npm/git/local install locations, including manifest globs.
  * Explicit and auto-discovered resources retain pi's distinct base directories and override rules.
  */
-export function resolveEnabledSkillPaths(
-	options: SkillWhitelistResolverOptions,
-): string[] | null {
+export function resolveEnabledSkillPaths(options: SkillWhitelistResolverOptions): string[] | null {
 	const { cwd } = options;
 	const home = options.agentHomeDir?.trim() || homedir();
 	const agentDir = join(home, ".pi", "agent");
@@ -60,39 +43,18 @@ export function resolveEnabledSkillPaths(
 	// ~/.agents/skills 及 settings.json 的全局技能必须与 Windows 侧 home 取并集，否则 --no-skills
 	// 会把 Linux 家目录技能全部关在白名单外（issue #203）。UNC（\\wsl.localhost\...）可在宿主侧
 	// 直接扫描，路径随后由 PiProcess 的 WSL 参数转换还原为 distro 内 Linux 路径。
-	const additionalHomes = (options.additionalAgentHomeDirs ?? [])
-		.map((dir) => dir.trim())
-		.filter((dir) => dir && resolve(dir) !== resolve(home));
+	const additionalHomes = (options.additionalAgentHomeDirs ?? []).map((dir) => dir.trim()).filter((dir) => dir && resolve(dir) !== resolve(home));
 
-	const projectSettings = includeProjectResources
-		? readSettingsObject(join(projectBaseDir, "settings.json"))
-		: {};
+	const projectSettings = includeProjectResources ? readSettingsObject(join(projectBaseDir, "settings.json")) : {};
 
 	// 全局与项目禁用状态分别匹配对应发现源；不能合并 name 集合，否则同名资源会跨作用域串扰。
-	const globalDisabledKeys = new Set(
-		(options.disabledNames ?? []).map((name) => name.toLowerCase()),
-	);
-	const projectDisabledKeys = new Set(
-		readStringArray(projectSettings, "disabledSkills").map((name) => name.toLowerCase()),
-	);
-	const inheritedDisabledKeys = new Set(
-		includeProjectResources
-			? readProjectResourceOverrides(cwd).disabledGlobalSkills
-			: [],
-	);
+	const globalDisabledKeys = new Set((options.disabledNames ?? []).map((name) => name.toLowerCase()));
+	const projectDisabledKeys = new Set(readStringArray(projectSettings, "disabledSkills").map((name) => name.toLowerCase()));
+	const inheritedDisabledKeys = new Set(includeProjectResources ? readProjectResourceOverrides(cwd).disabledGlobalSkills : []);
 	// 扫描过程中发现的 PiDeck 禁用/frontmatter 排除项计数：无任何禁用时返回 null（白名单关闭）。
 	const excluded = { count: 0 };
-	const enabledForScope = (
-		skillFile: string,
-		disabledKeys: Set<string>,
-		globalSourceId?: GlobalSkillSourceId,
-	) => {
-		const enabled = isEnabledSkill(
-			skillFile,
-			disabledKeys,
-			globalSourceId,
-			inheritedDisabledKeys,
-		);
+	const enabledForScope = (skillFile: string, disabledKeys: Set<string>, globalSourceId?: GlobalSkillSourceId) => {
+		const enabled = isEnabledSkill(skillFile, disabledKeys, globalSourceId, inheritedDisabledKeys);
 		if (!enabled) excluded.count += 1;
 		return enabled;
 	};
@@ -117,22 +79,13 @@ export function resolveEnabledSkillPaths(
 	const collectGlobalHomeSkills = (homeDir: string): void => {
 		const homeAgentDir = join(homeDir, ".pi", "agent");
 		const homeSettings = readSettingsObject(join(homeAgentDir, "settings.json"));
-		const { plain, patterns } = splitResourceEntries(
-			Array.isArray(homeSettings.skills) ? homeSettings.skills : [],
-		);
+		const { plain, patterns } = splitResourceEntries(Array.isArray(homeSettings.skills) ? homeSettings.skills : []);
 		collectSkillDir(join(homeAgentDir, "skills"), "pi", isGlobalPiEnabled, addPath, homeAgentDir, patterns);
 		const globalAgentsSkillsDir = join(homeDir, ".agents", "skills");
 		// 登记 resolved 路径供祖先目录去重：同一物理 ~/.agents/skills 是全局源，即使 cwd
 		//（如 WSL 内项目）沿祖先链再次碰到它，也不能按项目作用域重复枚举。
 		globalAgentsSkillDirs.add(resolve(globalAgentsSkillsDir));
-		collectSkillDir(
-			globalAgentsSkillsDir,
-			"agents",
-			isGlobalAgentsEnabled,
-			addPath,
-			dirname(globalAgentsSkillsDir),
-			patterns,
-		);
+		collectSkillDir(globalAgentsSkillsDir, "agents", isGlobalAgentsEnabled, addPath, dirname(globalAgentsSkillsDir), patterns);
 		collectSettingsSkills(homeAgentDir, plain, patterns, isGlobalPiEnabled, addPath);
 	};
 	collectGlobalHomeSkills(home);
@@ -141,9 +94,7 @@ export function resolveEnabledSkillPaths(
 	}
 
 	// 2) 项目资源只在 trust 放行后枚举；拒绝 trust 时白名单仅注入全局资源。
-	const { plain: projectPlain, patterns: projectOverrides } = splitResourceEntries(
-		Array.isArray(projectSettings.skills) ? projectSettings.skills : [],
-	);
+	const { plain: projectPlain, patterns: projectOverrides } = splitResourceEntries(Array.isArray(projectSettings.skills) ? projectSettings.skills : []);
 	if (includeProjectResources) {
 		collectSkillDir(join(projectBaseDir, "skills"), "pi", isProjectEnabled, addPath, projectBaseDir, projectOverrides);
 		for (const dir of collectAncestorAgentsSkillDirs(cwd)) {
@@ -168,20 +119,12 @@ export function resolveEnabledSkillPaths(
 			excluded.count += 1;
 			continue;
 		}
-		const enabled = resource.scope === "project"
-			? isProjectEnabled(resource.path)
-			: isGlobalPiEnabled(resource.path);
+		const enabled = resource.scope === "project" ? isProjectEnabled(resource.path) : isGlobalPiEnabled(resource.path);
 		if (enabled) addPath(resource.path);
 	}
 
 	// 无任何禁用（settings ∪ 项目继承覆盖 ∪ frontmatter）→ 白名单关闭，pi 默认发现全部技能。
-	if (
-		includeProjectResources &&
-		globalDisabledKeys.size === 0 &&
-		projectDisabledKeys.size === 0 &&
-		inheritedDisabledKeys.size === 0 &&
-		excluded.count === 0
-	) {
+	if (includeProjectResources && globalDisabledKeys.size === 0 && projectDisabledKeys.size === 0 && inheritedDisabledKeys.size === 0 && excluded.count === 0) {
 		return null;
 	}
 	return paths;
@@ -215,7 +158,10 @@ function readSkillMeta(skillFile: string): { name: string; modelInvocationDisabl
 				const index = line.indexOf(":");
 				if (index === -1) continue;
 				const key = line.slice(0, index).trim();
-				const value = line.slice(index + 1).trim().replace(/^['"]|['"]$/g, "");
+				const value = line
+					.slice(index + 1)
+					.trim()
+					.replace(/^['"]|['"]$/g, "");
 				if (key) fields[key] = value;
 			}
 		}
@@ -234,20 +180,12 @@ function readSkillMeta(skillFile: string): { name: string; modelInvocationDisabl
  * disable-model-invocation（老版 PiDeck 禁用语义，仅阻止自动调用）都排除——
  * 后者一并排除让旧禁用状态升级后直接变为「不加载」，无需用户重新操作。
  */
-function isEnabledSkill(
-	skillFile: string,
-	disabledKeys: Set<string>,
-	globalSourceId?: GlobalSkillSourceId,
-	inheritedDisabledKeys: ReadonlySet<string> = new Set(),
-): boolean {
+function isEnabledSkill(skillFile: string, disabledKeys: Set<string>, globalSourceId?: GlobalSkillSourceId, inheritedDisabledKeys: ReadonlySet<string> = new Set()): boolean {
 	const { name, modelInvocationDisabled } = readSkillMeta(skillFile);
 	if (modelInvocationDisabled) return false;
 	if (!name) return true;
 	if (disabledKeys.has(name.toLowerCase())) return false;
-	return !(
-		globalSourceId &&
-		inheritedDisabledKeys.has(globalSkillOverrideKey(globalSourceId, name))
-	);
+	return !(globalSourceId && inheritedDisabledKeys.has(globalSkillOverrideKey(globalSourceId, name)));
 }
 
 /**
@@ -256,16 +194,7 @@ function isEnabledSkill(
  * 否则递归子目录，顶层 .md 文件仅 pi 模式视为技能（agents 模式只认嵌套 .md）。
  * root 为扫描入口目录；ignore 规则从 root 起逐目录加载；override patterns 按作用域传入。
  */
-function collectSkillDir(
-	dir: string,
-	mode: "pi" | "agents",
-	isPiDeckEnabled: (skillFile: string) => boolean,
-	addPath: (path: string) => void,
-	overridesBase: string,
-	overrides: string[],
-	root = dir,
-	ig?: ReturnType<typeof ignore>,
-): void {
+function collectSkillDir(dir: string, mode: "pi" | "agents", isPiDeckEnabled: (skillFile: string) => boolean, addPath: (path: string) => void, overridesBase: string, overrides: string[], root = dir, ig?: ReturnType<typeof ignore>): void {
 	let entries;
 	try {
 		entries = readdirSync(dir, { withFileTypes: true });
@@ -340,13 +269,7 @@ function findGitRepoRoot(startDir: string): string | null {
  * （pi 的 collectFilesFromPaths → collectResourceFiles(dir, "skills") = collectSkillEntries(dir, "pi")，
  * 无 ignore）；整个显式集合再过 patterns（! + -）过滤。
  */
-function collectSettingsSkills(
-	base: string,
-	plain: string[],
-	patterns: string[],
-	isPiDeckEnabled: (skillFile: string) => boolean,
-	addPath: (path: string) => void,
-): void {
+function collectSettingsSkills(base: string, plain: string[], patterns: string[], isPiDeckEnabled: (skillFile: string) => boolean, addPath: (path: string) => void): void {
 	const allFiles: string[] = [];
 	for (const rawPath of plain) {
 		const resolved = resolveFromBase(rawPath, base);
@@ -370,6 +293,13 @@ function collectSettingsSkills(
 /** 枚举目录下全部技能文件（pi 模式，无 ignore——与 pi 的 collectResourceFiles 一致）。 */
 function collectSkillDirFiles(dir: string, mode: "pi" | "agents"): string[] {
 	const files: string[] = [];
-	collectSkillDir(dir, mode, () => true, (path) => files.push(path), dir, []);
+	collectSkillDir(
+		dir,
+		mode,
+		() => true,
+		(path) => files.push(path),
+		dir,
+		[],
+	);
 	return files;
 }

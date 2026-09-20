@@ -13,11 +13,11 @@ const DISMISSED_FILES_KEY = "pid:session-dismissed-files-v1";
 type DismissedFileCounts = Record<string, Record<string, number>>;
 
 function loadDismissed(): DismissedFileCounts {
-  try {
-    return JSON.parse(localStorage.getItem(DISMISSED_FILES_KEY) ?? "{}") as DismissedFileCounts;
-  } catch {
-    return {};
-  }
+	try {
+		return JSON.parse(localStorage.getItem(DISMISSED_FILES_KEY) ?? "{}") as DismissedFileCounts;
+	} catch {
+		return {};
+	}
 }
 
 /** 模块级缓存：一次加载，跨组件共享；保存时同步写回 localStorage（best-effort）。 */
@@ -25,27 +25,27 @@ let cachedCounts: DismissedFileCounts | null = null;
 const dismissedFileCountsAtom = atom<DismissedFileCounts>(cachedCounts ?? (cachedCounts = loadDismissed()));
 
 export function useSessionDismissedFiles(sessionId: string): {
-  /** 当前会话的清空快照（path -> count），无记录为 undefined */
-  snapshot: Record<string, number> | undefined;
-  /** 按“当前所有文件条目”记录清空快照并持久化 */
-  dismissAll: (entries: readonly { path: string; count: number }[]) => void;
+	/** 当前会话的清空快照（path -> count），无记录为 undefined */
+	snapshot: Record<string, number> | undefined;
+	/** 按“当前所有文件条目”记录清空快照并持久化 */
+	dismissAll: (entries: readonly { path: string; count: number }[]) => void;
 } {
-  const [all, setAll] = useAtom(dismissedFileCountsAtom);
+	const [all, setAll] = useAtom(dismissedFileCountsAtom);
 
-  const dismissAll = useCallback(
-    (entries: readonly { path: string; count: number }[]) => {
-      const snapshot: Record<string, number> = {};
-      for (const e of entries) snapshot[e.path] = e.count;
-      const next = { ...all, [sessionId]: snapshot };
-      try {
-        localStorage.setItem(DISMISSED_FILES_KEY, JSON.stringify(next));
-      } catch {
-        /* best-effort */
-      }
-      setAll(next);
-    },
-    [all, sessionId],
-  );
+	const dismissAll = useCallback(
+		(entries: readonly { path: string; count: number }[]) => {
+			const snapshot: Record<string, number> = {};
+			for (const e of entries) snapshot[e.path] = e.count;
+			const next = { ...all, [sessionId]: snapshot };
+			try {
+				localStorage.setItem(DISMISSED_FILES_KEY, JSON.stringify(next));
+			} catch {
+				/* best-effort */
+			}
+			setAll(next);
+		},
+		[all, sessionId],
+	);
 
-  return { snapshot: all[sessionId], dismissAll };
+	return { snapshot: all[sessionId], dismissAll };
 }

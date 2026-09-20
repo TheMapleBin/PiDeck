@@ -4,16 +4,8 @@ import { Button } from "../components/ui-shadcn/button";
 import { Checkbox } from "../components/ui-shadcn/checkbox";
 import { ConfigSelect } from "./ConfigShared";
 import { t } from "../i18n";
-import type {
-	ResourceImportKind,
-	ResourceImportReport,
-	ResourceImportSourceKind,
-} from "../../../shared/types/resourceImport";
-import {
-	canImportResource,
-	type ResourceImportProject,
-	useResourceImportDialog,
-} from "./useResourceImportDialog";
+import type { ResourceImportKind, ResourceImportReport, ResourceImportSourceKind } from "../../../shared/types/resourceImport";
+import { canImportResource, type ResourceImportProject, useResourceImportDialog } from "./useResourceImportDialog";
 
 function formatImportMessage(message: string): string {
 	const unsupported = /^Unsupported transport:\s*(.+)$/.exec(message);
@@ -77,7 +69,19 @@ function formatImportMessage(message: string): string {
 	if (message.includes("too large")) return t("config.import.warningSkillTooLarge");
 	if (message.includes("too deep")) return t("config.import.warningSkillTooDeep");
 	if (message === "Too many skill candidates; remaining entries were omitted.") return t("config.import.warningSkillCandidateLimit");
-	if (message === "Invalid resource import input." || message === "Invalid resource import scan input." || message === "Invalid resource import apply input." || message === "Invalid resource import target." || message === "Invalid MCP target." || message === "Invalid skill target." || message === "Invalid project id." || message === "Invalid source project id." || message === "Invalid resource import candidate ids." || message === "Invalid import candidate.") return t("config.import.invalidInput");
+	if (
+		message === "Invalid resource import input." ||
+		message === "Invalid resource import scan input." ||
+		message === "Invalid resource import apply input." ||
+		message === "Invalid resource import target." ||
+		message === "Invalid MCP target." ||
+		message === "Invalid skill target." ||
+		message === "Invalid project id." ||
+		message === "Invalid source project id." ||
+		message === "Invalid resource import candidate ids." ||
+		message === "Invalid import candidate."
+	)
+		return t("config.import.invalidInput");
 	if (message === "Resource import failed.") return t("config.import.genericError");
 	// Diagnostics originate from external configuration and filesystem operations.
 	// Unrecognized text may contain path/credential context, so never display it raw.
@@ -131,17 +135,9 @@ export function ResourceImportDialog(props: {
 					<div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden py-3">
 						<div className="flex items-center gap-2">
 							<span className="text-control text-muted-foreground">{t("config.import.target")}</span>
-							<ConfigSelect
-								value={state.selectedTargetValue}
-								options={state.targetOptions}
-								onChange={state.selectTarget}
-							/>
+							<ConfigSelect value={state.selectedTargetValue} options={state.targetOptions} onChange={state.selectTarget} />
 						</div>
-						{state.error ? (
-							<div className="rounded border border-danger/30 bg-danger-soft px-3 py-2 text-control text-danger">
-								{formatImportMessage(state.error)}
-							</div>
-						) : null}
+						{state.error ? <div className="rounded border border-danger/30 bg-danger-soft px-3 py-2 text-control text-danger">{formatImportMessage(state.error)}</div> : null}
 						{state.report ? (
 							<div className="space-y-2 rounded border border-border-subtle bg-bg-hover px-3 py-2 text-control">
 								<div className="flex flex-wrap items-center gap-3">
@@ -152,10 +148,11 @@ export function ResourceImportDialog(props: {
 								<div className="space-y-1 border-t border-border-subtle pt-2">
 									{state.report.results.map((item) => (
 										<div key={item.candidateId} className="flex items-start gap-2 text-caption">
-											<span className={item.status === "imported" ? "text-success" : item.status === "skipped" ? "text-warning" : "text-danger"}>
-												{resultStatusLabel(item.status)}
+											<span className={item.status === "imported" ? "text-success" : item.status === "skipped" ? "text-warning" : "text-danger"}>{resultStatusLabel(item.status)}</span>
+											<span className="min-w-0 break-words">
+												{item.name}
+												{item.reason ? ` · ${formatImportMessage(item.reason)}` : ""}
 											</span>
-											<span className="min-w-0 break-words">{item.name}{item.reason ? ` · ${formatImportMessage(item.reason)}` : ""}</span>
 										</div>
 									))}
 								</div>
@@ -183,33 +180,47 @@ export function ResourceImportDialog(props: {
 									))}
 									{state.scan.candidates.length === 0 ? (
 										<div className="py-8 text-center text-control text-muted-foreground">{t("config.import.empty")}</div>
-									) : state.scan.candidates.map((candidate) => {
-										const disabled = !canImportResource(candidate);
-										return (
-											<div key={candidate.candidateId} className="rounded border border-border-subtle px-3 py-2">
-												<div className="flex items-start gap-2">
-													<Checkbox
-														aria-label={candidate.targetName}
-														checked={state.selected.has(candidate.candidateId)}
-														disabled={disabled || state.applying}
-														onCheckedChange={(checked) => state.toggleCandidate(candidate.candidateId, checked === true)}
-													/>
-													<div className="min-w-0 flex-1">
-														<div className="flex items-center gap-2">
-															<strong className="truncate text-control">{candidate.targetName || candidate.name}</strong>
-															{canImportResource(candidate) ? <CheckCircle2 className="text-success" size={14} /> : <XCircle className="text-danger" size={14} />}
+									) : (
+										state.scan.candidates.map((candidate) => {
+											const disabled = !canImportResource(candidate);
+											return (
+												<div key={candidate.candidateId} className="rounded border border-border-subtle px-3 py-2">
+													<div className="flex items-start gap-2">
+														<Checkbox aria-label={candidate.targetName} checked={state.selected.has(candidate.candidateId)} disabled={disabled || state.applying} onCheckedChange={(checked) => state.toggleCandidate(candidate.candidateId, checked === true)} />
+														<div className="min-w-0 flex-1">
+															<div className="flex items-center gap-2">
+																<strong className="truncate text-control">{candidate.targetName || candidate.name}</strong>
+																{canImportResource(candidate) ? <CheckCircle2 className="text-success" size={14} /> : <XCircle className="text-danger" size={14} />}
+															</div>
+															<div className="text-micro text-muted-foreground">
+																{sourceLabelFor(candidate.source)} · {candidate.sourcePathLabel}
+															</div>
+															{candidate.description ? <div className="text-caption text-muted-foreground">{candidate.description}</div> : null}
+															{candidate.conflict ? <div className="text-micro text-warning">{t("config.import.conflict")}</div> : null}
+															{candidate.blockers.map((item) => (
+																<div key={item} className="text-micro text-danger">
+																	{formatImportMessage(item)}
+																</div>
+															))}
+															{candidate.warnings.map((item) => (
+																<div key={item} className="flex items-center gap-1 text-micro text-warning">
+																	<AlertTriangle size={12} />
+																	{formatImportMessage(item)}
+																</div>
+															))}
+															{candidate.preview?.url ? (
+																<div className="truncate font-mono text-micro text-muted-foreground">{candidate.preview.url}</div>
+															) : candidate.preview?.command ? (
+																<div className="truncate font-mono text-micro text-muted-foreground">
+																	{candidate.preview.command} {(candidate.preview.args ?? []).join(" ")}
+																</div>
+															) : null}
 														</div>
-														<div className="text-micro text-muted-foreground">{sourceLabelFor(candidate.source)} · {candidate.sourcePathLabel}</div>
-														{candidate.description ? <div className="text-caption text-muted-foreground">{candidate.description}</div> : null}
-														{candidate.conflict ? <div className="text-micro text-warning">{t("config.import.conflict")}</div> : null}
-														{candidate.blockers.map((item) => <div key={item} className="text-micro text-danger">{formatImportMessage(item)}</div>)}
-														{candidate.warnings.map((item) => <div key={item} className="flex items-center gap-1 text-micro text-warning"><AlertTriangle size={12} />{formatImportMessage(item)}</div>)}
-														{candidate.preview?.url ? <div className="truncate font-mono text-micro text-muted-foreground">{candidate.preview.url}</div> : candidate.preview?.command ? <div className="truncate font-mono text-micro text-muted-foreground">{candidate.preview.command} {(candidate.preview.args ?? []).join(" ")}</div> : null}
 													</div>
 												</div>
-											</div>
-										);
-									})}
+											);
+										})
+									)}
 								</div>
 							</>
 						) : null}

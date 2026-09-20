@@ -2,9 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
-const { chipIconDomSpec, CHIP_ICON_PATHS } = loadTsCommonJs(
-	"src/renderer/src/components/session/composer/chipIcons.ts",
-);
+const { chipIconDomSpec, CHIP_ICON_PATHS } = loadTsCommonJs("src/renderer/src/components/session/composer/chipIcons.ts");
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const CHIP_KINDS = ["file", "skill", "session", "quote"];
@@ -48,7 +46,10 @@ test("directory file chips switch to the folder icon", () => {
 	assert.deepEqual(folderPaths, CHIP_ICON_PATHS.folder);
 
 	const file = chipIconDomSpec("file");
-	assert.deepEqual(file.slice(2).map((child) => child[1].d), CHIP_ICON_PATHS.file);
+	assert.deepEqual(
+		file.slice(2).map((child) => child[1].d),
+		CHIP_ICON_PATHS.file,
+	);
 });
 
 test("every chip kind (plus folder) ships icon path data", () => {

@@ -67,16 +67,7 @@ test("dshManualStopped: 状态回传 manuallyStopped（渲染层显示中性徽�
 });
 
 test("dshManualStopped: i18n 中英文案齐全", () => {
-	for (const key of [
-		"config.dsh.stopHost",
-		"config.dsh.startHost",
-		"config.dsh.manuallyStopped",
-		"config.dsh.manuallyStoppedDesc",
-		"config.dsh.hostStopped",
-		"config.dsh.hostStopFailed",
-		"config.dsh.hostStarted",
-		"config.dsh.hostStartFailed",
-	]) {
+	for (const key of ["config.dsh.stopHost", "config.dsh.startHost", "config.dsh.manuallyStopped", "config.dsh.manuallyStoppedDesc", "config.dsh.hostStopped", "config.dsh.hostStopFailed", "config.dsh.hostStarted", "config.dsh.hostStartFailed"]) {
 		assert.match(zh, new RegExp(`"${key.replace(/\./g, "\\.")}"`));
 		assert.match(en, new RegExp(`"${key.replace(/\./g, "\\.")}"`));
 	}

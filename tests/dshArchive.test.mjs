@@ -102,10 +102,7 @@ test("DshHost.unarchiveSession：旧归档 manifest 无标题时按日志折叠�
 		// 旧归档：manifest 无 title，但日志里有 session/title（未压缩 jsonl 可被只读折叠）
 		const sessionDir = join(home, "sessions", workspaceDirFor(cwd), sessionId);
 		mkdirSync(sessionDir, { recursive: true });
-		writeFileSync(join(sessionDir, "session.jsonl"), [
-			`{"type":"session","id":"${sessionId}","cwd":"${cwd}"}`,
-			`{"type":"session/title","seq":1,"data":{"title":"旧归档折叠标题"}}`,
-		].join("\n"), "utf8");
+		writeFileSync(join(sessionDir, "session.jsonl"), [`{"type":"session","id":"${sessionId}","cwd":"${cwd}"}`, `{"type":"session/title","seq":1,"data":{"title":"旧归档折叠标题"}}`].join("\n"), "utf8");
 		await host.archiveSession(sessionId, cwd);
 		const restored = await host.unarchiveSession(sessionId);
 		assert.equal(restored.title, "旧归档折叠标题", "旧归档应回退到日志折叠标题，避免恢复后落占位名");
@@ -141,10 +138,7 @@ test("DshHost.listArchivedSessions：返回归档清单（id/cwd/archivedAt/标�
 		const sessionBDir = join(home, "sessions", workspaceDirFor("D:/other"), "session-b");
 		rmSync(sessionBDir, { recursive: true, force: true });
 		mkdirSync(sessionBDir, { recursive: true });
-		writeFileSync(join(sessionBDir, "session.jsonl"), [
-			`{"type":"session","id":"session-b","cwd":"D:/other"}`,
-			`{"type":"session/title","seq":1,"data":{"title":"归档B折叠标题"}}`,
-		].join("\n"), "utf8");
+		writeFileSync(join(sessionBDir, "session.jsonl"), [`{"type":"session","id":"session-b","cwd":"D:/other"}`, `{"type":"session/title","seq":1,"data":{"title":"归档B折叠标题"}}`].join("\n"), "utf8");
 		await host.archiveSession("session-b", "D:/other");
 		// 一个无 manifest 的目录（不属于 PiDeck 归档，应被跳过）
 		mkdirSync(join(home, ".pideck", "archive", "not-a-pideck-archive"), { recursive: true });
@@ -202,7 +196,10 @@ test("DshHost.deleteArchivedSession：删除归档目录并返回 true（走注�
 		() => home,
 		undefined,
 		undefined,
-		async (path) => { trashed.push(path); rmSync(path, { recursive: true, force: true }); },
+		async (path) => {
+			trashed.push(path);
+			rmSync(path, { recursive: true, force: true });
+		},
 	);
 	try {
 		const cwd = "C:/work/project";
@@ -232,7 +229,10 @@ test("DshHost.deleteArchivedSession：无 manifest 目录（非 PiDeck 归档）
 		() => home,
 		undefined,
 		undefined,
-		async (path) => { trashed.push(path); rmSync(path, { recursive: true, force: true }); },
+		async (path) => {
+			trashed.push(path);
+			rmSync(path, { recursive: true, force: true });
+		},
 	);
 	try {
 		// 无 manifest 的目录不属于 PiDeck 归档，delete 必须拒绝（避免误删非归档数据）
@@ -259,7 +259,10 @@ test("DshHost.deleteArchivedSession：归档目录不存在时返回 false（幂
 		() => home,
 		undefined,
 		undefined,
-		async (path) => { trashed.push(path); rmSync(path, { recursive: true, force: true }); },
+		async (path) => {
+			trashed.push(path);
+			rmSync(path, { recursive: true, force: true });
+		},
 	);
 	try {
 		const deleted = await host.deleteArchivedSession("session-never-existed");
@@ -282,7 +285,10 @@ test("DshHost.deleteSession：按 cwd 精确推导并移入回收站，返回 tr
 		() => home,
 		undefined,
 		undefined,
-		async (path) => { trashed.push(path); rmSync(path, { recursive: true, force: true }); },
+		async (path) => {
+			trashed.push(path);
+			rmSync(path, { recursive: true, force: true });
+		},
 	);
 	try {
 		const cwd = "C:/work/project";
@@ -292,8 +298,7 @@ test("DshHost.deleteSession：按 cwd 精确推导并移入回收站，返回 tr
 		const deleted = await host.deleteSession(sessionId, cwd);
 		assert.equal(deleted, true, "会话存在时应返回 true");
 		assert.equal(trashed.length, 1, "回收站回调应被调用一次");
-		assert.ok(trashed[0].endsWith(join("sessions", workspaceDirFor(cwd), sessionId)),
-			`回收站应收到会话目录: ${trashed[0]}`);
+		assert.ok(trashed[0].endsWith(join("sessions", workspaceDirFor(cwd), sessionId)), `回收站应收到会话目录: ${trashed[0]}`);
 		assert.ok(!existsSync(sessionDir), "sessions 树中的会话目录应已移走");
 	} finally {
 		rmSync(home, { recursive: true, force: true });
@@ -310,7 +315,10 @@ test("DshHost.deleteSession：cwd 失配时按 sessionId 兜底扫描仍能删�
 		() => home,
 		undefined,
 		undefined,
-		async (path) => { trashed.push(path); rmSync(path, { recursive: true, force: true }); },
+		async (path) => {
+			trashed.push(path);
+			rmSync(path, { recursive: true, force: true });
+		},
 	);
 	try {
 		// 会话真实位于 A 目录（项目目录后来被移动/改名），catalog 记录的 project.path 已失配
@@ -338,7 +346,10 @@ test("DshHost.deleteSession：无会话日志的同名目录不误删（跳过�
 		() => home,
 		undefined,
 		undefined,
-		async (path) => { trashed.push(path); rmSync(path, { recursive: true, force: true }); },
+		async (path) => {
+			trashed.push(path);
+			rmSync(path, { recursive: true, force: true });
+		},
 	);
 	try {
 		// 同名目录但里面没有会话日志（不是 DSH 会话目录），不能当会话删
@@ -365,7 +376,10 @@ test("DshHost.deleteSession：目录不存在时返回 false（幂等）", async
 		() => home,
 		undefined,
 		undefined,
-		async (path) => { trashed.push(path); rmSync(path, { recursive: true, force: true }); },
+		async (path) => {
+			trashed.push(path);
+			rmSync(path, { recursive: true, force: true });
+		},
 	);
 	try {
 		const deleted = await host.deleteSession("session-never-existed", "C:/work/project");

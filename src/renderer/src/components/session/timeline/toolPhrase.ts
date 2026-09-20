@@ -29,15 +29,7 @@ function firstString(...values: unknown[]): string | undefined {
 }
 
 function pickPath(input: Record<string, unknown>): string | undefined {
-	return firstString(
-		input.file_path,
-		input.filePath,
-		input.path,
-		input.file,
-		input.target,
-		input.destination,
-		input.dest_path,
-	);
+	return firstString(input.file_path, input.filePath, input.path, input.file, input.target, input.destination, input.dest_path);
 }
 
 export interface ToolPhrase {
@@ -51,10 +43,7 @@ export interface ToolPhrase {
  * 根据工具名和输入参数生成语义化短语。
  * 内置工具走中文动宾短语；未知/扩展工具回退为 `工具名 参数摘要`。
  */
-export function getToolPhrase(
-	toolName: string,
-	input: Record<string, unknown> = {},
-): ToolPhrase {
+export function getToolPhrase(toolName: string, input: Record<string, unknown> = {}): ToolPhrase {
 	const key = toolName.toLowerCase();
 	const path = pickPath(input);
 	const file = path ? filename(path) : undefined;
@@ -66,9 +55,7 @@ export function getToolPhrase(
 
 	// 文件读取/编辑/写入类
 	if (key === "read") {
-		const range = firstString(input.offset, input.start_line) !== undefined
-			? `（${firstString(input.offset, input.start_line)} 行起）`
-			: "";
+		const range = firstString(input.offset, input.start_line) !== undefined ? `（${firstString(input.offset, input.start_line)} 行起）` : "";
 		return phraseFor(file ? `读取 ${file}${range}` : "读取文件", file ? `正在读取 ${file}...` : "正在读取文件...");
 	}
 	if (key === "edit" || key === "multi_edit") {
@@ -81,10 +68,7 @@ export function getToolPhrase(
 	// bash / shell 命令
 	if (key === "bash" || key === "shell" || key === "run") {
 		const command = firstString(input.command, input.cmd);
-		return phraseFor(
-			command ? `执行 ${truncate(command, 60)}` : "执行命令",
-			command ? `正在执行 ${truncate(command, 60)}...` : "正在执行命令...",
-		);
+		return phraseFor(command ? `执行 ${truncate(command, 60)}` : "执行命令", command ? `正在执行 ${truncate(command, 60)}...` : "正在执行命令...");
 	}
 
 	// 搜索类
@@ -115,23 +99,13 @@ export function getToolPhrase(
 	}
 
 	// 通用/扩展/MCP 工具：回退到「工具名 参数摘要」
-	const paramSummary = firstString(
-		input.command, input.cmd,
-		input.pattern, input.query,
-		input.url, input.file_path, input.filePath, input.path,
-	);
+	const paramSummary = firstString(input.command, input.cmd, input.pattern, input.query, input.url, input.file_path, input.filePath, input.path);
 	const displayName = toolName || "工具";
-	return phraseFor(
-		paramSummary ? `${displayName} ${truncate(String(paramSummary), 60)}` : displayName,
-		`正在${displayName}...`,
-	);
+	return phraseFor(paramSummary ? `${displayName} ${truncate(String(paramSummary), 60)}` : displayName, `正在${displayName}...`);
 }
 
 /** 兼容旧签名：接收 ChatMessage，内部解析 args（给 ToolCard 直接用）。 */
-export function getToolPhraseFromArgs(
-	toolName: string,
-	args: unknown,
-): ToolPhrase {
+export function getToolPhraseFromArgs(toolName: string, args: unknown): ToolPhrase {
 	const parsed = parseToolArgs(args);
 	return getToolPhrase(toolName, parsed ?? {});
 }

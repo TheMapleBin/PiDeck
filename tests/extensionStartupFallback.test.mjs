@@ -3,20 +3,11 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
-const {
-	shouldRetryWithoutExtensions,
-	extractExtensionLoadHints,
-	formatExtensionFallbackDebug,
-	resolveDisabledExtensionsReason,
-	resolveDisabledExtensionsCopy,
-} = loadTsCommonJs("src/main/pi/extensionStartupFallback.ts");
+const { shouldRetryWithoutExtensions, extractExtensionLoadHints, formatExtensionFallbackDebug, resolveDisabledExtensionsReason, resolveDisabledExtensionsCopy } = loadTsCommonJs("src/main/pi/extensionStartupFallback.ts");
 
-const SAMPLE_STDERR = [
-	'Error: Failed to load extension "D:\\\\app\\\\resources\\\\extensions\\\\pi-deck-ask-question.ts":',
-	"Cannot find module '@earendil-works/pi-ai'",
-	'Error: Failed to load extension "D:\\\\app\\\\resources\\\\extensions\\\\pi-deck-todo.ts":',
-	"Cannot find module '@earendil-works/pi-ai'",
-].join("\n");
+const SAMPLE_STDERR = ['Error: Failed to load extension "D:\\\\app\\\\resources\\\\extensions\\\\pi-deck-ask-question.ts":', "Cannot find module '@earendil-works/pi-ai'", 'Error: Failed to load extension "D:\\\\app\\\\resources\\\\extensions\\\\pi-deck-todo.ts":', "Cannot find module '@earendil-works/pi-ai'"].join(
+	"\n",
+);
 
 test("retries when extension load kills the RPC process", () => {
 	assert.equal(
@@ -130,24 +121,12 @@ test("AgentManager wires handshake fallback but never persists --no-extensions g
 });
 
 test("禁用扩展成因：设置开关优先于本次回退，扩展正常加载时为 null", () => {
-	assert.equal(
-		resolveDisabledExtensionsReason({ settingDisabled: false, fallbackFromExtensions: false }),
-		null,
-	);
-	assert.equal(
-		resolveDisabledExtensionsReason({ settingDisabled: true, fallbackFromExtensions: false }),
-		"setting",
-	);
-	assert.equal(
-		resolveDisabledExtensionsReason({ settingDisabled: false, fallbackFromExtensions: true }),
-		"fallback",
-	);
+	assert.equal(resolveDisabledExtensionsReason({ settingDisabled: false, fallbackFromExtensions: false }), null);
+	assert.equal(resolveDisabledExtensionsReason({ settingDisabled: true, fallbackFromExtensions: false }), "setting");
+	assert.equal(resolveDisabledExtensionsReason({ settingDisabled: false, fallbackFromExtensions: true }), "fallback");
 	// 设置已开时 decideExtensionFallback 不会回退，两者理论上互斥；真同时命中时归给设置，
 	// 因为那才是用户能去关掉的持久成因（自动回退的开关不在用户手里）。
-	assert.equal(
-		resolveDisabledExtensionsReason({ settingDisabled: true, fallbackFromExtensions: true }),
-		"setting",
-	);
+	assert.equal(resolveDisabledExtensionsReason({ settingDisabled: true, fallbackFromExtensions: true }), "setting");
 });
 
 test("禁用扩展提示：只有设置成因带「去设置」动作，回退只解释本次运行", () => {
@@ -188,11 +167,7 @@ test("禁用扩展启动会提示用户：每次运行一次 toast + 去设置�
 	assert.match(agent, /private notifyExtensionsDisabled\(/);
 	assert.match(agent, /private readonly disabledExtensionsNoticesSent = new Set<DisabledExtensionsReason>\(\)/);
 	assert.match(agent, /this\.disabledExtensionsNoticesSent\.has\(reason\)/);
-	assert.equal(
-		(agent.match(/this\.notifyExtensionsDisabled\(/g) ?? []).length,
-		2,
-		"创建与重连两条启动路径都要提示",
-	);
+	assert.equal((agent.match(/this\.notifyExtensionsDisabled\(/g) ?? []).length, 2, "创建与重连两条启动路径都要提示");
 	// 动作只以符号 id 下发，UI 路径留在渲染层
 	assert.match(agent, /action: copy\.noticeAction/);
 

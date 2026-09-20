@@ -8,20 +8,14 @@
  * 进度只有一个出口（onProgress），由 main/index.ts 决定怎么广播给渲染层——
  * 编排层不认识 BrowserWindow。
  */
-import {
-	resolveDshRuntimeReleaseUrl,
-	selectRelease,
-	type DshRuntimeReleaseIndex,
-} from "../../../shared/types/dshRuntimeManifest";
+import { resolveDshRuntimeReleaseUrl, selectRelease, type DshRuntimeReleaseIndex } from "../../../shared/types/dshRuntimeManifest";
 import type { DshRuntimeInstallProgress } from "../../../shared/types/dshRuntime";
 import type { UpdateSourceId } from "../../../shared/types/settings";
 import { existsSync, statSync } from "node:fs";
 import type { BundledDshRuntime, DshRuntimeManager } from "./DshRuntimeManager";
 
 /** 拉取下载源索引（返回 null 表示拉不到/解析不了）。 */
-export type DshRuntimeIndexFetcher = (
-	url: string,
-) => Promise<DshRuntimeReleaseIndex | null>;
+export type DshRuntimeIndexFetcher = (url: string) => Promise<DshRuntimeReleaseIndex | null>;
 
 export type DshRuntimeInstallerDeps = {
 	manager: DshRuntimeManager;
@@ -115,13 +109,7 @@ export class DshRuntimeInstaller {
 		deps.onProgress({ phase: "downloading", percent: 0, runtimeVersion: release.runtimeVersion });
 		// 索引条目的 url 可能只是归档文件名占位；客户端按 updateSource 改写为
 		// 当前 latest 应用 Release 资产。file:// / 本地路径保持原样（离线验证）。
-		const archiveUrl = resolveDshRuntimeReleaseUrl(
-			release,
-			deps.updateSource?.() ?? "atomgit",
-			process.platform,
-			process.arch,
-			deps.releaseTag?.(),
-		);
+		const archiveUrl = resolveDshRuntimeReleaseUrl(release, deps.updateSource?.() ?? "atomgit", process.platform, process.arch, deps.releaseTag?.());
 		const result = await deps.manager.installFromUrl(archiveUrl, release.sha256, {
 			onPhase: (phase) => {
 				// 各阶段的离散进度：只有 downloading 有真实字节占比（见 onDownloadProgress）。
@@ -150,9 +138,7 @@ export class DshRuntimeInstaller {
 		// 本地导入没有下载源索引，因此拿不到期望 sha256 —— 校验职责落在归档/目录内的
 		// manifest（schema + 兼容区间 + 关键包齐全），足以挡住「拿错文件」。
 		const isDirectory = existsSync(filePath) && statSync(filePath).isDirectory();
-		const result = isDirectory
-			? await this.deps.manager.installFromDirectory(filePath)
-			: await this.deps.manager.installFromArchive(filePath);
+		const result = isDirectory ? await this.deps.manager.installFromDirectory(filePath) : await this.deps.manager.installFromArchive(filePath);
 		return this.finish(result, result.ok ? result.manifest.runtimeVersion : undefined);
 	}
 
@@ -181,10 +167,7 @@ export class DshRuntimeInstaller {
 		return this.finish({ ok: false, error });
 	}
 
-	private finish(
-		result: { ok: true; dirName: string } | { ok: false; error: string },
-		runtimeVersion?: string,
-	): DshRuntimeCommandResult {
+	private finish(result: { ok: true; dirName: string } | { ok: false; error: string }, runtimeVersion?: string): DshRuntimeCommandResult {
 		if (result.ok) {
 			this.deps.onProgress({ phase: "done", percent: 100, runtimeVersion });
 			return { ok: true };
