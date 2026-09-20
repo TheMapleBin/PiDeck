@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, net, protocol, safeStorage, session, shell, Tray, Notification } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, net, protocol, safeStorage, screen, session, shell, Tray, Notification } from "electron";
 import { randomUUID } from "node:crypto";
 import { basename, join } from "node:path";
 import { createWriteStream, existsSync } from "node:fs";
@@ -259,7 +259,7 @@ import { toWslLinuxPath, toWindowsHostPath } from "./wsl/WslPaths";
 import { registerProjectsIpc } from "./ipc/projectsIpc";
 import { registerUsageStatsIpc } from "./ipc/usageStatsIpc";
 import { UsageStatsService } from "./usageStats/UsageStatsService";
-import { readLastWindowBounds, saveLastWindowBounds } from "./windowState";
+import { constrainWindowBoundsToWorkArea, MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH, readLastWindowBounds, saveLastWindowBounds } from "./windowState";
 import { createRendererCrashRecoveryGuard } from "./window/rendererCrashRecovery";
 import { registerBackgroundImageProtocol, registerBackgroundsIpc } from "./ipc/backgroundsIpc";
 import { registerGitIpc } from "./ipc/gitIpc";
@@ -1483,13 +1483,18 @@ async function createWindow() {
 		startupBounds = resolveStartupWindowBounds(requestedMode);
 	}
 
+	// x/y 未持久化时以主显示器为确定的恢复目标；纯逻辑同时收敛尺寸并在 workArea 内居中。
+	const startupWindowBounds = constrainWindowBoundsToWorkArea(startupBounds, screen.getPrimaryDisplay().workArea);
+
 	mainWindow = new BrowserWindow({
 		show: showMainWindowImmediately,
 		backgroundColor,
-		width: startupBounds.width,
-		height: startupBounds.height,
-		minWidth: 880,
-		minHeight: 640,
+		x: startupWindowBounds.x,
+		y: startupWindowBounds.y,
+		width: startupWindowBounds.width,
+		height: startupWindowBounds.height,
+		minWidth: MIN_WINDOW_WIDTH,
+		minHeight: MIN_WINDOW_HEIGHT,
 		// 多 worktree 并行 dev：标题带分支名，任务栏/Alt-Tab 一眼区分窗口
 		title: isolateDevByGitBranch && !isSharedDevBranch(devGitBranch) ? `PiDeck · ${devGitBranch}` : "PiDeck",
 		icon: iconPath,
