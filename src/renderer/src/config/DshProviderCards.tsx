@@ -8,7 +8,7 @@
  */
 
 import { useCallback, useEffect, useId, useMemo, useState, type ReactNode } from "react";
-import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Copy, Eye, EyeOff, GripVertical, Plus, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, ChevronRight, Copy, Eye, EyeOff, GripVertical, Plus, Trash2, X } from "lucide-react";
 import { t } from "../i18n";
 import { desktopApi } from "../desktopApi";
 import { showNotice } from "../utils/notice";
@@ -30,7 +30,6 @@ import { isValidProviderName } from "../../../shared/providerName";
 import { applyProviderOrder } from "../utils/providerOrder";
 import { useProviderReorder } from "../hooks/useProviderReorder";
 
-/** 未提供重排回调时的空实现：保持 hook 调用参数稳定，同时让只读页面照常渲染。 */
 /** 未提供重排回调时的空实现：保持 hook 调用参数稳定，同时让只读页面照常渲染。 */
 const noopReorder = (): void => undefined;
 
@@ -266,8 +265,12 @@ export function PiAiProvidersCard(props: {
 	onOpenUsageProbeDialog: (provider: string) => void;
 	/** 供应商卡片自定义顺序（AppSettings.dshProviderOrder，仅展示用）。 */
 	providerOrder?: string[];
+	/** 排序作用域：DSH 页在「添加 provider」后可能多出未保存的行，父级传入完整集合以保证落点正确。 */
+	providerOrderScope?: string[];
 	/** 卡片重排回调（父级持久化到 AppSettings）。 */
 	onReorderProviders?: (nextOrder: string[]) => void;
+	/** 清空自定义顺序（列表上方的「恢复默认顺序」）。 */
+	onResetProviders?: () => void;
 }) {
 	const { namespace, writable, ops, sectionApi } = props;
 	const generatedId = useId();
@@ -382,7 +385,7 @@ export function PiAiProvidersCard(props: {
 	}, [entries, props.providerOrder]);
 	// 排序输入用有序键列表；DSH 页无隐藏供应商概念，完整列表即可见列表。
 	const orderedKeys = useMemo(() => orderedEntries.map((entry) => entry.key), [orderedEntries]);
-	const providerReorder = useProviderReorder({ names: orderedKeys, visibleNames: orderedKeys, onReorder: props.onReorderProviders ?? noopReorder });
+	const providerReorder = useProviderReorder({ names: props.providerOrderScope?.length ? props.providerOrderScope : orderedKeys, visibleNames: orderedKeys, onReorder: props.onReorderProviders ?? noopReorder });
 
 	if (!schema || !root || !providersField) {
 		return <div className="py-6 text-center text-control text-muted-foreground">{t("config.dsh.schemaUnavailable")}</div>;
@@ -570,6 +573,19 @@ export function PiAiProvidersCard(props: {
 						</div>
 					)}
 				</div>
+
+				{/* 排序说明：顺序是 PiDeck 本地偏好（AppSettings.dshProviderOrder），不写回 DSH 配置文件 */}
+				{orderedKeys.length > 1 && (
+					<div className="mt-2 mb-2.5 flex items-start gap-2 text-[11px] leading-relaxed text-text-tertiary">
+						<ArrowUpDown className="mt-0.5 size-3 shrink-0" aria-hidden="true" />
+						<span className="min-w-0 flex-1">{t("config.dsh.providerOrderHint")}</span>
+						{(props.providerOrder?.length ?? 0) > 0 && props.onResetProviders && (
+							<Button type="button" variant="ghost" size="sm" className="h-5 shrink-0 px-1.5 text-[11px] font-normal text-text-tertiary hover:text-text-primary" onClick={props.onResetProviders}>
+								{t("config.providerOrderReset")}
+							</Button>
+						)}
+					</div>
+				)}
 
 				{/* provider 行列表 */}
 				{orderedEntries.map((entry) => {

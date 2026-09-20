@@ -1,6 +1,6 @@
 import { Button } from "../components/ui-shadcn/button";
-import { useEffect, useState } from "react";
-import { Check, ChevronDown, ChevronRight, Copy, ExternalLink, Eye, EyeOff, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Check, ChevronDown, ChevronRight, Copy, ExternalLink, Eye, EyeOff, GripVertical, Trash2 } from "lucide-react";
 import { t } from "../i18n";
 import type { AuthFile, ModelsFile } from "./configTypes";
 import { ConfigSelect, openDocsInSystemBrowser, SecretInput } from "./ConfigShared";
@@ -11,6 +11,7 @@ import { ProviderMigrationButton } from "./ProviderMigrationButton";
 import { ProviderUsageInline } from "../components/app/ProviderUsageInline";
 import { UsageQueryEntryButton } from "../components/app/UsageQueryEntryButton";
 import { applyProviderOrder } from "../utils/providerOrder";
+import { useProviderReorder } from "../hooks/useProviderReorder";
 
 // 根据 pi 官方文档支持的供应商列表 (https://pi.dev/docs/latest/providers#auth-file)
 const PRESET_PROVIDERS = [
@@ -67,6 +68,12 @@ export function AuthTab(props: {
 	hiddenAuthProviders?: string[];
 	/** 供应商自定义顺序（AppSettings.providerOrder）：与模型页共用同一份排序，两页列表顺序一致。 */
 	providerOrder?: string[];
+	/** 排序作用域：与模型页共享的并集顺序（由父级用 models.json + auth.json 算出）。 */
+	providerOrderScope?: string[];
+	/** 卡片重排回调（与模型页同一个出口，父级持久化到 AppSettings.providerOrder）。 */
+	onReorderProviders?: (nextOrder: string[]) => void;
+	/** 清空自定义顺序（列表上方的「恢复默认顺序」）。 */
+	onResetProviders?: () => void;
 	/** 切换认证供应商隐藏状态 */
 	onToggleHiddenAuthProvider?: (name: string) => void;
 	onToggleAuth: (name: string) => void;
@@ -88,6 +95,15 @@ export function AuthTab(props: {
 	const hiddenAuthSet = new Set(hiddenAuthProviders);
 	const visibleProviders = allProviders.filter((name) => !hiddenAuthSet.has(name));
 	const hiddenProviderNames = allProviders.filter((name) => hiddenAuthSet.has(name));
+
+	/**
+	 * 拖拽/上移下移的统一出口：算出新的完整顺序交给父级持久化（与模型页共用一份）。
+	 * 顺序没变（拖回原位）也照常上报，由主进程 SettingsStore 的「值未变则剔除」拦下写盘。
+	 */
+	const reorderProviders = useCallback((nextOrder: string[]) => props.onReorderProviders?.(nextOrder), [props.onReorderProviders]);
+	// 作用域用「模型 + 认证」的并集（父级传入）：只传本页列表的话，在认证页拖动会把模型页独有的
+	// 供应商从顺序里踢出去，模型页的顺序就跟着回到默认了。
+	const providerReorder = useProviderReorder({ names: props.providerOrderScope?.length ? props.providerOrderScope : allProviders, visibleNames: visibleProviders, onReorder: reorderProviders });
 
 	const [hiddenSectionOpen, setHiddenSectionOpen] = useState(false);
 	const [selectingProvider, setSelectingProvider] = useState(false);
@@ -155,6 +171,19 @@ export function AuthTab(props: {
 					)}
 				</div>
 			</div>
+
+			{/* 排序说明：与模型页共用同一份顺序，写明白用户才知道拖完为什么另一页也跟着变 */}
+			{visibleProviders.length > 1 && (
+				<div className="mb-2.5 flex items-start gap-2 text-[11px] leading-relaxed text-text-tertiary">
+					<ArrowUpDown size={12} className="mt-0.5 shrink-0" aria-hidden="true" />
+					<span className="min-w-0 flex-1">{t("config.providerOrderHint")}</span>
+					{(props.providerOrder?.length ?? 0) > 0 && props.onResetProviders && (
+						<Button variant="ghost" size="sm" className="h-5 shrink-0 px-1.5 text-[11px] font-normal text-text-tertiary hover:text-text-primary" onClick={props.onResetProviders} disabled={saving}>
+							{t("config.providerOrderReset")}
+						</Button>
+					)}
+				</div>
+			)}
 
 			{/* 使用引导 */}
 			{showGuide && (
@@ -320,8 +349,48 @@ export function AuthTab(props: {
 					const auth = data[name];
 					const isExpanded = expandedAuth === name;
 					return (
-						<div key={name} className={`rounded-lg border border-border-subtle bg-bg-panel transition-[border-color,box-shadow,background-color] duration-150${isExpanded ? " border-[color-mix(in_srgb,var(--color-accent)_32%,var(--color-border-subtle))] shadow-[var(--shadow-border)]" : ""}`}>
-							<div className="flex cursor-pointer items-center gap-3 rounded-t-lg px-3.5 py-2 transition-colors duration-150 hover:bg-bg-hover" onClick={() => props.onToggleAuth(name)}>
+						<div
+							key={name}
+							ref={(element) => providerReorder.registerCard(name, element)}
+							className={`relative rounded-lg border border-border-subtle bg-bg-panel transition-[border-color,box-shadow,background-color,opacity] duration-150${providerReorder.draggingName === name ? " opacity-50" : ""}${isExpanded ? " border-[color-mix(in_srgb,var(--color-accent)_32%,var(--color-border-subtle))] shadow-[var(--shadow-border)]" : ""}`}
+							{...providerReorder.cardProps(name)}
+						>
+							{/* 插入指示线：拖拽落点在上下哪侧就画在卡片哪侧 */}
+							{providerReorder.dropTarget?.name === name && <span className={`absolute ${providerReorder.dropTarget.position === "before" ? "top-0" : "bottom-0"} right-0 left-0 z-10 h-0.5 bg-[color:var(--color-accent)]`} />}
+							<div data-provider-head="" className="group flex cursor-pointer items-center gap-2.5 rounded-t-lg px-3.5 py-2 transition-colors duration-150 hover:bg-bg-hover" onClick={() => props.onToggleAuth(name)}>
+								{/* 拖拽手柄：draggable 只落在手柄上，避免抢整行点击展开；上移/下移悬停浮现 */}
+								<Button variant="ghost" size="icon-sm" className="size-6 shrink-0 cursor-grab text-muted-foreground active:cursor-grabbing" title={t("config.dragProvider")} {...providerReorder.gripProps(name)} onClick={(event) => event.stopPropagation()}>
+									<GripVertical size={14} />
+								</Button>
+								{/* 上移/下移：悬停浮现（键盘聚焦也可见），到顶/到底禁用 */}
+								<div className="flex shrink-0 items-center">
+									<Button
+										variant="ghost"
+										size="icon-sm"
+										className="size-6 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+										disabled={!providerReorder.canMove(name, -1)}
+										title={t("config.moveProviderUp")}
+										onClick={(event) => {
+											event.stopPropagation();
+											providerReorder.moveBy(name, -1);
+										}}
+									>
+										<ArrowUp size={13} />
+									</Button>
+									<Button
+										variant="ghost"
+										size="icon-sm"
+										className="size-6 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+										disabled={!providerReorder.canMove(name, 1)}
+										title={t("config.moveProviderDown")}
+										onClick={(event) => {
+											event.stopPropagation();
+											providerReorder.moveBy(name, 1);
+										}}
+									>
+										<ArrowDown size={13} />
+									</Button>
+								</div>
 								{batchMode && (
 									<Label className="mr-2.5 inline-flex size-4 shrink-0 items-center justify-center" onClick={(e) => e.stopPropagation()}>
 										<Checkbox

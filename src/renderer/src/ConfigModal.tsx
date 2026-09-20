@@ -12,6 +12,7 @@ import type { FetchedModel, ConfigProxyMode } from "../../shared/types/fetchedMo
 import { Component, forwardRef, useRef, useState, useEffect, useCallback, useImperativeHandle, useMemo, type ReactNode, type Ref } from "react";
 import type { PiDesktopApi } from "../../preload";
 import { AuthTab } from "./config/AuthTab";
+import { buildProviderOrderScope } from "./utils/providerOrder";
 import { ModelsTab } from "./config/ModelsTab";
 import { TokenDancePanel, type TokendanceInstallOutcome } from "./config/TokenDancePanel";
 import { UsageProbeConfigDialog } from "./config/UsageProbeConfigDialog";
@@ -630,6 +631,22 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 		setDshProviderOrder(next);
 		void api.settings.update({ dshProviderOrder: next }).catch(() => undefined);
 	}, []);
+	/** 恢复默认顺序：清空自定义顺序（空数组）——两页与模型选择器立即回到配置本身的顺序。 */
+	const handleResetProviderOrder = useCallback(() => {
+		setProviderOrder([]);
+		void api.settings.update({ providerOrder: [] }).catch(() => undefined);
+	}, []);
+	/** DSH 页的「恢复默认顺序」（与 Pi 页分开清，避免改一页把另一页也重置）。 */
+	const handleResetDshProviderOrder = useCallback(() => {
+		setDshProviderOrder([]);
+		void api.settings.update({ dshProviderOrder: [] }).catch(() => undefined);
+	}, []);
+	/**
+	 * 「模型」与「认证」页共享的排序作用域：两页的供应商集合可能不同（models.json 与 auth.json
+	 * 各自独立增删），把并集交给排序 hook 当「完整顺序」，在任一页拖动都只会改变该项在并集里的位置，
+	 * 另一页独有的供应商保持原位。仅收录仍然存在的供应商，已删除的名字会在下次拖动时被顺带清掉。
+	 */
+	const providerOrderScope = useMemo(() => buildProviderOrderScope([Object.keys(modelsData.providers), Object.keys(authData)], providerOrder), [modelsData.providers, authData, providerOrder]);
 	// 打开配置页时读取 AppSettings.hiddenProviders、hiddenModels 与 hiddenAuthProviders
 	useEffect(() => {
 		let cancelled = false;
@@ -2341,7 +2358,9 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 				<TabsContent value="dsh" forceMount className="flex min-h-0 min-w-0 flex-1 data-[state=inactive]:hidden">
 					{/* runtime 安装态不再整页替换：概览页内嵌 DshRuntimeSection 状态自适应区块，
 					    未装→安装引导，已装→版本/目录/卸载/导入，一个页面操作完。 */}
-					{dshRuntimeStatus.state !== "checking" ? <DshConfigTab ref={dshConfigRef} onDirtyChange={handleDshDirtyChange} dirtyNavIds={dshDirtyNavIds} onOpenUsageProbeDialog={(provider) => openUsageProbeDialogFor(provider, "dsh")} providerOrder={dshProviderOrder} onReorderProviders={handleReorderDshProviders} /> : null}
+					{dshRuntimeStatus.state !== "checking" ? (
+						<DshConfigTab ref={dshConfigRef} onDirtyChange={handleDshDirtyChange} dirtyNavIds={dshDirtyNavIds} onOpenUsageProbeDialog={(provider) => openUsageProbeDialogFor(provider, "dsh")} providerOrder={dshProviderOrder} onReorderProviders={handleReorderDshProviders} onResetProviders={handleResetDshProviderOrder} />
+					) : null}
 				</TabsContent>
 				<TabsContent value="pi" forceMount className="flex min-h-0 min-w-0 flex-1 data-[state=inactive]:hidden">
 					{/* 默认浅色主题整页同底（bg-background），避免顶栏白 / 下方多层灰的割裂感。
@@ -2432,7 +2451,9 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 											hiddenProviders={hiddenProviders}
 											onToggleHiddenProvider={handleToggleHiddenProvider}
 											providerOrder={providerOrder}
+											providerOrderScope={providerOrderScope}
 											onReorderProviders={handleReorderProviders}
+											onResetProviders={handleResetProviderOrder}
 											hiddenModels={hiddenModels}
 											onToggleHiddenModel={handleToggleHiddenModel}
 											fetchingProvider={fetchingProvider}
@@ -2517,6 +2538,9 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 										modelsData={modelsData}
 										hiddenAuthProviders={hiddenAuthProviders}
 										providerOrder={providerOrder}
+										providerOrderScope={providerOrderScope}
+										onReorderProviders={handleReorderProviders}
+										onResetProviders={handleResetProviderOrder}
 										onToggleHiddenAuthProvider={handleToggleHiddenAuthProvider}
 										onToggleAuth={(name) => setExpandedAuth(expandedAuth === name ? null : name)}
 										onStartAddAuth={() => {

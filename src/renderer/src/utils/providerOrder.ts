@@ -54,6 +54,26 @@ export function applyProviderOrder(names: readonly string[], order?: readonly st
 }
 
 /**
+ * 「模型」与「认证」两页共用的排序作用域：两页的供应商集合可能不同（models.json 与 auth.json
+ * 各自独立增删，认证还允许只配 key 不配模型），取并集并按当前自定义顺序排好后交给排序 hook 当
+ * 「完整顺序」——在任一页拖动只会改变该供应商在并集里的位置，另一页独有的供应商保持原位，
+ * 不会出现「在认证页排一次，模型页的顺序被重置」。
+ * 只收录仍然存活的供应商名：已删除的供应商会在下一次拖动时被顺带清出偏好设置。
+ */
+export function buildProviderOrderScope(groups: readonly (readonly string[])[], order?: readonly string[] | null): string[] {
+	const seen = new Set<string>();
+	const union: string[] = [];
+	for (const group of groups) {
+		for (const name of group) {
+			if (typeof name !== "string" || name.length === 0 || seen.has(name)) continue;
+			seen.add(name);
+			union.push(name);
+		}
+	}
+	return applyProviderOrder(union, order);
+}
+
+/**
  * 把 fromKey 移动到锚点 anchorKey 的前/后，返回新的完整顺序。
  * 拖拽落点与上移/下移按钮都复用这一个入口，避免两套位移逻辑漂移：
  * - 拖拽：anchor = 悬停的卡片，position 由指针在卡片内的上下半区决定；

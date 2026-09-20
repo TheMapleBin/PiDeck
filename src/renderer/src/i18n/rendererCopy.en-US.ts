@@ -1398,6 +1398,8 @@ export const enUS: Record<TranslationKey, string> = {
 	"config.dsh.openFolder": "Open folder",
 	"config.dsh.overviewHint": "Provider routes and model config live in the Models tab (llm-deepseek / llm-pi-ai).",
 	"config.dsh.modelsHint": "Each provider is one row showing its key state (green = configured, red = missing); expand it to enter the key, customize settings, and edit the model catalog.",
+	// The DSH order is separate from the Pi Models tab (AppSettings.dshProviderOrder), so this hint avoids mentioning the Models/Auth tabs.
+	"config.dsh.providerOrderHint": "Drag the handle at the start of a row to reorder providers. The order is stored in PiDeck settings only and is never written back to the DSH config; the model picker in DSH sessions follows it.",
 	"config.dsh.providersCount": "{count} providers",
 	"config.dsh.providerKeyPlaceholder": "Provider key (e.g. my-gateway)",
 	"config.dsh.addProvider": "Add provider",
@@ -2176,6 +2178,9 @@ export const enUS: Record<TranslationKey, string> = {
 	"config.dragProvider": "Drag to reorder (hold the handle)",
 	"config.moveProviderUp": "Move up",
 	"config.moveProviderDown": "Move down",
+	// Ordering notes: Pi (Models/Auth) and DSH keep separate orders, so there are two hint keys.
+	"config.providerOrderHint": "Drag the handle at the start of a row to reorder providers. The order is a PiDeck-local preference and is never written to the config file. The Models and Auth tabs share one order, and the model picker follows it too.",
+	"config.providerOrderReset": "Reset order",
 	"config.migrate.toDsh": "Copy to DSH",
 	"config.migrate.toPi": "Copy to pi",
 	"config.migrate.overwriteConfirm": 'Provider "{name}" already exists on the other side. Overwrite its URL, models, and key?',

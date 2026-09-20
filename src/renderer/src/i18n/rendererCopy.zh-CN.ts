@@ -1395,6 +1395,8 @@ export const zhCN = {
 	"config.dsh.openFolder": "打开目录",
 	"config.dsh.overviewHint": "Provider 路由与模型配置在「模型」tab 中管理（llm-deepseek / llm-pi-ai）。",
 	"config.dsh.modelsHint": "各提供方一行收起即见密钥状态（绿=已配置、红=缺失）；点击展开可填密钥、改自定义设置与模型目录。",
+	// DSH 页顺序与 Pi 模型页独立（AppSettings.dshProviderOrder），所以提示文案不引用「模型/认证」两页。
+	"config.dsh.providerOrderHint": "拖动行首手柄调整供应商顺序。顺序只保存在 PiDeck 本地设置，不会写回 DSH 配置；DSH 会话的模型选择列表也按这个顺序排列。",
 	"config.dsh.providersCount": "{count} 个 provider",
 	"config.dsh.providerKeyPlaceholder": "provider 名称（如 my-gateway）",
 	"config.dsh.addProvider": "添加 provider",
@@ -2172,6 +2174,9 @@ export const zhCN = {
 	"config.dragProvider": "拖动排序（按住手柄拖动）",
 	"config.moveProviderUp": "上移",
 	"config.moveProviderDown": "下移",
+	// 排序说明：Pi 侧（模型/认证）与 DSH 侧各一份顺序，提示文案分两套 key。
+	"config.providerOrderHint": "拖动行首手柄调整供应商顺序。顺序是 PiDeck 本地偏好，不会写入配置文件；「模型」与「认证」两页共用同一份顺序，模型选择列表也按这个顺序排列。",
+	"config.providerOrderReset": "恢复默认顺序",
 	"config.migrate.toDsh": "一键迁移到 DSH",
 	"config.migrate.toPi": "一键迁移到 pi",
 	"config.migrate.overwriteConfirm": "对端已有供应商「{name}」，覆盖它的地址、模型和密钥？",

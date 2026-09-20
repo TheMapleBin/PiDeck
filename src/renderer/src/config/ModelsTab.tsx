@@ -1,6 +1,6 @@
 import { Button } from "../components/ui-shadcn/button";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Copy, Eye, EyeOff, ExternalLink, GripVertical, SquarePen, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, ChevronRight, Copy, Eye, EyeOff, ExternalLink, GripVertical, SquarePen, Trash2, X } from "lucide-react";
 import { t } from "../i18n";
 import { desktopApi } from "../desktopApi";
 import type { ModelItem, ModelsFile, ProviderConfig } from "./configTypes";
@@ -64,8 +64,12 @@ export function ModelsTab(props: {
 	onToggleHiddenProvider: (name: string) => void;
 	/** 供应商卡片自定义顺序（父级持有并持久化到 AppSettings.providerOrder）。 */
 	providerOrder?: string[];
+	/** 排序作用域：与认证页共享的并集顺序（由父级用 models.json + auth.json 算出）。 */
+	providerOrderScope?: string[];
 	/** 卡片重排回调：拖拽/上移下移算出新的完整顺序后交给父级持久化。 */
 	onReorderProviders?: (nextOrder: string[]) => void;
+	/** 清空自定义顺序（列表上方的「恢复默认顺序」）。 */
+	onResetProviders?: () => void;
 	/** 用户隐藏的模型标识列表（格式："provider/modelId"）。 */
 	hiddenModels?: string[];
 	/** 切换单个模型的隐藏状态（父级持久化到 AppSettings.hiddenModels）。 */
@@ -212,7 +216,9 @@ export function ModelsTab(props: {
 
 	// 拖动与上移/下移的状态机（落点判定、拖动中半透明、插入指示线、边界禁用）内聚在共享 hook，
 	// DSH 模型页的供应商卡片复用同一份，避免两页规则漂移。
-	const providerReorder = useProviderReorder({ names: orderedProviderNames, visibleNames: visibleProviderNames, onReorder: reorderProviders });
+	// 拖拽的作用域是「模型 + 认证」两页的并集（providerOrderScope）：认证页独有的供应商也要参与
+	// 同一份顺序，否则在认证页排一次会在并集里丢掉它们，模型页的顺序跟着回到默认。
+	const providerReorder = useProviderReorder({ names: props.providerOrderScope?.length ? props.providerOrderScope : orderedProviderNames, visibleNames: visibleProviderNames, onReorder: reorderProviders });
 	const [highlightProvider, setHighlightProvider] = useState<string | null>(null);
 	useEffect(() => {
 		if (!props.focusProvider) return;
@@ -287,6 +293,20 @@ export function ModelsTab(props: {
 							)}
 						</div>
 					</div>
+
+					{/* 排序说明：顺序是跨页共用的偏好（AppSettings.providerOrder），
+					    不写在这里用户只能靠试——拖了之后模型选择器也跟着变会让人困惑。 */}
+					{visibleProviderNames.length > 1 && (
+						<div className="mb-2.5 flex items-start gap-2 text-[11px] leading-relaxed text-text-tertiary">
+							<ArrowUpDown size={12} className="mt-0.5 shrink-0" aria-hidden="true" />
+							<span className="min-w-0 flex-1">{t("config.providerOrderHint")}</span>
+							{(props.providerOrder?.length ?? 0) > 0 && props.onResetProviders && (
+								<Button variant="ghost" size="sm" className="h-5 shrink-0 px-1.5 text-[11px] font-normal text-text-tertiary hover:text-text-primary" onClick={props.onResetProviders} disabled={saving}>
+									{t("config.providerOrderReset")}
+								</Button>
+							)}
+						</div>
+					)}
 
 					{/* Provider 配置指南 */}
 					{showGuide && (

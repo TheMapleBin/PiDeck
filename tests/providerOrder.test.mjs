@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
 // 供应商卡片自定义顺序纯函数：应用顺序 / 拖拽落点 / 上移下移 / 边界
-const { buildProviderRank, applyProviderOrder, moveProviderRelative, neighborProvider, moveProviderByStep } = loadTsCommonJs("src/renderer/src/utils/providerOrder.ts");
+const { buildProviderRank, applyProviderOrder, buildProviderOrderScope, moveProviderRelative, neighborProvider, moveProviderByStep } = loadTsCommonJs("src/renderer/src/utils/providerOrder.ts");
 
 // vm 沙箱里「数组字面量 / 展开语法」产出的数组原型属于沙箱 realm，与宿主 realm 的数组
 // 原型不同，deepStrictEqual 会判不等。用宿主 realm 的 Array.from 归一化后再比较。
@@ -50,6 +50,29 @@ test("neighborProvider 取可见列表的邻居，越界返回 null", () => {
 	assert.equal(neighborProvider(visible, "c", 1), "d");
 	assert.equal(neighborProvider(visible, "a", -1), null);
 	assert.equal(neighborProvider(visible, "d", 1), null);
+});
+
+test("buildProviderOrderScope 把多个来源合成一份顺序：已排名的先上、其余保持来源序追加", () => {
+	// 模型页与认证页的供应商集合不同：认证页独有的 gamma 也要进顺序，否则在认证页拖一次
+	// 会把 gamma 从顺序里去掉，模型页的顺序随之回到默认。
+	assert.deepEqual(
+		list(
+			buildProviderOrderScope(
+				[
+					["alpha", "beta"],
+					["beta", "gamma"],
+				],
+				["gamma", "alpha"],
+			),
+		),
+		["gamma", "alpha", "beta"],
+	);
+	// 没排过顺序：各来源按传入先后拼接（模型页在前、认证页独有的在后）
+	assert.deepEqual(list(buildProviderOrderScope([["alpha", "beta"], ["gamma"]], undefined)), ["alpha", "beta", "gamma"]);
+	// 同一名字出现在多个来源只保留一次；顺序数组里的未知名字不凭空造出供应商
+	assert.deepEqual(list(buildProviderOrderScope([["alpha"], ["alpha"]], ["ghost"])), ["alpha"]);
+	// 空集合 / 空顺序都安全
+	assert.deepEqual(list(buildProviderOrderScope([], ["alpha"])), []);
 });
 
 test("moveProviderByStep 在完整列表上位移，跳过隐藏项且不打乱可见相对顺序", () => {
@@ -115,8 +138,60 @@ test("契约完整性：供应商排序在主进程设置、配置页两处、DS
 	assert.ok(pickerHost.includes("providerOrder={preference.isDshSession ? preference.dshProviderOrder : preference.providerOrder}"));
 
 	// 拖拽手柄/上移/下移三个提示文案中英都要有（缺 key 会渲染成原始 key）
-	for (const key of ["config.dragProvider", "config.moveProviderUp", "config.moveProviderDown"]) {
+	for (const key of ["config.dragProvider", "config.moveProviderUp", "config.moveProviderDown", "config.providerOrderHint", "config.providerOrderReset", "config.dsh.providerOrderHint"]) {
 		assert.ok(zhCopy.includes(`"${key}"`), `zh-CN 缺少 ${key}`);
 		assert.ok(enCopy.includes(`"${key}"`), `en-US 缺少 ${key}`);
 	}
+});
+
+test("契约完整性：「模型」「认证」两页共享同一份顺序（providerOrderScope），拖完不会互相重置", () => {
+	const read = (path) => readFileSync(path, "utf8");
+	const configModal = read("src/renderer/src/ConfigModal.tsx");
+	const modelsTab = read("src/renderer/src/config/ModelsTab.tsx");
+	const authTab = read("src/renderer/src/config/AuthTab.tsx");
+
+	// 作用域由「模型 + 认证」两页的并集算出（单页集合会让另一页独有的供应商掉队）
+	assert.ok(configModal.includes("buildProviderOrderScope(["));
+	assert.ok(configModal.includes("providerOrderScope={providerOrderScope}"));
+	// 两页拖拽的作用域都必须优先用并集：只传自己的列表 = 认证页拖动会把模型页顺序重置
+	for (const [label, source] of [
+		["ModelsTab", modelsTab],
+		["AuthTab", authTab],
+	]) {
+		assert.ok(source.includes("props.providerOrderScope?.length ? props.providerOrderScope"), `${label} 未用 providerOrderScope 作为拖拽作用域`);
+		assert.ok(source.includes("providerReorder.gripProps("), `${label} 缺少拖拽手柄`);
+		assert.ok(source.includes("providerReorder.registerCard("), `${label} 缺少卡片注册`);
+		assert.ok(source.includes("color:var(--color-accent)") && source.includes("dropTarget.position ==="), `${label} 缺少插入指示线`);
+	}
+	// 认证页卡片也要有标题行标记，否则落点会按整张卡的中线算（展开态卡片偏移）
+	assert.ok(authTab.includes('data-provider-head=""'));
+});
+
+test("契约完整性：排序提示与「恢复默认顺序」在四个页都渲染，重置写空数组", () => {
+	const read = (path) => readFileSync(path, "utf8");
+	const configModal = read("src/renderer/src/ConfigModal.tsx");
+	const authTab = read("src/renderer/src/config/AuthTab.tsx");
+	const modelsTab = read("src/renderer/src/config/ModelsTab.tsx");
+	const dshCards = read("src/renderer/src/config/DshProviderCards.tsx");
+	const dshTab = read("src/renderer/src/config/DshConfigTab.tsx");
+
+	// 提示可发现性：排序行为写在设置里，用户遇到「另一页也变了」必须能从界面看到解释
+	for (const [label, source] of [
+		["ModelsTab", modelsTab],
+		["AuthTab", authTab],
+		["DshProviderCards", dshCards],
+	]) {
+		assert.ok(source.includes('t("config.providerOrderHint")') || source.includes('t("config.dsh.providerOrderHint")'), `${label} 缺少排序说明`);
+		assert.ok(source.includes('t("config.providerOrderReset")'), `${label} 缺少恢复默认顺序入口`);
+	}
+	// 重置按钮只在真的排过序时出现（默认状态下不该有可点的无效按钮）
+	assert.ok(modelsTab.includes("(props.providerOrder?.length ?? 0) > 0 && props.onResetProviders"));
+	assert.ok(authTab.includes("(props.providerOrder?.length ?? 0) > 0 && props.onResetProviders"));
+	assert.ok(dshCards.includes("(props.providerOrder?.length ?? 0) > 0 && props.onResetProviders"));
+	// 重置 = 写空数组，落到 SettingsStore 的默认（配置原始顺序）
+	assert.ok(configModal.includes("api.settings.update({ providerOrder: [] })"));
+	assert.ok(configModal.includes("api.settings.update({ dshProviderOrder: [] })"));
+	// DSH 页要透传 scope 与重置回调，否则卡片上的排序入口会静默失效
+	assert.ok(dshTab.includes("providerOrderScope={props.providerOrderScope}"));
+	assert.ok(dshTab.includes("onResetProviders={props.onResetProviders}"));
 });
