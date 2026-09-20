@@ -71,6 +71,9 @@ export function ImportOverlayHost(props: ImportOverlayHostProps) {
 				onToggleAll={props.controller.toggleAll}
 				onImport={() => void props.controller.importSelected()}
 				onChooseDirectory={() => void props.controller.chooseDirectory()}
+				onChooseSourceDir={props.controller.chooseSourceDir}
+				onClearDirectory={props.controller.clearDirectory}
+				onRefreshSources={() => void props.controller.refreshSources()}
 				onSetOnlyMissingCwd={props.controller.setOnlyMissingCwd}
 				hiddenByFilter={props.controller.hiddenByFilter}
 			/>

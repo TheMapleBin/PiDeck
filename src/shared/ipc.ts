@@ -276,9 +276,15 @@ export const ipcChannels = {
 	cursorSessionsImport: "cursor-sessions:import",
 	/**
 	 * 外置目录会话导入（项目目录移动/改名后找回历史）：扫描用户选定的目录
-	 * （旧项目目录 / pi sessions 根 / 某个 encoded 分组目录）里的会话。
+	 * （旧项目目录 / 某个 encoded 分组目录 / pi sessions 根）里的会话。
+	 * 返回 { sessions, kind }；kind=ancestor 表示用户选到了 ~/.pi 这类会话树的祖先目录。
 	 */
 	directorySessionsScan: "directory-sessions:scan",
+	/**
+	 * 列出 pi 现有的会话目录（按会话文件所在分组目录聚合，带原工作目录/会话数/最后使用）。
+	 * 弹窗首屏点选入口：只列真的有会话的目录，避免用户手选到没有意义的层级。
+	 */
+	directorySessionsListSources: "directory-sessions:list-sources",
 	/** 把选定目录里的会话挂到当前项目（只建 catalog 引用，不复制原文件）。 */
 	directorySessionsImport: "directory-sessions:import",
 	settingsGet: "settings:get",

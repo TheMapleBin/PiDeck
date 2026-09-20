@@ -312,11 +312,26 @@ export type AppSettings = {
 	 */
 	hiddenAuthProviders?: string[];
 
+	// ── 供应商卡片排序：用户在模型页拖拽/上移下移后写入的自定义顺序 ──
+	/**
+	 * Pi 模型页供应商卡片的用户自定义顺序（provider key 数组，与 models.json 一致）。
+	 * 只影响展示顺序，不改动 models.json；未列出的 provider 保持配置原序追加在后
+	 * （新增/改名的 provider 因此不会被顶到最前）。可选以兼容旧 settings.json。
+	 */
+	providerOrder?: string[];
+	/**
+	 * DSH 模型页供应商卡片的用户自定义顺序（llm-pi-ai providers 的 provider 名数组）。
+	 * 语义同 providerOrder；与 Pi 侧分开存放，避免两套配置互相污染顺序。
+	 */
+	dshProviderOrder?: string[];
+
 	// ── 模型选择器分组排序：记录最近使用的供应商 ──
 	/**
 	 * 最近使用的供应商 ID 列表（最新在前，最多 8 个），主进程在 sendPrompt 接受时自动记录，
 	 * 与 lastUsedModel 同点写入。模型选择器按此优先排列供应商分组：最近用过的排最前，
 	 * 没记录过的供应商仍按内置置顶 + 字母序。可选以兼容旧 settings.json。
+	 * 注意：被 providerOrder 显式排序过的供应商不再参与最近置顶（自定义顺序优先），
+	 * 此处只对「没自定义排过序」的供应商生效。
 	 */
 	recentProviders?: string[];
 

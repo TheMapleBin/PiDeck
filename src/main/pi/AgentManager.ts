@@ -160,7 +160,8 @@ export class AgentManager {
 	private readonly activeAssistantMessageIds = new Map<string, string>();
 	/** pi 的 toolCallId 贯穿 start/update/end，用它把同一次工具调用合并成一条 UI 记录。 */
 	private readonly toolMessageIds = new Map<string, Map<string, string>>();
-	/** 每个 agent 只保留一条自动重试状态消息，避免短暂 5xx/网络错误把会话刷屏。 */
+	/** 每个 agent 保留一条「进行中」的自动重试状态消息，避免短暂 5xx/网络错误把会话刷屏；
+	 *  一次重试周期（auto_retry_start → auto_retry_end）一张卡，已收敛的卡片不再被改写。 */
 	private readonly retryStatusMessageIds = new Map<string, string>();
 	/** 同一历史会话正在创建 Agent 时共享同一个 Promise，避免快速重复点击/IPC 竞态创建多个进程。 */
 	private readonly creatingSessionAgents = new Map<string, Promise<AgentTab>>();
@@ -2498,6 +2499,18 @@ export class AgentManager {
 
 	async setModel(agentId: string, provider: string, modelId: string) {
 		const runtime = this.requireRuntime(agentId);
+		// 幂等短路：pi 的 setModel 会**无条件**写一条 model_change（core/agent-session.js
+		// setModel → sessionManager.appendModelChange，值没变也写，RPC 层只校验模型存在）。
+		// 而 SessionRuntimeCoordinator 的每次激活/重启都会重放会话偏好（applyPreferences），
+		// 于是「模型其实没变」也在会话轨迹里留下一条用户从未操作过的「切换模型」，
+		// 会话列表展示的模型（SessionScanner 取最后一条 model_change）也跟着晃。
+		// 先问 pi 当前模型，相同就什么都不做——不写轨迹，也不重置 thinking 档位。
+		if (await this.isModelAlreadyActive(agentId, provider, modelId)) {
+			// 仍然广播一次 Agent 列表：调用方（激活/重启后重放偏好）依赖这次广播把「已生效的
+			// 模型」同步给渲染层，不能因为没发命令就跳过，否则 Tab 会停在 pi 的启动默认模型上。
+			this.emitState();
+			return this.getRuntimeState(agentId);
+		}
 		// Pi RPC 没有运行中 busy 门禁：set_model 立即更新 Agent state；已经发出的
 		// provider request 不可改写，后续同一 turn step/下一次 request 会读取新模型。
 		const response = await runtime.process.client.request({ type: "set_model", provider, modelId }, 60_000);
@@ -2523,6 +2536,26 @@ export class AgentManager {
 		}
 		this.emitState();
 		return this.getRuntimeState(agentId);
+	}
+
+	/**
+	 * pi 进程当前生效的模型是否就是 (provider, modelId)——setModel 幂等短路的判据。
+	 *
+	 * 只发一次 get_state：全量 getRuntimeState 还要拉 session stats 与文件命中率统计，
+	 * 对一次等值判定过重。任何不确定（RPC 失败、data/model 字段缺失或类型异常）都返回
+	 * false = 「未确认相同」，让调用方照旧发送命令：宁可多写一条 model_change，也不能让
+	 * 会话保存的模型偏好静默不生效。
+	 */
+	private async isModelAlreadyActive(agentId: string, provider: string, modelId: string): Promise<boolean> {
+		const runtime = this.agents.get(agentId);
+		if (!runtime) return false;
+		const response = await runtime.process.client.request({ type: "get_state" }, this.rpcTimeoutMs).catch(() => undefined);
+		if (!response?.success) return false;
+		const data = response.data;
+		if (!isRecord(data) || !isRecord(data.model)) return false;
+		const currentProvider = typeof data.model.provider === "string" ? data.model.provider : undefined;
+		const currentModelId = typeof data.model.id === "string" ? data.model.id : undefined;
+		return currentProvider === provider && currentModelId === modelId;
 	}
 
 	/**
@@ -4457,7 +4490,7 @@ export class AgentManager {
 			if (typed.willRetry === true) {
 				// agent_end.willRetry 表示 pi 已判定本次错误会进入自动重试；
 				// 此时不写入最终错误，避免用户误以为会话已经失败。
-				if (errorMsg && !this.retryStatusMessageIds.has(agentId)) {
+				if (errorMsg && !this.activeRetryStatusMessageId(agentId)) {
 					this.upsertRetryStatusMessage(
 						agentId,
 						{
@@ -5644,9 +5677,23 @@ export class AgentManager {
 		});
 	}
 
+	/**
+	 * 当前「进行中」的重试状态卡 id（仅 status=running 算数）。
+	 * 一次重试周期一张卡：已收敛成 success/error 的卡片不允许再被下一轮重试改写，
+	 * 否则时间线上永远只剩最后一条「正在自动重试」，用户看不出到底重试过几次（用户反馈）。
+	 * 同一周期内的后续事件（延迟变化等）仍会复用这张运行中卡片。
+	 */
+	private activeRetryStatusMessageId(agentId: string): string | undefined {
+		const messageId = this.retryStatusMessageIds.get(agentId);
+		if (!messageId) return undefined;
+		const message = this.messages.get(agentId)?.find((item) => item.id === messageId);
+		return message?.meta?.status === "running" ? messageId : undefined;
+	}
+
 	private upsertRetryStatusMessage(agentId: string, event: Record<string, unknown>, status: "running" | "success" | "error") {
 		const list = this.messages.get(agentId) ?? [];
-		let messageId = this.retryStatusMessageIds.get(agentId);
+		// 只复用仍在推进的卡片；已收敛（成功/失败）的卡片保持原样，本轮新建一张。
+		let messageId = this.activeRetryStatusMessageId(agentId);
 		let message = messageId ? list.find((item) => item.id === messageId) : undefined;
 		if (!message) {
 			messageId = randomUUID();

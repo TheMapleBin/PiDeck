@@ -1,6 +1,7 @@
 import type { AvailableModel, ModelListReport } from "../../../../shared/types";
 // 下拉列表排序键与配置页 / 落盘顺序共用 shared 比较器（避免两边秩不一致）。
 import { compareModelRows } from "../../../../shared/modelOrder";
+import { buildProviderRank } from "../../utils/providerOrder";
 import type { TranslationKey } from "../../i18n";
 
 /** Shared thinking options used by both the composer picker and the first-session setup. */
@@ -88,12 +89,15 @@ export const PROVIDER_ORDER = ["tokendance", "anthropic", "openai", "google", "d
 
 /**
  * 对供应商分组 key 排序：
- * 1) 最近使用过的（recentProviders，最新在前）排最前，让高频供应商免搜索直达；
- * 2) 未使用过的按内置置顶顺序（PROVIDER_ORDER）+ 字母序；
- * 3) 'other' 兜底组恒最后，避免未知供应商混进常用区。
+ * 1) 用户在模型页自定义过顺序的（providerOrder）严格按该顺序，且整体排在最前——
+ *    这是显式偏好，不再被「最近使用」覆盖（未自定义过顺序的供应商仍走旧策略）；
+ * 2) 未自定义过顺序的：最近使用过的（recentProviders，最新在前）排前，让高频供应商免搜索直达；
+ * 3) 仍未命中的按内置置顶顺序（PROVIDER_ORDER）+ 字母序；
+ * 4) 'other' 兜底组恒最后，避免未知供应商混进常用区。
  * 纯函数便于单测：排序策略离开 React 也能验证。
  */
-export function orderProviderGroups(providers: string[], recentProviders?: string[]): string[] {
+export function orderProviderGroups(providers: string[], recentProviders?: string[], providerOrder?: string[]): string[] {
+	const customRank = buildProviderRank(providerOrder);
 	const recent = recentProviders ?? [];
 	const recentIndex = new Map<string, number>();
 	recent.forEach((provider, index) => {
@@ -103,6 +107,11 @@ export function orderProviderGroups(providers: string[], recentProviders?: strin
 		// other 恒最后：不受最近使用影响（它是白名单外兜底，不是用户选的供应商）。
 		if (a === "other") return 1;
 		if (b === "other") return -1;
+		const aCustom = customRank.get(a);
+		const bCustom = customRank.get(b);
+		if (aCustom !== undefined && bCustom !== undefined) return aCustom - bCustom;
+		if (aCustom !== undefined) return -1;
+		if (bCustom !== undefined) return 1;
 		const aRecent = recentIndex.get(a);
 		const bRecent = recentIndex.get(b);
 		if (aRecent !== undefined && bRecent !== undefined) return aRecent - bRecent;

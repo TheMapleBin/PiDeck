@@ -3147,6 +3147,8 @@ app
 					return false;
 				}
 			},
+			// 会话扫描根：用于识别「用户选到了 ~/.pi 这类会话树祖先目录」，在弹窗里提示改选。
+			readSessionRoots: () => sessionScanner.getSessionScanRoots(),
 			onError: (sourcePath, error) => {
 				void appLogger?.warn("session", "Directory session import failed", {
 					sourcePath,

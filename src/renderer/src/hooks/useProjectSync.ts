@@ -112,6 +112,19 @@ export function useProjectSync(input: UseProjectSyncInput) {
 		return fileTreeGenerationRef.current === generation && activeProjectIdRef.current === projectId;
 	}, []);
 
+	/** 拉取单个项目的当前分支并写进侧栏分支字典。
+	 *  非 Git 仓库/调用失败统一记 null：只有徽标依赖这个值，失败不需要打扰用户。 */
+	async function refreshProjectBranch(projectId: string) {
+		try {
+			const branchInfo = await api.git.branches(projectId).catch(() => ({ current: null, branches: [] }));
+			setBranchByProject((prev) => (prev[projectId] === branchInfo.current ? prev : { ...prev, [projectId]: branchInfo.current }));
+			return branchInfo.current;
+		} catch {
+			setBranchByProject((prev) => (prev[projectId] === null ? prev : { ...prev, [projectId]: null }));
+			return null;
+		}
+	}
+
 	/**
 	 * 重新读取项目目录存在性并替换侧栏清单。
 	 * 缺失目录只标记 missing、不自动移除，避免网络盘/WSL 暂时不可达时丢失项目记录。
@@ -120,9 +133,16 @@ export function useProjectSync(input: UseProjectSyncInput) {
 		const next = await api.projects.list();
 		setProjects(next);
 		if (!activeProjectId && next.length > 0) setActiveProjectId(next[0].id);
-		// 失效目录不能继续触发 Git 扫描，否则手动刷新项目后仍会产生 ENOENT 噪音。
+		// 失效目录与内置 Chat 不能继续触发 Git 扫描，否则手动刷新项目后仍会产生 ENOENT 噪音。
+		// 工作区模式的项目分支随 worktree 列表一起取（refreshWorktrees），普通项目单独取一次，
+		// 让侧栏项目行的分支徽标在启动/手动刷新后立刻有值。
 		for (const p of next) {
-			if (p.worktreeEnabled && !p.missing) void refreshWorktrees(p.id);
+			if (p.missing || p.kind === "chat") continue;
+			if (p.worktreeEnabled) {
+				void refreshWorktrees(p.id);
+			} else {
+				void refreshProjectBranch(p.id);
+			}
 		}
 		return next;
 	}
@@ -338,6 +358,8 @@ export function useProjectSync(input: UseProjectSyncInput) {
 			setProjects(projectsAfterWorktreeRefresh);
 			const childProjects = projectsAfterWorktreeRefresh.filter((p) => p.worktreeParentId === latestProject.id && !p.missing);
 			await Promise.all(childProjects.map((child) => refreshProjectSessions(child.id).catch(() => undefined)));
+		} else if (latestProject.kind !== "chat") {
+			await refreshProjectBranch(latestProject.id);
 		}
 		showToast(t("app.projectRefreshed", {}), 1800);
 	}
@@ -373,6 +395,8 @@ export function useProjectSync(input: UseProjectSyncInput) {
 	return {
 		worktreesByProject,
 		branchByProject,
+		setBranchByProject,
+		refreshProjectBranch,
 		files,
 		setFiles,
 		gitInfo,

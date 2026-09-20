@@ -6,9 +6,10 @@ import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
 const timeline = readFileSync("src/renderer/src/components/session/SessionMessageTimeline.tsx", "utf8");
 const notice = readFileSync("src/renderer/src/components/session/timelineFailureNotice.ts", "utf8");
+const eventCards = readFileSync("src/renderer/src/components/session/TimelineEventCards.tsx", "utf8");
 
 const i18n = loadTsCommonJs("src/renderer/src/i18n.ts");
-const { FLOATING_FAILURE_KEYS, TOAST_ONLY_FAILURE_KEYS, composeFailureNotice, failureRetrySignature, isExtensionErrorMessage, isFailureNoticeMessage, isFloatingFailureMessage, isToastOnlyFailureMessage, reduceFailureNoticePass } = loadTsCommonJs("src/renderer/src/components/session/timelineFailureNotice.ts", {
+const { FLOATING_FAILURE_KEYS, RETRY_STATUS_KEYS, composeFailureNotice, failureRetrySignature, isExtensionErrorMessage, isFailureNoticeMessage, isFloatingFailureMessage, isRetryStatusMessage, reduceFailureNoticePass } = loadTsCommonJs("src/renderer/src/components/session/timelineFailureNotice.ts", {
 	// 与 composeFailureNotice 共用同一份 i18n 模块，否则 setI18nLocale 改不到 toast 文案。
 	stubs: { "../../i18n": i18n },
 });
@@ -63,31 +64,36 @@ test("floating failure keys: covers retry + failure diagnostics, excludes start/
 	assert.doesNotMatch(notice, /"diagnostic\.runtimeError"/);
 });
 
-test("timeline render: retry progress stays toast-only, failures render the diagnostic card", () => {
-	assert.match(timeline, /if \(message\.role === "error"\) \{\s*\/\/ 重试状态提示（retryScheduled\/retrySucceeded 等）仍只弹 toast；/s);
-	assert.match(timeline, /if \(isToastOnlyFailureMessage\(message\)\) return null;/);
-	assert.match(timeline, /\/\/ 重试状态提示（retryScheduled\/retrySucceeded 等）\s*\/\/ 属于「重试提示」，只弹 toast、不占时间线；失败类系统诊断照常渲染卡片。/s);
+test("timeline render: 重试状态与失败诊断都渲染卡片，重试卡带专属标题与旋转图标", () => {
+	// 用户反馈：重试只弹 toast（且会自动消失），事后在会话里找不到重试痕迹 → 不再短路重试状态。
+	assert.doesNotMatch(timeline, /isToastOnlyFailureMessage/);
+	assert.doesNotMatch(notice, /TOAST_ONLY_FAILURE_KEYS/);
 	assert.match(timeline, /composeFailureNotice\(message\)/);
-	// 失败类消息恢复时间线渲染诊断卡片（错误留痕），不再是 return null
-	assert.match(timeline, /return <DiagnosticMessageCard key=\{message\.id\} message=\{message\} \/>;/);
-	assert.match(timeline, /isToastOnlyFailureMessage/);
 	assert.match(timeline, /from "\.\/timelineFailureNotice"/);
+	// error / system 两个分支都必须渲染诊断卡片（旧实现各有一条 return null 的重试短路）
+	const cardReturns = timeline.match(/return <DiagnosticMessageCard key=\{message\.id\} message=\{message\} \/>;/g) ?? [];
+	assert.equal(cardReturns.length, 2);
+	// 重试卡在卡片组件里换标题 + running 态旋转图标，与普通「系统状态」区分开
+	assert.match(eventCards, /isRetryStatusMessage\(props\.message\)/);
+	assert.match(eventCards, /t\("diagnostic\.retryTitle"\)/);
+	assert.match(eventCards, /className=\{retryRunning \? "animate-pideck-spin" : undefined\}/);
 });
 
-test("toast-only keys: retry progress only, excludes failure diagnostics", () => {
-	assert.equal(TOAST_ONLY_FAILURE_KEYS.has("diagnostic.retryScheduled"), true);
-	assert.equal(TOAST_ONLY_FAILURE_KEYS.has("diagnostic.retryScheduledAfterDelay"), true);
-	assert.equal(TOAST_ONLY_FAILURE_KEYS.has("diagnostic.retrySucceeded"), true);
-	// retryFailed 是失败，必须走时间线留痕
-	assert.equal(TOAST_ONLY_FAILURE_KEYS.has("diagnostic.retryFailed"), false);
-	// 失败类全部渲染卡片（不在 toast-only 集合）
-	assert.equal(TOAST_ONLY_FAILURE_KEYS.has("diagnostic.requestFailed"), false);
-	assert.equal(TOAST_ONLY_FAILURE_KEYS.has("diagnostic.agentStopped"), false);
-	assert.equal(isToastOnlyFailureMessage(message("diagnostic.retryScheduled")), true);
-	assert.equal(isToastOnlyFailureMessage(message("diagnostic.retrySucceeded")), true);
-	assert.equal(isToastOnlyFailureMessage(message("diagnostic.requestFailed")), false);
-	// toast 层不受影响：重试失败仍然弹 toast
+test("retry status keys: 覆盖重试周期四态，不含普通失败诊断", () => {
+	assert.equal(RETRY_STATUS_KEYS.has("diagnostic.retryScheduled"), true);
+	assert.equal(RETRY_STATUS_KEYS.has("diagnostic.retryScheduledAfterDelay"), true);
+	assert.equal(RETRY_STATUS_KEYS.has("diagnostic.retrySucceeded"), true);
+	// retryFailed 是重试周期的收敛态，同样走重试卡语言
+	assert.equal(RETRY_STATUS_KEYS.has("diagnostic.retryFailed"), true);
+	// 普通失败诊断不是重试卡
+	assert.equal(RETRY_STATUS_KEYS.has("diagnostic.requestFailed"), false);
+	assert.equal(RETRY_STATUS_KEYS.has("diagnostic.agentStopped"), false);
+	assert.equal(isRetryStatusMessage(message("diagnostic.retryScheduled")), true);
+	assert.equal(isRetryStatusMessage(message("diagnostic.retryFailed")), true);
+	assert.equal(isRetryStatusMessage(message("diagnostic.requestFailed")), false);
+	// toast 层不受影响：重试周期每个 key 都仍然弹 toast（卡片与 toast 并存）
 	assert.equal(isFloatingFailureMessage(message("diagnostic.retryFailed")), true);
+	assert.equal(isFloatingFailureMessage(message("diagnostic.retrySucceeded")), true);
 });
 
 test("toast effect: reducer owns session-aware baseline; retry signatures survive tab switches", () => {
@@ -314,8 +320,8 @@ test("failure toast i18n keys exist in zh-CN and en-US", () => {
 	const en = readFileSync("src/renderer/src/i18n/rendererCopy.en-US.ts", "utf8");
 	assert.match(zh, /"diagnostic\.failureToastTitle": "会话失败"/);
 	assert.match(zh, /"diagnostic\.extensionErrorToastTitle": "扩展执行错误"/);
-	assert.match(zh, /"diagnostic\.retryToastTitle": "自动重试"/);
+	assert.match(zh, /"diagnostic\.retryTitle": "自动重试"/);
 	assert.match(en, /"diagnostic\.failureToastTitle": "Session error"/);
 	assert.match(en, /"diagnostic\.extensionErrorToastTitle": "Extension error"/);
-	assert.match(en, /"diagnostic\.retryToastTitle": "Auto retry"/);
+	assert.match(en, /"diagnostic\.retryTitle": "Auto retry"/);
 });

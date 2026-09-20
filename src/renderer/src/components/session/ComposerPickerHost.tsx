@@ -65,6 +65,8 @@ export function ComposerPickerHost(props: ComposerPickerHostProps) {
 				favoriteModels={preference.favoriteModels}
 				onToggleFavorite={(provider, modelId) => void preference.toggleFavorite(provider, modelId)}
 				recentProviders={preference.recentProviders}
+				// 自定义顺序随会话后端：DSH 目录分组是 route 名，用 dshProviderOrder
+				providerOrder={preference.isDshSession ? preference.dshProviderOrder : preference.providerOrder}
 				hiddenProviders={preference.hiddenProviders}
 				hiddenModels={preference.hiddenModels}
 				onToggleHideModel={(provider, modelId) => void preference.toggleHideModel(provider, modelId)}

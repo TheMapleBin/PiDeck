@@ -77,6 +77,8 @@ export function AutomationTaskEditor({ task, defaultProjectId, lockProject = fal
 	const [modelPickerOpen, setModelPickerOpen] = useState(false);
 	const [favoriteModels, setFavoriteModels] = useState<string[]>([]);
 	const [recentProviders, setRecentProviders] = useState<string[]>([]);
+	/** 供应商自定义顺序（模型页排序结果）：自动化任务的模型选择器与聊天侧保持一致。 */
+	const [providerOrder, setProviderOrder] = useState<string[]>([]);
 	const [hiddenProviders, setHiddenProviders] = useState<string[]>([]);
 
 	const initialTimeoutMinutes = task?.budget?.timeoutMs != null ? String(Math.round(task.budget.timeoutMs / 60000)) : "";
@@ -116,6 +118,7 @@ export function AutomationTaskEditor({ task, defaultProjectId, lockProject = fal
 			.then((settings) => {
 				setFavoriteModels(settings.favoriteModels ?? []);
 				setRecentProviders(settings.recentProviders ?? []);
+				setProviderOrder(settings.providerOrder ?? []);
 				setHiddenProviders(settings.hiddenProviders ?? []);
 			})
 			.catch(() => undefined);
@@ -464,6 +467,7 @@ export function AutomationTaskEditor({ task, defaultProjectId, lockProject = fal
 					current={selectedModel}
 					favoriteModels={favoriteModels}
 					recentProviders={recentProviders}
+					providerOrder={providerOrder}
 					hiddenProviders={hiddenProviders}
 					onClose={() => setModelPickerOpen(false)}
 					onPick={(model) => {

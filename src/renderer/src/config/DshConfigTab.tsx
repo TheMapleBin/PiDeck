@@ -113,6 +113,14 @@ export const DshConfigTab = forwardRef<
 		dirtyNavIds?: Set<string>;
 		/** 打开用量查询配置弹窗（与 Pi 模型页共用同一个 per-provider 弹窗）。 */
 		onOpenUsageProbeDialog: (provider: string) => void;
+		/** DSH 供应商卡片自定义顺序（AppSettings.dshProviderOrder）。 */
+		providerOrder?: string[];
+		/** 排序作用域：与「模型」「认证」两页共享的并集顺序（父级传入）。 */
+		providerOrderScope?: string[];
+		/** 卡片重排回调（ConfigModal 持有并持久化）。 */
+		onReorderProviders?: (nextOrder: string[]) => void;
+		/** 清空自定义顺序（列表上方的「恢复默认顺序」）。 */
+		onResetProviders?: () => void;
 	}
 >(function DshConfigTab(props, ref) {
 	const [status, setStatus] = useState<DshStatus | null>(null);
@@ -495,6 +503,10 @@ export const DshConfigTab = forwardRef<
 																}}
 																instanceKey={`dsh:models:${ns.ns}`}
 																onOpenUsageProbeDialog={props.onOpenUsageProbeDialog}
+																providerOrder={props.providerOrder}
+																providerOrderScope={props.providerOrderScope}
+																onReorderProviders={props.onReorderProviders}
+																onResetProviders={props.onResetProviders}
 															/>
 														) : (
 															<DeepseekRouteCard

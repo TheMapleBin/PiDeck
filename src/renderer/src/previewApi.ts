@@ -772,7 +772,8 @@ export function createPreviewApi(): PiDesktopApi {
 			import: async () => ({ results: [], imported: 0, failed: 0 }),
 		},
 		directorySessions: {
-			scan: async () => [],
+			scan: async () => ({ sessions: [], kind: "none" }),
+			listSources: async () => [],
 			import: async () => ({ results: [], imported: 0, failed: 0 }),
 		},
 		git: {

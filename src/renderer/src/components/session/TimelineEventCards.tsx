@@ -1,5 +1,5 @@
 import { memo, useState } from "react";
-import { AlertTriangle, Brain, ChevronDown, ChevronRight, ChevronUp } from "lucide-react";
+import { AlertTriangle, Brain, ChevronDown, ChevronRight, ChevronUp, RefreshCw } from "lucide-react";
 import type { ChatMessage } from "../../../../shared/types";
 import { t, translateI18nDescriptor } from "../../i18n";
 import { formatDuration, formatTime, stripAnsi } from "./TimelineFormat";
@@ -15,6 +15,7 @@ import { Loader } from "../motion/loader";
 import { useSmoothStream } from "../../utils/useSmoothStream";
 import { SingleLinePreview } from "./SingleLinePreview";
 import { deriveRespondingKind, type RespondingKind } from "./timeline/respondingKind";
+import { isRetryStatusMessage } from "./timelineFailureNotice";
 
 // Button 收口状态（P0）：本文件按钮全部保留原生——
 // thinking-card-trigger 是折叠触发器 + 内容排版容器（内部 span/small/em 结构）。
@@ -35,7 +36,12 @@ export const DiagnosticMessageCard = memo(function DiagnosticMessageCard(props: 
 	const tone = getDiagnosticTone(props.message);
 	const localizedText = translateI18nDescriptor(props.message.meta, props.message.text);
 	const debugDetails = typeof props.message.meta?.debugDetails === "string" ? props.message.meta.debugDetails.trim() : "";
-	const title = props.message.role === "error" ? t("diagnostic.errorTitle") : t("diagnostic.systemTitle");
+	// 自动重试卡单独给「自动重试」标题 + 旋转图标：它和普通系统状态的观感必须能一眼区分，
+	// 否则卡片和「系统状态」长一样，用户仍然不知道刚才发生的是重试。
+	const isRetry = isRetryStatusMessage(props.message);
+	const retryRunning = isRetry && String(props.message.meta?.status ?? "") === "running";
+	const title = isRetry ? t("diagnostic.retryTitle") : props.message.role === "error" ? t("diagnostic.errorTitle") : t("diagnostic.systemTitle");
+	const Icon = isRetry ? RefreshCw : AlertTriangle;
 	return (
 		<TimelineMarker
 			kind="diagnostic"
@@ -45,7 +51,7 @@ export const DiagnosticMessageCard = memo(function DiagnosticMessageCard(props: 
 		>
 			<article className={`diagnostic-card w-full min-w-0 overflow-hidden rounded-md border border-border-subtle bg-[var(--color-chat-muted-bg)] tone-${tone}`} data-message-id={props.message.id} data-role={props.message.role}>
 				<div className="flex items-center gap-2 px-2 py-1.5 text-caption text-text-secondary">
-					<AlertTriangle size={14} aria-hidden="true" />
+					<Icon size={14} aria-hidden="true" className={retryRunning ? "animate-pideck-spin" : undefined} />
 					<span className="font-semibold">{title}</span>
 					<time className="ml-auto text-micro tabular-nums text-text-tertiary">{formatTime(props.message.timestamp)}</time>
 				</div>

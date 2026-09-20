@@ -112,10 +112,12 @@ export function SessionHeader(props: SessionHeaderProps) {
 				) : null}
 				{/* 会话身份面包屑：项目名 / 会话标题。
             truncate + max-w 限制：项目名最长约 160px，标题吃剩余空间。
-            项目段加 bg-muted 胶囊底：裸文字与标题同色时用户分不清哪段是工作区
-            （用户反馈「看不清」）；胶囊底在明暗主题下都与标题段拉开对比。 */}
+            项目段用实底灰胶囊（bg-accent = --color-bg-active，与激活 Tab / 侧栏选中同色）
+            + 近正文色文字：早期用 bg-muted（#f4f4f5，浅色主题下贴在 #ffffff 上几乎不可见）
+            时用户反馈「项目不够明显」；换成可见面色后项目段一眼可辨，
+            标题仍靠 text-foreground + font-medium 保持主次。 */}
 				{projectName ? (
-					<span className="max-w-40 shrink truncate rounded bg-muted px-1.5 py-0.5 text-caption text-muted-foreground" title={projectName}>
+					<span className="max-w-40 shrink truncate rounded bg-accent px-1.5 py-0.5 text-caption text-foreground/80" title={projectName}>
 						{projectName}
 					</span>
 				) : null}

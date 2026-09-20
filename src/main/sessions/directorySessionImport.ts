@@ -1,4 +1,5 @@
-import type { DirectorySessionSummary, SessionSummary } from "../../shared/types";
+import { dirname } from "node:path";
+import type { DirectorySessionSourceDir, DirectorySourceKind, DirectorySessionSummary, SessionSummary } from "../../shared/types";
 
 /**
  * 外置目录会话导入的纯逻辑（不碰 Electron、不碰磁盘、不 import SessionScanner）。
@@ -7,10 +8,11 @@ import type { DirectorySessionSummary, SessionSummary } from "../../shared/types
  * （布局 `~/.pi/agent/sessions/<encoded-cwd>/<file>.jsonl`）。项目目录一旦移动/改名，
  * 会话记录里的项目路径与新项目不再匹配，常规项目扫描（isSameProject 过滤）就看不到它们。
  *
- * 这里负责可单测的三件事：
- * 1. 判断用户选定的目录属于哪种形态（会话容器 / 项目目录）；
+ * 这里负责可单测的四件事：
+ * 1. 判断用户选定的目录属于哪种形态（会话容器 / 项目目录 / 会话树的祖先目录）；
  * 2. 从「全量会话清单」里挑出属于该目录的候选（容器内文件，或原工作目录命中）；
- * 3. 候选摘要 → 弹窗行。
+ * 3. 候选摘要 → 弹窗行；
+ * 4. 全量会话清单 → 「现有会话目录」列表（弹窗先列目录让用户点选，避免手选 ~/.pi 误列全部项目）。
  * 磁盘 IO 与 catalog 写入在 DirectorySessionImporter，本模块保持纯函数。
  *
  * 注意：本模块不引入 pi 的 encoded 目录名编码逻辑——候选筛选一律基于 SessionScanner
@@ -58,15 +60,85 @@ export function isSameDirectory(left: string | undefined, right: string | undefi
 
 /**
  * 候选判定（纯函数）：
- * - 选定目录是会话容器（sessions 根 / 某个 encoded 分组目录）→ 只收目录内的会话文件；
+ * - 选定目录是会话容器（某个 encoded 分组目录，或 sessions 根）→ 收「会话文件就在该目录内」的会话；
  * - 选定目录是项目目录（用户按直觉选了项目路径）→ 收「会话记录里的原工作目录 == 该目录」的会话，
  *   因为 pi 的会话文件在 sessions 树里按 cwd 分组，不在项目目录里。
- * 两种情况都只认 pi sessions 树里、由扫描器给出的会话摘要。
+ *
+ * 关键边界：文件位置匹配**只在选定目录被判定为会话容器时**生效。
+ * 曾经的写法是不管形态先做 isPathInsideRoots，导致用户选 `~/.pi`（sessions 树的祖先目录）时
+ * 整棵树的会话全部命中（2026-09 反馈：选了 ~/.pi 却列出 300 条其它项目的会话）。
  */
 export function isDirectoryImportCandidate(input: { summary: SessionSummary; dir: string; pickedIsContainer: boolean }): boolean {
-	if (isPathInsideRoots(input.summary.filePath, [input.dir])) return true;
-	if (input.pickedIsContainer) return false;
+	if (input.pickedIsContainer && isPathInsideRoots(input.summary.filePath, [input.dir])) return true;
 	return isSameDirectory(input.summary.projectPath, input.dir);
+}
+
+/** 目录 A 是否是目录 B 的严格祖先（含盘符根，如 `C:\` 是 `C:\Users\...` 的祖先）。 */
+export function isPathAncestorOf(ancestor: string, descendant: string): boolean {
+	const normalizedAncestor = normalizeSessionPathKey(ancestor);
+	const normalizedDescendant = normalizeSessionPathKey(descendant);
+	if (!normalizedAncestor || normalizedAncestor === normalizedDescendant) return false;
+	return normalizedDescendant.startsWith(`${normalizedAncestor}/`);
+}
+
+/**
+ * 选定目录的形态（决定弹窗文案：正常列表 / 「你选的是 pi 主目录」提示）。
+ * - sessions-root / group：会话容器，按目录内文件列出；
+ * - project：按会话记录里的原工作目录命中；
+ * - ancestor：sessions 树的祖先目录（~/.pi、~/.pi/agent、用户主目录…），命中必然为 0，需要提示改选；
+ * - none：以上都不是，也没有命中。
+ */
+export function classifyDirectorySource(input: {
+	pickedIsContainer: boolean;
+	probe: DirectoryShapeProbe;
+	/** 命中候选总数（截断前） */
+	matchedSessions: number;
+	isAncestorOfSessionRoot: boolean;
+}): DirectorySourceKind {
+	// sessions 根：按设计列出树内全部会话（用户在列表里主动选「全部会话」才会走到这里）。
+	if (input.probe.hasEncodedGroups) return "sessions-root";
+	if (input.pickedIsContainer) return input.matchedSessions > 0 ? "group" : "none";
+	if (input.matchedSessions > 0) return "project";
+	return input.isAncestorOfSessionRoot ? "ancestor" : "none";
+}
+
+/** 「现有会话目录」列表条数上限（分组目录一般几十个，避免极端情况下 IPC 与渲染体量失控）。 */
+export const DIRECTORY_SOURCE_MAX_DIRS = 100;
+
+/** 分组结果（磁盘存在性由 DirectorySessionImporter 补齐）。 */
+export type SessionSourceDirectoryGroup = Omit<DirectorySessionSourceDir, "projectPathExists">;
+
+/**
+ * 全量会话清单 → 「现有会话目录」列表：按会话文件所在目录分组。
+ * 目录名是编码后的旧路径（`--D--work-old--`），用户无法凭名字判断该选哪个，
+ * 所以列表里带上解码后的原工作目录、会话数、最后使用时间，让用户按项目认领。
+ * 按最后使用时间倒序（最近用过的排最前），超上限截断。
+ */
+export function groupSessionSourceDirectories(sessions: readonly SessionSummary[]): SessionSourceDirectoryGroup[] {
+	const groups = new Map<string, SessionSourceDirectoryGroup>();
+	for (const summary of sessions) {
+		if (!summary.filePath) continue;
+		const dir = dirname(summary.filePath);
+		const key = normalizeSessionPathKey(dir);
+		const current = groups.get(key);
+		if (!current) {
+			groups.set(key, {
+				dir,
+				...(summary.projectPath ? { projectPath: summary.projectPath } : {}),
+				sessionCount: 1,
+				lastUsedAt: summary.updatedAt,
+			});
+			continue;
+		}
+		current.sessionCount += 1;
+		// 同一分组目录通常只对应一个项目路径；取「最近一次会话」那条作为代表，
+		// 保证列表展示的是用户最近在用、也是导入后要挂回的那个路径。
+		if (summary.updatedAt >= current.lastUsedAt) {
+			current.lastUsedAt = summary.updatedAt;
+			if (summary.projectPath) current.projectPath = summary.projectPath;
+		}
+	}
+	return [...groups.values()].sort((left, right) => right.lastUsedAt - left.lastUsedAt).slice(0, DIRECTORY_SOURCE_MAX_DIRS);
 }
 
 /** 会话文件路径 → 弹窗标题兜底名（拿不到会话名时的文件名 stem）。 */
