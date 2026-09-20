@@ -2,15 +2,46 @@ import { access, stat } from "node:fs/promises";
 import { constants } from "node:fs";
 import { isAbsolute, normalize } from "node:path";
 import type { BrowserWindow, Rectangle } from "electron";
-import type { QuickTaskState } from "../../shared/types/quickTask";
+import type { QuickTaskErrorCode, QuickTaskState } from "../../shared/types/quickTask";
+
+/** 校验失败带稳定错误码，渲染层据此本地化；不让原始 message 跨 IPC 直接进 UI。 */
+export class QuickTaskPathError extends Error {
+	constructor(readonly code: QuickTaskErrorCode) {
+		super(code);
+		this.name = "QuickTaskPathError";
+	}
+}
 
 /** Reject malformed launch paths before project lookup or creation. Never invokes a shell. */
 export async function validateQuickTaskPath(value: unknown): Promise<string> {
-	if (typeof value !== "string" || !value || value.length > 32767 || /[\u0000-\u001f"]/u.test(value) || !isAbsolute(value)) throw new Error("QUICK_TASK_INVALID_PATH");
+	if (typeof value !== "string" || !value || value.length > 32767 || /[\u0000-\u001f"]/u.test(value) || !isAbsolute(value)) throw new QuickTaskPathError("invalidPath");
 	const path = normalize(value);
-	if (!(await stat(path)).isDirectory()) throw new Error("QUICK_TASK_NOT_DIRECTORY");
-	await access(path, constants.R_OK);
+	let stats: Awaited<ReturnType<typeof stat>>;
+	try {
+		stats = await stat(path);
+	} catch {
+		// 路径不存在 / 中间目录不是目录：对用户都是「这个目录打不开」。
+		throw new QuickTaskPathError("notFound");
+	}
+	if (!stats.isDirectory()) throw new QuickTaskPathError("notDirectory");
+	try {
+		await access(path, constants.R_OK);
+	} catch {
+		throw new QuickTaskPathError("permissionDenied");
+	}
 	return path;
+}
+
+/**
+ * 把任意异常收敛成稳定错误码。
+ * 注入式 validatePath（测试替身）可能抛裸 Error，这里按 errno 文案兜底归类。
+ */
+export function quickTaskErrorCode(error: unknown): QuickTaskErrorCode {
+	if (error instanceof QuickTaskPathError) return error.code;
+	const message = error instanceof Error ? error.message : String(error);
+	if (/EACCES|EPERM/u.test(message)) return "permissionDenied";
+	if (/ENOENT|ENOTDIR/u.test(message)) return "notFound";
+	return "unknown";
 }
 
 /** Fits the task surface in the current display without changing saved workbench bounds. */
@@ -47,7 +78,7 @@ export class QuickTaskController {
 			this.state = { active: true, requestId, path: validated };
 		} catch (error) {
 			if (this.state.requestId !== requestId || !this.state.active) return;
-			this.state = { active: true, requestId, path, error: error instanceof Error ? error.message : String(error) };
+			this.state = { active: true, requestId, path, error: quickTaskErrorCode(error) };
 		}
 		this.deps.publish(this.getState());
 	}

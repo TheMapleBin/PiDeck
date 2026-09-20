@@ -11,7 +11,12 @@ export const enUS: Record<TranslationKey, string> = {
 	"quickTask.addDescription": "This folder is not a project yet. Confirm adding it to enter a task.",
 	"quickTask.loading": "Preparing task…",
 	"quickTask.retry": "Retry",
-	"quickTask.invalidPath": "Cannot open this working directory. Check that it exists and you have access.",
+	// Error code → copy: the main process only returns a code (see shared/types/quickTask.ts)
+	"quickTask.error.invalidPath": "Cannot open this working directory: the path is not accepted.",
+	"quickTask.error.notDirectory": "Cannot open this working directory: it is not a folder.",
+	"quickTask.error.notFound": "Cannot open this working directory: it does not exist or was moved.",
+	"quickTask.error.permissionDenied": "Cannot open this working directory: access is denied.",
+	"quickTask.error.unknown": "The operation failed. Please try again.",
 	"quickTask.menuTitle": "Start quick tasks from Explorer",
 	"quickTask.menuDescription": "Add a quick task entry to the Windows desktop, folders and folder backgrounds. Windows 11 may require Show more options.",
 	"sidebar.pendingConfirmation": "Pending",

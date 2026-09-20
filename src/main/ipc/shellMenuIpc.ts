@@ -8,7 +8,8 @@ export type ShellMenuIpcDeps = {
 	appLogger: AppLogger;
 	/** 右键菜单显示名（跟随主进程 locale，见 index.ts 装配） */
 	menuTitle: string;
-	quickTaskTitle?: string;
+	/** 「右键发起小任务」菜单显示名（同上，必填——用户可见文案不设英文兜底默认值） */
+	quickTaskTitle: string;
 };
 
 /**
@@ -17,7 +18,7 @@ export type ShellMenuIpcDeps = {
  * 禁用删键；查询实时读注册表，不落 settings.json（避免双份状态漂移）。
  * 非 Windows 平台不支持，返回 supported=false 让 UI 隐藏开关。
  */
-export function registerShellMenuIpc({ appLogger, menuTitle, quickTaskTitle = "Start a task with PiDeck" }: ShellMenuIpcDeps): void {
+export function registerShellMenuIpc({ appLogger, menuTitle, quickTaskTitle }: ShellMenuIpcDeps): void {
 	ipcMain.handle(ipcChannels.shellMenuQuickTaskGetState, async () => ({ supported: process.platform === "win32", registered: process.platform === "win32" && (await quickTaskShellMenuRegistered()) }));
 	ipcMain.handle(ipcChannels.shellMenuQuickTaskSetEnabled, async (_event, enabled: unknown) => {
 		if (typeof enabled !== "boolean") throw new Error("SHELL_MENU_INVALID_ENABLED");

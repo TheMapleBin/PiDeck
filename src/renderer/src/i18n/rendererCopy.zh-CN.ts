@@ -10,7 +10,12 @@ export const zhCN = {
 	"quickTask.addDescription": "此目录尚未添加为项目。确认添加后即可输入任务。",
 	"quickTask.loading": "准备任务中…",
 	"quickTask.retry": "重试",
-	"quickTask.invalidPath": "无法打开工作目录，请检查目录是否存在及访问权限。",
+	// 错误码 → 文案：主进程只回码，这里负责本地化（见 shared/types/quickTask.ts）
+	"quickTask.error.invalidPath": "无法打开该工作目录：路径格式不被接受。",
+	"quickTask.error.notDirectory": "无法打开该工作目录：它不是一个文件夹。",
+	"quickTask.error.notFound": "无法打开该工作目录：目录不存在或已被移动。",
+	"quickTask.error.permissionDenied": "无法打开该工作目录：没有访问权限。",
+	"quickTask.error.unknown": "操作失败，请重试。",
 	"quickTask.menuTitle": "右键发起小任务",
 	"quickTask.menuDescription": "在 Windows 桌面、文件夹及空白处添加小任务入口。Windows 11 可能需要「显示更多选项」。",
 	"sidebar.pendingConfirmation": "待确认",

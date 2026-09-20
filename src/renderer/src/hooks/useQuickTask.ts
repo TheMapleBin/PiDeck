@@ -1,9 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AgentBackend, Project, SessionRecord } from "../../../shared/types";
-import type { QuickTaskState } from "../../../shared/types/quickTask";
+import type { QuickTaskErrorCode, QuickTaskState } from "../../../shared/types/quickTask";
 import { desktopApi as api } from "../desktopApi";
 import { t } from "../i18n";
 import { quickTaskIntent, sameQuickTaskPath } from "../utils/quickTaskIntent";
+
+/** 主进程只回稳定错误码，文案在渲染层映射——用户可见文本一律走 i18n，不显示 IPC 技术串。 */
+function quickTaskErrorText(code: QuickTaskErrorCode): string {
+	return t(`quickTask.error.${code}`);
+}
 
 /** Owns compact task selection; launch requests never submit prompts or replace an existing draft. */
 export function useQuickTask(options: {
@@ -17,6 +22,8 @@ export function useQuickTask(options: {
 }) {
 	const optionsRef = useRef(options);
 	optionsRef.current = options;
+	/** 紧凑模式的根节点：聚焦输入框时用它限定查询范围，避免生产逻辑依赖 data-testid 这类测试契约。 */
+	const surfaceRef = useRef<HTMLDivElement | null>(null);
 	const [launch, setLaunch] = useState<QuickTaskState>({ active: false, requestId: 0 });
 	const [session, setSession] = useState<SessionRecord | null>(null);
 	const sessionRef = useRef<SessionRecord | null>(null);
@@ -46,8 +53,8 @@ export function useQuickTask(options: {
 					setLaunch(state);
 				}
 			})
-			.catch((e: unknown) => {
-				if (mounted.current) setError(String(e));
+			.catch(() => {
+				if (mounted.current) setError(t("quickTask.error.unknown"));
 			});
 		return () => {
 			mounted.current = false;
@@ -85,8 +92,9 @@ export function useQuickTask(options: {
 				setNeedsProject(false);
 				// A slow project/catalog write may finish after Close: retain the draft, but never steal focus.
 				if (activeRef.current) focusSession(record);
-			} catch (e) {
-				setError(e instanceof Error ? e.message : String(e));
+			} catch {
+				// 目录/项目/草稿任一环节失败对用户都是同一件事：这条任务没准备好，给通用文案而不是 IPC 原始串。
+				setError(t("quickTask.error.unknown"));
 			} finally {
 				busyRef.current = false;
 				if (mounted.current) setBusy(false);
@@ -99,7 +107,7 @@ export function useQuickTask(options: {
 		if (!launch.active || !options.ready || !launch.path || busy || handled.current === launch.requestId) return;
 		handled.current = launch.requestId;
 		if (launch.error) {
-			setError(`${t("quickTask.invalidPath")} ${launch.path}: ${launch.error}`);
+			setError(`${quickTaskErrorText(launch.error)} ${launch.path}`);
 			return;
 		}
 		setError(null);
@@ -125,7 +133,8 @@ export function useQuickTask(options: {
 		if (!launch.active || !session || busy) return;
 		let timer: ReturnType<typeof setTimeout> | undefined;
 		const focus = (attempt = 0) => {
-			const input = document.querySelector<HTMLElement>("[data-testid='quick-task-window'] .composer-box .rich-input, [data-testid='quick-task-window'] .composer-box textarea");
+			// 只在紧凑模式自己的根节点内查找，不再用 data-testid 当选择器（testid 属于测试契约）。
+			const input = surfaceRef.current?.querySelector<HTMLElement>(".composer-box .rich-input, .composer-box textarea");
 			if (input) input.focus();
 			else if (attempt < 10) timer = setTimeout(() => focus(attempt + 1), 50);
 		};
@@ -151,7 +160,7 @@ export function useQuickTask(options: {
 	const exit = useCallback(() => {
 		activeRef.current = false;
 		if (sessionRef.current) focusSession(sessionRef.current);
-		void api.quickTask.exit().catch((e: unknown) => setError(String(e)));
+		void api.quickTask.exit().catch(() => setError(t("quickTask.error.unknown")));
 	}, [focusSession]);
-	return { active: launch.active, session, path: path || launch.path || "", pendingPath, needsProject, busy, error, canRetry: Boolean(path), startNew, exit, keepCurrent: () => setPendingPath(null), addProject: () => void prepare(pathRef.current, true), retry: () => void prepare(pathRef.current, false) };
+	return { surfaceRef, active: launch.active, session, path: path || launch.path || "", pendingPath, needsProject, busy, error, canRetry: Boolean(path), startNew, exit, keepCurrent: () => setPendingPath(null), addProject: () => void prepare(pathRef.current, true), retry: () => void prepare(pathRef.current, false) };
 }
