@@ -10,6 +10,7 @@ import type { MainProcessTranslationKey } from "../../shared/i18n/mainProcessCop
 import { getCodexSessionThreadInfo } from "../../shared/codexSessionMeta";
 import { isInSubagentArtifactsDir, isValidPiSessionFileHead, looksLikePiSessionFileStem, SUBAGENT_ARTIFACTS_DIR_NAME } from "../../shared/sessionIdentity";
 import { extractMessageText, extractThinkingRaw } from "../pi/messageContent";
+import { isRoleMessageRole } from "../pi/sessionEntryIds";
 import { replaceExpandedRefBlocksWithLabels } from "../../shared/expandedRefBlocks";
 import { toWindowsHostPath, toWslLinuxPath, type WslEnvironment } from "../wsl/WslPaths";
 import { getAppLogger } from "../logging/sharedLogger";
@@ -1797,7 +1798,9 @@ export class SessionScanner {
 				provider: entry.provider,
 				model: entry.model,
 			};
-			if (message.role) {
+			// 只数会进时间线的角色消息：pi 0.86 起系统提示/工具清单变更也是 type:"message"
+			// （role:"system"），算进消息数会让侧栏/列表计数虚高（首个请求 +1、每次补丁再 +1）。
+			if (isRoleMessageRole(message.role)) {
 				messageCount += 1;
 				const text = this.extractText(message.content).trim();
 				// 侧栏会话 preview 是纯文本出口：折叠自包含引用块，避免露出 <quoted_context> 等 XML 原文。

@@ -4122,7 +4122,7 @@ export const zhCN = {
 	"session.trajectory.kind.import": "导入",
 	"session.trajectory.kind.retry": "重试",
 	"session.trajectory.kind.error": "错误",
-	"session.trajectory.systemPromptHint": "Pi 不会把当轮真实系统提示落进会话文件。这里展示内置 pi-system 参考文本，便于对照身份、工具和行为准则。",
+	"session.trajectory.systemPromptHint": "Pi 0.86 起会把系统提示按分节写入会话文件（更早版本不落盘）。这里展示应用内置的 pi-system 参考文本，便于对照身份、工具和行为准则。",
 	"session.trajectory.systemPromptHintDsh": "DSH 的系统提示由 harness 在请求时组装（persona + sections）。这里展示当轮请求的真实系统提示（dsh-web 轨迹同源）。",
 	"session.trajectory.field.time": "时间",
 	"session.trajectory.field.duration": "耗时",

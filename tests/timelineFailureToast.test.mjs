@@ -9,10 +9,13 @@ const notice = readFileSync("src/renderer/src/components/session/timelineFailure
 const eventCards = readFileSync("src/renderer/src/components/session/TimelineEventCards.tsx", "utf8");
 
 const i18n = loadTsCommonJs("src/renderer/src/i18n.ts");
-const { FLOATING_FAILURE_KEYS, RETRY_STATUS_KEYS, composeFailureNotice, failureRetrySignature, isExtensionErrorMessage, isFailureNoticeMessage, isFloatingFailureMessage, isRetryStatusMessage, reduceFailureNoticePass } = loadTsCommonJs("src/renderer/src/components/session/timelineFailureNotice.ts", {
-	// 与 composeFailureNotice 共用同一份 i18n 模块，否则 setI18nLocale 改不到 toast 文案。
-	stubs: { "../../i18n": i18n },
-});
+const { FLOATING_FAILURE_KEYS, RETRY_STATUS_KEYS, composeFailureNotice, failureRetrySignature, isExtensionErrorMessage, isFailureNoticeMessage, isFloatingFailureMessage, isRetryStatusMessage, isTransientRetryCard, reduceFailureNoticePass } = loadTsCommonJs(
+	"src/renderer/src/components/session/timelineFailureNotice.ts",
+	{
+		// 与 composeFailureNotice 共用同一份 i18n 模块，否则 setI18nLocale 改不到 toast 文案。
+		stubs: { "../../i18n": i18n },
+	},
+);
 const { setI18nLocale } = i18n;
 
 function message(i18nKey, extras = {}) {
@@ -77,6 +80,42 @@ test("timeline render: 重试状态与失败诊断都渲染卡片，重试卡带
 	assert.match(eventCards, /isRetryStatusMessage\(props\.message\)/);
 	assert.match(eventCards, /t\("diagnostic\.retryTitle"\)/);
 	assert.match(eventCards, /className=\{retryRunning \? "animate-pideck-spin" : undefined\}/);
+});
+
+test("transient retry card: 只有「重试成功」卡不进时间线，进行中/失败卡照旧渲染", () => {
+	// 用户反馈：连续重试（同一轮 run 内多次 5xx）会各留一张「自动重试成功」卡，挂一排很难看。
+	assert.equal(isTransientRetryCard(message("diagnostic.retrySucceeded", { role: "system", text: "自动重试成功，共重试 2 次" })), true);
+	// 进行中的重试卡必须留在时间线（用户要看到「正在重试」而不是最终失败）
+	assert.equal(isTransientRetryCard(message("diagnostic.retryScheduled", { role: "system" })), false);
+	assert.equal(isTransientRetryCard(message("diagnostic.retryScheduledAfterDelay", { role: "system" })), false);
+	// 失败卡保留留痕（用户明确要求只隐藏成功卡）
+	assert.equal(isTransientRetryCard(message("diagnostic.retryFailed", { role: "system" })), false);
+	// 普通失败诊断不是重试卡
+	assert.equal(isTransientRetryCard(message("diagnostic.requestFailed")), false);
+	// 渲染层在 system 分支短路成功卡，其余诊断卡照常返回
+	assert.match(timeline, /if \(isTransientRetryCard\(message\)\) return null;/);
+	// 成功卡仍属重试状态卡（toast 标题/签名不变），隐藏只发生在渲染层
+	assert.equal(isRetryStatusMessage(message("diagnostic.retrySucceeded", { role: "system" })), true);
+});
+
+test("retry success toast: 卡片不进时间线，toast 仍照常弹", () => {
+	const toastedIds = new Set();
+	const toastedRetrySignatures = new Set();
+	const baseline = pass({ toastedIds, toastedRetrySignatures });
+	const succeeded = message("diagnostic.retrySucceeded", {
+		id: "retry-ok",
+		role: "system",
+		text: "自动重试成功，共重试 2 次",
+		i18nParams: { count: "2/3" },
+	});
+	const live = pass({
+		messages: [succeeded],
+		state: baseline.state,
+		toastedIds,
+		toastedRetrySignatures,
+	});
+	assert.equal(toastIds(live), "retry-ok");
+	assert.equal(failureRetrySignature(succeeded), "retry-ok:diagnostic.retrySucceeded:2/3");
 });
 
 test("retry status keys: 覆盖重试周期四态，不含普通失败诊断", () => {

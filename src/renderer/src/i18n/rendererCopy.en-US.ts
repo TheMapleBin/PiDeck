@@ -4132,7 +4132,7 @@ export const enUS: Record<TranslationKey, string> = {
 	"session.trajectory.kind.import": "Import",
 	"session.trajectory.kind.retry": "Retry",
 	"session.trajectory.kind.error": "Error",
-	"session.trajectory.systemPromptHint": "Pi does not persist the live system prompt in the session file. This shows the built-in pi-system reference for identity, tools, and guidelines.",
+	"session.trajectory.systemPromptHint": "Since Pi 0.86 the system prompt is persisted in the session file as named sections (earlier versions stored none). This shows the app's built-in pi-system reference for identity, tools, and guidelines.",
 	"session.trajectory.systemPromptHintDsh": "DSH assembles the system prompt at request time (persona + sections). This shows the real prompt of the latest request (same source as dsh-web).",
 	"session.trajectory.field.time": "Time",
 	"session.trajectory.field.duration": "Duration",
