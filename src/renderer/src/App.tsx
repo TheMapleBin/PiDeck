@@ -404,6 +404,7 @@ export function App() {
 	const {
 		worktreesByProject,
 		branchByProject,
+		setBranchByProject,
 		files,
 		setFiles,
 		gitInfo,
@@ -844,7 +845,6 @@ export function App() {
 	expandedDirsRef.current = expandedDirs;
 	// 手动刷新/增删改后仍只拉浅层 + 当前展开目录，避免再走整棵 12 层 IPC。
 	const refreshVisibleFiles = useCallback((projectId?: string, silent?: boolean) => refreshFiles(projectId, silent, expandedDirs), [expandedDirs, refreshFiles]);
-	const [, setBranchByProject] = useState<Record<string, string | null>>({});
 	const [expandedSidebarProjects, setExpandedSidebarProjects] = useState<Set<string>>(new Set());
 	const expandedSidebarProjectsRef = useRef(expandedSidebarProjects);
 	expandedSidebarProjectsRef.current = expandedSidebarProjects;
@@ -1965,6 +1965,9 @@ export function App() {
 				if (stopped) return;
 				// 分支可能在外部终端/IDE 中切换,轮询只在状态真的变化时更新,避免不必要重渲染。
 				setGitInfo((current) => (current.current === next.current && current.branches.join("\n") === next.branches.join("\n") ? current : next));
+				// 侧栏分支徽标与 Git 抽屉同源：外部终端 checkout 后也要一起跟上。
+				// 只更新聚焦项目——非聚焦项目不在轮询范围内，由栏内 usePaneGitInfo 回写。
+				setBranchByProject((prev) => (prev[activeProjectId] === next.current ? prev : { ...prev, [activeProjectId]: next.current }));
 			} catch {
 				if (!stopped) {
 					setGitInfo({ current: null, branches: [] });
@@ -3326,13 +3329,18 @@ export function App() {
 	// 先算成稳定字符串再进 memo 依赖，避免 terminalOwner 每次渲染新建对象把 memo 打穿。
 	const activeTerminalOwnerKey = terminalOwner ? terminalOwnerKey(terminalOwner) : undefined;
 
-	// 分屏栏分支变化后的全局同步：只采纳“栏项目 == 当前聚焦项目”的变化，
-	// 非聚焦栏（另一个 worktree）切分支不得污染右侧 Git 抽屉/侧栏的聚焦态；
+	// 分屏栏分支变化后的全局同步：侧栏分支字典对所有栏项目即时更新（每个项目行都要显示自己的分支），
+	// 但右侧 Git 抽屉只采纳“栏项目 == 当前聚焦项目”的变化，
+	// 非聚焦栏（另一个 worktree）切分支不得污染右侧 Git 抽屉的聚焦态；
 	// 聚焦项目自己的分支早期离开（checkout 后被 4s 轮询追平）也不至于闪回旧值。
-	const handleProjectGitChanged = useCallback((projectId: string, info: GitBranchInfo) => {
-		if (projectId !== activeProjectIdRef.current) return;
-		setGitInfo((current) => (current.current === info.current && current.branches.join("\n") === info.branches.join("\n") ? current : info));
-	}, []);
+	const handleProjectGitChanged = useCallback(
+		(projectId: string, info: GitBranchInfo) => {
+			setBranchByProject((prev) => (prev[projectId] === info.current ? prev : { ...prev, [projectId]: info.current }));
+			if (projectId !== activeProjectIdRef.current) return;
+			setGitInfo((current) => (current.current === info.current && current.branches.join("\n") === info.branches.join("\n") ? current : info));
+		},
+		[setBranchByProject],
+	);
 
 	const sessionPaneServices = useMemo(
 		() => ({

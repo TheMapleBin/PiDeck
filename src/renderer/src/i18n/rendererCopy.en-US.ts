@@ -63,6 +63,7 @@ export const enUS: Record<TranslationKey, string> = {
 	"app.worktreeMainWorkspace": "Main workspace",
 	"app.worktreeOtherWorkspaces": "Other workspaces",
 	"app.worktreeBranchLoading": "…",
+	"app.currentBranch": "Current branch: {branch}",
 	"app.worktreeShowMoreSessions": "{count} more sessions…",
 	"app.worktreeNew": "New Workspace",
 	"app.worktreeNewShort": "New",
