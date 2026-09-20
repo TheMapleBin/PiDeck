@@ -8,12 +8,7 @@
  * sha256 必须写在索引里（下载前已知），zip 内不能自证哈希。
  */
 
-import {
-	atomGitFeedUrl,
-	atomGitReleasesBase,
-	gitHubLatestDownloadBase,
-	gitHubReleasesBase,
-} from "../updateSources";
+import { atomGitFeedUrl, atomGitReleasesBase, gitHubLatestDownloadBase, gitHubReleasesBase } from "../updateSources";
 import type { UpdateSourceId } from "./settings";
 
 export const DSH_RUNNER_NODE_RELEASE_SCHEMA = 1;
@@ -56,10 +51,7 @@ export function officialNodeZipUrl(version: string, arch: DshRunnerNodeArch): st
 	return `https://nodejs.org/dist/v${version}/${dshRunnerNodeZipName(version, arch)}`;
 }
 
-export function dshRunnerNodeAssetDownloadUrl(
-	source: UpdateSourceId,
-	fileName: string,
-): string {
+export function dshRunnerNodeAssetDownloadUrl(source: UpdateSourceId, fileName: string): string {
 	const encoded = encodeURIComponent(fileName);
 	if (source === "github") {
 		return `${gitHubLatestDownloadBase()}/${encoded}`;
@@ -77,17 +69,6 @@ export function dshRunnerNodeReleasePageUrl(source: UpdateSourceId): string {
 	return `${atomGitReleasesBase()}/releases/latest`;
 }
 
-export function selectDshRunnerNodeRelease(
-	releases: readonly DshRunnerNodeRelease[],
-	arch: DshRunnerNodeArch,
-	version: string = DSH_RUNNER_NODE_SIDECAR_VERSION,
-): DshRunnerNodeRelease | undefined {
-	return releases.find(
-		(release) =>
-			release.arch === arch &&
-			release.version === version &&
-			typeof release.url === "string" &&
-			typeof release.sha256 === "string" &&
-			release.sha256.length === 64,
-	);
+export function selectDshRunnerNodeRelease(releases: readonly DshRunnerNodeRelease[], arch: DshRunnerNodeArch, version: string = DSH_RUNNER_NODE_SIDECAR_VERSION): DshRunnerNodeRelease | undefined {
+	return releases.find((release) => release.arch === arch && release.version === version && typeof release.url === "string" && typeof release.sha256 === "string" && release.sha256.length === 64);
 }

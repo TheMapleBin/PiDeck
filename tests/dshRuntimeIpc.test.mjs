@@ -18,9 +18,8 @@ test("shared/ipc.ts 定义 dsh-runtime 通道（domain:action 命名）", () => 
 });
 
 test("sessionIpc 注册 dsh-runtime:get-status，未装配 dshBackend 时返回 notInstalled", () => {
-	const block = sessionIpc.match(
-		/ipcMain\.handle\(\s*ipcChannels\.dshRuntimeGetStatus,[\s\S]*?\n\t\);/,
-	);
+	// 闭合括号的缩进/写法可能被 formatter 调整（分隔层由 \n 变为折叠）：用 \s* 容忍。
+	const block = sessionIpc.match(/ipcMain\.handle\(\s*ipcChannels\.dshRuntimeGetStatus,[\s\S]*?\n[\t ]*\}?\s*\);/);
 	assert.ok(block, "sessionIpc.ts 必须注册 dshRuntimeGetStatus handler");
 	// 渲染层初值是 checking，主进程拿不到状态时必须给确定态，否则 UI 永远停在 checking。
 	assert.match(block[0], /notInstalled/);
@@ -29,18 +28,11 @@ test("sessionIpc 注册 dsh-runtime:get-status，未装配 dshBackend 时返回 
 
 test("new draft / anonymous 创建在 runtime 不可用时拒绝 dsh 后端", () => {
 	for (const channel of ["sessionsCatalogCreateDraft", "sessionsCreateAnonymous"]) {
-		const block = sessionIpc.match(
-			new RegExp(`ipcMain\\.handle\\(\\s*ipcChannels\\.${channel},[\\s\\S]*?canCreateDshSession`),
-		);
+		const block = sessionIpc.match(new RegExp(`ipcMain\\.handle\\(\\s*ipcChannels\\.${channel},[\\s\\S]*?canCreateDshSession`));
 		assert.ok(block, `${channel} 必须按 DSH runtime 安装态门控`);
 	}
 	// 门控必须只拦 dsh：pi 会话创建不受 runtime 状态影响。
-	assert.equal(
-		(sessionIpc.match(/input\.backend === "dsh" && canCreateDshSession\?\.\(\) !== true/g) ?? [])
-			.length,
-		2,
-		"两处创建入口都要有 dsh 专用门控",
-	);
+	assert.equal((sessionIpc.match(/input\.backend === "dsh" && canCreateDshSession\?\.\(\) !== true/g) ?? []).length, 2, "两处创建入口都要有 dsh 专用门控");
 });
 
 test("runtime 状态服务与主进程装配不再按 dev 隐藏远程安装", () => {
@@ -67,7 +59,10 @@ test("preload 暴露安装态查询与订阅，订阅返回退订函数", () => 
 });
 
 test("浏览器/预览兜底 API 同步提供安装态方法（缺一则预览态崩溃）", () => {
-	for (const [name, source] of [["browserApi", browserApi], ["previewApi", previewApi]]) {
+	for (const [name, source] of [
+		["browserApi", browserApi],
+		["previewApi", previewApi],
+	]) {
 		assert.match(source, /getDshRuntimeStatus/, `${name} 缺少 getDshRuntimeStatus 兜底`);
 		assert.match(source, /onDshRuntimeStatusChanged/, `${name} 缺少 onDshRuntimeStatusChanged 兜底`);
 	}
@@ -76,11 +71,7 @@ test("浏览器/预览兜底 API 同步提供安装态方法（缺一则预览�
 // ── 派生 atom 行为测试（渲染层门控的真相源）──
 // 必须经 atoms/index 一次性加载：loadTsCommonJs 每次调用独立建缓存，
 // 分两次加载会得到两个不同的 dshRuntimeStatusAtom 对象，派生 atom 读不到写入值。
-const {
-	defaultAgentBackendAtom,
-	effectiveAgentBackendAtom,
-	dshRuntimeStatusAtom,
-} = loadTsCommonJs("src/renderer/src/atoms/index.ts");
+const { defaultAgentBackendAtom, effectiveAgentBackendAtom, dshRuntimeStatusAtom } = loadTsCommonJs("src/renderer/src/atoms/index.ts");
 
 test("effectiveAgentBackendAtom：runtime 不可用时把 dsh 钳成 pi，恢复后自动回到 dsh", () => {
 	const store = createStore();

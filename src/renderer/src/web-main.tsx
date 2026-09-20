@@ -26,7 +26,7 @@ applyTheme();
 darkMedia.addEventListener("change", applyTheme);
 
 createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <WebChatApp />
-  </StrictMode>,
+	<StrictMode>
+		<WebChatApp />
+	</StrictMode>,
 );

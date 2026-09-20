@@ -73,10 +73,7 @@ if (!existsSync(dbPath)) {
 			for (const file of files) {
 				const templateName = file.replace(/\.md$/, "");
 				const slug = SLUG_OVERRIDES[templateName] ?? templateName;
-				const row = db.exec(
-					"SELECT slug, category, content FROM xueprompts WHERE slug = ?",
-					[slug]
-				);
+				const row = db.exec("SELECT slug, category, content FROM xueprompts WHERE slug = ?", [slug]);
 				if (!row[0]?.values?.length) {
 					failures.push(`内置模板缺失: ${slug}（来自 ${file}，期望分类 ${BUILTIN_CATEGORY}）`);
 					continue;

@@ -63,26 +63,26 @@ test("goal/plan composer chrome uses an inset accent rail and an in-chip exit", 
 });
 
 test("pi goal extension: a new goal typed after complete replaces the old objective", () => {
-  // 完成后目标模式里发的原文必须替换旧目标（修复前只重置 phase，
-  // 新目标既不显示也不被执行），且替换语义应清空上一目标消耗的轮次。
-  assert.match(extension, /else if \(state\.phase === "complete"\)/);
-  // 完成分支把新原文作为替换目标传入，而不是落入末位 else 只改 phase。
-  assert.match(extension, /上一目标已完成：目标模式里发的原文是「替换为新目标」/);
-  assert.match(extension, /} else if \(state\.phase === "complete"\) \{[\s\S]*?setActive\(ctx, body\);/);
-  // 替换语义清空上一目标消耗的轮次；恢复（不传参）保留原轮次。
-  assert.match(extension, /roundsStarted: replacing \? 0 : state\.roundsStarted/);
-  assert.match(extension, /暂停\/阻塞 ≠ 完成：正文保持原文推进同一目标/);
+	// 完成后目标模式里发的原文必须替换旧目标（修复前只重置 phase，
+	// 新目标既不显示也不被执行），且替换语义应清空上一目标消耗的轮次。
+	assert.match(extension, /else if \(state\.phase === "complete"\)/);
+	// 完成分支把新原文作为替换目标传入，而不是落入末位 else 只改 phase。
+	assert.match(extension, /上一目标已完成：目标模式里发的原文是「替换为新目标」/);
+	assert.match(extension, /} else if \(state\.phase === "complete"\) \{[\s\S]*?setActive\(ctx, body\);/);
+	// 替换语义清空上一目标消耗的轮次；恢复（不传参）保留原轮次。
+	assert.match(extension, /roundsStarted: replacing \? 0 : state\.roundsStarted/);
+	assert.match(extension, /暂停\/阻塞 ≠ 完成：正文保持原文推进同一目标/);
 });
 
 test("pi goal extension: resume kicks off a turn and abort stops the loop", () => {
-  // resume/on/enable 后必须真正派发一轮续跑，而不是只把 phase 置回 active 空转。
-  assert.match(extension, /kickOffContinuation\(\);/);
-  assert.match(extension, /恢复必须真正触发一轮续跑：否则 agent 空闲时 goal 只标 active、不干活/);
-  // 恢复与自动续轮共用同一派发 helper（triggerTurn + followUp）。
-  assert.match(extension, /function kickOffContinuation\(\): void \{[\s\S]*?triggerTurn: true, deliverAs: "followUp"/);
-  // Stop 会话（abort）后 agent_end 不再自动续轮：检查 assistant 的 stopReason。
-  assert.match(extension, /lastAssistant\.stopReason === "aborted" \|\| lastAssistant\.stopReason === "error"/);
-  assert.match(extension, /停止会话却停不下来/);
+	// resume/on/enable 后必须真正派发一轮续跑，而不是只把 phase 置回 active 空转。
+	assert.match(extension, /kickOffContinuation\(\);/);
+	assert.match(extension, /恢复必须真正触发一轮续跑：否则 agent 空闲时 goal 只标 active、不干活/);
+	// 恢复与自动续轮共用同一派发 helper（triggerTurn + followUp）。
+	assert.match(extension, /function kickOffContinuation\(\): void \{[\s\S]*?triggerTurn: true, deliverAs: "followUp"/);
+	// Stop 会话（abort）后 agent_end 不再自动续轮：检查 assistant 的 stopReason。
+	assert.match(extension, /lastAssistant\.stopReason === "aborted" \|\| lastAssistant\.stopReason === "error"/);
+	assert.match(extension, /停止会话却停不下来/);
 });
 
 test("send path keeps DSH off agentMessage and uses /goal transform", () => {

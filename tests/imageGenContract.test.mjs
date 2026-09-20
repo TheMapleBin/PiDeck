@@ -19,10 +19,7 @@ const composerPanels = readFileSync("src/renderer/src/components/session/Compose
 const zh = readFileSync("src/renderer/src/i18n/rendererCopy.zh-CN.ts", "utf8");
 const en = readFileSync("src/renderer/src/i18n/rendererCopy.en-US.ts", "utf8");
 // 设置页 tab 的标题 i18n key 已收敛到这份布局模块（命令面板 Ctrl+P 搜设置项复用同一份）
-const settingsTabLayout = readFileSync(
-	"src/renderer/src/components/app/settings/settingsTabLayout.ts",
-	"utf8",
-);
+const settingsTabLayout = readFileSync("src/renderer/src/components/app/settings/settingsTabLayout.ts", "utf8");
 
 test("IPC 通道三处同步：generate / get-config / save-config", () => {
 	assert.match(ipc, /imagegenGenerate: "imagegen:generate"/);
@@ -180,7 +177,8 @@ test("controller：生图分支不 send、生图占位消息三态上屏（不�
 
 test("发送控件：生图进行中显示转圈并禁用", () => {
 	assert.match(composerPanels, /isGeneratingImage\?: boolean/);
-	assert.match(composerPanels, /isGeneratingImage \? \(/);
+	// 三元的 JSX 可能被格式化到下一行：只锁条件表达式。
+	assert.match(composerPanels, /isGeneratingImage \? \(?/);
 	assert.match(composerPanels, /props\.isAgentStarting \|\| props\.isGeneratingImage \|\| !props\.canSend/);
 });
 
@@ -197,8 +195,7 @@ test("生图结果提供原图复制与按 mime 保存", () => {
 });
 
 test("i18n：zh/en 生图模式与错误文案 key 一致", () => {
-	const extract = (src) => [...src.matchAll(/"(app\.composerModeImagegen|app\.composerModeImagegenDesc|imagegen\.[^"]+|config\.nav\.imagegen|config\.imagegen\.[^"]+)"/g)]
-		.map((m) => m[0].slice(1, -1)).sort();
+	const extract = (src) => [...src.matchAll(/"(app\.composerModeImagegen|app\.composerModeImagegenDesc|imagegen\.[^"]+|config\.nav\.imagegen|config\.imagegen\.[^"]+)"/g)].map((m) => m[0].slice(1, -1)).sort();
 	const zhKeys = extract(zh);
 	const enKeys = extract(en);
 	assert.ok(zhKeys.length >= 8, `zh imagegen keys: ${zhKeys.length}`);

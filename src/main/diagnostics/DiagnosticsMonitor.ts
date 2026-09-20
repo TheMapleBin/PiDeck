@@ -85,11 +85,7 @@ export class DiagnosticsMonitor {
 	 * 记录一条关键路径耗时。未开启时直接丢弃（零开销）。
 	 * 写盘走队列，不 await 调用方。
 	 */
-	recordTiming(
-		name: string,
-		startedAt: number,
-		detail?: DiagnosticsEventTiming["detail"],
-	): void {
+	recordTiming(name: string, startedAt: number, detail?: DiagnosticsEventTiming["detail"]): void {
 		if (!this.enabled) return;
 		const durationMs = Math.max(0, Date.now() - startedAt);
 		const entry: DiagnosticsEventTiming = {

@@ -2,32 +2,12 @@ import { app } from "electron";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, open, readdir, rm, stat, utimes } from "node:fs/promises";
 import { basename, join } from "node:path";
-import type {
-	ClaudeImportReport,
-	ClaudeImportResult,
-	ClaudeImportStatus,
-	ClaudeSessionSummary,
-} from "../../shared/types";
-import {
-	defaultSessionImportCopy,
-	type SessionImportCopy,
-} from "./SessionImportCopy";
+import type { ClaudeImportReport, ClaudeImportResult, ClaudeImportStatus, ClaudeSessionSummary } from "../../shared/types";
+import { defaultSessionImportCopy, type SessionImportCopy } from "./SessionImportCopy";
 import { normalizeImportedToolArguments } from "./importToolArguments";
 import { readImportMetaHead } from "./importMetaHead";
-import {
-	createBufferedLineSink,
-	mapWithConcurrency,
-	readJsonlObjects,
-	readSessionSourceHead,
-	renameWithRetry,
-	SESSION_SCAN_CONCURRENCY,
-} from "./sessionSourceHead";
-import {
-	importedContentHasToolCall,
-	importedUnknownBlockAsText,
-	normalizeImportedStopReason,
-	tryImportedImageBlock,
-} from "./importNormalize";
+import { createBufferedLineSink, mapWithConcurrency, readJsonlObjects, readSessionSourceHead, renameWithRetry, SESSION_SCAN_CONCURRENCY } from "./sessionSourceHead";
+import { importedContentHasToolCall, importedUnknownBlockAsText, normalizeImportedStopReason, tryImportedImageBlock } from "./importNormalize";
 
 type ParsedClaudeSession = {
 	meta: {
@@ -43,12 +23,7 @@ type ParsedClaudeSession = {
 };
 
 /** 向 pi 会话写一条消息（返回 Promise：流式导入要尊重写盘背压）。 */
-type ClaudePushMessage = (
-	role: "user" | "assistant" | "toolResult",
-	content: unknown[],
-	extra?: Record<string, unknown>,
-	timestampValue?: string,
-) => Promise<void>;
+type ClaudePushMessage = (role: "user" | "assistant" | "toolResult", content: unknown[], extra?: Record<string, unknown>, timestampValue?: string) => Promise<void>;
 
 export class ClaudeSessionImporter {
 	private readonly claudeRoot = join(app.getPath("home"), ".claude", "projects");
@@ -68,15 +43,9 @@ export class ClaudeSessionImporter {
 		const projectDir = this.getClaudeProjectDir(projectPath);
 		const files = await this.collectJsonl(projectDir).catch(() => []);
 		// 有界并发：内存峰值 = 并发数 × 头部缓冲（见 SESSION_SCAN_CONCURRENCY）
-		const sessions = await mapWithConcurrency(files, SESSION_SCAN_CONCURRENCY, (file) =>
-			this.readClaudeSessionHead(file).catch(() => null),
-		);
+		const sessions = await mapWithConcurrency(files, SESSION_SCAN_CONCURRENCY, (file) => this.readClaudeSessionHead(file).catch(() => null));
 
-		const summaries = await Promise.all(
-			sessions
-				.filter((session): session is ParsedClaudeSession => Boolean(session))
-				.map((session) => this.toSummary(session, projectPath)),
-		);
+		const summaries = await Promise.all(sessions.filter((session): session is ParsedClaudeSession => Boolean(session)).map((session) => this.toSummary(session, projectPath)));
 
 		return summaries.sort((a, b) => b.updatedAt - a.updatedAt);
 	}
@@ -93,10 +62,7 @@ export class ClaudeSessionImporter {
 		};
 	}
 
-	private async importOne(
-		projectPath: string,
-		sourcePath: string,
-	): Promise<ClaudeImportResult> {
+	private async importOne(projectPath: string, sourcePath: string): Promise<ClaudeImportResult> {
 		const tempPath = `${join(this.getProjectSessionDir(projectPath), `${randomUUID().slice(0, 8)}.importing`)}`;
 		let handle: Awaited<ReturnType<typeof open>> | undefined;
 		try {
@@ -109,12 +75,7 @@ export class ClaudeSessionImporter {
 			handle = await open(tempPath, "w");
 			const buffered = createBufferedLineSink(handle);
 
-			const converted = await this.convertToPiSessionTo(
-				projectPath,
-				parsed,
-				readJsonlObjects(sourcePath),
-				buffered.sink,
-			);
+			const converted = await this.convertToPiSessionTo(projectPath, parsed, readJsonlObjects(sourcePath), buffered.sink);
 			await buffered.flush();
 			await handle.close();
 			handle = undefined;
@@ -149,20 +110,12 @@ export class ClaudeSessionImporter {
 		}
 	}
 
-	private async toSummary(
-		session: ParsedClaudeSession,
-		projectPath: string,
-	): Promise<ClaudeSessionSummary> {
+	private async toSummary(session: ParsedClaudeSession, projectPath: string): Promise<ClaudeSessionSummary> {
 		const targetPath = this.getTargetPath(projectPath, session);
 		const importMeta = await this.readImportMeta(targetPath);
 		// 扫描路径：entries 只是头部小数组，直接内存转换（体积有上界）
 		const converted = await this.convertToPiSession(projectPath, session);
-		const status: ClaudeImportStatus = !importMeta
-			? "new"
-			: importMeta.sourceMtime === session.sourceMtime &&
-			  importMeta.sourceSize === session.sourceSize
-			? "current"
-			: "outdated";
+		const status: ClaudeImportStatus = !importMeta ? "new" : importMeta.sourceMtime === session.sourceMtime && importMeta.sourceSize === session.sourceSize ? "current" : "outdated";
 
 		return {
 			id: session.meta.sessionId,
@@ -188,12 +141,7 @@ export class ClaudeSessionImporter {
 	 * - 扫描（toSummary）传头部已解析的小数组 → 体积有上界。
 	 * 两路共用同一份转换逻辑，避免像 Codex 那样维护两份实现而漂移（改一处漏一处）。
 	 */
-	private async convertToPiSessionTo(
-		projectPath: string,
-		session: ParsedClaudeSession,
-		entries: Iterable<Record<string, any>> | AsyncIterable<Record<string, any>>,
-		sink: (line: string) => Promise<void> | void,
-	): Promise<{ title: string; preview: string; messageCount: number }> {
+	private async convertToPiSessionTo(projectPath: string, session: ParsedClaudeSession, entries: Iterable<Record<string, any>> | AsyncIterable<Record<string, any>>, sink: (line: string) => Promise<void> | void): Promise<{ title: string; preview: string; messageCount: number }> {
 		const sessionId = session.meta.sessionId;
 		const timestamp = new Date(session.meta.firstTimestamp).toISOString();
 		const titleState = { title: "", preview: "" };
@@ -205,12 +153,7 @@ export class ClaudeSessionImporter {
 			await sink(JSON.stringify(entry));
 		};
 
-		const pushMessage = async (
-			role: "user" | "assistant" | "toolResult",
-			content: unknown[],
-			extra: Record<string, unknown> = {},
-			timestampValue?: string,
-		) => {
+		const pushMessage = async (role: "user" | "assistant" | "toolResult", content: unknown[], extra: Record<string, unknown> = {}, timestampValue?: string) => {
 			if (content.length === 0) return;
 			const id = this.makeId(sessionId, sequence++);
 			const ts = timestampValue || new Date().toISOString();
@@ -337,10 +280,7 @@ export class ClaudeSessionImporter {
 			}
 		}
 
-		const title =
-			titleState.title ||
-			this.cleanTitle(basename(session.sourcePath)) ||
-			this.translate("session.importedTitle", { source: "Claude" });
+		const title = titleState.title || this.cleanTitle(basename(session.sourcePath)) || this.translate("session.importedTitle", { source: "Claude" });
 		// 使用 pi 原生 session_info 格式追加在末尾，避免旧版 sessionName 行（无 type 字段）
 		// 在文件头破坏 pi 的首行校验导致会话无法加载（见 #114）。
 		await pushEntry({
@@ -372,10 +312,7 @@ export class ClaudeSessionImporter {
 	 * Claude Code 的 user 行可能是纯文本，也可能是 content[]：
 	 * tool_result 块（喂回模型的工具输出）必须写成 pi toolResult，不能 String(数组) 变成用户气泡。
 	 */
-	private async pushClaudeUserEntry(
-		entry: Record<string, any>,
-		pushMessage: ClaudePushMessage,
-	) {
+	private async pushClaudeUserEntry(entry: Record<string, any>, pushMessage: ClaudePushMessage) {
 		const raw = entry.message?.content;
 		if (typeof raw === "string") {
 			const text = raw.trim();
@@ -411,11 +348,7 @@ export class ClaudeSessionImporter {
 		await flushUser();
 	}
 
-	private async pushClaudeToolResult(
-		payload: Record<string, any>,
-		entry: Record<string, any>,
-		pushMessage: ClaudePushMessage,
-	) {
+	private async pushClaudeToolResult(payload: Record<string, any>, entry: Record<string, any>, pushMessage: ClaudePushMessage) {
 		await pushMessage(
 			"toolResult",
 			[{ type: "text", text: this.extractToolOutput(payload) }],

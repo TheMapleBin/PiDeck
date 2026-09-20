@@ -4,27 +4,11 @@ import test from "node:test";
 
 import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
-const timeline = readFileSync(
-	"src/renderer/src/components/session/SessionMessageTimeline.tsx",
-	"utf8",
-);
-const notice = readFileSync(
-	"src/renderer/src/components/session/timelineFailureNotice.ts",
-	"utf8",
-);
+const timeline = readFileSync("src/renderer/src/components/session/SessionMessageTimeline.tsx", "utf8");
+const notice = readFileSync("src/renderer/src/components/session/timelineFailureNotice.ts", "utf8");
 
 const i18n = loadTsCommonJs("src/renderer/src/i18n.ts");
-const {
-	FLOATING_FAILURE_KEYS,
-	TOAST_ONLY_FAILURE_KEYS,
-	composeFailureNotice,
-	failureRetrySignature,
-	isExtensionErrorMessage,
-	isFailureNoticeMessage,
-	isFloatingFailureMessage,
-	isToastOnlyFailureMessage,
-	reduceFailureNoticePass,
-} = loadTsCommonJs("src/renderer/src/components/session/timelineFailureNotice.ts", {
+const { FLOATING_FAILURE_KEYS, TOAST_ONLY_FAILURE_KEYS, composeFailureNotice, failureRetrySignature, isExtensionErrorMessage, isFailureNoticeMessage, isFloatingFailureMessage, isToastOnlyFailureMessage, reduceFailureNoticePass } = loadTsCommonJs("src/renderer/src/components/session/timelineFailureNotice.ts", {
 	// 与 composeFailureNotice 共用同一份 i18n 模块，否则 setI18nLocale 改不到 toast 文案。
 	stubs: { "../../i18n": i18n },
 });
@@ -278,19 +262,23 @@ test("reduceFailureNoticePass: cached session switch without a loading flicker s
 
 test("composeFailureNotice: retry stays info, request failure stays session-error title", () => {
 	setI18nLocale("zh-CN");
-	const retry = composeFailureNotice(message("diagnostic.retryScheduled", {
-		text: "正在自动重试 2",
-		i18nParams: { count: 2 },
-	}));
+	const retry = composeFailureNotice(
+		message("diagnostic.retryScheduled", {
+			text: "正在自动重试 2",
+			i18nParams: { count: 2 },
+		}),
+	);
 	assert.equal(retry.kind, "info");
 	assert.equal(retry.duration, 2200);
 	assert.equal(retry.id, "session-retry:agent-1");
 	assert.equal(retry.title, "自动重试");
 
-	const failed = composeFailureNotice(message("diagnostic.requestFailed", {
-		text: "请求失败。",
-		debugDetails: "HTTP 429",
-	}));
+	const failed = composeFailureNotice(
+		message("diagnostic.requestFailed", {
+			text: "请求失败。",
+			debugDetails: "HTTP 429",
+		}),
+	);
 	assert.equal(failed.kind, "error");
 	assert.equal(failed.title, "会话失败");
 	assert.match(failed.body, /请求失败/);
@@ -299,20 +287,24 @@ test("composeFailureNotice: retry stays info, request failure stays session-erro
 
 test("composeFailureNotice: extension error uses its own title and shows debugDetails", () => {
 	setI18nLocale("zh-CN");
-	const noticeContent = composeFailureNotice(message("diagnostic.extensionError", {
-		text: "扩展执行错误。",
-		debugDetails: "pi-deck-todo: Cannot read properties of undefined",
-	}));
+	const noticeContent = composeFailureNotice(
+		message("diagnostic.extensionError", {
+			text: "扩展执行错误。",
+			debugDetails: "pi-deck-todo: Cannot read properties of undefined",
+		}),
+	);
 	assert.equal(noticeContent.title, "扩展执行错误");
 	assert.equal(noticeContent.kind, "error");
 	assert.equal(noticeContent.body, "pi-deck-todo: Cannot read properties of undefined");
 	assert.notEqual(noticeContent.title, "会话失败");
 	assert.equal(noticeContent.id, undefined);
 
-	const clipped = composeFailureNotice(message("diagnostic.extensionError", {
-		text: "扩展执行错误。",
-		debugDetails: "x".repeat(400),
-	}));
+	const clipped = composeFailureNotice(
+		message("diagnostic.extensionError", {
+			text: "扩展执行错误。",
+			debugDetails: "x".repeat(400),
+		}),
+	);
 	assert.equal(clipped.body.endsWith("…"), true);
 	assert.ok(clipped.body.length < 400);
 });

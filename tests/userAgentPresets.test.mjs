@@ -17,21 +17,24 @@ import assert from "node:assert/strict";
 import { createTsSandbox } from "./helpers/createTsSandbox.mjs";
 
 const load = createTsSandbox();
-const {
-	USER_AGENT_PRESETS,
-	USER_AGENT_UNSET,
-	getUserAgentOptions,
-	isValidUserAgent,
-	resolveUserAgentSelection,
-} = load("src/renderer/src/config/userAgentPresets.ts");
+const { USER_AGENT_PRESETS, USER_AGENT_UNSET, getUserAgentOptions, isValidUserAgent, resolveUserAgentSelection } = load("src/renderer/src/config/userAgentPresets.ts");
 
 test("预设清单覆盖官方 CLI 白名单前缀（claude-cli / claude-code / Kilo-Code）", () => {
 	const values = USER_AGENT_PRESETS.map((preset) => preset.value);
 	// 这三类是实测能过 claude-cli 系 UA 白名单的取值，缺任何一个都会让用户又回到
 	// 「手写 UA」的麻烦里，所以按前缀断言而不是按完整字符串断言。
-	assert.ok(values.some((value) => value.startsWith("claude-cli/")), "缺少 claude-cli 预设");
-	assert.ok(values.some((value) => value.startsWith("claude-code/")), "缺少 claude-code 预设");
-	assert.ok(values.some((value) => value.startsWith("Kilo-Code/")), "缺少 Kilo-Code 预设");
+	assert.ok(
+		values.some((value) => value.startsWith("claude-cli/")),
+		"缺少 claude-cli 预设",
+	);
+	assert.ok(
+		values.some((value) => value.startsWith("claude-code/")),
+		"缺少 claude-code 预设",
+	);
+	assert.ok(
+		values.some((value) => value.startsWith("Kilo-Code/")),
+		"缺少 Kilo-Code 预设",
+	);
 });
 
 test("预设清单覆盖官方 SDK 与通用 HTTP 客户端两类", () => {
@@ -60,7 +63,10 @@ test("getUserAgentOptions: 不再暴露旧的 __custom__ 哨兵项（单控件�
 	const options = getUserAgentOptions();
 	// 旧实现用 __custom__ 区分「下拉选预设」与「手写值」，两个控件并存；
 	// 合并成单控件后手写值本身就是合法选中值，哨兵项必须消失。
-	assert.equal(options.some((option) => option.value === "__custom__"), false);
+	assert.equal(
+		options.some((option) => option.value === "__custom__"),
+		false,
+	);
 });
 
 test("getUserAgentOptions: 覆盖全部预设且 label 非空", () => {

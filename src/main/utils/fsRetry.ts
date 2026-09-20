@@ -16,10 +16,7 @@ export const RENAME_RETRY_DELAYS = [0, 20, 75, 200];
 
 /** 判断错误是否为 rename 的瞬态锁冲突（EPERM/EBUSY），可安全重试。 */
 export function isTransientRenameError(error: unknown): boolean {
-	const code =
-		error && typeof error === "object" && "code" in error
-			? (error as { code?: unknown }).code
-			: undefined;
+	const code = error && typeof error === "object" && "code" in error ? (error as { code?: unknown }).code : undefined;
 	return code === "EPERM" || code === "EBUSY";
 }
 

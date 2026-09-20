@@ -45,13 +45,7 @@ function order(store) {
 
 test("任务列表按 createdAt 降序：新建的排最前", () => {
 	const store = createStore();
-	store.set(
-		atoms.automationSnapshotAtom,
-		snapshot([
-			task({ id: "old", createdAt: 1000, updatedAt: 9000 }),
-			task({ id: "new", createdAt: 2000, updatedAt: 3000 }),
-		]),
-	);
+	store.set(atoms.automationSnapshotAtom, snapshot([task({ id: "old", createdAt: 1000, updatedAt: 9000 }), task({ id: "new", createdAt: 2000, updatedAt: 3000 })]));
 	assert.equal(order(store), "new,old", "createdAt 更新的在前，与 updatedAt 无关");
 });
 
@@ -63,10 +57,7 @@ test("停用/编辑 bump updatedAt 不换位：顺序不随 updatedAt 变化", (
 	assert.equal(order(store), "b,a");
 
 	// 用户点了列表第二张卡（a）的「停用」：主进程 updateTask 只改 enabled + updatedAt
-	store.set(
-		atoms.automationSnapshotAtom,
-		snapshot([{ ...older, enabled: false, updatedAt: 99999 }, newer]),
-	);
+	store.set(atoms.automationSnapshotAtom, snapshot([{ ...older, enabled: false, updatedAt: 99999 }, newer]));
 	assert.equal(order(store), "b,a", "卡片不因 updatedAt 被顶到首位（换位观感即「点了另一个」）");
 
 	// 再停用另一张：顺序同样不变
@@ -82,12 +73,6 @@ test("停用/编辑 bump updatedAt 不换位：顺序不随 updatedAt 变化", (
 
 test("createdAt 相同时以 id 兜底，保证顺序确定", () => {
 	const store = createStore();
-	store.set(
-		atoms.automationSnapshotAtom,
-		snapshot([
-			task({ id: "zzz", createdAt: 1000, updatedAt: 1 }),
-			task({ id: "aaa", createdAt: 1000, updatedAt: 2 }),
-		]),
-	);
+	store.set(atoms.automationSnapshotAtom, snapshot([task({ id: "zzz", createdAt: 1000, updatedAt: 1 }), task({ id: "aaa", createdAt: 1000, updatedAt: 2 })]));
 	assert.equal(order(store), "aaa,zzz");
 });

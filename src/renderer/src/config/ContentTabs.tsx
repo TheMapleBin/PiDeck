@@ -31,12 +31,7 @@ export function ContentTabs(props: {
 }) {
 	const { value, onValueChange, items, compact = false, fill = true, className } = props;
 	return (
-		<Tabs
-			value={value}
-			onValueChange={onValueChange}
-			variant="underline"
-			className={cn("min-w-0", fill && "flex-1")}
-		>
+		<Tabs value={value} onValueChange={onValueChange} variant="underline" className={cn("min-w-0", fill && "flex-1")}>
 			<TabsList className={cn("w-full justify-start gap-0", className)}>
 				{items.map((item) => (
 					<TabsTrigger
@@ -44,10 +39,7 @@ export function ContentTabs(props: {
 						value={item.value}
 						// 覆盖 beui 默认尺寸（min-h-[44px] text-sm）到应用控件节奏；
 						// 指示器 2px（h-0.5）与旧 line variant 的 border-b-2 视觉一致。
-						className={cn(
-							"min-h-0 gap-1.5 px-3 py-2 text-[13px] font-medium",
-							compact && "px-3 py-1.5 text-xs",
-						)}
+						className={cn("min-h-0 gap-1.5 px-3 py-2 text-[13px] font-medium", compact && "px-3 py-1.5 text-xs")}
 						indicatorClassName="h-0.5"
 					>
 						{item.icon}

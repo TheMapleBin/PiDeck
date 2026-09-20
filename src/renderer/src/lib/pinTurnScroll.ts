@@ -11,18 +11,11 @@ export type PinTurnMessage = {
 };
 
 /** 尾部新增消息 id（入场动画用）。历史首帧不闪；只有发送当下才给当前尾一条入场。 */
-export function resolveFreshTailIds(
-	messages: readonly PinTurnMessage[],
-	previousTail: string | undefined,
-	nextTail: string,
-	pendingRequestId?: string,
-): string[] {
+export function resolveFreshTailIds(messages: readonly PinTurnMessage[], previousTail: string | undefined, nextTail: string, pendingRequestId?: string): string[] {
 	if (!previousTail) return pendingRequestId ? [nextTail] : [];
 	if (nextTail === previousTail) return [];
 	const baselineIndex = messages.findIndex((message) => message.id === previousTail);
-	return baselineIndex < 0
-		? [nextTail]
-		: messages.slice(baselineIndex + 1).map((message) => message.id);
+	return baselineIndex < 0 ? [nextTail] : messages.slice(baselineIndex + 1).map((message) => message.id);
 }
 
 /** 按滚动距离估算时长：短距离干脆，长距离封顶，避免整页滚太久。 */
@@ -48,11 +41,7 @@ export type AnimateScrollTopOptions = {
  * 不用 CSS scroll-behavior:smooth：时长/曲线不可控，且无法在用户介入时同步清理
  * 程序化滚动抑制标记。
  */
-export function animateScrollTop(
-	element: HTMLElement,
-	targetTop: number,
-	options: AnimateScrollTopOptions = {},
-): () => void {
+export function animateScrollTop(element: HTMLElement, targetTop: number, options: AnimateScrollTopOptions = {}): () => void {
 	const reduceMotion = options.reduceMotion ?? false;
 	const isCancelled = options.isCancelled ?? (() => false);
 	const target = Math.max(0, targetTop);

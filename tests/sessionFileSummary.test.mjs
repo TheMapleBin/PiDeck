@@ -24,9 +24,7 @@ function toolMessage(overrides = {}) {
 }
 
 test("collectSessionFileChanges: write tool yields the file with full content", () => {
-	const messages = [
-		toolMessage({ path: "src/a.ts", args: { file_path: "src/a.ts", content: "export const a = 1;" } }),
-	];
+	const messages = [toolMessage({ path: "src/a.ts", args: { file_path: "src/a.ts", content: "export const a = 1;" } })];
 	const files = collectSessionFileChanges(messages);
 	assert.equal(files.length, 1);
 	assert.equal(files[0].path, "src/a.ts");
@@ -35,10 +33,7 @@ test("collectSessionFileChanges: write tool yields the file with full content", 
 });
 
 test("collectSessionFileChanges: same file written twice counts twice and keeps the last content", () => {
-	const messages = [
-		toolMessage({ path: "src/a.ts", args: { file_path: "src/a.ts", content: "v1" } }),
-		toolMessage({ path: "src/a.ts", args: { file_path: "src/a.ts", content: "v2" } }),
-	];
+	const messages = [toolMessage({ path: "src/a.ts", args: { file_path: "src/a.ts", content: "v1" } }), toolMessage({ path: "src/a.ts", args: { file_path: "src/a.ts", content: "v2" } })];
 	const files = collectSessionFileChanges(messages);
 	assert.equal(files.length, 1);
 	assert.equal(files[0].count, 2);
@@ -65,25 +60,15 @@ test("collectSessionFileChanges: edit tool captures the changed region", () => {
 });
 
 test("collectSessionFileChanges: non-file tools and file-less args are ignored", () => {
-	const messages = [
-		toolMessage({ toolName: "bash", args: { command: "ls" } }),
-		toolMessage({ toolName: "read", args: { file_path: "README.md" } }),
-		toolMessage({ toolName: "write", args: {} }),
-	];
+	const messages = [toolMessage({ toolName: "bash", args: { command: "ls" } }), toolMessage({ toolName: "read", args: { file_path: "README.md" } }), toolMessage({ toolName: "write", args: {} })];
 	assert.deepEqual(collectSessionFileChanges(messages), []);
 });
 
 test("collectSessionFileChanges: different files are kept separately", () => {
-	const messages = [
-		toolMessage({ path: "src/a.ts", args: { file_path: "src/a.ts", content: "a" } }),
-		toolMessage({ path: "src/b.ts", args: { file_path: "src/b.ts", content: "b" } }),
-	];
+	const messages = [toolMessage({ path: "src/a.ts", args: { file_path: "src/a.ts", content: "a" } }), toolMessage({ path: "src/b.ts", args: { file_path: "src/b.ts", content: "b" } })];
 	const files = collectSessionFileChanges(messages);
 	assert.equal(files.length, 2);
-	assert.deepEqual(
-		files.map((f) => f.path).sort(),
-		["src/a.ts", "src/b.ts"],
-	);
+	assert.deepEqual(files.map((f) => f.path).sort(), ["src/a.ts", "src/b.ts"]);
 });
 
 test("collectRunFileChanges: gathers file changes from one run only", () => {
@@ -97,10 +82,7 @@ test("collectRunFileChanges: gathers file changes from one run only", () => {
 			{
 				kind: "tool-group",
 				id: "tg-1",
-				messages: [
-					toolMessage({ path: "src/a.ts", args: { file_path: "src/a.ts", content: "v1" } }),
-					toolMessage({ toolName: "bash", args: { command: "ls" } }),
-				],
+				messages: [toolMessage({ path: "src/a.ts", args: { file_path: "src/a.ts", content: "v1" } }), toolMessage({ toolName: "bash", args: { command: "ls" } })],
 			},
 			{ kind: "thinking-group", id: "th-1", text: "", startedAt: 1200, endedAt: 1300, messages: [] },
 			{ kind: "message", message: { role: "assistant", id: "a1", text: "done", timestamp: 1900 } },
@@ -123,12 +105,7 @@ function userMessage(text = "hi") {
 }
 
 test("collectLatestTurnFileChanges: only aggregates files after the last user message", () => {
-	const messages = [
-		userMessage("第一轮提问"),
-		toolMessage({ path: "src/old.ts", args: { file_path: "src/old.ts", content: "old" } }),
-		userMessage("第二轮提问"),
-		toolMessage({ path: "src/new.ts", args: { file_path: "src/new.ts", content: "new" } }),
-	];
+	const messages = [userMessage("第一轮提问"), toolMessage({ path: "src/old.ts", args: { file_path: "src/old.ts", content: "old" } }), userMessage("第二轮提问"), toolMessage({ path: "src/new.ts", args: { file_path: "src/new.ts", content: "new" } })];
 	const files = collectLatestTurnFileChanges(messages);
 	assert.equal(files.length, 1);
 	assert.equal(files[0].path, "src/new.ts");
@@ -137,12 +114,7 @@ test("collectLatestTurnFileChanges: only aggregates files after the last user me
 });
 
 test("collectLatestTurnFileChanges: earlier-turn hits do not count into the latest turn", () => {
-	const messages = [
-		userMessage("提问1"),
-		toolMessage({ path: "src/a.ts", args: { file_path: "src/a.ts", content: "v1" } }),
-		userMessage("提问2"),
-		toolMessage({ path: "src/a.ts", args: { file_path: "src/a.ts", content: "v2" } }),
-	];
+	const messages = [userMessage("提问1"), toolMessage({ path: "src/a.ts", args: { file_path: "src/a.ts", content: "v1" } }), userMessage("提问2"), toolMessage({ path: "src/a.ts", args: { file_path: "src/a.ts", content: "v2" } })];
 	const files = collectLatestTurnFileChanges(messages);
 	assert.equal(files.length, 1);
 	assert.equal(files[0].count, 1); // 只统计最新一轮的一次命中
@@ -150,9 +122,7 @@ test("collectLatestTurnFileChanges: earlier-turn hits do not count into the late
 });
 
 test("collectLatestTurnFileChanges: no user message falls back to full aggregation", () => {
-	const messages = [
-		toolMessage({ path: "src/a.ts", args: { file_path: "src/a.ts", content: "a" } }),
-	];
+	const messages = [toolMessage({ path: "src/a.ts", args: { file_path: "src/a.ts", content: "a" } })];
 	const files = collectLatestTurnFileChanges(messages);
 	assert.equal(files.length, 1);
 	assert.equal(files[0].path, "src/a.ts");

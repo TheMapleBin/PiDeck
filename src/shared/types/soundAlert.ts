@@ -10,14 +10,7 @@
 export type SoundAlertKind = "done" | "error" | "waiting";
 
 /** 内置预设音效 id（文件名与之一一对应，见 scripts/gen-sound-presets.mjs）。 */
-export type SoundAlertPresetId =
-	| "done-chime"
-	| "done-bell"
-	| "done-pop"
-	| "error-buzz"
-	| "error-alert"
-	| "waiting-ping"
-	| "waiting-knock";
+export type SoundAlertPresetId = "done-chime" | "done-bell" | "done-pop" | "error-buzz" | "error-alert" | "waiting-ping" | "waiting-knock";
 
 /** 单个事件的声音配置：enabled + 音效引用（预设 id 或 `custom:<文件名>`）。 */
 export type SoundAlertEventConfig = {
@@ -61,9 +54,7 @@ export type CustomSoundInfo = {
 };
 
 /** 自定义音频导入结果：ok=false 时 error 为渲染层可映射的稳定错误码。 */
-export type SoundImportResult =
-	| { ok: true; info: CustomSoundInfo }
-	| { ok: false; error: "canceled" | "invalidType" | "tooLarge" | "readFailed" };
+export type SoundImportResult = { ok: true; info: CustomSoundInfo } | { ok: false; error: "canceled" | "invalidType" | "tooLarge" | "readFailed" };
 
 /** 每个事件的默认预设（config.sound 为空时的兜底）。 */
 export const DEFAULT_SOUND_BY_KIND: Record<SoundAlertKind, SoundAlertPresetId> = {
@@ -87,8 +78,7 @@ export const SOUND_ALERT_PRESETS: readonly {
 	{ id: "waiting-knock", file: "waiting-knock.wav", labelKey: "settings.sound.preset.waitingKnock" },
 ];
 
-export const SOUND_ALERT_PRESET_IDS: readonly SoundAlertPresetId[] =
-	SOUND_ALERT_PRESETS.map((entry) => entry.id);
+export const SOUND_ALERT_PRESET_IDS: readonly SoundAlertPresetId[] = SOUND_ALERT_PRESETS.map((entry) => entry.id);
 
 /** 自定义音频允许的扩展名（小写，不含点）。 */
 export const CUSTOM_SOUND_EXTENSIONS = ["wav", "mp3", "ogg", "m4a", "flac"] as const;
@@ -129,9 +119,7 @@ export function isAllowedCustomSoundName(name: string): boolean {
  * - 预设 id → { kind: "preset", id }
  * - 其它 → null
  */
-export function parseSoundAlertRef(
-	value: string,
-): { kind: "preset"; id: SoundAlertPresetId } | { kind: "custom"; file: string } | null {
+export function parseSoundAlertRef(value: string): { kind: "preset"; id: SoundAlertPresetId } | { kind: "custom"; file: string } | null {
 	if (value.startsWith("custom:")) {
 		const file = value.slice("custom:".length);
 		if (isAllowedCustomSoundName(file)) return { kind: "custom", file };
@@ -153,16 +141,10 @@ function clampVolume(value: unknown): number {
 	return Math.min(1, Math.max(0, n));
 }
 
-function normalizeEventConfig(
-	raw: unknown,
-	fallback: SoundAlertEventConfig,
-): SoundAlertEventConfig {
+function normalizeEventConfig(raw: unknown, fallback: SoundAlertEventConfig): SoundAlertEventConfig {
 	if (!isRecord(raw)) return { ...fallback };
 	const enabled = typeof raw.enabled === "boolean" ? raw.enabled : fallback.enabled;
-	const sound =
-		typeof raw.sound === "string" && parseSoundAlertRef(raw.sound)
-			? raw.sound
-			: fallback.sound;
+	const sound = typeof raw.sound === "string" && parseSoundAlertRef(raw.sound) ? raw.sound : fallback.sound;
 	return { enabled, sound };
 }
 

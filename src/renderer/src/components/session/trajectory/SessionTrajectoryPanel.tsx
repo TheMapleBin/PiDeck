@@ -15,10 +15,7 @@ export function SessionTrajectoryPanel() {
 
 	if (!sessionId) {
 		return (
-			<div
-				className="flex h-full min-h-0 flex-col items-center justify-center gap-2 px-4 text-center"
-				data-session-view="trajectory"
-			>
+			<div className="flex h-full min-h-0 flex-col items-center justify-center gap-2 px-4 text-center" data-session-view="trajectory">
 				<Activity size={16} className="text-muted-foreground" aria-hidden="true" />
 				<p className="text-caption text-muted-foreground">{t("session.trajectory.noSession")}</p>
 			</div>
@@ -26,16 +23,6 @@ export function SessionTrajectoryPanel() {
 	}
 
 	return (
-		<SessionTrajectoryView
-			sessionId={sessionId}
-			messages={source.messages}
-			processEvents={source.processEvents}
-			systemPrompt={source.systemPrompt}
-			isDsh={source.isDshSession}
-			hasMoreMessages={source.hasMoreMessages}
-			isLoadingMoreMessages={source.isLoadingMoreMessages}
-			onLoadMore={source.loadMore}
-			variant="drawer"
-		/>
+		<SessionTrajectoryView sessionId={sessionId} messages={source.messages} processEvents={source.processEvents} systemPrompt={source.systemPrompt} isDsh={source.isDshSession} hasMoreMessages={source.hasMoreMessages} isLoadingMoreMessages={source.isLoadingMoreMessages} onLoadMore={source.loadMore} variant="drawer" />
 	);
 }

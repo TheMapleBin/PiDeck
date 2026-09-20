@@ -10,20 +10,14 @@ function isPrivateIpv4(address: string): boolean {
 		return false;
 	}
 	const [first, second] = parts;
-	return (
-		first === 10 ||
-		(first === 172 && second >= 16 && second <= 31) ||
-		(first === 192 && second === 168)
-	);
+	return first === 10 || (first === 172 && second >= 16 && second <= 31) || (first === 192 && second === 168);
 }
 
 /**
  * 枚举所有非回环 IPv4 网卡，局域网地址排在前面。
  * 机器同时连接 Wi-Fi、网线、VPN 或虚拟网卡时，调用方可让用户切换具体入口。
  */
-export function listWebNetworkAddresses(
-	interfaces: NetworkInterfaceMap = networkInterfaces(),
-): WebNetworkAddress[] {
+export function listWebNetworkAddresses(interfaces: NetworkInterfaceMap = networkInterfaces()): WebNetworkAddress[] {
 	const addresses: WebNetworkAddress[] = [];
 	const seen = new Set<string>();
 

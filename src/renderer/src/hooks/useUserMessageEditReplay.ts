@@ -2,11 +2,7 @@ import { useSetAtom } from "jotai";
 import { useEffect, useRef } from "react";
 import type { MutableRefObject, RefObject } from "react";
 import { setSessionQuotesAtom } from "../atoms";
-import {
-	extractQuoteTokens,
-	pruneUnreferencedQuotes,
-	rehydrateDraftFromMessage,
-} from "../components/session/composer/quoteChip";
+import { extractQuoteTokens, pruneUnreferencedQuotes, rehydrateDraftFromMessage } from "../components/session/composer/quoteChip";
 
 /**
  * 「编辑重发 / fork 重放」把用户消息回填到输入框。
@@ -16,12 +12,7 @@ import {
  * 形态：quote 重建快照 + `#q<id>` token，其余还原为 mention 文本，由 composer 的
  * 白名单解析重新渲染成 chip（见 rehydrateDraftFromMessage）。
  */
-export function useUserMessageEditReplay(args: {
-	setPrompt: (value: string | ((current: string) => string)) => void;
-	pendingComposerCaretRef: MutableRefObject<number | null>;
-	composerRef: RefObject<HTMLElement | null>;
-	currentSessionIdRef: MutableRefObject<string | undefined>;
-}): void {
+export function useUserMessageEditReplay(args: { setPrompt: (value: string | ((current: string) => string)) => void; pendingComposerCaretRef: MutableRefObject<number | null>; composerRef: RefObject<HTMLElement | null>; currentSessionIdRef: MutableRefObject<string | undefined> }): void {
 	const setQuotes = useSetAtom(setSessionQuotesAtom);
 	// setPrompt 每次渲染都是新函数：放 ref 里，避免监听器每次渲染重挂、也避免闭包过期。
 	const setPromptRef = useRef(args.setPrompt);
@@ -36,9 +27,7 @@ export function useUserMessageEditReplay(args: {
 			const sessionId = currentSessionIdRef.current;
 			if (sessionId && quotes.length > 0) {
 				// 与时间线「引用追问」同一登记语义：只保留新草稿仍引用的快照。
-				const referencedIds = new Set(
-					extractQuoteTokens(draft).map((occurrence) => occurrence.id),
-				);
+				const referencedIds = new Set(extractQuoteTokens(draft).map((occurrence) => occurrence.id));
 				setQuotes({
 					sessionId,
 					value: (current) => ({

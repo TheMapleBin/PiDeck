@@ -2,10 +2,7 @@ import { app, session } from "electron";
 import type { AppSettings } from "../../shared/types";
 import { getAppLogger } from "../logging/sharedLogger";
 
-type DesktopProxySettings = Pick<
-	AppSettings,
-	"desktopProxyEnabled" | "desktopProxyUrl" | "desktopProxyBypass"
->;
+type DesktopProxySettings = Pick<AppSettings, "desktopProxyEnabled" | "desktopProxyUrl" | "desktopProxyBypass">;
 
 export async function applyDesktopProxy(settings: DesktopProxySettings) {
 	const config = buildDesktopProxyConfig(settings);
@@ -55,9 +52,7 @@ export function buildDesktopProxyConfig(settings: DesktopProxySettings) {
 function normalizeProxyRules(value: string) {
 	const trimmed = value.trim();
 	if (!trimmed) return "";
-	const normalized = /^[a-z][a-z\d+.-]*:\/\//i.test(trimmed)
-		? trimmed
-		: `http://${trimmed}`;
+	const normalized = /^[a-z][a-z\d+.-]*:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`;
 
 	try {
 		const url = new URL(normalized);

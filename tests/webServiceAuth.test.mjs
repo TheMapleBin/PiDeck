@@ -44,9 +44,7 @@ test("non-loopback binding rejects /api without a valid token", async () => {
 		});
 		assert.equal(response.status, 401);
 		// 正确令牌（query）→ 越过鉴权门，落到 404 apiNotFound
-		response = await fetch(
-			`${baseUrl}/api/nope?token=${encodeURIComponent(token)}`,
-		);
+		response = await fetch(`${baseUrl}/api/nope?token=${encodeURIComponent(token)}`);
 		assert.equal(response.status, 404);
 		// 正确令牌（Bearer）→ 404
 		response = await fetch(`${baseUrl}/api/nope`, {

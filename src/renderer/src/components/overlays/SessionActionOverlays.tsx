@@ -22,10 +22,16 @@ export type SessionActionOverlaysProps = {
 };
 
 export function SessionActionOverlays({ settings, feedback, confirm, trust }: SessionActionOverlaysProps) {
-	return <>
-		{settings?.open && <Suspense fallback={null}><SettingsModal {...settings.props} /></Suspense>}
-		{feedback?.open && <FeedbackDialog {...feedback.props} />}
-		{confirm?.open && <ConfirmDialog {...confirm.props} />}
-		{trust?.open && <TrustConfirmModal cwd={trust.cwd} projectName={trust.projectName} onChoose={trust.onChoose} />}
-	</>;
+	return (
+		<>
+			{settings?.open && (
+				<Suspense fallback={null}>
+					<SettingsModal {...settings.props} />
+				</Suspense>
+			)}
+			{feedback?.open && <FeedbackDialog {...feedback.props} />}
+			{confirm?.open && <ConfirmDialog {...confirm.props} />}
+			{trust?.open && <TrustConfirmModal cwd={trust.cwd} projectName={trust.projectName} onChoose={trust.onChoose} />}
+		</>
+	);
 }

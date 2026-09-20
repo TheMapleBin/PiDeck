@@ -110,19 +110,7 @@ function ensureFallbackHost() {
 	host.id = "app-notice-fallback-host";
 	host.setAttribute("aria-live", "polite");
 	// 与 sonner 的 top-right 位置保持一致，并让开标题栏拖拽区，避免兑底与正式 toast 位置跳动
-	host.style.cssText = [
-		"position:fixed",
-		"top:calc(var(--window-drag-height, 0px) + 12px)",
-		"right:16px",
-		"z-index:2147483000",
-		"display:flex",
-		"flex-direction:column",
-		"align-items:flex-end",
-		"gap:8px",
-		"pointer-events:none",
-		"max-width:min(520px, calc(100vw - 32px))",
-		"-webkit-app-region:no-drag"
-	].join(";");
+	host.style.cssText = ["position:fixed", "top:calc(var(--window-drag-height, 0px) + 12px)", "right:16px", "z-index:2147483000", "display:flex", "flex-direction:column", "align-items:flex-end", "gap:8px", "pointer-events:none", "max-width:min(520px, calc(100vw - 32px))", "-webkit-app-region:no-drag"].join(";");
 	document.body.appendChild(host);
 	fallbackHost = host;
 	return host;
@@ -169,18 +157,7 @@ function showFallbackNotice(message: string, duration: number, kind: NoticeKind 
 
 	// 图标块：24×24 圆角背景 + 14px 线性图标（与 NoticeToastCard 同规格）
 	const iconBlock = document.createElement("div");
-	iconBlock.style.cssText = [
-		"display:flex",
-		"align-items:center",
-		"justify-content:center",
-		"width:24px",
-		"height:24px",
-		"flex:none",
-		"margin-top:1px",
-		"border-radius:var(--radius-md, 8px)",
-		"background:var(--color-bg-muted, rgba(0,0,0,0.05))",
-		"color:" + KIND_ICON_COLORS[kind],
-	].join(";");
+	iconBlock.style.cssText = ["display:flex", "align-items:center", "justify-content:center", "width:24px", "height:24px", "flex:none", "margin-top:1px", "border-radius:var(--radius-md, 8px)", "background:var(--color-bg-muted, rgba(0,0,0,0.05))", "color:" + KIND_ICON_COLORS[kind]].join(";");
 	iconBlock.appendChild(svgIcon(kind));
 	item.appendChild(iconBlock);
 
@@ -189,25 +166,13 @@ function showFallbackNotice(message: string, duration: number, kind: NoticeKind 
 	content.style.cssText = ["flex:1", "min-width:0", "display:flex", "flex-direction:column"].join(";");
 	if (title) {
 		const titleEl = document.createElement("div");
-		titleEl.style.cssText = [
-			"font-weight:500",
-			"font-size:13px",
-			"line-height:20px",
-			"color:var(--color-text-primary, #1f2328)",
-		].join(";");
+		titleEl.style.cssText = ["font-weight:500", "font-size:13px", "line-height:20px", "color:var(--color-text-primary, #1f2328)"].join(";");
 		titleEl.textContent = title;
 		content.appendChild(titleEl);
 	}
 	const msgEl = document.createElement("div");
 	// 有标题时正文是描述（12px 次级色）；无标题时整段作为主文案（13px 主色）
-	msgEl.style.cssText = title
-		? [
-			"margin-top:2px",
-			"font-size:12px",
-			"line-height:16px",
-			"color:var(--color-text-secondary, #57606a)",
-		].join(";")
-		: ["font-size:13px", "line-height:20px", "color:var(--color-text-primary, #1f2328)"].join(";");
+	msgEl.style.cssText = title ? ["margin-top:2px", "font-size:12px", "line-height:16px", "color:var(--color-text-secondary, #57606a)"].join(";") : ["font-size:13px", "line-height:20px", "color:var(--color-text-primary, #1f2328)"].join(";");
 	msgEl.textContent = message;
 	content.appendChild(msgEl);
 
@@ -222,27 +187,11 @@ function showFallbackNotice(message: string, duration: number, kind: NoticeKind 
 			button.type = "button";
 			// 与 NoticeToastCard 按钮一致：主按钮带「→」强化前往语义
 			button.textContent = key === "action" ? `${action.label} →` : action.label;
-			button.style.cssText = [
-				"display:inline-flex",
-				"align-items:center",
-				"height:28px",
-				"border:0",
-				"border-radius:var(--radius-md, 8px)",
-				"padding:0 10px",
-				"font:500 12px/1.4 system-ui,sans-serif",
-				"cursor:pointer",
-			].join(";");
+			button.style.cssText = ["display:inline-flex", "align-items:center", "height:28px", "border:0", "border-radius:var(--radius-md, 8px)", "padding:0 10px", "font:500 12px/1.4 system-ui,sans-serif", "cursor:pointer"].join(";");
 			if (key === "action") {
-				button.style.cssText += [
-					"background:var(--color-primary, var(--color-accent, #3b82f6))",
-					"color:var(--color-primary-foreground, #fff)",
-				].join(";");
+				button.style.cssText += ["background:var(--color-primary, var(--color-accent, #3b82f6))", "color:var(--color-primary-foreground, #fff)"].join(";");
 			} else {
-				button.style.cssText += [
-					"border:1px solid var(--color-border-subtle, rgba(0,0,0,0.12))",
-					"background:var(--color-bg-muted, rgba(0,0,0,0.04))",
-					"color:var(--color-text-secondary, #57606a)",
-				].join(";");
+				button.style.cssText += ["border:1px solid var(--color-border-subtle, rgba(0,0,0,0.12))", "background:var(--color-bg-muted, rgba(0,0,0,0.04))", "color:var(--color-text-secondary, #57606a)"].join(";");
 			}
 			button.addEventListener("click", () => {
 				action.onClick?.();
@@ -294,19 +243,7 @@ function showFallbackNotice(message: string, duration: number, kind: NoticeKind 
 }
 
 /** 兜底 toast 右上角图标钮的共享样式（24px 方钮，与 NoticeToastCard 的 copy/close 一致）。 */
-const iconButtonCss = [
-	"display:inline-flex",
-	"align-items:center",
-	"justify-content:center",
-	"width:24px",
-	"height:24px",
-	"flex:none",
-	"border:0",
-	"border-radius:var(--radius-md, 6px)",
-	"background:transparent",
-	"color:var(--color-text-tertiary, #8b8f94)",
-	"cursor:pointer",
-].join(";");
+const iconButtonCss = ["display:inline-flex", "align-items:center", "justify-content:center", "width:24px", "height:24px", "flex:none", "border:0", "border-radius:var(--radius-md, 6px)", "background:transparent", "color:var(--color-text-tertiary, #8b8f94)", "cursor:pointer"].join(";");
 
 /**
  * 弹出全局 toast。duration 省略时 info=1500ms、需要用户留意/处理的 error/warning/question=3000ms。
@@ -323,8 +260,7 @@ export function showNotice(
 	id?: NoticeId,
 ): NoticeId | undefined {
 	// question 需要用户点开会话去回答，比纯提示停留更久（Ask 场景通常自带 Infinity 保持粘性）。
-	const resolvedDuration =
-		duration ?? (kind === "error" || kind === "warning" || kind === "question" ? 3000 : 1500);
+	const resolvedDuration = duration ?? (kind === "error" || kind === "warning" || kind === "question" ? 3000 : 1500);
 	const text = String(message ?? "").trim();
 	if (!text) return;
 	if (!toasterMounted()) {

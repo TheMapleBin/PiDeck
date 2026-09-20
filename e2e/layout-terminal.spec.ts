@@ -17,8 +17,7 @@ test("layout: terminal dock open/shell/collapse", async ({ window }) => {
 	await composer.click();
 	await window.keyboard.type("终端预热");
 	await window.keyboard.press("Enter");
-	await expect(window.locator(".message-timeline"))
-		.toContainText("Mock 回复：「终端预热」流式渲染验证完成", { timeout: 20_000 });
+	await expect(window.locator(".message-timeline")).toContainText("Mock 回复：「终端预热」流式渲染验证完成", { timeout: 20_000 });
 
 	// outline 右侧条上的终端按钮（aria-label 终端）
 	await window.getByRole("button", { name: "终端", exact: true }).first().click();
@@ -46,9 +45,12 @@ test("layout: terminal dock open/shell/collapse", async ({ window }) => {
 
 	// 拖拽高度：react-resizable-panels 在 headless Electron 上 pointer 命中不稳定，
 	// 保留 soft check（不 fail 整用例）。硬断言仍以开合/shell 菜单为准。
-	await dock.getByTitle("展开终端").dispatchEvent("click").catch(async () => {
-		await dock.dispatchEvent("click");
-	});
+	await dock
+		.getByTitle("展开终端")
+		.dispatchEvent("click")
+		.catch(async () => {
+			await dock.dispatchEvent("click");
+		});
 	if (!(await dock.evaluate((el) => el.classList.contains("collapsed")))) {
 		const heightBefore = (await dock.boundingBox())?.height ?? 0;
 		const splitter = window.locator(".v-splitter").last();
@@ -80,8 +82,7 @@ test("layout: terminal stays open while the agent streams", async ({ window }) =
 	await composer.click();
 	await window.keyboard.type("终端流式预热");
 	await window.keyboard.press("Enter");
-	await expect(window.locator(".message-timeline"))
-		.toContainText("Mock 回复：「终端流式预热」流式渲染验证完成", { timeout: 20_000 });
+	await expect(window.locator(".message-timeline")).toContainText("Mock 回复：「终端流式预热」流式渲染验证完成", { timeout: 20_000 });
 
 	await window.getByRole("button", { name: "终端", exact: true }).first().click();
 	const dock = window.locator(".terminal-dock");
@@ -98,8 +99,7 @@ test("layout: terminal stays open while the agent streams", async ({ window }) =
 	await expect(dock).toBeVisible();
 	await expect(dock).not.toHaveClass(/collapsed/);
 
-	await expect(window.locator(".message-timeline"))
-		.toContainText("Mock 回复：「SLOW 保持终端展开」流式渲染验证完成", { timeout: 20_000 });
+	await expect(window.locator(".message-timeline")).toContainText("Mock 回复：「SLOW 保持终端展开」流式渲染验证完成", { timeout: 20_000 });
 	await expect(dock).toBeVisible();
 	await expect(dock).not.toHaveClass(/collapsed/);
 });

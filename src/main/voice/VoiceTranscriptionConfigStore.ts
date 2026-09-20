@@ -1,14 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import {
-	DEFAULT_VOICE_TRANSCRIPTION_CONFIG,
-	sanitizeVoiceTranscriptionApiKey,
-	sanitizeVoiceTranscriptionConfig,
-} from "../../shared/voiceTranscriptionConfig";
-import type {
-	VoiceTranscriptionPublicConfig,
-	VoiceTranscriptionSaveResult,
-} from "../../shared/types/voiceTranscription";
+import { DEFAULT_VOICE_TRANSCRIPTION_CONFIG, sanitizeVoiceTranscriptionApiKey, sanitizeVoiceTranscriptionConfig } from "../../shared/voiceTranscriptionConfig";
+import type { VoiceTranscriptionPublicConfig, VoiceTranscriptionSaveResult } from "../../shared/types/voiceTranscription";
 
 const MAX_PROTECTED_API_KEY_LENGTH = 8192;
 
@@ -29,13 +22,15 @@ export type VoiceTranscriptionCredentials = {
 
 /** Owns encrypted transcription credentials in Electron userData. */
 export class VoiceTranscriptionConfigStore {
-	constructor(private readonly deps: {
-		getConfigPath: () => string;
-		isEncryptionAvailable: () => boolean;
-		protect: (plainText: string) => Uint8Array;
-		unprotect: (encrypted: Uint8Array) => string;
-		log: (message: string, details?: Record<string, unknown>) => void;
-	}) {}
+	constructor(
+		private readonly deps: {
+			getConfigPath: () => string;
+			isEncryptionAvailable: () => boolean;
+			protect: (plainText: string) => Uint8Array;
+			unprotect: (encrypted: Uint8Array) => string;
+			log: (message: string, details?: Record<string, unknown>) => void;
+		},
+	) {}
 
 	async getPublicConfig(): Promise<VoiceTranscriptionPublicConfig> {
 		const config = await this.readPersisted();
@@ -98,10 +93,7 @@ export class VoiceTranscriptionConfigStore {
 			const sanitized = sanitizeVoiceTranscriptionConfig(parsed);
 			if (!sanitized || !isRecord(parsed)) return this.emptyConfig();
 			const rawProtectedApiKey = Reflect.get(parsed, "protectedApiKey");
-			const protectedApiKey = typeof rawProtectedApiKey === "string" &&
-				rawProtectedApiKey.length <= MAX_PROTECTED_API_KEY_LENGTH
-				? rawProtectedApiKey
-				: undefined;
+			const protectedApiKey = typeof rawProtectedApiKey === "string" && rawProtectedApiKey.length <= MAX_PROTECTED_API_KEY_LENGTH ? rawProtectedApiKey : undefined;
 			return { version: 1, ...sanitized, ...(protectedApiKey ? { protectedApiKey } : {}) };
 		} catch {
 			return this.emptyConfig();

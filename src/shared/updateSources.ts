@@ -35,12 +35,12 @@ export const ATOMGIT_API_HOST = "https://api.atomgit.com";
 
 /** AtomGit Release 仓库根路径，例如 `https://atomgit.com/ayuayue/PiDeck`。 */
 export function atomGitReleasesBase(): string {
-  return `${ATOMGIT_HOST}/${UPDATE_REPO_OWNER}/${UPDATE_REPO}`;
+	return `${ATOMGIT_HOST}/${UPDATE_REPO_OWNER}/${UPDATE_REPO}`;
 }
 
 /** AtomGit Release generic feed baseUrl（latest.yml 与安装包都下载自此路径）。 */
 export function atomGitFeedUrl(): string {
-  return `${atomGitReleasesBase()}/releases/download/latest`;
+	return `${atomGitReleasesBase()}/releases/download/latest`;
 }
 
 /**
@@ -50,17 +50,15 @@ export function atomGitFeedUrl(): string {
  * `/releases/tag/vX.Y.Z`，程序化读版本必须走 JSON 的 `tag_name`。
  */
 export function atomGitLatestReleaseApiUrl(): string {
-  return `${ATOMGIT_API_HOST}/api/v5/repos/${UPDATE_REPO_OWNER}/${UPDATE_REPO}/releases/latest`;
+	return `${ATOMGIT_API_HOST}/api/v5/repos/${UPDATE_REPO_OWNER}/${UPDATE_REPO}/releases/latest`;
 }
 
 /** 镜像/非官方更新源清单：保留 AtomGit 作为国内加速源（第一首选）；github 走原生链路。 */
-export const UPDATE_SOURCE_MIRRORS: ReadonlyArray<{ id: UpdateSourceId; host: string }> = [
-  { id: "atomgit", host: ATOMGIT_HOST },
-];
+export const UPDATE_SOURCE_MIRRORS: ReadonlyArray<{ id: UpdateSourceId; host: string }> = [{ id: "atomgit", host: ATOMGIT_HOST }];
 
 /** GitHub Release 仓库根路径，例如 `https://github.com/ayuayue/PiDeck`。 */
 export function gitHubReleasesBase(): string {
-  return `https://github.com/${UPDATE_REPO_OWNER}/${UPDATE_REPO}`;
+	return `https://github.com/${UPDATE_REPO_OWNER}/${UPDATE_REPO}`;
 }
 
 /**
@@ -68,29 +66,29 @@ export function gitHubReleasesBase(): string {
  * 与 AtomGit 的 `/releases/download/latest` 路径不同，两边不能共用同一套拼接。
  */
 export function gitHubLatestDownloadBase(): string {
-  return `${gitHubReleasesBase()}${RELEASES_LATEST_DOWNLOAD_PATH}`;
+	return `${gitHubReleasesBase()}${RELEASES_LATEST_DOWNLOAD_PATH}`;
 }
 
 /** 镜像前缀 → generic feed baseUrl。对于 atomgit 直接返回 atomgit feed url。 */
 export function buildCustomSourceFeedUrl(host: string): string {
-  if (host === ATOMGIT_HOST || host.startsWith(ATOMGIT_HOST)) {
-    return atomGitFeedUrl();
-  }
-  return `${host}/${gitHubReleasesBase()}${RELEASES_LATEST_DOWNLOAD_PATH}`;
+	if (host === ATOMGIT_HOST || host.startsWith(ATOMGIT_HOST)) {
+		return atomGitFeedUrl();
+	}
+	return `${host}/${gitHubReleasesBase()}${RELEASES_LATEST_DOWNLOAD_PATH}`;
 }
 
 /**
  * 规范化自定义镜像前缀：trim、去尾斜杠、强制 https/http。非法/空返回 null（UI 实时校验用）。
  */
 export function normalizeCustomMirrorHost(raw: string | null | undefined): string | null {
-  const trimmed = (raw ?? "").trim().replace(/\/+$/, "");
-  if (!trimmed) return null;
-  if (!/^https?:\/\//i.test(trimmed)) return null;
-  try {
-    const parsed = new URL(trimmed);
-    if (!parsed.hostname) return null;
-    return trimmed;
-  } catch {
-    return null;
-  }
+	const trimmed = (raw ?? "").trim().replace(/\/+$/, "");
+	if (!trimmed) return null;
+	if (!/^https?:\/\//i.test(trimmed)) return null;
+	try {
+		const parsed = new URL(trimmed);
+		if (!parsed.hostname) return null;
+		return trimmed;
+	} catch {
+		return null;
+	}
 }

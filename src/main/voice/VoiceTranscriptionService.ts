@@ -1,12 +1,5 @@
-import {
-	normalizeVoiceTranscriptionUrl,
-	VOICE_TRANSCRIPTION_MAX_AUDIO_BYTES,
-	VOICE_TRANSCRIPTION_TIMEOUT_MS,
-} from "../../shared/voiceTranscriptionConfig";
-import type {
-	VoiceTranscriptionRequest,
-	VoiceTranscriptionResult,
-} from "../../shared/types/voiceTranscription";
+import { normalizeVoiceTranscriptionUrl, VOICE_TRANSCRIPTION_MAX_AUDIO_BYTES, VOICE_TRANSCRIPTION_TIMEOUT_MS } from "../../shared/voiceTranscriptionConfig";
+import type { VoiceTranscriptionRequest, VoiceTranscriptionResult } from "../../shared/types/voiceTranscription";
 import type { VoiceTranscriptionCredentials } from "./VoiceTranscriptionConfigStore";
 
 const MAX_RESPONSE_BYTES = 128 * 1024;
@@ -25,12 +18,14 @@ const AUDIO_EXTENSIONS = new Map([
 export class VoiceTranscriptionService {
 	private readonly inFlight = new Map<string, AbortController>();
 
-	constructor(private readonly deps: {
-		getCredentials: () => Promise<VoiceTranscriptionCredentials | null>;
-		fetch?: typeof fetch;
-		timeoutMs?: number;
-		log: (message: string, details?: Record<string, unknown>) => void;
-	}) {}
+	constructor(
+		private readonly deps: {
+			getCredentials: () => Promise<VoiceTranscriptionCredentials | null>;
+			fetch?: typeof fetch;
+			timeoutMs?: number;
+			log: (message: string, details?: Record<string, unknown>) => void;
+		},
+	) {}
 
 	async transcribe(input: VoiceTranscriptionRequest): Promise<VoiceTranscriptionResult> {
 		const mimeType = input.mimeType.split(";", 1)[0]?.trim().toLowerCase() ?? "";
@@ -66,11 +61,7 @@ export class VoiceTranscriptionService {
 				signal: controller.signal,
 			});
 			if (!response.ok) {
-				const error = response.status === 401 || response.status === 403
-					? "invalidKey"
-					: response.status === 404 || response.status === 405
-						? "badBaseUrl"
-						: "http";
+				const error = response.status === 401 || response.status === 403 ? "invalidKey" : response.status === 404 || response.status === 405 ? "badBaseUrl" : "http";
 				this.deps.log("request rejected", { status: response.status, error });
 				return { ok: false, error };
 			}
@@ -79,9 +70,7 @@ export class VoiceTranscriptionService {
 			const text = parseTranscriptionText(textBody);
 			return text ? { ok: true, text } : { ok: false, error: "empty" };
 		} catch {
-			const error = controller.signal.aborted
-				? timedOut ? "timeout" : "cancelled"
-				: "network";
+			const error = controller.signal.aborted ? (timedOut ? "timeout" : "cancelled") : "network";
 			this.deps.log("request failed", { error });
 			return { ok: false, error };
 		} finally {

@@ -8,13 +8,9 @@ import { SecurityLevelMenu } from "./SecurityLevelMenu";
  * - DSH 后端：权限预设菜单（DshPermissionMenu，host 侧 /permission，dsh-web 同款预设）。
  * 新增后端（如未来 Codex 运行时）只在这里注册控制位，不再在 ComposerArea 写 if/else。
  */
-export function SecurityControl(props: {
-  sessionId: string;
-  backend?: AgentBackend;
-  disabled?: boolean;
-}) {
-  if (props.backend === "dsh") {
-    return <DshPermissionMenu sessionId={props.sessionId} disabled={props.disabled} />;
-  }
-  return <SecurityLevelMenu sessionId={props.sessionId} disabled={props.disabled} />;
+export function SecurityControl(props: { sessionId: string; backend?: AgentBackend; disabled?: boolean }) {
+	if (props.backend === "dsh") {
+		return <DshPermissionMenu sessionId={props.sessionId} disabled={props.disabled} />;
+	}
+	return <SecurityLevelMenu sessionId={props.sessionId} disabled={props.disabled} />;
 }

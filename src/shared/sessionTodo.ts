@@ -26,8 +26,7 @@ export function parseTodoSnapshotData(data: unknown): SessionTodoSnapshot | unde
 	if (data.version !== 3) return undefined;
 	const plan = isRecord(data.activePlan) ? data.activePlan : undefined;
 	if (!plan) return undefined;
-	const planId =
-		typeof plan.id === "number" && Number.isSafeInteger(plan.id) && plan.id > 0 ? plan.id : 0;
+	const planId = typeof plan.id === "number" && Number.isSafeInteger(plan.id) && plan.id > 0 ? plan.id : 0;
 	if (!Array.isArray(plan.todos)) return { planId, todos: [] };
 	const todos: SessionTodoSnapshot["todos"] = [];
 	for (const raw of plan.todos) {

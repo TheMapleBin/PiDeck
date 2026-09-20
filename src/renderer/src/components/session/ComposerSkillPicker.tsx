@@ -6,13 +6,7 @@ import { t } from "../../i18n";
 import { desktopApi } from "../../desktopApi";
 import { projectByIdAtomFamily } from "../../atoms";
 import type { AgentBackend, DshSkillView, PiSkillSummary } from "../../../../shared/types";
-import {
-	Command,
-	CommandEmpty,
-	CommandInput,
-	CommandItem,
-	CommandList,
-} from "../ui-shadcn/command";
+import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from "../ui-shadcn/command";
 import { Button } from "../ui-shadcn/button";
 import { PickerDialog } from "./ComposerComponents";
 import { showNotice } from "../../utils/notice";
@@ -79,60 +73,64 @@ export function ComposerSkillPicker(props: {
 		let cancelled = false;
 		setLoading(true);
 		setError(null);
-		const load = props.backend === "pi"
-			? Promise.all([
-					hasProjectResources
-						? desktopApi.projectResources.list(props.projectId as string).then((result) =>
+		const load =
+			props.backend === "pi"
+				? Promise.all([
+						hasProjectResources
+							? desktopApi.projectResources.list(props.projectId as string).then((result) =>
+									result.skills
+										.filter((skill) => skill.enabled)
+										.map<SkillItem>((skill: PiSkillSummary) => ({
+											name: skill.name,
+											description: skill.description,
+											source: "project",
+											sourceLabel: skill.sourceLabel,
+											path: skill.path,
+										})),
+								)
+							: Promise.resolve<SkillItem[]>([]),
+						desktopApi.skills.list().then((result) =>
 							result.skills
 								.filter((skill) => skill.enabled)
-								.map<SkillItem>((skill: PiSkillSummary) => ({
+								.map<SkillItem>((skill) => ({
 									name: skill.name,
 									description: skill.description,
-									source: "project",
+									source: "global",
 									sourceLabel: skill.sourceLabel,
 									path: skill.path,
 								})),
-						)
-						: Promise.resolve<SkillItem[]>([]),
-					desktopApi.skills.list().then((result) =>
-						result.skills
-							.filter((skill) => skill.enabled)
-							.map<SkillItem>((skill) => ({
-								name: skill.name,
-								description: skill.description,
-								source: "global",
-								sourceLabel: skill.sourceLabel,
-								path: skill.path,
-							})),
-					),
-				]).then(([projectSkills, globalSkills]) => {
-					// 同名去重（小写不区分）：两边都可见时项目技能优先（当前项目上下文更具体），
-					// 与 pi 实际解析一致地避免同一个名字在面板里出现两次。
-					const seen = new Map<string, SkillItem>();
-					for (const skill of [...projectSkills, ...globalSkills]) {
-						const key = skill.name.toLowerCase();
-						const prev = seen.get(key);
-						if (!prev || (skill.source === "project" && prev.source === "global")) {
-							seen.set(key, skill);
+						),
+					]).then(([projectSkills, globalSkills]) => {
+						// 同名去重（小写不区分）：两边都可见时项目技能优先（当前项目上下文更具体），
+						// 与 pi 实际解析一致地避免同一个名字在面板里出现两次。
+						const seen = new Map<string, SkillItem>();
+						for (const skill of [...projectSkills, ...globalSkills]) {
+							const key = skill.name.toLowerCase();
+							const prev = seen.get(key);
+							if (!prev || (skill.source === "project" && prev.source === "global")) {
+								seen.set(key, skill);
+							}
 						}
-					}
-					return Array.from(seen.values()).sort((a, b) => a.name.localeCompare(b.name));
-				})
-			: desktopApi.sessions.listDshSkills(props.agentId as string).then((list: DshSkillView[]) =>
-				list.map<SkillItem>((skill) => ({
-					name: skill.name,
-					description: skill.description,
-					whenToUse: skill.whenToUse,
-					userOnly: !skill.modelInvocable,
-				})),
-			);
-		void load.then((next) => {
-			if (!cancelled) setItems(next);
-		}).catch((reason) => {
-			if (!cancelled) setError(reason instanceof Error ? reason.message : String(reason));
-		}).finally(() => {
-			if (!cancelled) setLoading(false);
-		});
+						return Array.from(seen.values()).sort((a, b) => a.name.localeCompare(b.name));
+					})
+				: desktopApi.sessions.listDshSkills(props.agentId as string).then((list: DshSkillView[]) =>
+						list.map<SkillItem>((skill) => ({
+							name: skill.name,
+							description: skill.description,
+							whenToUse: skill.whenToUse,
+							userOnly: !skill.modelInvocable,
+						})),
+					);
+		void load
+			.then((next) => {
+				if (!cancelled) setItems(next);
+			})
+			.catch((reason) => {
+				if (!cancelled) setError(reason instanceof Error ? reason.message : String(reason));
+			})
+			.finally(() => {
+				if (!cancelled) setLoading(false);
+			});
 		return () => {
 			cancelled = true;
 		};
@@ -147,65 +145,47 @@ export function ComposerSkillPicker(props: {
 	/** 点眼睛打开详情：懒加载正文，失败时内联展示原因（与列表加载失败同款 detail）。 */
 	function openDetail(item: SkillItem) {
 		setDetail({ item, loading: true, error: null });
-		void readContent(item).then((content) => {
-			setDetail((prev) =>
-				prev?.item.name === item.name
-					? { item, content, loading: false, error: null }
-					: prev,
-			);
-		}).catch((reason) => {
-			setDetail((prev) =>
-				prev?.item.name === item.name
-					? {
-							item,
-							loading: false,
-							error: reason instanceof Error ? reason.message : String(reason),
-						}
-					: prev,
-			);
-		});
+		void readContent(item)
+			.then((content) => {
+				setDetail((prev) => (prev?.item.name === item.name ? { item, content, loading: false, error: null } : prev));
+			})
+			.catch((reason) => {
+				setDetail((prev) =>
+					prev?.item.name === item.name
+						? {
+								item,
+								loading: false,
+								error: reason instanceof Error ? reason.message : String(reason),
+							}
+						: prev,
+				);
+			});
 	}
 
 	/** 一键插入正文：点击时先读 SKILL.md 再整段塞进输入框（读失败给 toast 定位）。 */
 	function insertContent(item: SkillItem) {
-		void readContent(item).then((content) => {
-			if (content !== undefined) props.onInsertContent?.(content);
-		}).catch((reason) => {
-			showNotice(reason instanceof Error ? reason.message : String(reason), 4000);
-		});
+		void readContent(item)
+			.then((content) => {
+				if (content !== undefined) props.onInsertContent?.(content);
+			})
+			.catch((reason) => {
+				showNotice(reason instanceof Error ? reason.message : String(reason), 4000);
+			});
 	}
 
 	// 详情预览态：替换列表为「返回 + 正文」（复用 prompt picker 的内联预览设计）
 	if (detail) {
 		return (
-			<PickerDialog
-				title={t("app.skillPreviewTitle", { name: "/" + detail.item.name })}
-				onClose={props.onClose}
-				className="skill-picker"
-			>
+			<PickerDialog title={t("app.skillPreviewTitle", { name: "/" + detail.item.name })} onClose={props.onClose} className="skill-picker">
 				<div className="picker-preview-inline">
 					<div className="flex items-center justify-between gap-2">
-						<Button
-							type="button"
-							variant="ghost"
-							className="h-auto gap-1 px-1 text-caption"
-							onClick={() => setDetail(null)}
-							title={t("app.skillPreviewBack")}
-						>
+						<Button type="button" variant="ghost" className="h-auto gap-1 px-1 text-caption" onClick={() => setDetail(null)} title={t("app.skillPreviewBack")}>
 							<ChevronLeft size={16} strokeWidth={2.2} />
 							{t("app.skillPreviewBack")}
 						</Button>
 						{/* 预览里同样可以一键插入全文（与条目上的插入按钮入口并列） */}
 						{props.onInsertContent && (
-							<Button
-								type="button"
-								variant="outline"
-								size="sm"
-								className="h-7 gap-1"
-								disabled={!detail.content}
-								onClick={() => detail.content !== undefined && props.onInsertContent?.(detail.content)}
-								title={t("app.pickerInsertContent")}
-							>
+							<Button type="button" variant="outline" size="sm" className="h-7 gap-1" disabled={!detail.content} onClick={() => detail.content !== undefined && props.onInsertContent?.(detail.content)} title={t("app.pickerInsertContent")}>
 								<CornerDownLeft size={13} strokeWidth={2} aria-hidden="true" />
 								{t("app.pickerInsertContent")}
 							</Button>
@@ -238,20 +218,13 @@ export function ComposerSkillPicker(props: {
 	const globalOnly = props.backend === "pi" && !hasProjectResources;
 
 	return (
-		<PickerDialog
-			title={t("app.skillPickerTitle")}
-			hint={t("app.skillPickerHint")}
-			onClose={props.onClose}
-			className="skill-picker"
-		>
+		<PickerDialog title={t("app.skillPickerTitle")} hint={t("app.skillPickerHint")} onClose={props.onClose} className="skill-picker">
 			<Command>
 				<CommandInput placeholder={t("app.skillPickerSearchPlaceholder")} autoFocus />
 				<CommandList className="max-h-[min(420px,55vh)]">
 					{/* cmdk 的 Empty 只在列表有数据且过滤后无匹配时才有意义；
 					    loading/出错/缺上下文等非列表态由下方自定义块承担，避免双提示。 */}
-					{!loading && !error && !blockedByAgent && (
-						<CommandEmpty>{t("app.skillPickerSearchEmpty")}</CommandEmpty>
-					)}
+					{!loading && !error && !blockedByAgent && <CommandEmpty>{t("app.skillPickerSearchEmpty")}</CommandEmpty>}
 					{loading ? (
 						<div className="flex items-center justify-center gap-2 py-6 text-caption text-muted-foreground">
 							<Loader2 size={14} className="animate-pideck-spin" aria-hidden="true" />
@@ -263,32 +236,18 @@ export function ComposerSkillPicker(props: {
 						<div className="flex flex-col items-center gap-1.5 px-4 py-6 text-caption">
 							<span className="font-medium text-foreground">{t("app.skillPickerLoadFailed")}</span>
 							<span className="text-muted-foreground">{t("app.skillPickerLoadFailedNote")}</span>
-							{error && (
-								<pre className="max-h-28 w-full overflow-auto whitespace-pre-wrap break-all rounded-md border border-border/60 bg-muted/40 p-2.5 font-mono text-[11px] leading-relaxed text-muted-foreground">{error}</pre>
-							)}
+							{error && <pre className="max-h-28 w-full overflow-auto whitespace-pre-wrap break-all rounded-md border border-border/60 bg-muted/40 p-2.5 font-mono text-[11px] leading-relaxed text-muted-foreground">{error}</pre>}
 						</div>
 					) : blockedByAgent ? (
 						<div className="px-6 py-10 text-center text-caption text-muted-foreground">{t("app.skillPickerNoAgent")}</div>
 					) : items.length === 0 ? (
 						/* 区分三种空态：chat 项目/无项目时只可能是全局为空；有项目时是项目+全局都为空。 */
-						<div className="px-6 py-10 text-center text-caption text-muted-foreground">
-							{globalOnly
-								? isChatSessionProject
-									? t("app.skillPickerChatProject")
-									: t("app.skillPickerNoProject")
-								: t("app.skillPickerEmpty")}
-						</div>
+						<div className="px-6 py-10 text-center text-caption text-muted-foreground">{globalOnly ? (isChatSessionProject ? t("app.skillPickerChatProject") : t("app.skillPickerNoProject")) : t("app.skillPickerEmpty")}</div>
 					) : (
 						items.map((skill) => (
 							/* 双行条目与 prompt/模型选择器对齐：首行图标 + 真实斜杠命令 + 徽标，
 							   次行描述截断 + 右侧详情/插入按钮。旧 picker-palette-* 单行排版弃用。 */
-							<CommandItem
-								key={skill.name}
-								value={`/${skill.name}`}
-								keywords={[skill.name, skill.description, skill.whenToUse ?? "", toSkillInvocationToken(props.backend, skill.name)]}
-								onSelect={() => props.onPick(skill.name)}
-								className="group min-h-10 items-center gap-2.5 rounded-md px-3 py-2"
-							>
+							<CommandItem key={skill.name} value={`/${skill.name}`} keywords={[skill.name, skill.description, skill.whenToUse ?? "", toSkillInvocationToken(props.backend, skill.name)]} onSelect={() => props.onPick(skill.name)} className="group min-h-10 items-center gap-2.5 rounded-md px-3 py-2">
 								<span className="grid size-7 shrink-0 place-items-center rounded-md bg-muted/70 text-muted-foreground">
 									<Sparkles size={14} strokeWidth={1.8} aria-hidden="true" />
 								</span>
@@ -301,18 +260,11 @@ export function ComposerSkillPicker(props: {
 										</span>
 										{/* 来源徽标：全局 / 项目（title 显示完整目录），让用户知道技能从哪里来 */}
 										{skill.source && (
-											<span
-												className="shrink-0 inline-flex items-center rounded bg-sky-500/12 px-1.5 py-0.5 text-micro font-medium text-sky-600 dark:text-sky-400"
-												title={skill.sourceLabel}
-											>
+											<span className="shrink-0 inline-flex items-center rounded bg-sky-500/12 px-1.5 py-0.5 text-micro font-medium text-sky-600 dark:text-sky-400" title={skill.sourceLabel}>
 												{skill.source === "global" ? t("app.skillBadgeGlobal") : t("app.skillBadgeProject")}
 											</span>
 										)}
-										{skill.userOnly && (
-											<span className="shrink-0 inline-flex items-center rounded bg-amber-500/15 px-1.5 py-0.5 text-micro font-medium text-amber-600 dark:text-amber-400">
-												{t("dshTools.skillUserOnly")}
-											</span>
-										)}
+										{skill.userOnly && <span className="shrink-0 inline-flex items-center rounded bg-amber-500/15 px-1.5 py-0.5 text-micro font-medium text-amber-600 dark:text-amber-400">{t("dshTools.skillUserOnly")}</span>}
 									</span>
 									{skill.description && (
 										<span className="mt-0.5 block truncate text-caption text-muted-foreground" title={skill.description}>

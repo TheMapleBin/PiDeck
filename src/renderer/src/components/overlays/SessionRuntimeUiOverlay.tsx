@@ -1,25 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Check, ClipboardList } from "lucide-react";
-import type {
-	AgentUiBatchQuestion,
-	AgentUiRequest,
-	AgentUiResponse,
-	SessionUiResponseInput,
-} from "../../../../shared/types";
+import type { AgentUiBatchQuestion, AgentUiRequest, AgentUiResponse, SessionUiResponseInput } from "../../../../shared/types";
 import type { SessionRuntimeUiState, SessionRuntimeViewState } from "../../atoms/session-atoms";
 import { t } from "../../i18n";
-import {
-	buildAskResponse,
-	formatAskTitle,
-	isComposingKeyboardEvent,
-	parseSecurityConfirmTitle,
-	pickActiveAskRequest,
-	resolveBatchAskDirectEnter,
-	resolveSingleAskDirectEnter,
-	serializeBatchAnswers,
-	shouldSuppressAskClick,
-	splitAskOption,
-} from "../../utils/askUi";
+import { buildAskResponse, formatAskTitle, isComposingKeyboardEvent, parseSecurityConfirmTitle, pickActiveAskRequest, resolveBatchAskDirectEnter, resolveSingleAskDirectEnter, serializeBatchAnswers, shouldSuppressAskClick, splitAskOption } from "../../utils/askUi";
 import { SecurityConfirmCard } from "./SecurityConfirmCard";
 import { Button } from "../ui-shadcn/button";
 import { Input } from "../ui-shadcn/input";
@@ -39,14 +23,7 @@ export type SessionRuntimeUiResponder = {
 	respond: (request: AgentUiRequest, response: AgentUiResponse) => Promise<boolean>;
 };
 
-export function createSessionRuntimeUiResponder(input: {
-	binding: RuntimeUiBinding;
-	readBinding: () => RuntimeUiBinding | undefined;
-	claim: ResponseClaim;
-	rollback: ResponseRollback;
-	send: (input: SessionUiResponseInput) => Promise<void>;
-	onError?: (error: unknown) => void;
-}): SessionRuntimeUiResponder {
+export function createSessionRuntimeUiResponder(input: { binding: RuntimeUiBinding; readBinding: () => RuntimeUiBinding | undefined; claim: ResponseClaim; rollback: ResponseRollback; send: (input: SessionUiResponseInput) => Promise<void>; onError?: (error: unknown) => void }): SessionRuntimeUiResponder {
 	return {
 		respond: async (request, response) => {
 			const start = input.readBinding();
@@ -99,19 +76,10 @@ function isBatchAnswered(value: BatchAnswer): boolean {
 }
 
 /** Ask 展开后由时间线 owner 重新定位到底部，确保新展开的内容不会落在视口下方。 */
-function notifyAskExpanded(
-	onExpandedChange: ((expanded: boolean) => void) | undefined,
-	expanded: boolean,
-) {
+function notifyAskExpanded(onExpandedChange: ((expanded: boolean) => void) | undefined, expanded: boolean) {
 	onExpandedChange?.(expanded);
 }
-function BatchAskInlineBar(props: {
-	request: AgentUiRequest;
-	responding: boolean;
-	onCancel: () => void;
-	onSubmit: (answers: string) => void;
-	onExpandedChange?: (expanded: boolean) => void;
-}) {
+function BatchAskInlineBar(props: { request: AgentUiRequest; responding: boolean; onCancel: () => void; onSubmit: (answers: string) => void; onExpandedChange?: (expanded: boolean) => void }) {
 	const questions = props.request.batchQuestions ?? [];
 	const total = questions.length;
 	const [answers, setAnswers] = useState<Record<string, BatchAnswer>>({});
@@ -126,13 +94,7 @@ function BatchAskInlineBar(props: {
 		setAnswers({});
 		setAnswerLabels({});
 		setCustomAnswerIds(new Set());
-		setInputValues(
-			Object.fromEntries(
-				questions
-					.filter((question) => question.prefill)
-					.map((question) => [question.id, question.prefill ?? ""]),
-			),
-		);
+		setInputValues(Object.fromEntries(questions.filter((question) => question.prefill).map((question) => [question.id, question.prefill ?? ""])));
 		setCurrentTab(0);
 		setExpanded(true);
 	}, [requestKey]);
@@ -160,17 +122,21 @@ function BatchAskInlineBar(props: {
 	}
 
 	function submitAnswers() {
-		props.onSubmit(serializeBatchAnswers(
-			questions,
-			answers,
-			Object.fromEntries(questions.map((question) => [
-				question.id,
-				{
-					label: answerLabels[question.id],
-					wasCustom: customAnswerIds.has(question.id),
-				},
-			])),
-		));
+		props.onSubmit(
+			serializeBatchAnswers(
+				questions,
+				answers,
+				Object.fromEntries(
+					questions.map((question) => [
+						question.id,
+						{
+							label: answerLabels[question.id],
+							wasCustom: customAnswerIds.has(question.id),
+						},
+					]),
+				),
+			),
+		);
 	}
 
 	if (total === 0) return null;
@@ -192,10 +158,7 @@ function BatchAskInlineBar(props: {
 		>
 			<div className="mb-2 flex min-w-0 items-center gap-2" aria-label={t("ask.batchProgress", { done: answeredCount, total })}>
 				<div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-bg-muted" role="progressbar" aria-valuemin={0} aria-valuemax={total} aria-valuenow={answeredCount}>
-					<div
-						className="h-full rounded-full bg-[var(--color-success)] transition-[width] duration-200"
-						style={{ width: `${total > 0 ? (answeredCount / total) * 100 : 0}%` }}
-					/>
+					<div className="h-full rounded-full bg-[var(--color-success)] transition-[width] duration-200" style={{ width: `${total > 0 ? (answeredCount / total) * 100 : 0}%` }} />
 				</div>
 				<span className="shrink-0 text-micro font-medium text-text-secondary">{t("ask.batchProgress", { done: answeredCount, total })}</span>
 			</div>
@@ -217,7 +180,9 @@ function BatchAskInlineBar(props: {
 							<span className="min-w-[14px] text-center font-mono font-semibold">{index + 1}</span>
 							{/* 单行截断：tab 只做摘要，完整问题在下方详情区展示；
 							    多行会突破胶囊固定高度溢出到下方内容（min-w-0 让 truncate 在 flex 里生效） */}
-							<span className="max-w-[28ch] min-w-0 truncate text-left" title={question.question}>{question.question}</span>
+							<span className="max-w-[28ch] min-w-0 truncate text-left" title={question.question}>
+								{question.question}
+							</span>
 							{answered ? <Check size={11} className="shrink-0 text-[var(--color-success)]" aria-hidden="true" /> : null}
 						</Button>
 					);
@@ -253,22 +218,13 @@ function BatchAskInlineBar(props: {
 									<div key={question.id} className="grid grid-cols-[20px_minmax(0,1fr)_minmax(0,30ch)] items-start gap-2 text-caption leading-[1.6] text-text-primary">
 										<span className="font-mono font-semibold">{index + 1}</span>
 										<span className="min-w-0 [overflow-wrap:anywhere]">{question.question}</span>
-										<span className={`min-w-0 text-right font-mono font-medium [overflow-wrap:anywhere]${answered ? " answered" : " unanswered"}`}>
-											{answered ? answerLabels[question.id] ?? batchAnswerLabel(value) : "-"}
-										</span>
+										<span className={`min-w-0 text-right font-mono font-medium [overflow-wrap:anywhere]${answered ? " answered" : " unanswered"}`}>{answered ? (answerLabels[question.id] ?? batchAnswerLabel(value)) : "-"}</span>
 									</div>
 								);
 							})}
 						</div>
-						{!allAnswered ? (
-							<div className="rounded-sm bg-[color:color-mix(in_srgb,var(--color-warning)_10%,transparent)] p-2 text-caption text-[var(--color-warning)]">{t("ask.batchIncomplete")}</div>
-						) : null}
-						<Button
-							className="w-full"
-							variant="default"
-							disabled={!allAnswered || props.responding}
-							onClick={submitAnswers}
-						>
+						{!allAnswered ? <div className="rounded-sm bg-[color:color-mix(in_srgb,var(--color-warning)_10%,transparent)] p-2 text-caption text-[var(--color-warning)]">{t("ask.batchIncomplete")}</div> : null}
+						<Button className="w-full" variant="default" disabled={!allAnswered || props.responding} onClick={submitAnswers}>
 							{t("ask.batchSubmitAll")}
 						</Button>
 					</div>
@@ -318,11 +274,11 @@ function BatchQuestion(props: {
 	finalLabel?: string;
 }) {
 	const { question } = props;
-	const selectOptions = question.type === "select" || question.type === "multi_select" ? question.options ?? [] : [];
+	const selectOptions = question.type === "select" || question.type === "multi_select" ? (question.options ?? []) : [];
 	const hasOptionDescriptions = selectOptions.some((option) => typeof option !== "string" && Boolean(option.description));
 	const hasLongOptionText = selectOptions.some((option) => {
 		const label = typeof option === "string" ? option : option.label;
-		const description = typeof option === "string" ? "" : option.description ?? "";
+		const description = typeof option === "string" ? "" : (option.description ?? "");
 		return label.length > 28 || description.length > 56;
 	});
 	const expandedOptionLayout = hasOptionDescriptions || hasLongOptionText || selectOptions.length > 6;
@@ -388,11 +344,9 @@ function BatchQuestion(props: {
 						<div className={`grid min-w-0 gap-1.5 ${expandedOptionLayout ? "grid-cols-2 max-[720px]:grid-cols-1" : "grid-cols-4 max-[720px]:grid-cols-2 max-[480px]:grid-cols-1"}`}>
 							{question.options.map((option, index) => {
 								const rawLabel = typeof option === "string" ? option : option.label;
-								const parsed = typeof option === "string"
-									? splitAskOption(option)
-									: { label: rawLabel, description: option.description };
+								const parsed = typeof option === "string" ? splitAskOption(option) : { label: rawLabel, description: option.description };
 								const label = parsed.label;
-								const value = typeof option === "string" ? option : option.value ?? rawLabel;
+								const value = typeof option === "string" ? option : (option.value ?? rawLabel);
 								const description = parsed.description;
 								return (
 									<Button
@@ -401,16 +355,22 @@ function BatchQuestion(props: {
 										variant="outline"
 										disabled={props.responding}
 										onClick={() => {
-										if (shouldSuppressAskClick()) return;
-										props.onAnswer(value, label);
-									}}
+											if (shouldSuppressAskClick()) return;
+											props.onAnswer(value, label);
+										}}
 									>
 										{/* 选中态对勾标记：主题色 accent 对比度低时只靠边框/背景变色难分辨已选项 */}
 										<span className="flex min-w-0 max-w-full items-center gap-1">
 											{props.answer === value ? <Check size={14} className="shrink-0 text-[var(--color-success)]" aria-hidden="true" /> : null}
-											<span className="min-w-0 max-w-full break-words whitespace-normal text-caption font-medium leading-5 text-text-primary" title={label}>{label}</span>
+											<span className="min-w-0 max-w-full break-words whitespace-normal text-caption font-medium leading-5 text-text-primary" title={label}>
+												{label}
+											</span>
 										</span>
-										{description ? <span className="min-w-0 max-w-full break-words whitespace-normal text-micro font-normal leading-5 text-text-tertiary" title={description}>{description}</span> : null}
+										{description ? (
+											<span className="min-w-0 max-w-full break-words whitespace-normal text-micro font-normal leading-5 text-text-tertiary" title={description}>
+												{description}
+											</span>
+										) : null}
 									</Button>
 								);
 							})}
@@ -430,11 +390,7 @@ function BatchQuestion(props: {
 										}
 									}}
 								/>
-								<Button
-																		variant="default"
-									disabled={props.responding || !props.inputValue.trim()}
-									onClick={props.onSubmitInput}
-								>
+								<Button variant="default" disabled={props.responding || !props.inputValue.trim()} onClick={props.onSubmitInput}>
 									{t("ask.submit")}
 								</Button>
 							</div>
@@ -446,11 +402,9 @@ function BatchQuestion(props: {
 						<div className={`grid min-w-0 gap-1.5 ${expandedOptionLayout ? "grid-cols-2 max-[720px]:grid-cols-1" : "grid-cols-4 max-[720px]:grid-cols-2 max-[480px]:grid-cols-1"}`}>
 							{question.options.map((option, index) => {
 								const rawLabel = typeof option === "string" ? option : option.label;
-								const parsed = typeof option === "string"
-									? splitAskOption(option)
-									: { label: rawLabel, description: option.description };
+								const parsed = typeof option === "string" ? splitAskOption(option) : { label: rawLabel, description: option.description };
 								const label = parsed.label;
-								const value = typeof option === "string" ? option : option.value ?? rawLabel;
+								const value = typeof option === "string" ? option : (option.value ?? rawLabel);
 								const description = parsed.description;
 								const selectedValues = Array.isArray(props.answer) ? props.answer : [];
 								const selected = selectedValues.includes(value);
@@ -463,18 +417,22 @@ function BatchQuestion(props: {
 										onClick={() => {
 											if (shouldSuppressAskClick()) return;
 											// 切换选中项：multi_select 答案始终是数组
-											const next = selected
-												? selectedValues.filter((v) => v !== value)
-												: [...selectedValues, value];
+											const next = selected ? selectedValues.filter((v) => v !== value) : [...selectedValues, value];
 											props.onAnswer(next, next.join("、"));
 										}}
 									>
 										{/* 选中态对勾标记：主题色 accent 对比度低时只靠边框/背景变色难分辨已选项 */}
 										<span className="flex min-w-0 max-w-full items-center gap-1">
 											{selected ? <Check size={14} className="shrink-0 text-[var(--color-success)]" aria-hidden="true" /> : null}
-											<span className="min-w-0 max-w-full break-words whitespace-normal text-caption font-medium leading-5 text-text-primary" title={label}>{label}</span>
+											<span className="min-w-0 max-w-full break-words whitespace-normal text-caption font-medium leading-5 text-text-primary" title={label}>
+												{label}
+											</span>
 										</span>
-										{description ? <span className="min-w-0 max-w-full break-words whitespace-normal text-micro font-normal leading-5 text-text-tertiary" title={description}>{description}</span> : null}
+										{description ? (
+											<span className="min-w-0 max-w-full break-words whitespace-normal text-micro font-normal leading-5 text-text-tertiary" title={description}>
+												{description}
+											</span>
+										) : null}
 									</Button>
 								);
 							})}
@@ -493,13 +451,7 @@ function BatchQuestion(props: {
 						}}
 						onKeyDown={(event) => {
 							// 多行编辑器：回车保留换行，Ctrl/Cmd+Enter 提交并进入下一题（末题 = 提交全部）
-							if (
-								event.key === "Enter" &&
-								(event.ctrlKey || event.metaKey) &&
-								!event.shiftKey &&
-								!isComposingKeyboardEvent(event) &&
-								!props.nextDisabled
-							) {
+							if (event.key === "Enter" && (event.ctrlKey || event.metaKey) && !event.shiftKey && !isComposingKeyboardEvent(event) && !props.nextDisabled) {
 								event.preventDefault();
 								props.onNext();
 							}
@@ -522,12 +474,7 @@ function BatchQuestion(props: {
 							}}
 						/>
 						{/* 纯输入题的按钮与输入框并排；不能使用 w-full，否则 Button 的 shrink-0 会把输入框压成窄条。 */}
-						<Button
-							className="shrink-0"
-							variant="default"
-							disabled={props.responding || !props.inputValue.trim()}
-							onClick={props.onSubmitInput}
-						>
+						<Button className="shrink-0" variant="default" disabled={props.responding || !props.inputValue.trim()} onClick={props.onSubmitInput}>
 							{t("ask.submit")}
 						</Button>
 					</div>
@@ -540,15 +487,8 @@ function BatchQuestion(props: {
 					</Button>
 				) : null}
 				<span className="flex-1" />
-				<Button
-					className="h-7 px-2 text-caption"
-					variant="ghost"
-					disabled={props.responding || props.nextDisabled}
-					onClick={props.onNext}
-				>
-					{props.questionIndex < props.total - 1
-						? t("ask.batchNext")
-						: props.finalLabel ?? t("ask.batchGoReview")}
+				<Button className="h-7 px-2 text-caption" variant="ghost" disabled={props.responding || props.nextDisabled} onClick={props.onNext}>
+					{props.questionIndex < props.total - 1 ? t("ask.batchNext") : (props.finalLabel ?? t("ask.batchGoReview"))}
 				</Button>
 			</div>
 		</div>
@@ -556,18 +496,8 @@ function BatchQuestion(props: {
 }
 
 export function SessionRuntimeUiOverlay({ sessionId, runtime, ui, responder, onExpandedChange }: SessionRuntimeUiOverlayProps) {
-	const active = Boolean(
-		runtime &&
-		ui &&
-		runtime.status !== "detached" &&
-		runtime.status !== "closed" &&
-		runtime.agentId === ui.agentId &&
-		runtime.runtimeGeneration === ui.runtimeGeneration,
-	);
-	const request = useMemo(
-		() => active && ui ? pickActiveAskRequest(ui.requests) : undefined,
-		[active, ui],
-	);
+	const active = Boolean(runtime && ui && runtime.status !== "detached" && runtime.status !== "closed" && runtime.agentId === ui.agentId && runtime.runtimeGeneration === ui.runtimeGeneration);
+	const request = useMemo(() => (active && ui ? pickActiveAskRequest(ui.requests) : undefined), [active, ui]);
 	const requestState = request ? ui?.requests[request.requestId] : undefined;
 	const requestKey = request ? `${sessionId}:${request.agentId}:${ui?.runtimeGeneration}:${request.requestId}` : "";
 	const [value, setValue] = useState("");
@@ -601,15 +531,7 @@ export function SessionRuntimeUiOverlay({ sessionId, runtime, ui, responder, onE
 	};
 
 	if (request.method === "batch_ask") {
-		return (
-			<BatchAskInlineBar
-				request={request}
-				responding={responding}
-				onCancel={cancel}
-				onSubmit={(answers) => submitValue(answers)}
-				onExpandedChange={onExpandedChange}
-			/>
-		);
+		return <BatchAskInlineBar request={request} responding={responding} onCancel={cancel} onSubmit={(answers) => submitValue(answers)} onExpandedChange={onExpandedChange} />;
 	}
 
 	// 安全确认（pi-deck-security-gate 的「ask」动作）：用专用卡片展开工具/等级/详情，
@@ -656,13 +578,9 @@ export function SessionRuntimeUiOverlay({ sessionId, runtime, ui, responder, onE
 					if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
 					const action = resolveSingleAskDirectEnter({
 						method: request.method,
-						fromField:
-							event.target instanceof HTMLInputElement ||
-							event.target instanceof HTMLTextAreaElement,
+						fromField: event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement,
 						fromButton: event.target instanceof HTMLButtonElement,
-						fromOptionButton:
-							event.target instanceof HTMLElement &&
-							event.target.classList.contains("ask-inline-bar-option"),
+						fromOptionButton: event.target instanceof HTMLElement && event.target.classList.contains("ask-inline-bar-option"),
 						selectedOption,
 						text: value,
 					});
@@ -714,11 +632,7 @@ export function SessionRuntimeUiOverlay({ sessionId, runtime, ui, responder, onE
 										}
 									}}
 								/>
-								<Button
-																		variant="default"
-									disabled={responding || !value.trim()}
-									onClick={() => submitValue(value.trim())}
-								>
+								<Button variant="default" disabled={responding || !value.trim()} onClick={() => submitValue(value.trim())}>
 									{t("ask.submit")}
 								</Button>
 							</div>
@@ -728,7 +642,8 @@ export function SessionRuntimeUiOverlay({ sessionId, runtime, ui, responder, onE
 				{selectedOption ? (
 					<div className="mt-1 flex w-full min-w-0 items-center gap-1.5">
 						<span className="min-w-0 flex-1 truncate text-caption text-text-secondary">
-							{t("ask.selectedPrefix")}{splitAskOption(selectedOption).label}
+							{t("ask.selectedPrefix")}
+							{splitAskOption(selectedOption).label}
 						</span>
 						<Button variant="default" disabled={responding} onClick={() => submitValue(selectedOption)}>
 							{t("ask.submit")}
@@ -777,13 +692,7 @@ export function SessionRuntimeUiOverlay({ sessionId, runtime, ui, responder, onE
 							onChange={(event) => setValue(event.target.value)}
 							onKeyDown={(event) => {
 								// 多行编辑器：回车保留换行，Ctrl/Cmd+Enter 提交（与主流编辑器快捷键一致）
-								if (
-									event.key === "Enter" &&
-									(event.ctrlKey || event.metaKey) &&
-									!event.shiftKey &&
-									!isComposingKeyboardEvent(event) &&
-									value.trim()
-								) {
+								if (event.key === "Enter" && (event.ctrlKey || event.metaKey) && !event.shiftKey && !isComposingKeyboardEvent(event) && value.trim()) {
 									event.preventDefault();
 									submitValue(value);
 								}

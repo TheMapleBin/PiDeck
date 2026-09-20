@@ -100,15 +100,21 @@ function makeNetwork(repoFiles) {
 		const relPath = resolveRepoPath(url);
 		const content = relPath ? repoFiles[relPath] : undefined;
 		if (content === undefined) {
-			return { ok: false, status: 404, async arrayBuffer() { return new ArrayBuffer(0); } };
+			return {
+				ok: false,
+				status: 404,
+				async arrayBuffer() {
+					return new ArrayBuffer(0);
+				},
+			};
 		}
 		const isAtomGit = url.includes("api.atomgit.com");
 		const payload = isAtomGit
 			? JSON.stringify({
-				type: "file",
-				encoding: "base64",
-				content: Buffer.from(content, "utf8").toString("base64"),
-			})
+					type: "file",
+					encoding: "base64",
+					content: Buffer.from(content, "utf8").toString("base64"),
+				})
 			: content;
 		return {
 			ok: true,
@@ -153,9 +159,7 @@ function repoFilesOf(fixture, override = {}, version = "1.0.1") {
 	const files = { ...fixture.files, ...override };
 	return {
 		[`resources/extensions/${EXTENSIONS_MANIFEST_FILE_NAME}`]: remoteManifestText(files, version),
-		...Object.fromEntries(
-			Object.entries(files).map(([name, content]) => [`resources/extensions/${name}`, content]),
-		),
+		...Object.fromEntries(Object.entries(files).map(([name, content]) => [`resources/extensions/${name}`, content])),
 	};
 }
 
@@ -190,20 +194,11 @@ test("parseBuiltInExtensionsManifest 丢弃一切不可信结构", () => {
 		assert.equal(parseBuiltInExtensionsManifest(raw), null, `应拒绝文件名 ${name}`);
 	}
 	// 摘要形态非法
-	assert.equal(
-		parseBuiltInExtensionsManifest(JSON.stringify({ ...good, files: [{ ...goodFile, sha256: "xyz" }] })),
-		null,
-	);
+	assert.equal(parseBuiltInExtensionsManifest(JSON.stringify({ ...good, files: [{ ...goodFile, sha256: "xyz" }] })), null);
 	// bytes 必须正整数
-	assert.equal(
-		parseBuiltInExtensionsManifest(JSON.stringify({ ...good, files: [{ ...goodFile, bytes: 0 }] })),
-		null,
-	);
+	assert.equal(parseBuiltInExtensionsManifest(JSON.stringify({ ...good, files: [{ ...goodFile, bytes: 0 }] })), null);
 	// 同名重复会让「以文件名为键」的比对产生歧义
-	assert.equal(
-		parseBuiltInExtensionsManifest(JSON.stringify({ ...good, files: [goodFile, goodFile] })),
-		null,
-	);
+	assert.equal(parseBuiltInExtensionsManifest(JSON.stringify({ ...good, files: [goodFile, goodFile] })), null);
 });
 
 test("readVerifiedArtifact 对内容/字节数被篡改的目录返回 null", () => {
@@ -275,14 +270,8 @@ test("update 写入完整自洽覆盖层，解析路径与生效版本随之切�
 		assert.ok(readVerifiedArtifact(overlayDir), "覆盖层必须通过整体校验");
 
 		// 变化文件取远端内容，未变化文件从内置复制（相对 import 才能解析）
-		assert.equal(
-			readFileSync(join(overlayDir, "pi-deck-vision.ts"), "utf8"),
-			"export const vision = 2;\n",
-		);
-		assert.equal(
-			readFileSync(join(overlayDir, "pi-deck-todo-state.ts"), "utf8"),
-			fixture.files["pi-deck-todo-state.ts"],
-		);
+		assert.equal(readFileSync(join(overlayDir, "pi-deck-vision.ts"), "utf8"), "export const vision = 2;\n");
+		assert.equal(readFileSync(join(overlayDir, "pi-deck-todo-state.ts"), "utf8"), fixture.files["pi-deck-todo-state.ts"]);
 
 		// 缓存失效：同一进程内的解析立刻切到覆盖层，不用等重启（否则「更新成功」只是自欺）
 		assert.equal(resolveBuiltInExtensionPath("pi-deck-todo.ts", roots), join(overlayDir, "pi-deck-todo.ts"));
@@ -367,10 +356,7 @@ test("source=github 时 raw 直连优先；AtomGit 的 base64 解码必须字节
 		assert.equal(update.ok, true);
 		assert.equal(update.filesWritten, 3);
 		// 落盘内容必须与远端字节一致，否则校验会挡下来（这里断言的是「确实一致」）
-		assert.equal(
-			readFileSync(join(resolveBuiltInExtensionsOverlayDir(fixture.userDataDir), "pi-deck-todo.ts"), "utf8"),
-			content,
-		);
+		assert.equal(readFileSync(join(resolveBuiltInExtensionsOverlayDir(fixture.userDataDir), "pi-deck-todo.ts"), "utf8"), content);
 	});
 });
 
@@ -413,10 +399,7 @@ test("update 把 vendored node_modules 一并写进覆盖层", async () => {
 		assert.equal(result.ok, true);
 		assert.equal(result.updated, true);
 		// vendored 包整目录复制进覆盖层，扩展的裸导入在覆盖层路径下才解析得到
-		assert.equal(
-			readFileSync(join(overlayDir, "node_modules", "undici", "package.json"), "utf8"),
-			'{"name":"undici","version":"6.28.0"}\n',
-		);
+		assert.equal(readFileSync(join(overlayDir, "node_modules", "undici", "package.json"), "utf8"), '{"name":"undici","version":"6.28.0"}\n');
 		// 多出的 node_modules 目录不影响清单整体校验（清单只声明 .ts 文件）
 		assert.ok(readVerifiedArtifact(overlayDir), "覆盖层必须通过整体校验");
 	});
@@ -440,10 +423,7 @@ test("ensureOverlayVendorDependencies 自愈旧覆盖层且幂等", async () => 
 			vendorNodeModulesDir,
 		});
 		assert.equal(healer.ensureOverlayVendorDependencies(), true);
-		assert.equal(
-			readFileSync(join(overlayDir, "node_modules", "undici", "package.json"), "utf8"),
-			'{"name":"undici","version":"6.28.0"}\n',
-		);
+		assert.equal(readFileSync(join(overlayDir, "node_modules", "undici", "package.json"), "utf8"), '{"name":"undici","version":"6.28.0"}\n');
 
 		// 3) 幂等：已有该包时不再写盘
 		assert.equal(healer.ensureOverlayVendorDependencies(), false);

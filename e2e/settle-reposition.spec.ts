@@ -15,12 +15,7 @@ import { makeSeedProject } from "./open-session";
 
 // mock-pi.cjs 的 LONG 分支与这里完全一致：`"Mock 回复：「LONG」"` 后无换行直接
 // 拼接 `join("\n")` 的剩余行。
-const LONG_REPLY =
-	"Mock 回复：「LONG」" +
-	Array.from(
-		{ length: 120 },
-		(_, i) => `第 ${i + 1} 行：长回答示例文本，用于撑高时间线高度（滚动/贴底类用例需要内容溢出视口）。`,
-	).join("\n");
+const LONG_REPLY = "Mock 回复：「LONG」" + Array.from({ length: 120 }, (_, i) => `第 ${i + 1} 行：长回答示例文本，用于撑高时间线高度（滚动/贴底类用例需要内容溢出视口）。`).join("\n");
 
 // 预置项目 + 一个已结束的 LONG 历史会话（场景 3 用；场景 1/2 仍走内置聊天项目）。
 const settleSeedProject = makeSeedProject("settle-reposition-seed");
@@ -153,12 +148,15 @@ test("mouse move + typing during the settle window do not cancel repositioning",
 	// 此时 dist 还很小）；也不能只轮询 dist（动画拉起第一帧就满足）。
 	// 双条件同时成立才算动画完成：已离开底部（dist>90）且已到 30% 目标。
 	await expect
-		.poll(async () => {
-			await ensureWindowVisible(app);
-			const f = await anchorFingerprint(window);
-			if (!f || f.dist <= 90) return Number.POSITIVE_INFINITY;
-			return Math.abs(f.anchorTopInViewport - f.clientHeight * 0.3);
-		}, { timeout: 8_000 })
+		.poll(
+			async () => {
+				await ensureWindowVisible(app);
+				const f = await anchorFingerprint(window);
+				if (!f || f.dist <= 90) return Number.POSITIVE_INFINITY;
+				return Math.abs(f.anchorTopInViewport - f.clientHeight * 0.3);
+			},
+			{ timeout: 8_000 },
+		)
 		.toBeLessThan(90);
 	const fingerprint = await anchorFingerprint(window);
 	expect(fingerprint).not.toBeNull();
@@ -193,9 +191,7 @@ test("real up-scroll before settle keeps the manual history position", async ({ 
 	const before = await window.locator(".message-timeline").evaluate(async (timeline) => {
 		for (let i = 0; i < 10; i += 1) {
 			const content = timeline.querySelector(".turn-row") ?? timeline.querySelector("p") ?? timeline;
-			content.dispatchEvent(
-				new WheelEvent("wheel", { deltaY: -160, bubbles: true, cancelable: true }),
-			);
+			content.dispatchEvent(new WheelEvent("wheel", { deltaY: -160, bubbles: true, cancelable: true }));
 			timeline.scrollTop = Math.max(0, timeline.scrollTop - 160);
 			await new Promise((resolve) => setTimeout(resolve, 25));
 		}
@@ -231,22 +227,19 @@ test("opening a settled session while following still repositions without input"
 	// 因此这里只轮询「最终回答进入视口上半部且视口离开底部」的稳定终态，
 	// 而不是死磕 30% 像素——30% 的精确锚定由场景 1（长内容）覆盖。
 	await expect
-		.poll(async () => {
-			await ensureWindowVisible(app);
-			const f = await anchorFingerprint(window);
-			if (!f) return Number.POSITIVE_INFINITY;
-			if (f.dist <= 300) return Number.POSITIVE_INFINITY;
-			// 最终回答顶部应在视口内（上方 10% 到 60% 高度区间）
-			return f.anchorTopInViewport > -f.clientHeight * 0.1 &&
-				f.anchorTopInViewport < f.clientHeight * 0.6
-				? 0
-				: Number.POSITIVE_INFINITY;
-		}, { timeout: 8_000 })
+		.poll(
+			async () => {
+				await ensureWindowVisible(app);
+				const f = await anchorFingerprint(window);
+				if (!f) return Number.POSITIVE_INFINITY;
+				if (f.dist <= 300) return Number.POSITIVE_INFINITY;
+				// 最终回答顶部应在视口内（上方 10% 到 60% 高度区间）
+				return f.anchorTopInViewport > -f.clientHeight * 0.1 && f.anchorTopInViewport < f.clientHeight * 0.6 ? 0 : Number.POSITIVE_INFINITY;
+			},
+			{ timeout: 8_000 },
+		)
 		.toBeLessThan(90);
 	const fingerprint = await anchorFingerprint(window);
 	expect(fingerprint).not.toBeNull();
-	expect(
-		fingerprint.dist,
-		`settled session reopen should leave the bottom: ${JSON.stringify(fingerprint)}`,
-	).toBeGreaterThan(300);
+	expect(fingerprint.dist, `settled session reopen should leave the bottom: ${JSON.stringify(fingerprint)}`).toBeGreaterThan(300);
 });

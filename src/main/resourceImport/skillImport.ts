@@ -2,18 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { cp, lstat, mkdir, readdir, readFile, rename, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { ResourceImportSourceKind, ResourceImportCandidate, StoredResourceImportCandidate } from "../../shared/types/resourceImport";
-import {
-	fingerprint,
-	hasErrorCode,
-	MAX_FILE_BYTES,
-	MAX_SKILL_DEPTH,
-	MAX_SKILL_TREE_BYTES,
-	PREVIEW_TEXT_MAX,
-	redactSensitiveList,
-	redactSensitiveText,
-	safeMessage,
-	sourceLabel,
-} from "./common";
+import { fingerprint, hasErrorCode, MAX_FILE_BYTES, MAX_SKILL_DEPTH, MAX_SKILL_TREE_BYTES, PREVIEW_TEXT_MAX, redactSensitiveList, redactSensitiveText, safeMessage, sourceLabel } from "./common";
 
 type SourcePath = { source: ResourceImportSourceKind; path: string };
 
@@ -37,7 +26,10 @@ export function parseSkillFrontmatter(raw: string): Record<string, string> {
 		const index = line.indexOf(":");
 		if (index < 0) continue;
 		const key = line.slice(0, index).trim();
-		const value = line.slice(index + 1).trim().replace(/^["']|["']$/g, "");
+		const value = line
+			.slice(index + 1)
+			.trim()
+			.replace(/^["']|["']$/g, "");
 		if (key) result[key] = value;
 	}
 	return result;
@@ -157,13 +149,7 @@ export async function buildSkillCandidate(item: SourcePath, dir: string): Promis
 }
 
 export function publicSkillCandidate(candidate: StoredResourceImportCandidate): ResourceImportCandidate {
-	const {
-		sourcePath: _sourcePath,
-		sourcePathLexical: _sourcePathLexical,
-		sourceFingerprint: _sourceFingerprint,
-		mcpDefinition: _mcpDefinition,
-		...publicCandidate
-	} = candidate;
+	const { sourcePath: _sourcePath, sourcePathLexical: _sourcePathLexical, sourceFingerprint: _sourceFingerprint, mcpDefinition: _mcpDefinition, ...publicCandidate } = candidate;
 	return {
 		...publicCandidate,
 		name: redactSensitiveText(publicCandidate.name, PREVIEW_TEXT_MAX),
@@ -188,9 +174,7 @@ export async function copySkillDirectoryAtomic(targetRoot: string, sourceDirecto
 	// discovery and the copy operation before anything is placed in the destination.
 	await skillTreeFingerprint(sourceDirectory);
 	await mkdir(targetRoot, { recursive: true });
-	const occupied = (await readdir(targetRoot, { withFileTypes: true })).some(
-		(entry) => entry.name.toLowerCase() === targetName.toLowerCase() || normalizeSkillName(entry.name) === targetName,
-	);
+	const occupied = (await readdir(targetRoot, { withFileTypes: true })).some((entry) => entry.name.toLowerCase() === targetName.toLowerCase() || normalizeSkillName(entry.name) === targetName);
 	if (occupied) throw new Error("Target already contains this skill.");
 	const temporaryDirectory = join(targetRoot, `.${targetName}.${randomUUID()}.tmp`);
 	try {

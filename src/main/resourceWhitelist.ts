@@ -133,27 +133,16 @@ export function matchesAnyPattern(filePath: string, patterns: string[], baseDir:
 	const parentDirPosix = parentDir ? toPosixPath(parentDir) : undefined;
 	return patterns.some((pattern) => {
 		const normalized = toPosixPath(pattern);
-		if (
-			minimatch(rel, normalized) ||
-			minimatch(name, normalized) ||
-			minimatch(filePathPosix, normalized)
-		) {
+		if (minimatch(rel, normalized) || minimatch(name, normalized) || minimatch(filePathPosix, normalized)) {
 			return true;
 		}
 		if (!isSkillFile) return false;
-		return Boolean(
-			parentRel && parentName && parentDirPosix &&
-			(minimatch(parentRel, normalized) ||
-				minimatch(parentName, normalized) ||
-				minimatch(parentDirPosix, normalized)),
-		);
+		return Boolean(parentRel && parentName && parentDirPosix && (minimatch(parentRel, normalized) || minimatch(parentName, normalized) || minimatch(parentDirPosix, normalized)));
 	});
 }
 
 function normalizeExactPattern(pattern: string): string {
-	const normalized = pattern.startsWith("./") || pattern.startsWith(".\\")
-		? pattern.slice(2)
-		: pattern;
+	const normalized = pattern.startsWith("./") || pattern.startsWith(".\\") ? pattern.slice(2) : pattern;
 	return toPosixPath(normalized);
 }
 
@@ -169,12 +158,7 @@ export function matchesAnyExactPattern(filePath: string, patterns: string[], bas
 	return patterns.some((pattern) => {
 		const normalized = normalizeExactPattern(pattern);
 		if (normalized === rel || normalized === filePathPosix) return true;
-		return Boolean(
-			isSkillFile &&
-			parentRel !== undefined &&
-			parentDirPosix !== undefined &&
-			(normalized === parentRel || normalized === parentDirPosix),
-		);
+		return Boolean(isSkillFile && parentRel !== undefined && parentDirPosix !== undefined && (normalized === parentRel || normalized === parentDirPosix));
 	});
 }
 
@@ -223,23 +207,15 @@ export function applyPatterns(allPaths: string[], patterns: string[], baseDir: s
 }
 
 /** autoload:false 的 delta 开关语义；只返回 pattern 明确命中的资源。 */
-export function applyAutoloadDisabledPatterns(
-	allPaths: string[],
-	patterns: string[],
-	baseDir: string,
-): Map<string, boolean> {
+export function applyAutoloadDisabledPatterns(allPaths: string[], patterns: string[], baseDir: string): Map<string, boolean> {
 	const result = new Map<string, boolean>();
 	for (const pattern of patterns) {
 		const prefix = pattern[0];
-		const target = prefix === "+" || prefix === "-" || prefix === "!"
-			? pattern.slice(1)
-			: pattern;
+		const target = prefix === "+" || prefix === "-" || prefix === "!" ? pattern.slice(1) : pattern;
 		const exact = prefix === "+" || prefix === "-";
 		const enabled = prefix !== "-" && prefix !== "!";
 		for (const filePath of allPaths) {
-			const matches = exact
-				? matchesAnyExactPattern(filePath, [target], baseDir)
-				: matchesAnyPattern(filePath, [target], baseDir);
+			const matches = exact ? matchesAnyExactPattern(filePath, [target], baseDir) : matchesAnyPattern(filePath, [target], baseDir);
 			if (matches) result.set(filePath, enabled);
 		}
 	}

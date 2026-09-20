@@ -31,17 +31,17 @@ import type { DshHomeSharingState } from "../../shared/types/dshHome";
  * 用于判定「当前 home 是否就是默认 ~/.dsh」，不用于文件系统寻址。
  */
 export function normalizeDshHomePath(value: string): string {
-	const unified = value.trim().replace(/[\\/]+/g, "/").replace(/\/+$/, "");
+	const unified = value
+		.trim()
+		.replace(/[\\/]+/g, "/")
+		.replace(/\/+$/, "");
 	return process.platform === "win32" ? unified.toLowerCase() : unified;
 }
 
 /** 当前 home 是否就是默认 `~/.dsh`（与 dsh CLI 共用同一份配置/会话）。 */
 export function isCliSharedHome(dshHome: string, homeDir: string): boolean {
 	if (!dshHome.trim() || !homeDir.trim()) return false;
-	return (
-		normalizeDshHomePath(dshHome) ===
-		normalizeDshHomePath(`${homeDir.replace(/[\\/]+$/, "")}/${DEFAULT_DSH_HOME_DIR_NAME}`)
-	);
+	return normalizeDshHomePath(dshHome) === normalizeDshHomePath(`${homeDir.replace(/[\\/]+$/, "")}/${DEFAULT_DSH_HOME_DIR_NAME}`);
 }
 
 /**
@@ -49,11 +49,7 @@ export function isCliSharedHome(dshHome: string, homeDir: string): boolean {
  * - override 非空 = 用户已显式指定目录（视为已隔离，不再提示共享）；
  * - 否则按 `resolveDshHomeDir` 的默认规则与 `~/.dsh` 比对。
  */
-export function resolveDshHomeSharing(input: {
-	dshHome: string;
-	override?: string;
-	homeDir: string;
-}): DshHomeSharingState {
+export function resolveDshHomeSharing(input: { dshHome: string; override?: string; homeDir: string }): DshHomeSharingState {
 	const usingOverride = Boolean(input.override?.trim());
 	return {
 		usingOverride,
@@ -72,11 +68,7 @@ export function resolveDshHomeSharing(input: {
  *
  * @param isAlive 进程存活探测，由调用方注入（DshHost 传 kill(pid,0) 实现）。
  */
-export function externalHostHolderPid(input: {
-	lockRaw?: string;
-	selfPid: number;
-	isAlive: (pid: number) => boolean;
-}): number | undefined {
+export function externalHostHolderPid(input: { lockRaw?: string; selfPid: number; isAlive: (pid: number) => boolean }): number | undefined {
 	const raw = input.lockRaw?.trim();
 	if (!raw) return undefined;
 	let parsed: unknown;

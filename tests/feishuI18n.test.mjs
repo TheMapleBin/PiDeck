@@ -58,26 +58,42 @@ test("run state localizes lifecycle copy and never exposes raw Agent errors", ()
 	});
 	let state = runState.createInitialState();
 	state = runState.reduceFromPiEvent(state, { type: "agent_start" }, "en-US");
-	state = runState.reduceFromPiEvent(state, {
-		type: "message_update",
-		assistantMessageEvent: { type: "thinking_delta", delta: "Agent internal reasoning" },
-	}, "en-US");
-	state = runState.reduceFromPiEvent(state, {
-		type: "message_update",
-		assistantMessageEvent: {
-			type: "toolcall_start",
-			toolCall: { id: "tool-1", name: "read", input: { filePath: "C:/work/用户文件.txt" } },
+	state = runState.reduceFromPiEvent(
+		state,
+		{
+			type: "message_update",
+			assistantMessageEvent: { type: "thinking_delta", delta: "Agent internal reasoning" },
 		},
-	}, "en-US");
-	state = runState.reduceFromPiEvent(state, {
-		type: "message_update",
-		assistantMessageEvent: { type: "toolcall_end", toolCall: { id: "tool-1", isError: false } },
-	}, "en-US");
-	state = runState.reduceFromPiEvent(state, {
-		type: "agent_end",
-		stopReason: "error",
-		error: "provider-secret raw failure",
-	}, "en-US");
+		"en-US",
+	);
+	state = runState.reduceFromPiEvent(
+		state,
+		{
+			type: "message_update",
+			assistantMessageEvent: {
+				type: "toolcall_start",
+				toolCall: { id: "tool-1", name: "read", input: { filePath: "C:/work/用户文件.txt" } },
+			},
+		},
+		"en-US",
+	);
+	state = runState.reduceFromPiEvent(
+		state,
+		{
+			type: "message_update",
+			assistantMessageEvent: { type: "toolcall_end", toolCall: { id: "tool-1", isError: false } },
+		},
+		"en-US",
+	);
+	state = runState.reduceFromPiEvent(
+		state,
+		{
+			type: "agent_end",
+			stopReason: "error",
+			error: "provider-secret raw failure",
+		},
+		"en-US",
+	);
 	const serialized = JSON.stringify(state);
 
 	assert.match(serialized, /Agent started/);
@@ -94,17 +110,20 @@ test("run card translates wrappers while preserving Agent output and file paths"
 		"./FeishuI18n": i18n,
 		"./rich-text": richText,
 	});
-	const card = renderer.renderRunCard({
-		blocks: [{ kind: "tool", tool: { id: "1", name: "read", input: { filePath: "C:/工作区/report.md" }, status: "done" } }],
-		reasoning: { content: "", active: false },
-		footer: null,
-		terminal: "error",
-		errorMsg: "raw provider stack trace",
-		startedAt: Date.now(),
-		meta: { durationMs: 1200 },
-		trail: [],
-		outputText: "Agent 原文 output",
-	}, { locale: "en-US" });
+	const card = renderer.renderRunCard(
+		{
+			blocks: [{ kind: "tool", tool: { id: "1", name: "read", input: { filePath: "C:/工作区/report.md" }, status: "done" } }],
+			reasoning: { content: "", active: false },
+			footer: null,
+			terminal: "error",
+			errorMsg: "raw provider stack trace",
+			startedAt: Date.now(),
+			meta: { durationMs: 1200 },
+			trail: [],
+			outputText: "Agent 原文 output",
+		},
+		{ locale: "en-US" },
+	);
 	const serialized = JSON.stringify(card);
 
 	assert.match(serialized, /Agent 原文 output/);

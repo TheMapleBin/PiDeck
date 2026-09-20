@@ -84,20 +84,8 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import * as tar from "tar";
 // 裁剪规则独立成模块：CLI 主流程不便 import（会触发打包），测试直接引用规则单测。
-import {
-	allEntryCandidates,
-	isExcluded,
-	isNpmHashedLeftoverDir,
-	isSrcPrunable,
-	runtimeEntryResolvableOnDisk,
-} from "./runtime-prune-rules.mjs";
-import {
-	collectLockClosure,
-	isPlatformGatedEntry,
-	npmPlatformArgs,
-	normalizeTarget,
-	pinnedDependenciesFromClosure,
-} from "./dshRuntimeLockClosure.mjs";
+import { allEntryCandidates, isExcluded, isNpmHashedLeftoverDir, isSrcPrunable, runtimeEntryResolvableOnDisk } from "./runtime-prune-rules.mjs";
+import { collectLockClosure, isPlatformGatedEntry, npmPlatformArgs, normalizeTarget, pinnedDependenciesFromClosure } from "./dshRuntimeLockClosure.mjs";
 
 const require = createRequire(import.meta.url);
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -270,28 +258,17 @@ function ensureClosureEntriesBuilt(closureDirs) {
 		// exports["."] 指不存在文件（子路径导出包）更常见，跑构建既慢又炸流程，
 		// 直接报错交给人判断。
 		if (isSymlinkedLocalPackage(dir) && typeof pkg.scripts?.build === "string") {
-			console.warn(
-				`[pack-dsh-runtime] ⚠️ ${rel}: 运行时入口缺失（${entries.join(", ")}），自动执行 npm run build...`,
-			);
+			console.warn(`[pack-dsh-runtime] ⚠️ ${rel}: 运行时入口缺失（${entries.join(", ")}），自动执行 npm run build...`);
 			// Windows 上 npm 是 npm.cmd shim，CreateProcess 不经 cmd.exe 不能执行批处理（EINVAL），
 			// 必须显式走 cmd.exe；不用 shell:true——Node 24 传参会触发 DEP0190（参数不转义只拼接），
 			// 而这里的参数全是固定常量，无用户输入，无注入面。
-			const [npmCmd, npmArgs] =
-				process.platform === "win32"
-					? ["cmd.exe", ["/d", "/s", "/c", "npm", "run", "build"]]
-					: ["npm", ["run", "build"]];
+			const [npmCmd, npmArgs] = process.platform === "win32" ? ["cmd.exe", ["/d", "/s", "/c", "npm", "run", "build"]] : ["npm", ["run", "build"]];
 			execFileSync(npmCmd, npmArgs, { cwd: dir, stdio: "inherit" });
 			if (entries.some((entry) => runtimeEntryResolvableOnDisk(dir, entry))) continue;
-			console.error(
-				`[pack-dsh-runtime] ❌ ${rel}: npm run build 后入口仍缺失（${entries.join(", ")}），中止打包。`,
-			);
+			console.error(`[pack-dsh-runtime] ❌ ${rel}: npm run build 后入口仍缺失（${entries.join(", ")}），中止打包。`);
 			process.exit(1);
 		}
-		console.error(
-			`[pack-dsh-runtime] ❌ ${rel}: 运行时入口全部不可解析（${entries.join(", ")}），中止打包。\n` +
-				`   file: 本地包请先构建（npm run build）；registry 包可能是子路径导出包（exports["."] 指向未发布文件），\n` +
-				`   请确认该包确为 dsh 运行所需后手动处理（补文件或从闭包剔除），再重试。`,
-		);
+		console.error(`[pack-dsh-runtime] ❌ ${rel}: 运行时入口全部不可解析（${entries.join(", ")}），中止打包。\n` + `   file: 本地包请先构建（npm run build）；registry 包可能是子路径导出包（exports["."] 指向未发布文件），\n` + `   请确认该包确为 dsh 运行所需后手动处理（补文件或从闭包剔除），再重试。`);
 		process.exit(1);
 	}
 }
@@ -369,10 +346,7 @@ function resolveClosureNodeModulesRoot() {
 	const seedNames = [...scopeNames, ...EXTRA_SEED_NAMES];
 
 	const { keys, versions, multiVersion } = collectLockClosure(lockPackages, seedNames);
-	console.log(
-		`[pack-dsh-runtime] lock 闭包: ${keys.length} 条目 / ${versions.size} 个包名` +
-			(multiVersion.size > 0 ? `（同名多版本 ${multiVersion.size}，次要版本由 npm 嵌套落位）` : ""),
-	);
+	console.log(`[pack-dsh-runtime] lock 闭包: ${keys.length} 条目 / ${versions.size} 个包名` + (multiVersion.size > 0 ? `（同名多版本 ${multiVersion.size}，次要版本由 npm 嵌套落位）` : ""));
 
 	const missingSeeds = ["@deepseek-ai/dsh", "dsh-bill"].filter((name) => !versions.has(name));
 	if (missingSeeds.length > 0) {
@@ -405,7 +379,10 @@ function resolveClosureNodeModulesRoot() {
 		// 注意用 /node_modules/ 带前导斜杠的分隔符只能命中嵌套段；顶层 key 以
 		// node_modules/ 开头（前面没有斜杠），必须单独剥前缀，否则 name 拿到的是
 		// 整条 key，versions.has 必然 false → 平台包全部漏进 dependencies（EBADPLATFORM）。
-		const name = key.replace(/^node_modules\//, "").split("/node_modules/").at(-1);
+		const name = key
+			.replace(/^node_modules\//, "")
+			.split("/node_modules/")
+			.at(-1);
 		if (!name || !versions.has(name)) continue;
 		// 同名多版本的次要版本会被顶层版本覆盖：optional 表只留顶层版本。
 		optionalDeps[name] = versions.get(name);
@@ -432,23 +409,19 @@ function resolveClosureNodeModulesRoot() {
 		// 空对象在 npm 里表示「无 optional 依赖」，写出去便于诊断（直接看 workdir）。
 		optionalDependencies: Object.keys(optionalDeps).length > 0 ? optionalDeps : {},
 	};
-	writeFileSync(
-		join(crossWorkspace, "package.json"),
-		`${JSON.stringify(workPackageJson, null, 2)}\n`,
-	);
+	writeFileSync(join(crossWorkspace, "package.json"), `${JSON.stringify(workPackageJson, null, 2)}\n`);
 	console.log(`[pack-dsh-runtime] 临时 package.json: ${Object.keys(deps).length} 硬依赖 + ${Object.keys(optionalDeps).length} 平台 optional`);
 
-	console.log(
-		`[pack-dsh-runtime] 交叉解析: ${target.os}-${target.arch}` +
-			(target.libc ? ` libc=${target.libc}` : "") +
-			` （${keys.length} 个 lock 条目，--ignore-scripts）`,
-	);
+	console.log(`[pack-dsh-runtime] 交叉解析: ${target.os}-${target.arch}` + (target.libc ? ` libc=${target.libc}` : "") + ` （${keys.length} 个 lock 条目，--ignore-scripts）`);
 	// 交叉解析只下 prebuild 与 JS，不需要任何 install 脚本；--ignore-scripts 同时
 	// 是供应链面收窄（不在用户机上跑第三方 postinstall）。
 	const npmArgs = [
-		"install", "--no-audit", "--no-fund",
+		"install",
+		"--no-audit",
+		"--no-fund",
 		...npmPlatformArgs(target),
-		"--cache", resolve(join(projectRoot, "node_modules/.cache/dsh-cross-npm")),
+		"--cache",
+		resolve(join(projectRoot, "node_modules/.cache/dsh-cross-npm")),
 		// 优先本地缓存/离线；首次运行仍会真实下载，但不会跳过 registry 校验。
 		"--prefer-offline",
 	];
@@ -510,10 +483,7 @@ if (ifMissing) {
 			console.log("[pack-dsh-runtime] --if-missing：归档与索引已存在，跳过（已清 extraResources）");
 			process.exit(0);
 		}
-	} else if (
-		existsSync(join(bundleDir, "manifest.json")) &&
-		existsSync(join(bundleDir, archiveName))
-	) {
+	} else if (existsSync(join(bundleDir, "manifest.json")) && existsSync(join(bundleDir, archiveName))) {
 		cleanupCrossWorkspace();
 		console.log("[pack-dsh-runtime] --if-missing：随包 runtime 已存在，跳过");
 		process.exit(0);
@@ -525,9 +495,7 @@ const seedDirs = [
 		.filter((name) => !isNpmHashedLeftoverDir(name))
 		.map((name) => join(dshScopeDir, name))
 		.filter((dir) => existsSync(join(dir, "package.json"))),
-	...EXTRA_SEED_NAMES.map((name) => join(closureNodeModulesRoot, name)).filter((dir) =>
-		existsSync(join(dir, "package.json")),
-	),
+	...EXTRA_SEED_NAMES.map((name) => join(closureNodeModulesRoot, name)).filter((dir) => existsSync(join(dir, "package.json"))),
 ];
 
 // 随 app 分发的包不在 runtime 里重复带（electron-builder 已打进 asar，装完也用得上）。
@@ -587,15 +555,7 @@ const manifest = {
 	// 0.1.5（Typert Remote 迁移，见 docs/dsh-0.1.5-typert-migration.md）：
 	// dsh-host-apiproxy 已废，fetch 半在 dsh-client-connection，网关在
 	// dsh-api-gateway（base 补丁自带），领域端点在 dsh-api-session-controller。
-	requiredPackages: [
-		"@deepseek-ai/dsh-base",
-		"@deepseek-ai/dsh-app-boot",
-		"@deepseek-ai/dsh-cmdline",
-		"@deepseek-ai/dsh-client-connection",
-		"@deepseek-ai/dsh-api-gateway",
-		"@deepseek-ai/dsh-api-remotes",
-		"@deepseek-ai/dsh-api-session-controller",
-	],
+	requiredPackages: ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-app-boot", "@deepseek-ai/dsh-cmdline", "@deepseek-ai/dsh-client-connection", "@deepseek-ai/dsh-api-gateway", "@deepseek-ai/dsh-api-remotes", "@deepseek-ai/dsh-api-session-controller"],
 	packageCount: closure.length,
 };
 
@@ -648,10 +608,7 @@ try {
 				// relInClosure 是相对 node_modules 的路径（不含 node_modules 段），
 				// 这里补回来：归档内必须是 dsh-runtime/node_modules/<pkg>/... ，
 				// 与 DshRuntimeManager 解压后的期望布局一致。
-				entry.path =
-					rel === MANIFEST_TMP_NAME
-						? `${ARCHIVE_ROOT}/manifest.json`
-						: `${ARCHIVE_ROOT}/node_modules/${rel}`;
+				entry.path = rel === MANIFEST_TMP_NAME ? `${ARCHIVE_ROOT}/manifest.json` : `${ARCHIVE_ROOT}/node_modules/${rel}`;
 			},
 		},
 		// 注意必须带 "./"：见上面 onWriteEntry 的说明。
@@ -692,10 +649,7 @@ if (lite) {
 } else {
 	copyFileSync(archivePath, join(bundleDir, archiveName));
 	// 随包这份 manifest 必须带真实 sha256：应用端用它校验归档完整性。
-	writeFileSync(
-		join(bundleDir, "manifest.json"),
-		JSON.stringify({ ...manifest, archiveSha256: sha256 }, null, 2),
-	);
+	writeFileSync(join(bundleDir, "manifest.json"), JSON.stringify({ ...manifest, archiveSha256: sha256 }, null, 2));
 	console.log("[pack-dsh-runtime] 随包目录:", bundleDir, "（拷进 resources/ 即可离线安装）");
 }
 

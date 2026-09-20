@@ -31,7 +31,9 @@ function loadPersisted(): PersistedInstall[] {
 function savePersisted(entries: PersistedInstall[]) {
 	try {
 		localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
-	} catch { /* noop */ }
+	} catch {
+		/* noop */
+	}
 }
 
 /** 添加入口到持久化列表（去重） */
@@ -48,9 +50,7 @@ function persistInstall(prev: PersistedInstall[], slug: string, name: string, pr
 /** 获取本地已安装 skill 名称集合 */
 async function getInstalledNames(projectId?: string): Promise<Set<string>> {
 	try {
-		const list: PiSkillListResult = projectId
-			? await desktopApi.projectResources.list(projectId)
-			: await desktopApi.skills.list();
+		const list: PiSkillListResult = projectId ? await desktopApi.projectResources.list(projectId) : await desktopApi.skills.list();
 		return new Set(list.skills.map((s) => s.name.toLowerCase()));
 	} catch {
 		return new Set();
@@ -83,20 +83,19 @@ async function getInstalledSlugsSet(searchItems: SkillHubItem[], projectId?: str
 	}
 }
 
-const api = (window as unknown as {
-	piDesktop: {
-		skillHub: {
-			search: (q: string, limit?: number) => Promise<SkillHubSearchResult>;
-			detail: (slug: string) => Promise<SkillHubDetail | null>;
-			install: (slug: string, projectId?: string) => Promise<SkillHubInstallResult>;
+const api = (
+	window as unknown as {
+		piDesktop: {
+			skillHub: {
+				search: (q: string, limit?: number) => Promise<SkillHubSearchResult>;
+				detail: (slug: string) => Promise<SkillHubDetail | null>;
+				install: (slug: string, projectId?: string) => Promise<SkillHubInstallResult>;
+			};
 		};
-	};
-}).piDesktop;
+	}
+).piDesktop;
 
-const SUGGESTED_SEARCHES = [
-	"pdf", "ocr", "translate", "code review", "react",
-	"python", "git", "image", "data", "writing",
-];
+const SUGGESTED_SEARCHES = ["pdf", "ocr", "translate", "code review", "react", "python", "git", "image", "data", "writing"];
 
 function fmtNum(n: number): string {
 	if (n >= 10000) return (n / 10000).toFixed(1) + "w";
@@ -124,34 +123,37 @@ export function SkillHubStorePanel(props: { projectId?: string }) {
 		searchInputRef.current?.focus();
 	}, []);
 
-	const handleSearch = useCallback(async (searchQuery: string) => {
-		const q = searchQuery.trim();
-		if (!q) return;
-		setResult(null);
-		setPreviewSlug(null);
-		setDetail(null);
-		setInstallResult(null);
-		setError(null);
-		setSearching(true);
-		try {
-			const data = await api.skillHub.search(q, 50);
-			// 搜索后判断已安装状态（需要搜索结果列表来消除同名歧义）
-			const installed = await getInstalledSlugsSet(data.items, props.projectId);
-			// 合并持久化记录 → 精确 slug 匹配，无条件信任（安装时已记录完整 slug）
-			const merged = new Set(installed);
-			const persisted = Array.isArray(persistedRef.current) ? persistedRef.current : [];
-			for (const entry of persisted) {
-				if (entry.projectId === props.projectId) merged.add(entry.slug);
+	const handleSearch = useCallback(
+		async (searchQuery: string) => {
+			const q = searchQuery.trim();
+			if (!q) return;
+			setResult(null);
+			setPreviewSlug(null);
+			setDetail(null);
+			setInstallResult(null);
+			setError(null);
+			setSearching(true);
+			try {
+				const data = await api.skillHub.search(q, 50);
+				// 搜索后判断已安装状态（需要搜索结果列表来消除同名歧义）
+				const installed = await getInstalledSlugsSet(data.items, props.projectId);
+				// 合并持久化记录 → 精确 slug 匹配，无条件信任（安装时已记录完整 slug）
+				const merged = new Set(installed);
+				const persisted = Array.isArray(persistedRef.current) ? persistedRef.current : [];
+				for (const entry of persisted) {
+					if (entry.projectId === props.projectId) merged.add(entry.slug);
+				}
+				setResult(data);
+				setInstalledSlugs(merged);
+			} catch (err) {
+				console.error("[SkillHub] Search failed", err);
+				setError(t("config.skillHubSearchError"));
+			} finally {
+				setSearching(false);
 			}
-			setResult(data);
-			setInstalledSlugs(merged);
-		} catch (err) {
-			console.error("[SkillHub] Search failed", err);
-			setError(t("config.skillHubSearchError"));
-		} finally {
-			setSearching(false);
-		}
-	}, [props.projectId]);
+		},
+		[props.projectId],
+	);
 
 	const handleKeyDown = (e: React.KeyboardEvent) => {
 		if (e.key === "Enter") void handleSearch(query);
@@ -228,7 +230,15 @@ export function SkillHubStorePanel(props: { projectId?: string }) {
 		return (
 			<div className="skillhub-panel">
 				<div className="skillhub-detail-toolbar">
-					<Button size="sm"  variant="outline" onClick={() => { setPreviewSlug(null); setDetail(null); setInstallResult(null); }}>
+					<Button
+						size="sm"
+						variant="outline"
+						onClick={() => {
+							setPreviewSlug(null);
+							setDetail(null);
+							setInstallResult(null);
+						}}
+					>
 						<ArrowLeft size={14} />
 						{t("config.promptStoreBack")}
 					</Button>
@@ -253,15 +263,16 @@ export function SkillHubStorePanel(props: { projectId?: string }) {
 				searchDisabled={!query.trim()}
 				onSearch={() => void handleSearch(query)}
 				suggestions={!result && !searching ? SUGGESTED_SEARCHES : undefined}
-				onSuggestionClick={(s) => { setQuery(s); void handleSearch(s); }}
+				onSuggestionClick={(s) => {
+					setQuery(s);
+					void handleSearch(s);
+				}}
 			/>
 
 			{error && <div className="mb-3.5 rounded-sm border border-danger/20 bg-danger-soft px-3.5 py-2.5 text-control leading-relaxed text-danger whitespace-pre-line">{error}</div>}
 			{searching && <div className="py-12 text-center text-control text-text-tertiary">{t("common.searching")}…</div>}
 
-			{result && !searching && result.total === 0 && (
-				<div className="py-12 text-center text-control text-text-tertiary">{t("config.noSearchResults")}</div>
-			)}
+			{result && !searching && result.total === 0 && <div className="py-12 text-center text-control text-text-tertiary">{t("config.noSearchResults")}</div>}
 
 			{result && result.total > 0 && (
 				<div className="skillhub-results">
@@ -275,32 +286,29 @@ export function SkillHubStorePanel(props: { projectId?: string }) {
 							onClick={() => {
 								// 弹框（ConfigModal Dialog）内链接强制系统浏览器：内置浏览器面板位于 Dialog 下层不可见，
 								// 跟随 linkOpenMode=internal 打开会被遮挡，用户看到“点了没反应”（与 openDocsInSystemBrowser 同规则）
-								window.piDesktop.app.openExternal(
-									`https://www.skills.sh/search?q=${encodeURIComponent(item.name)}`,
-									true
-								);
+								window.piDesktop.app.openExternal(`https://www.skills.sh/search?q=${encodeURIComponent(item.name)}`, true);
 							}}
 						>
 							<div className="skillhub-card-main">
 								<strong className="skillhub-card-title">
 									{item.name}
-							{installedSlugs.has(item.slug) && (
-								<span className="skillhub-installed-badge">
-									<Check size={11} /> {t("config.installed")}
-								</span>
+									{installedSlugs.has(item.slug) && (
+										<span className="skillhub-installed-badge">
+											<Check size={11} /> {t("config.installed")}
+										</span>
 									)}
 								</strong>
-							<div className="skillhub-card-meta">
-								<span className="skillhub-card-stats">
-									<Download size={12} /> {t("config.skillHubInstallCount", { count: fmtNum(item.downloads) })}
-								</span>
+								<div className="skillhub-card-meta">
+									<span className="skillhub-card-stats">
+										<Download size={12} /> {t("config.skillHubInstallCount", { count: fmtNum(item.downloads) })}
+									</span>
 									<span className="skillhub-card-source">{item.ownerName}</span>
 								</div>
 							</div>
 							<div className="skillhub-card-actions">
-							<button
-								className="skillhub-card-action-btn"
-								title={t("config.skillHubCopyInstallCommand")}
+								<button
+									className="skillhub-card-action-btn"
+									title={t("config.skillHubCopyInstallCommand")}
 									onClick={(e) => {
 										e.stopPropagation();
 										const pkg = item.slug.slice(0, item.slug.lastIndexOf("/"));
@@ -308,7 +316,10 @@ export function SkillHubStorePanel(props: { projectId?: string }) {
 										showNotice(t("app.codeCopied"), 1200);
 									}}
 								>
-									<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+									<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+										<rect x="9" y="9" width="13" height="13" rx="2" />
+										<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+									</svg>
 								</button>
 								{!installedSlugs.has(item.slug) && (
 									<button

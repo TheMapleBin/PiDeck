@@ -36,20 +36,19 @@ export type AddProviderDraft = {
  * 参数只取结构子集（不依赖 UI 层的 ProviderDialogInitial），因此可在单测直接调用。
  */
 export function resolveInitialReasoningContentReplay(
-	initial: {
-		name: string;
-		baseUrl?: string;
-		models?: ModelItem[];
-		compat?: ProviderCompat;
-	} | undefined,
+	initial:
+		| {
+				name: string;
+				baseUrl?: string;
+				models?: ModelItem[];
+				compat?: ProviderCompat;
+		  }
+		| undefined,
 ): boolean | undefined {
 	const saved = initial?.compat?.requiresReasoningContentOnAssistantMessages;
 	if (saved !== undefined) return saved;
 	if (!initial) return undefined;
-	const deepseekBacked = looksDeepSeekBacked(
-		{ models: initial.models ?? [], baseUrl: initial.baseUrl },
-		initial.name,
-	);
+	const deepseekBacked = looksDeepSeekBacked({ models: initial.models ?? [], baseUrl: initial.baseUrl }, initial.name);
 	return deepseekBacked ? true : undefined;
 }
 
@@ -72,11 +71,7 @@ export function buildProviderConfigFromDraft(draft: AddProviderDraft): ProviderC
 		provider.headers = setHeaderValue(undefined, "User-Agent", draft.userAgent);
 	}
 	const reasoningContent = draft.compat.requiresReasoningContentOnAssistantMessages;
-	if (
-		draft.compat.supportsDeveloperRole
-		|| draft.compat.supportsReasoningEffort
-		|| reasoningContent !== undefined
-	) {
+	if (draft.compat.supportsDeveloperRole || draft.compat.supportsReasoningEffort || reasoningContent !== undefined) {
 		provider.compat = {
 			supportsDeveloperRole: draft.compat.supportsDeveloperRole,
 			supportsReasoningEffort: draft.compat.supportsReasoningEffort,
@@ -102,10 +97,7 @@ export function buildProviderConfigFromDraft(draft: AddProviderDraft): ProviderC
  * - 其余字段（oauth / authHeader / modelOverrides / 未知字段）原样透传。
  * original 为空（新增模式）时等价于 buildProviderConfigFromDraft。
  */
-export function mergeProviderDraft(
-	original: ProviderConfig | undefined,
-	draft: AddProviderDraft,
-): ProviderConfig {
+export function mergeProviderDraft(original: ProviderConfig | undefined, draft: AddProviderDraft): ProviderConfig {
 	if (!original) return buildProviderConfigFromDraft(draft);
 	const next: ProviderConfig = { ...original };
 	next.models = draft.models ?? [];
@@ -131,11 +123,7 @@ export function mergeProviderDraft(
 	if (reasoningContent !== undefined) {
 		compat.requiresReasoningContentOnAssistantMessages = reasoningContent;
 	}
-	const hasCompat =
-		original.compat != null ||
-		draft.compat.supportsDeveloperRole ||
-		draft.compat.supportsReasoningEffort ||
-		reasoningContent !== undefined;
+	const hasCompat = original.compat != null || draft.compat.supportsDeveloperRole || draft.compat.supportsReasoningEffort || reasoningContent !== undefined;
 	if (hasCompat) next.compat = compat;
 	else delete next.compat;
 	return next;

@@ -23,20 +23,12 @@ test("restart 成功路径必须重下发消息窗口（桌面 IPC 与 web 服�
 	]) {
 		const index = source.indexOf("emitReplacementState(result.value.runtime,");
 		assert.ok(index >= 0, `${file} 的 restart 处理器必须重下发 runtime 状态`);
-		assert.match(
-			source.slice(index, index + 64),
-			/emitReplacementState\(result\.value\.runtime, true\)/,
-			`${file} 的 restart 处理器必须带消息窗口重下发`,
-		);
+		assert.match(source.slice(index, index + 64), /emitReplacementState\(result\.value\.runtime, true\)/, `${file} 的 restart 处理器必须带消息窗口重下发`);
 	}
 });
 
 test("重发/编辑/删除确认文案按 busy 状态区分，zh/en 都提供 idle 变体", () => {
-	for (const key of [
-		"historyStopToEditBodyIdle",
-		"historyStopToDeleteBodyIdle",
-		"historyStopToResendBodyIdle",
-	]) {
+	for (const key of ["historyStopToEditBodyIdle", "historyStopToDeleteBodyIdle", "historyStopToResendBodyIdle"]) {
 		assert.match(zh, new RegExp(`"message\\.${key}"`), `zh-CN 缺少 ${key}`);
 		assert.match(en, new RegExp(`"message\\.${key}"`), `en-US 缺少 ${key}`);
 	}

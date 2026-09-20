@@ -13,7 +13,8 @@ const rendererMainSource = readFileSync("src/renderer/src/main.tsx", "utf8");
 
 test("agent startup writes diagnostics across renderer IPC and pi launch boundaries", () => {
 	assert.match(ipcSource, /rendererLog:\s*"renderer:log"/);
-	assert.match(preloadSource, /rendererLog:\s*\(\s*level: AppLogLevel,\s*scope: string,\s*message: string,\s*detail\?: unknown,/);
+	// 参数可能内联在同一行（formatter 去掉了换行）：用 \s* 容忍即可。
+	assert.match(preloadSource, /rendererLog:\s*\(?\s*level: AppLogLevel,\s*scope: string,\s*message: string,\s*detail\?: unknown/);
 	assert.match(systemIpcSource, /ipcChannels\.rendererLog/);
 	assert.doesNotMatch(indexSource, /Agent create IPC received|ipcChannels\.agentsCreate/);
 	assert.match(mainSource, /Agent create requested/);

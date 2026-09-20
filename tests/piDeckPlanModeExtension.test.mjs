@@ -10,27 +10,31 @@ const extensionPath = "resources/extensions/pi-deck-plan-mode.ts";
 const selfPath = "C:/PiDeck/resources/extensions/pi-deck-plan-mode.ts";
 
 function compileExtension() {
-  const source = readFileSync(extensionPath, "utf8");
-  const output = ts.transpileModule(source, {
-    compilerOptions: {
-      module: ts.ModuleKind.CommonJS,
-      target: ts.ScriptTarget.ES2022,
-      esModuleInterop: true,
-    },
-    fileName: extensionPath,
-  }).outputText;
-  const module2 = { exports: {} };
-  const localRequire = (specifier) => {
-    throw new Error(`pi-deck-plan-mode must stay dependency-free, got require("${specifier}")`);
-  };
-  vm.runInNewContext(output, {
-    module: module2,
-    exports: module2.exports,
-    require: localRequire,
-    __filename: selfPath,
-    console,
-  }, { filename: extensionPath });
-  return module2.exports.default;
+	const source = readFileSync(extensionPath, "utf8");
+	const output = ts.transpileModule(source, {
+		compilerOptions: {
+			module: ts.ModuleKind.CommonJS,
+			target: ts.ScriptTarget.ES2022,
+			esModuleInterop: true,
+		},
+		fileName: extensionPath,
+	}).outputText;
+	const module2 = { exports: {} };
+	const localRequire = (specifier) => {
+		throw new Error(`pi-deck-plan-mode must stay dependency-free, got require("${specifier}")`);
+	};
+	vm.runInNewContext(
+		output,
+		{
+			module: module2,
+			exports: module2.exports,
+			require: localRequire,
+			__filename: selfPath,
+			console,
+		},
+		{ filename: extensionPath },
+	);
+	return module2.exports.default;
 }
 
 /**
@@ -39,199 +43,196 @@ function compileExtension() {
  * - context 替身记录通知与 widget，ui.select 可编程（模拟选单点击/关闭）。
  */
 function createHarness() {
-  const handlers = new Map();
-  const commands = new Map();
-  const notifications = [];
-  const widgets = new Map();
-  const appendedEntries = [];
-  const sentMessages = [];
-  const toolSwitches = [];
-  let activeTools = ["read", "bash", "edit", "write", "ask_question"];
-  let selectResponses = [];
+	const handlers = new Map();
+	const commands = new Map();
+	const notifications = [];
+	const widgets = new Map();
+	const appendedEntries = [];
+	const sentMessages = [];
+	const toolSwitches = [];
+	let activeTools = ["read", "bash", "edit", "write", "ask_question"];
+	let selectResponses = [];
 
-  const api = {
-    getActiveTools() {
-      return [...activeTools];
-    },
-    setActiveTools(names) {
-      toolSwitches.push([...names]);
-      activeTools = [...names];
-    },
-    appendEntry(customType, data) {
-      appendedEntries.push({ type: "custom", customType, data });
-    },
-    on(event, handler) {
-      handlers.set(event, handler);
-    },
-    registerCommand(name, command) {
-      commands.set(name, command);
-    },
-    sendMessage(message, options) {
-      sentMessages.push({ message, options });
-    },
-  };
+	const api = {
+		getActiveTools() {
+			return [...activeTools];
+		},
+		setActiveTools(names) {
+			toolSwitches.push([...names]);
+			activeTools = [...names];
+		},
+		appendEntry(customType, data) {
+			appendedEntries.push({ type: "custom", customType, data });
+		},
+		on(event, handler) {
+			handlers.set(event, handler);
+		},
+		registerCommand(name, command) {
+			commands.set(name, command);
+		},
+		sendMessage(message, options) {
+			sentMessages.push({ message, options });
+		},
+	};
 
-  const context = {
-    hasUI: true,
-    ui: {
-      notify(message, type) {
-        notifications.push({ message, type });
-      },
-      setWidget(key, lines) {
-        if (lines?.length) widgets.set(key, [...lines]);
-        else widgets.delete(key);
-      },
-      select(title, options) {
-        return selectResponses.length > 0 ? selectResponses.shift() : undefined;
-      },
-    },
-    sessionManager: {
-      getEntries() {
-        return [...appendedEntries];
-      },
-    },
-  };
+	const context = {
+		hasUI: true,
+		ui: {
+			notify(message, type) {
+				notifications.push({ message, type });
+			},
+			setWidget(key, lines) {
+				if (lines?.length) widgets.set(key, [...lines]);
+				else widgets.delete(key);
+			},
+			select(title, options) {
+				return selectResponses.length > 0 ? selectResponses.shift() : undefined;
+			},
+		},
+		sessionManager: {
+			getEntries() {
+				return [...appendedEntries];
+			},
+		},
+	};
 
-  const extension = compileExtension();
-  extension(api);
+	const extension = compileExtension();
+	extension(api);
 
-  return {
-    handlers,
-    commands,
-    notifications,
-    widgets,
-    appendedEntries,
-    sentMessages,
-    toolSwitches,
-    context,
-    getActiveTools: () => [...activeTools],
-    /** 预设下一次 ui.select 的返回值（模拟点击选项；undefined = 关闭选单）。 */
-    queueSelectResponse(value) {
-      selectResponses.push(value);
-    },
-    async runCommand(name, args) {
-      const command = commands.get(name);
-      assert.ok(command, `command ${name} not registered`);
-      await command.handler(args, context);
-    },
-    async runInput(text) {
-      return handlers.get("input")({ text }, context);
-    },
-    async runBeforeAgentStart() {
-      return handlers.get("before_agent_start")({}, context);
-    },
-    async runToolCall(toolName, input) {
-      return handlers.get("tool_call")({ toolName, input }, context);
-    },
-    async runAgentEnd(messages) {
-      return handlers.get("agent_end")({ messages }, context);
-    },
-  };
+	return {
+		handlers,
+		commands,
+		notifications,
+		widgets,
+		appendedEntries,
+		sentMessages,
+		toolSwitches,
+		context,
+		getActiveTools: () => [...activeTools],
+		/** 预设下一次 ui.select 的返回值（模拟点击选项；undefined = 关闭选单）。 */
+		queueSelectResponse(value) {
+			selectResponses.push(value);
+		},
+		async runCommand(name, args) {
+			const command = commands.get(name);
+			assert.ok(command, `command ${name} not registered`);
+			await command.handler(args, context);
+		},
+		async runInput(text) {
+			return handlers.get("input")({ text }, context);
+		},
+		async runBeforeAgentStart() {
+			return handlers.get("before_agent_start")({}, context);
+		},
+		async runToolCall(toolName, input) {
+			return handlers.get("tool_call")({ toolName, input }, context);
+		},
+		async runAgentEnd(messages) {
+			return handlers.get("agent_end")({ messages }, context);
+		},
+	};
 }
 
 function assistantMessage(text) {
-  return { role: "assistant", content: [{ type: "text", text }] };
+	return { role: "assistant", content: [{ type: "text", text }] };
 }
 
 // ---------------------------------------------------------------------------
 
 test("/plan command keeps plan mode active for the next normal message", async () => {
-  const harness = createHarness();
+	const harness = createHarness();
 
-  await harness.runCommand("plan", "");
-  assert.ok(harness.notifications.some((n) => n.message.includes("已启用")));
+	await harness.runCommand("plan", "");
+	assert.ok(harness.notifications.some((n) => n.message.includes("已启用")));
 
-  // 根因回归：/plan 激活后，下一条普通任务消息不得被当成退出信号。
-  const inputResult = await harness.runInput("分析一下认证模块的改造方案");
-  assert.equal(inputResult, undefined, "normal message must pass through untransformed");
+	// 根因回归：/plan 激活后，下一条普通任务消息不得被当成退出信号。
+	const inputResult = await harness.runInput("分析一下认证模块的改造方案");
+	assert.equal(inputResult, undefined, "normal message must pass through untransformed");
 
-  // 通知里不得出现「已禁用」；工具面仍处于只读集合（edit/write 不在列）。
-  assert.equal(
-    harness.notifications.some((n) => n.message.includes("已禁用")),
-    false,
-    "plan mode must not be disabled by the first normal message",
-  );
-  const tools = harness.getActiveTools();
-  assert.equal(tools.includes("edit"), false);
-  assert.equal(tools.includes("write"), false);
+	// 通知里不得出现「已禁用」；工具面仍处于只读集合（edit/write 不在列）。
+	assert.equal(
+		harness.notifications.some((n) => n.message.includes("已禁用")),
+		false,
+		"plan mode must not be disabled by the first normal message",
+	);
+	const tools = harness.getActiveTools();
+	assert.equal(tools.includes("edit"), false);
+	assert.equal(tools.includes("write"), false);
 
-  // before_agent_start 注入只读计划上下文，模型才知道要产出 Plan:。
-  const contextResult = await harness.runBeforeAgentStart();
-  assert.ok(contextResult?.message?.content?.includes("[PLAN MODE ACTIVE]"));
+	// before_agent_start 注入只读计划上下文，模型才知道要产出 Plan:。
+	const contextResult = await harness.runBeforeAgentStart();
+	assert.ok(contextResult?.message?.content?.includes("[PLAN MODE ACTIVE]"));
 });
 
 test("/plan command still blocks non-read-only bash while active", async () => {
-  const harness = createHarness();
-  await harness.runCommand("plan", "");
+	const harness = createHarness();
+	await harness.runCommand("plan", "");
 
-  const blocked = await harness.runToolCall("bash", { command: "echo hacked > file.txt" });
-  assert.ok(blocked?.block === true, "destructive bash must be blocked in plan mode");
+	const blocked = await harness.runToolCall("bash", { command: "echo hacked > file.txt" });
+	assert.ok(blocked?.block === true, "destructive bash must be blocked in plan mode");
 
-  const allowed = await harness.runToolCall("bash", { command: "ls src/main" });
-  assert.equal(allowed, undefined, "read-only bash must pass through");
+	const allowed = await harness.runToolCall("bash", { command: "ls src/main" });
+	assert.equal(allowed, undefined, "read-only bash must pass through");
 });
 
 test("composer chip activation still exits plan mode on the next unmarked message", async () => {
-  const harness = createHarness();
-  const marker = "__PI_DECK_PLAN_MODE__";
+	const harness = createHarness();
+	const marker = "__PI_DECK_PLAN_MODE__";
 
-  // 桌面输入框计划 chip 发出带标记消息（agentMessage 前缀）。
-  const markerResult = await harness.runInput(`${marker}\n分析认证模块`);
-  assert.equal(markerResult?.action, "transform");
-  assert.ok(markerResult.text.startsWith("分析认证模块"), "marker must be stripped before LLM");
+	// 桌面输入框计划 chip 发出带标记消息（agentMessage 前缀）。
+	const markerResult = await harness.runInput(`${marker}\n分析认证模块`);
+	assert.equal(markerResult?.action, "transform");
+	assert.ok(markerResult.text.startsWith("分析认证模块"), "marker must be stripped before LLM");
 
-  // composer 切回普通后的无标记消息：退出信号，plan 模式关闭。
-  await harness.runInput("普通消息");
-  assert.ok(
-    harness.notifications.some((n) => n.message.includes("已禁用")),
-    "unmarked message after chip activation must exit plan mode",
-  );
-  assert.deepEqual(harness.getActiveTools().sort(), ["ask_question", "bash", "edit", "read", "write"]);
+	// composer 切回普通后的无标记消息：退出信号，plan 模式关闭。
+	await harness.runInput("普通消息");
+	assert.ok(
+		harness.notifications.some((n) => n.message.includes("已禁用")),
+		"unmarked message after chip activation must exit plan mode",
+	);
+	assert.deepEqual(harness.getActiveTools().sort(), ["ask_question", "bash", "edit", "read", "write"]);
 });
 
 test("/plan off explicitly disables command-activated plan mode", async () => {
-  const harness = createHarness();
-  await harness.runCommand("plan", "");
-  await harness.runInput("任务消息");
-  assert.equal(harness.notifications.some((n) => n.message.includes("已禁用")), false);
+	const harness = createHarness();
+	await harness.runCommand("plan", "");
+	await harness.runInput("任务消息");
+	assert.equal(
+		harness.notifications.some((n) => n.message.includes("已禁用")),
+		false,
+	);
 
-  await harness.runCommand("plan", "off");
-  assert.ok(harness.notifications.some((n) => n.message.includes("已禁用")));
-  assert.deepEqual(harness.getActiveTools().sort(), ["ask_question", "bash", "edit", "read", "write"]);
+	await harness.runCommand("plan", "off");
+	assert.ok(harness.notifications.some((n) => n.message.includes("已禁用")));
+	assert.deepEqual(harness.getActiveTools().sort(), ["ask_question", "bash", "edit", "read", "write"]);
 });
 
 test("closing the plan menu after command activation exits plan mode", async () => {
-  const harness = createHarness();
-  await harness.runCommand("plan", "");
-  await harness.runInput("任务消息");
+	const harness = createHarness();
+	await harness.runCommand("plan", "");
+	await harness.runInput("任务消息");
 
-  // agent_end：模型产出带 Plan: 的回复 → 弹选单；关闭选单（undefined）= 退出 plan。
-  harness.queueSelectResponse(undefined);
-  await harness.runAgentEnd([
-    assistantMessage("分析完成\n\nPlan:\n1. 读取现有实现\n2. 编写迁移脚本"),
-  ]);
-  assert.ok(
-    harness.notifications.some((n) => n.message.includes("已禁用")),
-    "closing the plan menu must exit plan mode",
-  );
+	// agent_end：模型产出带 Plan: 的回复 → 弹选单；关闭选单（undefined）= 退出 plan。
+	harness.queueSelectResponse(undefined);
+	await harness.runAgentEnd([assistantMessage("分析完成\n\nPlan:\n1. 读取现有实现\n2. 编写迁移脚本")]);
+	assert.ok(
+		harness.notifications.some((n) => n.message.includes("已禁用")),
+		"closing the plan menu must exit plan mode",
+	);
 });
 
 test("choosing execute from the menu restores write tools and sends execution prompt", async () => {
-  const harness = createHarness();
-  await harness.runCommand("plan", "");
-  await harness.runInput("任务消息");
+	const harness = createHarness();
+	await harness.runCommand("plan", "");
+	await harness.runInput("任务消息");
 
-  // 桌面端 select 回传的是 option 原文（含「标题|说明」编码，见 askUi.splitAskOption）。
-  harness.queueSelectResponse("开始执行|恢复写权限，按步骤改代码并勾进度");
-  await harness.runAgentEnd([
-    assistantMessage("分析完成\n\nPlan:\n1. 读取现有实现\n2. 编写迁移脚本"),
-  ]);
+	// 桌面端 select 回传的是 option 原文（含「标题|说明」编码，见 askUi.splitAskOption）。
+	harness.queueSelectResponse("开始执行|恢复写权限，按步骤改代码并勾进度");
+	await harness.runAgentEnd([assistantMessage("分析完成\n\nPlan:\n1. 读取现有实现\n2. 编写迁移脚本")]);
 
-  const tools = harness.getActiveTools();
-  assert.equal(tools.includes("edit"), true, "write tools must be restored on execute");
-  assert.equal(tools.includes("write"), true);
-  // 执行提示词经 sendMessage 注入（followUp + triggerTurn）。
-  assert.ok(
-    harness.sentMessages.some((m) => String(m.message?.content ?? "").includes("Execute the approved plan")),
-  );
+	const tools = harness.getActiveTools();
+	assert.equal(tools.includes("edit"), true, "write tools must be restored on execute");
+	assert.equal(tools.includes("write"), true);
+	// 执行提示词经 sendMessage 注入（followUp + triggerTurn）。
+	assert.ok(harness.sentMessages.some((m) => String(m.message?.content ?? "").includes("Execute the approved plan")));
 });

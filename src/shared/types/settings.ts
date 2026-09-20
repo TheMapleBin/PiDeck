@@ -4,10 +4,7 @@ import type { ExternalEditorSettings } from "./project";
 import type { SecurityConfig } from "./security";
 import type { SoundAlertSettings } from "./soundAlert";
 
-export type SendShortcutMode =
-	| "enter-send"
-	| "ctrl-enter-send"
-	| "shift-enter-send";
+export type SendShortcutMode = "enter-send" | "ctrl-enter-send" | "shift-enter-send";
 
 export type AppThemeMode = "system" | "light" | "dark" | "schedule";
 /** 主题色预设：data-accent 属性驱动 foundation.css 的 accent/logo 变量 */
@@ -17,13 +14,7 @@ export type AppAccentMode = "default" | "green" | "blue" | "purple" | "amber" | 
  * 内置主题在 themePresets.ts SKIN_PRESETS 定义；custom 由 customThemeOverrides 驱动。
  * classic-green 为出厂默认（中性黑白灰）；fresh-green 为全屏绿色主题（表面带绿色调）。
  */
-export type AppSkinId =
-	| "classic-green"
-	| "fresh-green"
-	| "graphite"
-	| "sea-blue"
-	| "warm-beige"
-	| "custom";
+export type AppSkinId = "classic-green" | "fresh-green" | "graphite" | "sea-blue" | "warm-beige" | "custom";
 export type AppLanguageMode = "system" | "zh-CN" | "en-US" | "pseudo";
 export type LinkOpenMode = "external" | "internal";
 
@@ -41,9 +32,7 @@ export type SessionTabOpenMode = "preview" | "permanent";
 export type AppFontSizeMode = "compact" | "default" | "medium" | "large" | "xlarge";
 
 /** 更新源：atomgit = 国内 AtomGit 源（默认首选）；github = 官方 GitHub Release。 */
-export type UpdateSourceId =
-	| "atomgit"
-	| "github";
+export type UpdateSourceId = "atomgit" | "github";
 
 /** 内置镜像体检状态：ok=检测+下载预检全通；slow=通但实测速度低于阈值；broken=失败/超时/响应异常。 */
 export type MirrorHealthStatus = "ok" | "slow" | "broken";
@@ -67,15 +56,9 @@ export const DEFAULT_PET_SCALE = 0.3;
 export type AppFontBaseMode = "system" | "sans" | "serif" | "custom";
 export type AppFontMonoMode = "system-mono" | "custom";
 /** 主窗口启动尺寸预设：last=上次关闭时的窗口大小（读不到时顺延默认）；fullscreen 占满屏幕，maximized 最大化，其余为固定窗口 */
-export type StartupWindowMode =
-	| "last"
-	| "fullscreen"
-	| "maximized"
-	| "normal-large"
-	| "normal-medium"
-	| "normal-compact";
+export type StartupWindowMode = "last" | "fullscreen" | "maximized" | "normal-large" | "normal-medium" | "normal-compact";
 
-	/**
+/**
  * 一条扩展禁用记录：作用域区分 user/project 同名 source 的独立状态。
  * scope 与 PiExtensionSummary.scope 对齐（user=全局 pi，project=项目 .pi）。
  */
@@ -564,7 +547,6 @@ export type AppSettings = {
 	 * 缺省 undefined/false：保持按需自动启动的历史语义。
 	 */
 	dshManualStopped?: boolean;
-
 };
 
 /**
@@ -618,7 +600,6 @@ export type PetManifest = {
 	/** 渲染层可加载的 spritesheet URL（pideck-pet:// 协议，主进程按需读文件，非 base64 大字符串） */
 	spritesheetUrl: string;
 };
-
 
 /** 三端宠物窗能力探测结果（设计文档第 5.2 节降级形态） */
 export type PetWindowCaps = {

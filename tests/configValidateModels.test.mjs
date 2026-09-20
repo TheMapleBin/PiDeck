@@ -51,12 +51,7 @@ function compile() {
 		// provider 名宽松校验（与 providerMigration.isSafeProviderName 同规则）。
 		if (specifier === "./providerMigration") {
 			return {
-				isSafeProviderName: (name) =>
-					typeof name === "string" &&
-					name.trim().length > 0 &&
-					name.trim().length <= 80 &&
-					!/[\\/]/.test(name) &&
-					!name.includes(".."),
+				isSafeProviderName: (name) => typeof name === "string" && name.trim().length > 0 && name.trim().length <= 80 && !/[\\/]/.test(name) && !name.includes(".."),
 			};
 		}
 		// saveModelsConfig 会调用归因兜底（仅依赖纯常量，无副作用），加载真实实现避免空对象 stub
@@ -69,11 +64,7 @@ function compile() {
 		// validateModels 路径不依赖其余模块（parse/usage/catalog 等），返回空对象即可。
 		return {};
 	};
-	vm.runInNewContext(
-		output,
-		{ module, exports: module.exports, require: localRequire, console },
-		{ filename: MODULE_PATH },
-	);
+	vm.runInNewContext(output, { module, exports: module.exports, require: localRequire, console }, { filename: MODULE_PATH });
 	return module.exports;
 }
 

@@ -26,9 +26,7 @@ function parseToolArgs(value: unknown): Record<string, unknown> | undefined {
 				return undefined;
 			}
 		}
-		return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-			? (parsed as Record<string, unknown>)
-			: undefined;
+		return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : undefined;
 	} catch {
 		return undefined;
 	}
@@ -73,9 +71,7 @@ function countTextLines(value: string): number {
 	return value ? value.split(/\r\n|\r|\n/).length : 0;
 }
 
-function getToolEditDiff(
-	args: Record<string, unknown>,
-): { oldText: string; newText: string } | undefined {
+function getToolEditDiff(args: Record<string, unknown>): { oldText: string; newText: string } | undefined {
 	const edits = Array.isArray(args.edits) ? args.edits : undefined;
 	if (edits) {
 		const parts = edits
@@ -93,22 +89,8 @@ function getToolEditDiff(
 			newText: parts.map((p) => p.newText).join("\n"),
 		};
 	}
-	const oldText =
-		typeof args.oldText === "string"
-			? args.oldText
-			: typeof args.old_text === "string"
-				? args.old_text
-				: typeof args.old_string === "string"
-					? args.old_string
-					: undefined;
-	const newText =
-		typeof args.newText === "string"
-			? args.newText
-			: typeof args.new_text === "string"
-				? args.new_text
-				: typeof args.new_string === "string"
-					? args.new_string
-					: undefined;
+	const oldText = typeof args.oldText === "string" ? args.oldText : typeof args.old_text === "string" ? args.old_text : typeof args.old_string === "string" ? args.old_string : undefined;
+	const newText = typeof args.newText === "string" ? args.newText : typeof args.new_text === "string" ? args.new_text : typeof args.new_string === "string" ? args.new_string : undefined;
 	if (oldText === undefined || newText === undefined) return undefined;
 	return { oldText, newText };
 }
@@ -134,7 +116,9 @@ export function isFileChangeToolName(toolName: string): boolean {
 export function getToolName(message: ChatMessage): string {
 	const fromMeta = message.meta?.toolName;
 	if (typeof fromMeta === "string" && fromMeta.trim()) return fromMeta;
-	const text = stripAnsi(message.text).replace(/^[\u25b6\u2713\u2717]\s*/u, "").trim();
+	const text = stripAnsi(message.text)
+		.replace(/^[\u25b6\u2713\u2717]\s*/u, "")
+		.trim();
 	return text.split(/\s+/)[0] || "tool";
 }
 
@@ -143,21 +127,14 @@ export function getToolName(message: ChatMessage): string {
  * write/create 提供完整新内容；edit/patch 提供变动区域（oldText/newText）。
  * 与单条工具卡片的 diff 按钮共用，会话文件汇总也复用此逻辑。
  */
-export function getToolDiffTarget(
-	message: ChatMessage,
-): { path: string; originalContent: string; content: string; changedLines: number } | undefined {
+export function getToolDiffTarget(message: ChatMessage): { path: string; originalContent: string; content: string; changedLines: number } | undefined {
 	const toolName = getToolName(message);
 	if (!isFileChangeToolName(toolName)) return undefined;
 	const args = parseToolArgs(message.meta?.args);
 	const path = getToolFilePath(args);
 	if (!args || !path) return undefined;
 	if (/write|create/i.test(toolName)) {
-		const content =
-			typeof args.content === "string"
-				? args.content
-				: typeof args.text === "string"
-					? args.text
-					: undefined;
+		const content = typeof args.content === "string" ? args.content : typeof args.text === "string" ? args.text : undefined;
 		if (content === undefined) return undefined;
 		return { path, originalContent: "", content, changedLines: countTextLines(content) };
 	}

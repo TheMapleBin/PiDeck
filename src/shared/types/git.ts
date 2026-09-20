@@ -117,14 +117,14 @@ export type GitWorkspaceFileDiff = {
 
 /** 单个 Git 提交记录，对应 git log 一行输出 */
 export type CommitEntry = {
-	hash: string;          // 完整 SHA
-	shortHash: string;     // 短 SHA（前 7 位）
-	message: string;       // 提交信息首行（subject）
+	hash: string; // 完整 SHA
+	shortHash: string; // 短 SHA（前 7 位）
+	message: string; // 提交信息首行（subject）
 	authorName: string;
 	authorEmail: string;
-	authorDate: number;    // unix timestamp
-	parents: string[];     // 父提交 hash 列表
-	refNames: string[];    // 关联的 ref 名称（如 HEAD -> main, origin/main）
+	authorDate: number; // unix timestamp
+	parents: string[]; // 父提交 hash 列表
+	refNames: string[]; // 关联的 ref 名称（如 HEAD -> main, origin/main）
 	/** git log --graph 输出的 ASCII 图谱行（等宽字体渲染即得分支图） */
 	graph: string[];
 	/** 完整提交信息；历史列表仍使用 message 作为单行 subject。 */
@@ -149,9 +149,9 @@ export type GitCommitFileDiff = {
 
 /** Git 引用（分支 / 远程分支 / Tag） */
 export type GitRef = {
-	name: string;          // 短名称（如 main, v1.0）
-	fullName: string;      // 完整 ref（如 refs/heads/main）
-	hash: string;          // 对象 SHA
+	name: string; // 短名称（如 main, v1.0）
+	fullName: string; // 完整 ref（如 refs/heads/main）
+	hash: string; // 对象 SHA
 	type: "head" | "remote" | "tag";
 };
 
@@ -167,8 +167,8 @@ export type GitAheadBehind = {
 export type BranchDiffResult = {
 	/** 变更的文件列表（base...target 三点语法 symmetric difference） */
 	files: GitChangedFile[];
-	ahead: number;   // target 比 base 多几个 commit
-	behind: number;  // target 比 base 少几个 commit（等于 0 时 base 是 target 的子集）
+	ahead: number; // target 比 base 多几个 commit
+	behind: number; // target 比 base 少几个 commit（等于 0 时 base 是 target 的子集）
 };
 
 // ── Git 可执行文件探测（设置页「Git 可执行文件」行契约）────────────────

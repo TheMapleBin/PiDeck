@@ -6,18 +6,12 @@ export const mainProcessZhCN = {
 	"diagnostic.runtimeError": "Agent 运行时发生错误。",
 	"diagnostic.agentStartFailed": "Pi RPC 启动失败。",
 	// 两种成因：回退只作用于本次运行（不写入设置），设置开关则是每个新会话都会复现的持续成因。
-	"diagnostic.extensionsDisabledFallback":
-		"扩展加载失败，本次运行已临时禁用扩展（不写入设置，「禁用扩展启动」开关保持原样），下次启动会重新尝试加载扩展。可在本会话把下面的错误信息发给 AI，协助排查扩展问题。",
-	"diagnostic.extensionsDisabledBySetting":
-		"本次启动未加载任何扩展：设置 → 开发设置 的「禁用扩展启动」处于开启状态，todo/plan/ask 等扩展能力不可用。如非排查扩展问题需要，请关闭该开关后重启会话。",
-	"diagnostic.skillWhitelistSkipped":
-		"技能数量过多（{count} 个），已跳过「禁用技能」设置：本次启动由 pi 自动加载全部技能（禁用技能仍可被模型自动调用）。减少技能后重启会话即可恢复。",
-	"diagnostic.extensionWhitelistSkipped":
-		"扩展数量过多（{count} 个），已跳过「禁用扩展」设置：本次启动由 pi 自动加载全部扩展。减少扩展后重启会话即可恢复。",
-	"diagnostic.promptWhitelistSkipped":
-		"提示词模板过多（{count} 个），已跳过「禁用提示词」设置：本次启动由 pi 自动加载全部提示词模板（/名字 仍可展开）。减少模板后重启会话即可恢复。",
-	"diagnostic.modelPreferenceIgnored":
-		"会话保存的模型偏好 {provider}/{model} 已不存在（可能已被重命名或删除），本次发送沿用当前模型。请打开模型选择器重新选择。",
+	"diagnostic.extensionsDisabledFallback": "扩展加载失败，本次运行已临时禁用扩展（不写入设置，「禁用扩展启动」开关保持原样），下次启动会重新尝试加载扩展。可在本会话把下面的错误信息发给 AI，协助排查扩展问题。",
+	"diagnostic.extensionsDisabledBySetting": "本次启动未加载任何扩展：设置 → 开发设置 的「禁用扩展启动」处于开启状态，todo/plan/ask 等扩展能力不可用。如非排查扩展问题需要，请关闭该开关后重启会话。",
+	"diagnostic.skillWhitelistSkipped": "技能数量过多（{count} 个），已跳过「禁用技能」设置：本次启动由 pi 自动加载全部技能（禁用技能仍可被模型自动调用）。减少技能后重启会话即可恢复。",
+	"diagnostic.extensionWhitelistSkipped": "扩展数量过多（{count} 个），已跳过「禁用扩展」设置：本次启动由 pi 自动加载全部扩展。减少扩展后重启会话即可恢复。",
+	"diagnostic.promptWhitelistSkipped": "提示词模板过多（{count} 个），已跳过「禁用提示词」设置：本次启动由 pi 自动加载全部提示词模板（/名字 仍可展开）。减少模板后重启会话即可恢复。",
+	"diagnostic.modelPreferenceIgnored": "会话保存的模型偏好 {provider}/{model} 已不存在（可能已被重命名或删除），本次发送沿用当前模型。请打开模型选择器重新选择。",
 	"diagnostic.agentStopped": "Agent 进程已停止，请重启 Agent 后重试",
 	"diagnostic.messageRequired": "消息不能为空",
 	"diagnostic.promptRejected": "消息发送失败。",
@@ -56,8 +50,7 @@ export const mainProcessZhCN = {
 	"update.downloadFailed": "更新包下载失败，请稍后重试。",
 	"update.openFailed": "无法打开更新包，请手动打开下载目录。",
 	"wsl.windowsOnly": "WSL 仅在 Windows 上可用。",
-	"wsl.piNotInstalled":
-		"未检测到 pi CLI。若用 nvm/fnm/volta 等版本管理器安装，请在「自定义 pi 路径」填写 WSL 内的绝对路径（如 /home/user/.nvm/versions/node/v22/bin/pi）；或在 WSL 中运行 npm i -g @earendil-works/pi-coding-agent。",
+	"wsl.piNotInstalled": "未检测到 pi CLI。若用 nvm/fnm/volta 等版本管理器安装，请在「自定义 pi 路径」填写 WSL 内的绝对路径（如 /home/user/.nvm/versions/node/v22/bin/pi）；或在 WSL 中运行 npm i -g @earendil-works/pi-coding-agent。",
 	"wsl.connectionFailed": "无法连接到所选 WSL 发行版和用户，请检查配置后重试。",
 	"webService.invalidPort": "Web 服务端口必须是 1 到 65535 之间的整数。",
 	"webService.startFailed": "Web 服务启动失败，请检查主机和端口设置后重试。",
@@ -255,16 +248,11 @@ export const mainProcessEnUS: Record<MainProcessTranslationKey, string> = {
 	"diagnostic.agentStartFailed": "Pi RPC failed to start.",
 	"diagnostic.extensionsDisabledFallback":
 		"Extensions failed to load, so extensions are disabled for this run only (nothing was written to settings — the “Disable extensions on start” switch stays as it is). Extensions will load again on the next start. Paste the error details below into this chat and ask the AI to help diagnose them.",
-	"diagnostic.extensionsDisabledBySetting":
-		"No extension was loaded this run: “Disable extensions on start” is still enabled in Settings → Developer settings, so todo/plan/ask and other extension capabilities are unavailable. Turn that switch off and restart the session unless you are debugging extensions.",
-	"diagnostic.skillWhitelistSkipped":
-		"Too many skills ({count}). The disabled-skill list was skipped for this launch, so pi loaded every skill (disabled ones can still be invoked by the model). Reduce the number of skills and restart the session to restore it.",
-	"diagnostic.extensionWhitelistSkipped":
-		"Too many extensions ({count}). The disabled-extension list was skipped for this launch, so pi loaded every extension. Reduce the number of extensions and restart the session to restore it.",
-	"diagnostic.promptWhitelistSkipped":
-		"Too many prompt templates ({count}). The disabled-prompt list was skipped for this launch, so pi loaded every template (both are still expandable via /name). Reduce the number of templates and restart the session to restore it.",
-	"diagnostic.modelPreferenceIgnored":
-		"The saved model preference {provider}/{model} no longer exists (it may have been renamed or removed). This message was sent with the current model. Pick a model again in the model selector.",
+	"diagnostic.extensionsDisabledBySetting": "No extension was loaded this run: “Disable extensions on start” is still enabled in Settings → Developer settings, so todo/plan/ask and other extension capabilities are unavailable. Turn that switch off and restart the session unless you are debugging extensions.",
+	"diagnostic.skillWhitelistSkipped": "Too many skills ({count}). The disabled-skill list was skipped for this launch, so pi loaded every skill (disabled ones can still be invoked by the model). Reduce the number of skills and restart the session to restore it.",
+	"diagnostic.extensionWhitelistSkipped": "Too many extensions ({count}). The disabled-extension list was skipped for this launch, so pi loaded every extension. Reduce the number of extensions and restart the session to restore it.",
+	"diagnostic.promptWhitelistSkipped": "Too many prompt templates ({count}). The disabled-prompt list was skipped for this launch, so pi loaded every template (both are still expandable via /name). Reduce the number of templates and restart the session to restore it.",
+	"diagnostic.modelPreferenceIgnored": "The saved model preference {provider}/{model} no longer exists (it may have been renamed or removed). This message was sent with the current model. Pick a model again in the model selector.",
 	"diagnostic.agentStopped": "The Agent process has stopped. Restart the Agent and try again.",
 	"diagnostic.messageRequired": "The message cannot be empty.",
 	"diagnostic.promptRejected": "Failed to send the message.",
@@ -303,8 +291,7 @@ export const mainProcessEnUS: Record<MainProcessTranslationKey, string> = {
 	"update.downloadFailed": "Failed to download the update package. Try again later.",
 	"update.openFailed": "Could not open the update package. Open the download folder manually.",
 	"wsl.windowsOnly": "WSL is available only on Windows.",
-	"wsl.piNotInstalled":
-		"pi CLI was not detected. If it was installed by nvm/fnm/volta or another version manager, set the absolute Linux path in \"Custom pi path\" (e.g. /home/user/.nvm/versions/node/v22/bin/pi); otherwise run npm i -g @earendil-works/pi-coding-agent inside WSL.",
+	"wsl.piNotInstalled": 'pi CLI was not detected. If it was installed by nvm/fnm/volta or another version manager, set the absolute Linux path in "Custom pi path" (e.g. /home/user/.nvm/versions/node/v22/bin/pi); otherwise run npm i -g @earendil-works/pi-coding-agent inside WSL.',
 	"wsl.connectionFailed": "Could not connect to the selected WSL distribution and user. Check the settings and try again.",
 	"webService.invalidPort": "The web service port must be an integer from 1 to 65535.",
 	"webService.startFailed": "Failed to start the web service. Check the host and port settings and try again.",
@@ -322,9 +309,9 @@ export const mainProcessEnUS: Record<MainProcessTranslationKey, string> = {
 	"session.backendLocked": "The session is already created; the backend (pi / dsh) cannot be switched.",
 	"session.agentPresetLocked": "The session is already created; its agent mode (preset) cannot be changed.",
 	"session.fileNotFound": "The session file no longer exists. Refresh the session list and try again.",
-	"session.copyDshUnsupported": "DSH history sessions cannot be copied directly yet; open the session and use \"Copy session\" from the running agent's menu.",
+	"session.copyDshUnsupported": 'DSH history sessions cannot be copied directly yet; open the session and use "Copy session" from the running agent\'s menu.',
 	"session.exportFailed": "Failed to export the session. Try again.",
-	"session.inUseDeleteBlocked": "Session \"{title}\" is in use. Close its Agent before deleting it.",
+	"session.inUseDeleteBlocked": 'Session "{title}" is in use. Close its Agent before deleting it.',
 	"session.stopBeforeDelete": "Stop the session runtime before deleting the session.",
 	"session.invalidArchivePath": "Invalid archived session path.",
 	"session.newTitle": "New session",
@@ -373,11 +360,11 @@ export const mainProcessEnUS: Record<MainProcessTranslationKey, string> = {
 	"mainConfig.invalidJson": "The JSON is invalid.",
 	"mainConfig.fileNotEditable": "This file cannot be edited: {fileName}",
 	"mainConfig.modelsProvidersRequired": "models.json is missing the providers field.",
-	"mainConfig.providerModelsRequired": "Provider \"{provider}\" is missing its models array.",
-	"mainConfig.providerNameInvalid": "Provider name \"{provider}\" is invalid: it must not contain path separators or control characters.",
-	"mainConfig.modelIdRequired": "Model #{index} for provider \"{provider}\" is missing a valid id.",
-	"mainConfig.modelIdInvalid": "Model #{index} for provider \"{provider}\" has an invalid id: it must not contain control characters or exceed the length limit.",
-	"mainConfig.baseUrlInvalid": "Provider \"{provider}\" has an invalid base URL: it must not contain control characters.",
+	"mainConfig.providerModelsRequired": 'Provider "{provider}" is missing its models array.',
+	"mainConfig.providerNameInvalid": 'Provider name "{provider}" is invalid: it must not contain path separators or control characters.',
+	"mainConfig.modelIdRequired": 'Model #{index} for provider "{provider}" is missing a valid id.',
+	"mainConfig.modelIdInvalid": 'Model #{index} for provider "{provider}" has an invalid id: it must not contain control characters or exceed the length limit.',
+	"mainConfig.baseUrlInvalid": 'Provider "{provider}" has an invalid base URL: it must not contain control characters.',
 	"mainConfig.emptyModelList": "The API returned an empty model list.",
 	"mainConfig.fetchTimeout": "The request timed out. Check the network connection or base URL.",
 	"mainConfig.fetchModelsFailed": "Failed to load the model list. Check the provider configuration and try again.",
@@ -498,13 +485,7 @@ export function normalizeMainProcessLocale(locale: unknown): MainProcessLocale {
 	return locale.trim().toLowerCase().startsWith("en") ? "en-US" : "zh-CN";
 }
 
-export function mainProcessT(
-	locale: MainProcessLocale,
-	key: MainProcessTranslationKey,
-	params: Record<string, string | number> = {},
-): string {
+export function mainProcessT(locale: MainProcessLocale, key: MainProcessTranslationKey, params: Record<string, string | number> = {}): string {
 	const template = (locale === "en-US" ? mainProcessEnUS : mainProcessZhCN)[key];
-	return template.replace(/\{([A-Za-z0-9_]+)\}/g, (match, name: string) => (
-		Object.prototype.hasOwnProperty.call(params, name) ? String(params[name]) : match
-	));
+	return template.replace(/\{([A-Za-z0-9_]+)\}/g, (match, name: string) => (Object.prototype.hasOwnProperty.call(params, name) ? String(params[name]) : match));
 }

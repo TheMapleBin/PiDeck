@@ -35,7 +35,11 @@ function loadXuePromptManager() {
 				},
 			},
 			// PromptManager 只是被构造，不参与 list/detail；给一个空壳即可
-			"./PromptManager": { PromptManager: class { configureWsl() {} } },
+			"./PromptManager": {
+				PromptManager: class {
+					configureWsl() {}
+				},
+			},
 		},
 	});
 }
@@ -118,10 +122,7 @@ test("内置模板均落在「编程提示词」分类且正文可解压", { ski
 	const initSqlJs = (await import("sql.js")).default;
 	const SQL = await initSqlJs();
 	const db = new SQL.Database(new Uint8Array(readFileSync(dbPath)));
-	const expected = [
-		"fix", "review", "test-cases", "refactor", "doc", "explain",
-		"commit", "commit-own", "commit-split", "pi-system", "skill-discipline",
-	];
+	const expected = ["fix", "review", "test-cases", "refactor", "doc", "explain", "commit", "commit-own", "commit-split", "pi-system", "skill-discipline"];
 	try {
 		for (const slug of expected) {
 			const rows = db.exec("SELECT category, content FROM xueprompts WHERE slug = ?", [slug]);

@@ -43,11 +43,7 @@ const SID = "1959804f-221e-4840-b049-cbf339590e25";
 
 function writeTranscript(root, slug, sessionId, entries, options = {}) {
 	const transcripts = join(root, ".cursor", "projects", slug, "agent-transcripts");
-	const dir = options.subagent
-		? join(transcripts, sessionId, "subagents")
-		: options.flat
-			? transcripts
-			: join(transcripts, sessionId);
+	const dir = options.subagent ? join(transcripts, sessionId, "subagents") : options.flat ? transcripts : join(transcripts, sessionId);
 	mkdirSync(dir, { recursive: true });
 	const file = join(dir, `${options.fileId ?? sessionId}.jsonl`);
 	writeFileSync(file, entries.map((entry) => JSON.stringify(entry)).join("\n") + "\n", "utf8");
@@ -55,12 +51,7 @@ function writeTranscript(root, slug, sessionId, entries, options = {}) {
 }
 
 function wrappedUser(query, timestamp = "Tuesday, Sep 15, 2026, 4:35 PM (UTC+8)") {
-	return [
-		`<timestamp>${timestamp}</timestamp>`,
-		"<user_info>OS Version: win32 10.0.26200</user_info>",
-		"<agent_skills>Skill list that is not the user question</agent_skills>",
-		`<user_query>\n${query}\n</user_query>`,
-	].join("\n");
+	return [`<timestamp>${timestamp}</timestamp>`, "<user_info>OS Version: win32 10.0.26200</user_info>", "<agent_skills>Skill list that is not the user question</agent_skills>", `<user_query>\n${query}\n</user_query>`].join("\n");
 }
 
 function baseEntries({ userText = "帮我导入 Cursor 会话", extraAssistant = [] } = {}) {
@@ -114,10 +105,7 @@ test("纯函数: extractCursorUserText 抽 user_query，丢掉注入包装", () 
 		const { registry } = loadImporter(home);
 		const { extractCursorUserText } = registry.source;
 		assert.equal(extractCursorUserText(wrappedUser("真正的提问")), "真正的提问");
-		assert.equal(
-			extractCursorUserText("<timestamp>now</timestamp>\n没有 query 的原文"),
-			"没有 query 的原文",
-		);
+		assert.equal(extractCursorUserText("<timestamp>now</timestamp>\n没有 query 的原文"), "没有 query 的原文");
 	} finally {
 		rmSync(home, { recursive: true, force: true });
 	}
@@ -131,10 +119,7 @@ test("纯函数: parseCursorClock 解析 Cursor 时间戳", () => {
 		const ms = parseCursorClock("Tuesday, Sep 15, 2026, 4:35 PM (UTC+8)");
 		assert.ok(ms > 0, "应解析出有效时间");
 		assert.equal(new Date(ms).getUTCFullYear(), 2026);
-		assert.equal(
-			parseCursorTimestampFromText(wrappedUser("x")),
-			parseCursorClock("Tuesday, Sep 15, 2026, 4:35 PM (UTC+8)"),
-		);
+		assert.equal(parseCursorTimestampFromText(wrappedUser("x")), parseCursorClock("Tuesday, Sep 15, 2026, 4:35 PM (UTC+8)"));
 	} finally {
 		rmSync(home, { recursive: true, force: true });
 	}
@@ -308,9 +293,7 @@ test("import: tool_use.input 为 JSON 字符串时解析成对象参数", async 
 			{
 				role: "assistant",
 				message: {
-					content: [
-						{ type: "tool_use", id: "call_json", name: "Read", input: "{\"path\":\"a.ts\",\"limit\":10}" },
-					],
+					content: [{ type: "tool_use", id: "call_json", name: "Read", input: '{"path":"a.ts","limit":10}' }],
 				},
 			},
 		]);
@@ -399,10 +382,7 @@ test("import: 重复导入标记为 current，源文件变化后标记为 outdat
 		let sessions = await importer.scan("F:\\PiDeck");
 		assert.equal(sessions[0].status, "current");
 
-		writeTranscript(home, "f-PiDeck", SID, [
-			...baseEntries({ userText: "帮我导入 Cursor 会话" }),
-			{ role: "assistant", message: { content: [{ type: "text", text: "补充一句" }] } },
-		]);
+		writeTranscript(home, "f-PiDeck", SID, [...baseEntries({ userText: "帮我导入 Cursor 会话" }), { role: "assistant", message: { content: [{ type: "text", text: "补充一句" }] } }]);
 
 		sessions = await importer.scan("F:\\PiDeck");
 		assert.equal(sessions[0].status, "outdated");

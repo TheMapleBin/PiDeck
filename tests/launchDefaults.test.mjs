@@ -23,11 +23,15 @@ function loadResolver() {
 		fileName: "launchDefaults.ts",
 	}).outputText;
 	const module = { exports: {} };
-	vm.runInNewContext(output, {
-		module,
-		exports: module.exports,
-		require: () => ({}),
-	}, { filename: "launchDefaults.ts" });
+	vm.runInNewContext(
+		output,
+		{
+			module,
+			exports: module.exports,
+			require: () => ({}),
+		},
+		{ filename: "launchDefaults.ts" },
+	);
 	return module.exports.resolveLaunchDefaultOptions;
 }
 

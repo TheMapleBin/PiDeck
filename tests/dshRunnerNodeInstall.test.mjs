@@ -7,25 +7,9 @@ import { pathToFileURL } from "node:url";
 import test from "node:test";
 import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
-const {
-	DSH_RUNNER_NODE_SIDECAR_VERSION,
-	dshRunnerNodeSidecarArch,
-	dshRunnerNodeZipInnerDir,
-	installDshRunnerNodeSidecar,
-	resolveDshRunnerNodeIndexUrl,
-	resolveDshRunnerNodeReleaseUrl,
-} = loadTsCommonJs("src/main/dsh/dshRunnerNodeInstall.ts");
+const { DSH_RUNNER_NODE_SIDECAR_VERSION, dshRunnerNodeSidecarArch, dshRunnerNodeZipInnerDir, installDshRunnerNodeSidecar, resolveDshRunnerNodeIndexUrl, resolveDshRunnerNodeReleaseUrl } = loadTsCommonJs("src/main/dsh/dshRunnerNodeInstall.ts");
 const { dshRunnerNodeUserDataSidecar } = loadTsCommonJs("src/main/dsh/dshRunnerNodeSidecar.ts");
-const {
-	DSH_RUNNER_NODE_INDEX_FILE,
-	DSH_RUNNER_NODE_RELEASE_TAG,
-	defaultDshRunnerNodeIndexUrl,
-	dshRunnerNodeAssetDownloadUrl,
-	dshRunnerNodeReleasePageUrl,
-	dshRunnerNodeZipName,
-	officialNodeZipUrl,
-	selectDshRunnerNodeRelease,
-} = loadTsCommonJs("src/shared/types/dshRunnerNodeRelease.ts");
+const { DSH_RUNNER_NODE_INDEX_FILE, DSH_RUNNER_NODE_RELEASE_TAG, defaultDshRunnerNodeIndexUrl, dshRunnerNodeAssetDownloadUrl, dshRunnerNodeReleasePageUrl, dshRunnerNodeZipName, officialNodeZipUrl, selectDshRunnerNodeRelease } = loadTsCommonJs("src/shared/types/dshRunnerNodeRelease.ts");
 
 const HASH_A = "a".repeat(64);
 const HASH_B = "b".repeat(64);
@@ -65,39 +49,13 @@ test("客户端下载走 latest 应用 Release，不直连 nodejs.org，也不�
 	assert.equal(dshRunnerNodeSidecarArch("x64"), "x64");
 	assert.equal(dshRunnerNodeSidecarArch("arm64"), "arm64");
 	assert.equal(DSH_RUNNER_NODE_RELEASE_TAG, "latest");
-	assert.equal(
-		defaultDshRunnerNodeIndexUrl("atomgit"),
-		"https://atomgit.com/ayuayue/PiDeck/releases/download/latest/dsh-runner-node-releases.json",
-	);
-	assert.equal(
-		defaultDshRunnerNodeIndexUrl("github"),
-		"https://github.com/ayuayue/PiDeck/releases/latest/download/dsh-runner-node-releases.json",
-	);
-	assert.equal(
-		dshRunnerNodeAssetDownloadUrl("atomgit", "node-v24.13.0-win-x64.zip"),
-		"https://atomgit.com/ayuayue/PiDeck/releases/download/latest/node-v24.13.0-win-x64.zip",
-	);
-	assert.equal(
-		dshRunnerNodeReleasePageUrl("github"),
-		"https://github.com/ayuayue/PiDeck/releases/latest",
-	);
-	assert.equal(
-		dshRunnerNodeReleasePageUrl("atomgit"),
-		"https://atomgit.com/ayuayue/PiDeck/releases/latest",
-	);
-	assert.equal(
-		resolveDshRunnerNodeIndexUrl({ updateSource: "github" }),
-		defaultDshRunnerNodeIndexUrl("github"),
-	);
-	assert.equal(
-		resolveDshRunnerNodeReleaseUrl(
-			sampleIndex().releases[0],
-			"atomgit",
-			"x64",
-			"24.13.0",
-		),
-		dshRunnerNodeAssetDownloadUrl("atomgit", dshRunnerNodeZipName("24.13.0", "x64")),
-	);
+	assert.equal(defaultDshRunnerNodeIndexUrl("atomgit"), "https://atomgit.com/ayuayue/PiDeck/releases/download/latest/dsh-runner-node-releases.json");
+	assert.equal(defaultDshRunnerNodeIndexUrl("github"), "https://github.com/ayuayue/PiDeck/releases/latest/download/dsh-runner-node-releases.json");
+	assert.equal(dshRunnerNodeAssetDownloadUrl("atomgit", "node-v24.13.0-win-x64.zip"), "https://atomgit.com/ayuayue/PiDeck/releases/download/latest/node-v24.13.0-win-x64.zip");
+	assert.equal(dshRunnerNodeReleasePageUrl("github"), "https://github.com/ayuayue/PiDeck/releases/latest");
+	assert.equal(dshRunnerNodeReleasePageUrl("atomgit"), "https://atomgit.com/ayuayue/PiDeck/releases/latest");
+	assert.equal(resolveDshRunnerNodeIndexUrl({ updateSource: "github" }), defaultDshRunnerNodeIndexUrl("github"));
+	assert.equal(resolveDshRunnerNodeReleaseUrl(sampleIndex().releases[0], "atomgit", "x64", "24.13.0"), dshRunnerNodeAssetDownloadUrl("atomgit", dshRunnerNodeZipName("24.13.0", "x64")));
 	assert.match(officialNodeZipUrl("24.13.0", "x64"), /nodejs\.org/);
 });
 
@@ -156,8 +114,7 @@ test("下载走索引条目并校验 sha256 后落到 userData", async () => {
 			platform: "win32",
 			arch: "x64",
 			updateSource: "atomgit",
-			fetchIndex: async () =>
-				sampleIndex({ url: pathToFileURL(zip).href, sha256: HASH_B }),
+			fetchIndex: async () => sampleIndex({ url: pathToFileURL(zip).href, sha256: HASH_B }),
 			download: async (url, zipPath) => {
 				assert.equal(url, pathToFileURL(zip).href);
 				await mkdir(join(zipPath, ".."), { recursive: true });

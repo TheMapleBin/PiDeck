@@ -2,11 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
-const {
-	USAGE_PROBE_DEFAULT_INTERVAL_MINUTES,
-	providerUsageEntryStale,
-	shouldAutoFetchProviderUsage,
-} = loadTsCommonJs("src/renderer/src/hooks/providerUsageAutoQuery.ts");
+const { USAGE_PROBE_DEFAULT_INTERVAL_MINUTES, providerUsageEntryStale, shouldAutoFetchProviderUsage } = loadTsCommonJs("src/renderer/src/hooks/providerUsageAutoQuery.ts");
 
 const MINUTE = 60_000;
 const NOW = 1_700_000_000_000;

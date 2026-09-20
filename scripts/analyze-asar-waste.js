@@ -90,9 +90,7 @@ function nodeSize(node) {
 }
 
 const waste = [...inAsar].filter((n) => !closure.has(n));
-const rows = waste
-	.map((n) => [n, nodeSize(findPkgNode(n) || {})])
-	.sort((a, b) => b[1] - a[1]);
+const rows = waste.map((n) => [n, nodeSize(findPkgNode(n) || {})]).sort((a, b) => b[1] - a[1]);
 
 console.log("=== 可安全排除（未被运行时闭包引用）Top 40 ===");
 for (const [n, s] of rows.slice(0, 40)) console.log((s / 1024 / 1024).toFixed(1).padStart(8), "MB", n);
@@ -106,7 +104,13 @@ console.log("=== 保留闭包包数:", closure.size, "===");
 const wasteList = waste.slice().sort();
 const groups = [];
 for (let i = 0; i < wasteList.length; i += 4) {
-	groups.push("\t\t\t" + wasteList.slice(i, i + 4).map((w) => JSON.stringify("!node_modules/" + w)).join(", "));
+	groups.push(
+		"\t\t\t" +
+			wasteList
+				.slice(i, i + 4)
+				.map((w) => JSON.stringify("!node_modules/" + w))
+				.join(", "),
+	);
 }
 console.log("\n=== electron-builder files 排除模式（", wasteList.length, "个包）===");
 console.log(groups.join(",\n"));

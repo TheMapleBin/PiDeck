@@ -23,9 +23,6 @@ execSync("npm run build", {
 });
 
 console.log(`\n[2/3] electron-builder --win nsis …`);
-execSync(
-	`npx electron-builder --win nsis --config.productName=phidsDev --config.appId=com.ayuayue.pi-desktop-dev`,
-	{ cwd: root, stdio: "inherit", shell: true },
-);
+execSync(`npx electron-builder --win nsis --config.productName=phidsDev --config.appId=com.ayuayue.pi-desktop-dev`, { cwd: root, stdio: "inherit", shell: true });
 
 console.log(`\n[3/3] ✅ Dev 版打包完成！产物在 release/ 目录（phidsDev Setup *.exe）`);

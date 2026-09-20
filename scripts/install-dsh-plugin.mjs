@@ -66,11 +66,7 @@ const destRoot = resolve(argValue("--dest") ?? join(userData, "dsh-plugins"));
 const dshHome = resolve(argValue("--dsh-home") ?? join(homedir(), ".dsh"));
 
 if (!existsSync(join(runtimeRoot, "node_modules"))) {
-	console.error(
-		`✗ 找不到 runtime node_modules: ${join(runtimeRoot, "node_modules")}\n` +
-			"  请用 --runtime 指定已安装的 runtime 目录（…/runtimes/dsh/<version>/dsh-runtime）。\n" +
-			"  插件依赖需要从 runtime 取（不联网装 @deepseek-ai/* 以免版本漂移）。",
-	);
+	console.error(`✗ 找不到 runtime node_modules: ${join(runtimeRoot, "node_modules")}\n` + "  请用 --runtime 指定已安装的 runtime 目录（…/runtimes/dsh/<version>/dsh-runtime）。\n" + "  插件依赖需要从 runtime 取（不联网装 @deepseek-ai/* 以免版本漂移）。");
 	process.exit(1);
 }
 const nmRoot = join(runtimeRoot, "node_modules");
@@ -193,13 +189,7 @@ rmSync(tmp, { recursive: true, force: true });
 // ── 3. 登记 Loader 行 ──
 const patchPath = join(dshHome, "cordis.patch.yml");
 const rowId = `${pkg.name.replace(/^.*\//, "")}/host`;
-const rowText = [
-	"- insert:",
-	`    - id: ${rowId}`,
-	`      name: ${entryUrl}`,
-	"      config: {}",
-	"",
-].join("\n");
+const rowText = ["- insert:", `    - id: ${rowId}`, `      name: ${entryUrl}`, "      config: {}", ""].join("\n");
 console.log(`[3/3] 安装完成：${destDir}`);
 console.log(`      entry: ${entry}`);
 
@@ -221,14 +211,7 @@ if (register) {
 		mkdirSync(dshHome, { recursive: true });
 		writeFileSync(
 			patchPath,
-			[
-				"# PiDeck / DSH 用户补丁层（官方层级：作用于每个 profile）",
-				"# 由 install-dsh-plugin.mjs 登记；Loader 行 name 用绝对路径引用，",
-				"# 插件本体放在 userData/dsh-plugins/ 下（与 runtime 解耦）。",
-				"# 第三方插件 = 在 host 进程内执行任意代码，安装前请自行确认来源可信。",
-				"",
-				rowText,
-			].join("\n"),
+			["# PiDeck / DSH 用户补丁层（官方层级：作用于每个 profile）", "# 由 install-dsh-plugin.mjs 登记；Loader 行 name 用绝对路径引用，", "# 插件本体放在 userData/dsh-plugins/ 下（与 runtime 解耦）。", "# 第三方插件 = 在 host 进程内执行任意代码，安装前请自行确认来源可信。", "", rowText].join("\n"),
 			"utf8",
 		);
 		console.log(`      已创建 ${patchPath} 并登记`);

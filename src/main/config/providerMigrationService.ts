@@ -105,10 +105,7 @@ function piBuiltinCatalogMeta(providerId: string): { modelCount: number; baseUrl
  * auth.json 里、且是 pi 内置名、api_key 类型的条目 → preview 行
  * （models.json 里没有它们，但反向迁移时可由 catalog 补全后写入 DSH）。
  */
-function authBuiltinPreviewRows(
-	auth: Record<string, { type?: string }> | undefined,
-	dshNames: Set<string>,
-): MigratableProviderRow[] {
+function authBuiltinPreviewRows(auth: Record<string, { type?: string }> | undefined, dshNames: Set<string>): MigratableProviderRow[] {
 	if (!auth) return [];
 	const rows: MigratableProviderRow[] = [];
 	for (const [name, item] of Object.entries(auth)) {
@@ -127,11 +124,7 @@ function authBuiltinPreviewRows(
 	return rows;
 }
 
-function listDshRows(
-	parsed: ReturnType<typeof parseDshSettingsDocument>,
-	piNames: Set<string>,
-	hasKey: (namespace: "llm-pi-ai" | "llm-deepseek", name: string, profile: DshProviderProfile) => boolean,
-): MigratableProviderRow[] {
+function listDshRows(parsed: ReturnType<typeof parseDshSettingsDocument>, piNames: Set<string>, hasKey: (namespace: "llm-pi-ai" | "llm-deepseek", name: string, profile: DshProviderProfile) => boolean): MigratableProviderRow[] {
 	const rows: MigratableProviderRow[] = [];
 	const deepseek = parsed.deepseek ?? {};
 	// deepseek-official is supplied by DSH composition even when the user has no
@@ -157,21 +150,11 @@ function listDshRows(
 	return rows.sort((left, right) => left.name.localeCompare(right.name));
 }
 
-export async function previewProviderMigration(
-	deps: ProviderMigrationDeps,
-	direction: MigrationDirection,
-): Promise<ProviderMigrationPreview> {
-	const [models, auth, dshDoc] = await Promise.all([
-		deps.configManager.getModelsConfig(),
-		deps.configManager.getAuthConfig(),
-		readDshSettings(deps.dshHost.getHomeDir()),
-	]);
+export async function previewProviderMigration(deps: ProviderMigrationDeps, direction: MigrationDirection): Promise<ProviderMigrationPreview> {
+	const [models, auth, dshDoc] = await Promise.all([deps.configManager.getModelsConfig(), deps.configManager.getAuthConfig(), readDshSettings(deps.dshHost.getHomeDir())]);
 	const piProviders = models.parsed.providers ?? {};
 	const dshParsed = parseDshSettingsDocument(dshDoc.parsed);
-	const dshNames = new Set([
-		...Object.keys(dshParsed.piAi),
-		...(dshParsed.deepseek ? ["deepseek"] : []),
-	]);
+	const dshNames = new Set([...Object.keys(dshParsed.piAi), ...(dshParsed.deepseek ? ["deepseek"] : [])]);
 
 	if (direction === "pi-to-dsh") {
 		const customRows: MigratableProviderRow[] = Object.entries(piProviders)
@@ -181,25 +164,19 @@ export async function previewProviderMigration(
 				modelCount: Array.isArray(provider.models) ? provider.models.length : 0,
 				hasKey: Boolean(resolvePiApiKey(provider, auth.parsed[name])),
 				baseUrl: typeof provider.baseUrl === "string" ? provider.baseUrl : undefined,
-				targetExists: name === "deepseek" && looksLikeOfficialDeepseek(provider.baseUrl)
-					? Boolean(dshParsed.deepseek)
-					: dshNames.has(name),
+				targetExists: name === "deepseek" && looksLikeOfficialDeepseek(provider.baseUrl) ? Boolean(dshParsed.deepseek) : dshNames.has(name),
 			}));
 		// 反向也列出 auth.json 中 pi 内置名（api_key）——它们不在 models.json，
 		// 但可由 catalog 补全后写入 DSH；OAuth 一律不列（无法用 API Key 迁移）。
 		const authRows = authBuiltinPreviewRows(auth.parsed, dshNames);
-		const providers = [...customRows, ...authRows]
-			.sort((left, right) => left.name.localeCompare(right.name));
+		const providers = [...customRows, ...authRows].sort((left, right) => left.name.localeCompare(right.name));
 		return { direction, providers };
 	}
 
 	const credentialText = await readText(join(deps.dshHost.getHomeDir(), ".credentials.yaml"));
 	// pi 侧“已有同名”既看 models.json（自定义名）也看 auth.json（内置名），
 	// 否则内置名迁移覆盖 auth.json 已有 key 时不会弹覆盖确认。
-	const piExisting = new Set([
-		...Object.keys(piProviders),
-		...(auth.parsed ? Object.keys(auth.parsed) : []),
-	]);
+	const piExisting = new Set([...Object.keys(piProviders), ...(auth.parsed ? Object.keys(auth.parsed) : [])]);
 	const providers = listDshRows(dshParsed, piExisting, (_ns, name, profile) => {
 		const ref = credentialRefFor(profile, name);
 		// 兼容 dsh-credentials-local v1（version:1 + refs）与旧扁平布局
@@ -211,10 +188,7 @@ export async function previewProviderMigration(
 }
 
 async function readPiSnapshot(deps: ProviderMigrationDeps, name: string): Promise<PiProviderSnapshot> {
-	const [models, auth] = await Promise.all([
-		deps.configManager.getModelsConfig(),
-		deps.configManager.getAuthConfig(),
-	]);
+	const [models, auth] = await Promise.all([deps.configManager.getModelsConfig(), deps.configManager.getAuthConfig()]);
 	const provider = models.parsed.providers[name];
 	if (!provider) throw new Error(`pi provider not found: ${name}`);
 	return {
@@ -238,7 +212,7 @@ async function readDshSnapshot(deps: ProviderMigrationDeps, name: string): Promi
 	// a valid source, with the adapter's default DEEPSEEK_API_KEY reference.
 	const profile = official ? (doc.deepseek ?? {}) : doc.piAi[name];
 	if (!profile) throw new Error(`dsh provider not found: ${name}`);
-	const namespace = official ? "llm-deepseek" as const : "llm-pi-ai" as const;
+	const namespace = official ? ("llm-deepseek" as const) : ("llm-pi-ai" as const);
 	const ref = credentialRefFor(profile, official ? "deepseek" : name);
 	let apiKey: string | undefined;
 	try {
@@ -250,15 +224,8 @@ async function readDshSnapshot(deps: ProviderMigrationDeps, name: string): Promi
 }
 
 async function writePiSnapshot(deps: ProviderMigrationDeps, snapshot: PiProviderSnapshot): Promise<void> {
-	const [models, auth] = await Promise.all([
-		deps.configManager.getModelsConfig(),
-		deps.configManager.getAuthConfig(),
-	]);
-	const merged = mergePiProvider(
-		{ providers: models.parsed.providers ?? {} },
-		auth.parsed,
-		snapshot,
-	);
+	const [models, auth] = await Promise.all([deps.configManager.getModelsConfig(), deps.configManager.getAuthConfig()]);
+	const merged = mergePiProvider({ providers: models.parsed.providers ?? {} }, auth.parsed, snapshot);
 	const modelsResult = await deps.configManager.saveModelsConfig(merged.models as PiModelsFile);
 	if (!modelsResult.valid) throw new Error(modelsResult.error ?? "failed to save models.json");
 	const authResult = await deps.configManager.saveAuthConfig(merged.auth as PiAuthFile);
@@ -290,9 +257,7 @@ export async function writeDshSnapshot(deps: ProviderMigrationDeps, snapshot: Ds
 			if (snapshot.namespace === "llm-deepseek") {
 				await deps.dshHost.updateSettings(snapshot.namespace, snapshot.profile as Record<string, unknown>, view?.revision);
 			} else {
-				const current = view?.value && typeof view.value === "object" && !Array.isArray(view.value)
-					? (view.value as { providers?: Record<string, unknown> })
-					: {};
+				const current = view?.value && typeof view.value === "object" && !Array.isArray(view.value) ? (view.value as { providers?: Record<string, unknown> }) : {};
 				const providers = { ...(current.providers ?? {}) };
 				providers[snapshot.name] = snapshot.profile;
 				await deps.dshHost.updateSettings(snapshot.namespace, { providers }, view?.revision);
@@ -323,11 +288,7 @@ export async function writeDshSnapshot(deps: ProviderMigrationDeps, snapshot: Ds
 	return false;
 }
 
-export async function applyProviderMigration(
-	deps: ProviderMigrationDeps,
-	direction: MigrationDirection,
-	providerName: string,
-): Promise<ProviderMigrationResult> {
+export async function applyProviderMigration(deps: ProviderMigrationDeps, direction: MigrationDirection, providerName: string): Promise<ProviderMigrationResult> {
 	if (!isSafeProviderName(providerName)) {
 		return { ok: false, provider: String(providerName), direction, copiedKey: false, wroteViaHost: false, error: "invalid provider name" };
 	}
@@ -338,10 +299,7 @@ export async function applyProviderMigration(
 			// DSH 内置匹配的 provider（official deepseek）由 piToDshSnapshot 路由到
 			// 对应 namespace（llm-deepseek），DSH 不认识的按普通 API Key provider
 			// 落 llm-pi-ai.providers.<name>。不再要求 DSH settings.yaml 预先存在同名条目。
-			const [models, auth] = await Promise.all([
-				deps.configManager.getModelsConfig(),
-				deps.configManager.getAuthConfig(),
-			]);
+			const [models, auth] = await Promise.all([deps.configManager.getModelsConfig(), deps.configManager.getAuthConfig()]);
 			const authItem = auth.parsed[providerName];
 			const inModels = Boolean(models.parsed.providers?.[providerName]);
 			const isBuiltin = piBuiltinProviderIds().has(providerName.toLowerCase());
@@ -357,11 +315,7 @@ export async function applyProviderMigration(
 					};
 				}
 				// 无条件迁移：不要求 DSH settings.yaml 预先存在同名条目。
-				const snapshot = piBuiltinSnapshotFromCatalog(
-					providerName,
-					typeof authItem.key === "string" ? authItem.key : undefined,
-					getPiAiCatalogIndex(),
-				);
+				const snapshot = piBuiltinSnapshotFromCatalog(providerName, typeof authItem.key === "string" ? authItem.key : undefined, getPiAiCatalogIndex());
 				if (!snapshot) {
 					return {
 						ok: false,

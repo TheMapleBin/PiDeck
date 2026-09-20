@@ -6,10 +6,7 @@ import test from "node:test";
 const sidebar = readFileSync("src/renderer/src/components/sidebar/SidebarContent.tsx", "utf8");
 
 test("automation entry renders under new/search session actions, not the dock", () => {
-	assert.match(
-		sidebar,
-		/import \{ AutomationDockButton \} from "\.\.\/automation\/AutomationDockButton";/,
-	);
+	assert.match(sidebar, /import \{ AutomationDockButton \} from "\.\.\/automation\/AutomationDockButton";/);
 	const newSessionIndex = sidebar.indexOf('aria-label={t("app.newSession")}');
 	const searchIndex = sidebar.indexOf('aria-label={t("app.searchSessions")}');
 	const automationIndex = sidebar.indexOf("<AutomationDockButton />");
@@ -28,10 +25,7 @@ test("dock no longer hosts the automation entry", () => {
 
 test("automation management is a modal, not a workbench-covering surface", () => {
 	const app = readFileSync("src/renderer/src/App.tsx", "utf8");
-	const sessionActions = readFileSync(
-		"src/renderer/src/hooks/useSessionActions.ts",
-		"utf8",
-	);
+	const sessionActions = readFileSync("src/renderer/src/hooks/useSessionActions.ts", "utf8");
 
 	// 定时任务以模态弹框呈现：App 挂 AutomationModal，不再有覆盖会话区的 utility surface
 	assert.match(app, /<AutomationModal/);
@@ -43,10 +37,7 @@ test("automation management is a modal, not a workbench-covering surface", () =>
 });
 
 test("automation dock button keeps active-run indicator and opens the modal", () => {
-	const source = readFileSync(
-		"src/renderer/src/components/automation/AutomationDockButton.tsx",
-		"utf8",
-	);
+	const source = readFileSync("src/renderer/src/components/automation/AutomationDockButton.tsx", "utf8");
 	const app = readFileSync("src/renderer/src/App.tsx", "utf8");
 	assert.match(source, /openAutomationModalAtom/);
 	assert.doesNotMatch(source, /openAutomationWorkspaceAtom/);

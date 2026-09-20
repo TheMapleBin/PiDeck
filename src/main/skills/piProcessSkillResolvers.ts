@@ -19,11 +19,7 @@ export function createPiProcessSkillResolvers(
 	settings: AppSettings,
 	additionalAgentHomeDirs?: string[],
 ): {
-	resolveEnabledSkillPaths: (
-		processSettings?: Partial<AppSettings>,
-		cwd?: string,
-		includeProjectResources?: boolean,
-	) => string[] | null;
+	resolveEnabledSkillPaths: (processSettings?: Partial<AppSettings>, cwd?: string, includeProjectResources?: boolean) => string[] | null;
 } {
 	return {
 		resolveEnabledSkillPaths: (processSettings, _processCwd, includeProjectResources = true) =>
@@ -31,8 +27,7 @@ export function createPiProcessSkillResolvers(
 				cwd,
 				includeProjectResources,
 				additionalAgentHomeDirs,
-				disabledNames:
-					processSettings?.disabledSkills ?? settings.disabledSkills ?? [],
+				disabledNames: processSettings?.disabledSkills ?? settings.disabledSkills ?? [],
 			}),
 	};
 }

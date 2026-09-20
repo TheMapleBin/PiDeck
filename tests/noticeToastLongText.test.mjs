@@ -49,10 +49,7 @@ test("copy keeps the full text regardless of truncation", () => {
 	// 卡片与弹窗的复制语义一致：有正文时「标题\n正文」，否则仅标题（拼接在截断之后，不受显示截断影响）
 	const copySemantic = (source) => source.match(/const copyText = ([^\n]+);/g) ?? [];
 	const cardCopies = copySemantic(card).filter((line) => line.includes("description"));
-	assert.ok(
-		cardCopies.length >= 2,
-		`card and dialog must each keep full-text copy semantics, got: ${cardCopies.length}`,
-	);
+	assert.ok(cardCopies.length >= 2, `card and dialog must each keep full-text copy semantics, got: ${cardCopies.length}`);
 	// 复制走完整 copyText，且复制入口不在 truncated 条件内（截断与否都可复制）
 	assert.match(card, /writeClipboardText\(copyText\)/);
 	assert.doesNotMatch(card, /truncated \?[\s\S]{0,200}handleCopy/);

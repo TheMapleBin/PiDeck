@@ -15,21 +15,9 @@
 import { AlertCircle, Clock, RefreshCw } from "lucide-react";
 import { t } from "../../i18n";
 import { cn } from "../../lib/utils";
-import type {
-	ProviderUsageResult,
-	UsageProbeBackend,
-} from "../../../../shared/types/providerUsage";
+import type { ProviderUsageResult, UsageProbeBackend } from "../../../../shared/types/providerUsage";
 import { useProviderUsageEntry, useProviderUsageRefresh, useProviderUsageState } from "../../hooks/useProviderUsage";
-import {
-	formatAmount,
-	formatBalance,
-	relativeTimeParts,
-	USAGE_TONE_BAR_CLASS,
-	USAGE_TONE_TEXT_CLASS,
-	usageToneForPercent,
-	usageWindowLabelText,
-	type UsageTone,
-} from "../../utils/providerUsageDisplay";
+import { formatAmount, formatBalance, relativeTimeParts, USAGE_TONE_BAR_CLASS, USAGE_TONE_TEXT_CLASS, usageToneForPercent, usageWindowLabelText, type UsageTone } from "../../utils/providerUsageDisplay";
 
 /** cc-switch TierBar 行：label + 圆角进度条 + 彩色粗体百分比 + 右侧小字。 */
 function UsageBarRow(props: {
@@ -46,19 +34,10 @@ function UsageBarRow(props: {
 				{props.label}
 			</span>
 			<span className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
-				<span
-					className={`block h-full rounded-full transition-all ${USAGE_TONE_BAR_CLASS[tone]}`}
-					style={{ width: `${pct ?? 0}%` }}
-				/>
+				<span className={`block h-full rounded-full transition-all ${USAGE_TONE_BAR_CLASS[tone]}`} style={{ width: `${pct ?? 0}%` }} />
 			</span>
-			<span className={`w-9 flex-none text-right font-mono text-caption font-semibold tabular-nums ${USAGE_TONE_TEXT_CLASS[tone]}`}>
-				{pct != null ? `${pct}%` : t("sessionContext.usageUnknown")}
-			</span>
-			{props.trailing && (
-				<span className="min-w-0 flex-none text-right font-mono text-micro text-text-tertiary">
-					{props.trailing}
-				</span>
-			)}
+			<span className={`w-9 flex-none text-right font-mono text-caption font-semibold tabular-nums ${USAGE_TONE_TEXT_CLASS[tone]}`}>{pct != null ? `${pct}%` : t("sessionContext.usageUnknown")}</span>
+			{props.trailing && <span className="min-w-0 flex-none text-right font-mono text-micro text-text-tertiary">{props.trailing}</span>}
 		</div>
 	);
 }
@@ -66,48 +45,28 @@ function UsageBarRow(props: {
 /** 独立货币子块（如 Kimi Boost 点数）：与主额度并存的级联小字排版。 */
 function BoosterBlock(props: { booster: NonNullable<ProviderUsageResult["booster"]> }) {
 	const booster = props.booster;
-	const asBalance = (value: number): string =>
-		formatBalance({ value, currency: booster.currency });
+	const asBalance = (value: number): string => formatBalance({ value, currency: booster.currency });
 	return (
-		<div
-			className="mt-1 space-y-0.5 border-t border-border/60 pt-1.5"
-			data-testid="provider-usage-booster"
-		>
+		<div className="mt-1 space-y-0.5 border-t border-border/60 pt-1.5" data-testid="provider-usage-booster">
 			<div className="flex items-center justify-between gap-4 px-0.5">
-				<span className="shrink-0 text-caption leading-5 text-text-secondary">
-					{t("sessionContext.usageBoosterBalance")}
-				</span>
-				<span className="min-w-0 text-right font-mono font-semibold tabular-nums text-green-600 dark:text-green-400">
-					{asBalance(booster.balance)}
-				</span>
+				<span className="shrink-0 text-caption leading-5 text-text-secondary">{t("sessionContext.usageBoosterBalance")}</span>
+				<span className="min-w-0 text-right font-mono font-semibold tabular-nums text-green-600 dark:text-green-400">{asBalance(booster.balance)}</span>
 			</div>
 			{booster.monthlyUsed != null && (
 				<div className="flex items-center justify-between gap-4 px-0.5">
-					<span className="shrink-0 text-caption leading-5 text-text-secondary">
-						{t("sessionContext.usageBoosterMonthlyUsed")}
-					</span>
-					<span className="min-w-0 text-right font-mono tabular-nums text-text-tertiary">
-						{asBalance(booster.monthlyUsed)}
-					</span>
+					<span className="shrink-0 text-caption leading-5 text-text-secondary">{t("sessionContext.usageBoosterMonthlyUsed")}</span>
+					<span className="min-w-0 text-right font-mono tabular-nums text-text-tertiary">{asBalance(booster.monthlyUsed)}</span>
 				</div>
 			)}
 			{booster.unlimitedMonthly ? (
 				<div className="flex items-center justify-between gap-4 px-0.5">
-					<span className="shrink-0 text-caption leading-5 text-text-secondary">
-						{t("sessionContext.usageBoosterMonthlyLimit")}
-					</span>
-					<span className="min-w-0 text-right font-mono tabular-nums text-text-tertiary">
-						{t("sessionContext.usageBoosterUnlimited")}
-					</span>
+					<span className="shrink-0 text-caption leading-5 text-text-secondary">{t("sessionContext.usageBoosterMonthlyLimit")}</span>
+					<span className="min-w-0 text-right font-mono tabular-nums text-text-tertiary">{t("sessionContext.usageBoosterUnlimited")}</span>
 				</div>
 			) : booster.monthlyChargeLimit != null ? (
 				<div className="flex items-center justify-between gap-4 px-0.5">
-					<span className="shrink-0 text-caption leading-5 text-text-secondary">
-						{t("sessionContext.usageBoosterMonthlyLimit")}
-					</span>
-					<span className="min-w-0 text-right font-mono tabular-nums text-text-tertiary">
-						{asBalance(booster.monthlyChargeLimit)}
-					</span>
+					<span className="shrink-0 text-caption leading-5 text-text-secondary">{t("sessionContext.usageBoosterMonthlyLimit")}</span>
+					<span className="min-w-0 text-right font-mono tabular-nums text-text-tertiary">{asBalance(booster.monthlyChargeLimit)}</span>
 				</div>
 			) : null}
 		</div>
@@ -143,17 +102,9 @@ export function ProviderUsageDetails(props: {
 	const time = entry.fetchedAt != null ? relativeTimeParts(entry.fetchedAt) : null;
 
 	return (
-		<div
-			className={cn("space-y-1.5 border-t border-border pt-2", props.className)}
-			data-testid="provider-usage-details"
-			data-provider={props.provider}
-			data-status={entry.status}
-			data-enabled={state ? (state.enabled ? "true" : "false") : undefined}
-		>
+		<div className={cn("space-y-1.5 border-t border-border pt-2", props.className)} data-testid="provider-usage-details" data-provider={props.provider} data-status={entry.status} data-enabled={state ? (state.enabled ? "true" : "false") : undefined}>
 			<div className="flex items-center gap-1.5 px-0.5">
-				<span className="text-micro font-semibold uppercase tracking-wide text-text-tertiary">
-					{t("sessionContext.usageHeader")}
-				</span>
+				<span className="text-micro font-semibold uppercase tracking-wide text-text-tertiary">{t("sessionContext.usageHeader")}</span>
 				{time && !loading && (
 					<span className="inline-flex items-center gap-0.5 text-[10px] text-text-tertiary">
 						<Clock size={10} aria-hidden="true" />
@@ -171,19 +122,11 @@ export function ProviderUsageDetails(props: {
 					<RefreshCw size={12} className={loading ? "animate-pideck-spin" : undefined} />
 				</button>
 			</div>
-			{loading && result == null ? (
-				<div className="px-0.5 text-caption leading-5 text-text-tertiary">
-					{t("sessionContext.usageRefreshing")}
-				</div>
-			) : null}
+			{loading && result == null ? <div className="px-0.5 text-caption leading-5 text-text-tertiary">{t("sessionContext.usageRefreshing")}</div> : null}
 			{balance ? (
 				<div className="flex items-center justify-between gap-4 px-0.5">
 					<span className={LABEL_CLASS}>{t("sessionContext.usageBalance")}</span>
-					<span className={`min-w-0 text-right font-mono font-semibold tabular-nums ${
-						balance.value <= 0 ? USAGE_TONE_TEXT_CLASS.empty : USAGE_TONE_TEXT_CLASS.ok
-					}`}>
-						{formatBalance(balance)}
-					</span>
+					<span className={`min-w-0 text-right font-mono font-semibold tabular-nums ${balance.value <= 0 ? USAGE_TONE_TEXT_CLASS.empty : USAGE_TONE_TEXT_CLASS.ok}`}>{formatBalance(balance)}</span>
 				</div>
 			) : null}
 			{windows.length > 0 ? (
@@ -193,30 +136,14 @@ export function ProviderUsageDetails(props: {
 					{windows.map((window) => {
 						const total = window.total;
 						const used = window.used;
-						const remaining =
-							window.remaining ??
-							(total != null && used != null ? Math.max(0, total - used) : undefined);
+						const remaining = window.remaining ?? (total != null && used != null ? Math.max(0, total - used) : undefined);
 						// 百分比 = 已用/总额；用超（used>total）封顶 100。total 缺失时不显示百分比。
-						const pct =
-							total != null && used != null && total > 0
-								? Math.min(100, Math.round((used / total) * 100))
-								: null;
+						const pct = total != null && used != null && total > 0 ? Math.min(100, Math.round((used / total) * 100)) : null;
 						// 用量≥90% 红、≥70% 橙、其余绿（cc-switch utilizationColor 阈值）
 						const urgent = pct != null && pct >= 90;
 						// 窗口名与 inline 行共用 providerUsageDisplay 的统一映射（未知 key 原样展示）。
 						const label = usageWindowLabelText(window.key, t);
-						return (
-							<UsageBarRow
-								key={window.key}
-								label={label}
-								percent={pct}
-								trailing={
-									remaining != null && !urgent
-										? t("sessionContext.usageWindowRemaining", { n: formatAmount(remaining) })
-										: undefined
-								}
-							/>
-						);
+						return <UsageBarRow key={window.key} label={label} percent={pct} trailing={remaining != null && !urgent ? t("sessionContext.usageWindowRemaining", { n: formatAmount(remaining) }) : undefined} />;
 					})}
 					{booster ? <BoosterBlock booster={booster} /> : null}
 				</div>
@@ -225,21 +152,13 @@ export function ProviderUsageDetails(props: {
 					{credits.remaining != null && (
 						<div className="flex items-center justify-between gap-4 px-0.5">
 							<span className={LABEL_CLASS}>{t("sessionContext.usageCreditsRemaining")}</span>
-							<span className={`min-w-0 text-right font-mono font-semibold tabular-nums ${
-								credits.remaining <= 0
-									? USAGE_TONE_TEXT_CLASS.empty
-									: USAGE_TONE_TEXT_CLASS.ok
-							}`}>
-								{formatAmount(credits.remaining)}
-							</span>
+							<span className={`min-w-0 text-right font-mono font-semibold tabular-nums ${credits.remaining <= 0 ? USAGE_TONE_TEXT_CLASS.empty : USAGE_TONE_TEXT_CLASS.ok}`}>{formatAmount(credits.remaining)}</span>
 						</div>
 					)}
 					{credits.used != null && (
 						<div className="flex items-center justify-between gap-4 px-0.5">
 							<span className={LABEL_CLASS}>{t("sessionContext.usageCreditsUsed")}</span>
-							<span className="min-w-0 text-right font-mono tabular-nums text-text-tertiary">
-								{formatAmount(credits.used)}
-							</span>
+							<span className="min-w-0 text-right font-mono tabular-nums text-text-tertiary">{formatAmount(credits.used)}</span>
 						</div>
 					)}
 					{booster ? <BoosterBlock booster={booster} /> : null}
@@ -248,19 +167,9 @@ export function ProviderUsageDetails(props: {
 				<div className="space-y-1">
 					{(["rolling", "weekly", "monthly"] as const).map((key) => {
 						const period = periods[key];
-						const label = key === "rolling"
-							? t("sessionContext.usageRolling")
-							: key === "weekly"
-								? t("sessionContext.usageWeekly")
-								: t("sessionContext.usageMonthly");
+						const label = key === "rolling" ? t("sessionContext.usageRolling") : key === "weekly" ? t("sessionContext.usageWeekly") : t("sessionContext.usageMonthly");
 						if (!period) return null;
-						return (
-							<UsageBarRow
-								key={key}
-								label={label}
-								percent={period.percent ?? null}
-							/>
-						);
+						return <UsageBarRow key={key} label={label} percent={period.percent ?? null} />;
 					})}
 				</div>
 			) : null}
@@ -270,12 +179,7 @@ export function ProviderUsageDetails(props: {
 					<AlertCircle size={12} aria-hidden="true" />
 					<span>{t("config.usage.notEnabled")}</span>
 					{props.onConfigureUsage && (
-						<button
-							type="button"
-							data-testid="provider-usage-configure"
-							onClick={props.onConfigureUsage}
-							className="ml-auto inline-flex flex-none items-center rounded px-1.5 py-0.5 text-caption text-text-secondary transition-colors hover:bg-muted/60 hover:text-foreground"
-						>
+						<button type="button" data-testid="provider-usage-configure" onClick={props.onConfigureUsage} className="ml-auto inline-flex flex-none items-center rounded px-1.5 py-0.5 text-caption text-text-secondary transition-colors hover:bg-muted/60 hover:text-foreground">
 							{t("config.usage.configure")}
 						</button>
 					)}
@@ -284,19 +188,11 @@ export function ProviderUsageDetails(props: {
 				// 失败态只占一行（cc-switch 同款极简）：红字提示；「去配置」是行内小链接，
 				// 不再渲染全宽大按钮；重试统一走头部的刷新按钮（只保留一个刷新入口）。
 				// 结构性「未开启」给专属引导文案（用量查询未开启 → 去配置），其余失败给通用文案。
-				<div
-					className="flex items-center gap-1.5 px-0.5 text-caption leading-5 text-red-500 dark:text-red-400"
-					title={result?.error ?? undefined}
-				>
+				<div className="flex items-center gap-1.5 px-0.5 text-caption leading-5 text-red-500 dark:text-red-400" title={result?.error ?? undefined}>
 					<AlertCircle size={12} aria-hidden="true" />
 					<span>{result?.disabled ? t("config.usage.notEnabled") : t("sessionContext.usageError")}</span>
 					{props.onConfigureUsage && (
-						<button
-							type="button"
-							data-testid="provider-usage-configure"
-							onClick={props.onConfigureUsage}
-							className="ml-auto inline-flex flex-none items-center rounded px-1.5 py-0.5 text-caption text-text-secondary transition-colors hover:bg-muted/60 hover:text-foreground"
-						>
+						<button type="button" data-testid="provider-usage-configure" onClick={props.onConfigureUsage} className="ml-auto inline-flex flex-none items-center rounded px-1.5 py-0.5 text-caption text-text-secondary transition-colors hover:bg-muted/60 hover:text-foreground">
 							{t("config.usage.configure")}
 						</button>
 					)}

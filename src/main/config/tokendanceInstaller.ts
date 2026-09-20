@@ -57,10 +57,7 @@ export type TokendanceInstallDeps = ProviderMigrationDeps & {
  * settings API，否则磁盘直写）。任一写盘失败即返回 ok=false（错误信息原样上抛，
  * 由 IPC 边界转结构化结果，不泄露 Key）。
  */
-export async function installTokendanceProvider(
-	deps: TokendanceInstallDeps,
-	options: { apiKey?: string } = {},
-): Promise<TokendanceInstallResult> {
+export async function installTokendanceProvider(deps: TokendanceInstallDeps, options: { apiKey?: string } = {}): Promise<TokendanceInstallResult> {
 	// 安装前强制刷新目录：旧缓存可能含已废弃的行（如 2026-09 曾写入 context_length=0
 	// 的模型导致 pi 拒绝整个 provider）；刷新失败（断网/超时）降级用旧缓存，不让目录消失。
 	let catalogResult;
@@ -112,15 +109,8 @@ export async function installTokendanceProvider(
 		models: piModels,
 		apiKey,
 	};
-	const [modelsConfig, authConfig] = await Promise.all([
-		deps.configManager.getModelsConfig(),
-		deps.configManager.getAuthConfig(),
-	]);
-	const merged = mergePiProvider(
-		{ providers: modelsConfig.parsed.providers ?? {} },
-		authConfig.parsed,
-		piSnapshot,
-	);
+	const [modelsConfig, authConfig] = await Promise.all([deps.configManager.getModelsConfig(), deps.configManager.getAuthConfig()]);
+	const merged = mergePiProvider({ providers: modelsConfig.parsed.providers ?? {} }, authConfig.parsed, piSnapshot);
 	const saveResult = await deps.configManager.saveModelsConfig(merged.models as never);
 	if (!saveResult.valid) {
 		return {
@@ -162,10 +152,7 @@ export async function installTokendanceProvider(
 		};
 	} catch (error) {
 		// 跨 realm（测试 vm 加载）时 instanceof Error 不可靠，用结构提取 message
-		const dshError =
-			error && typeof error === "object" && typeof (error as { message?: unknown }).message === "string"
-				? (error as { message: string }).message
-				: String(error);
+		const dshError = error && typeof error === "object" && typeof (error as { message?: unknown }).message === "string" ? (error as { message: string }).message : String(error);
 		return {
 			ok: true,
 			modelCount: piModels.length,

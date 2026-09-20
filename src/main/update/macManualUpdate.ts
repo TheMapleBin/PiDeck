@@ -56,13 +56,8 @@ export function parseLatestReleaseTagFromJson(body: string): string | null {
 }
 
 /** 优先从 GitHub 风格的最终 URL 取版本；取不到再读 JSON 的 tag_name（AtomGit OpenAPI）。 */
-export function resolveLatestReleaseVersion(
-	response: Pick<LatestReleaseResponse, "url" | "body">,
-): string | null {
-	return (
-		parseGitHubReleaseVersion(response.url) ??
-		(response.body ? parseLatestReleaseTagFromJson(response.body) : null)
-	);
+export function resolveLatestReleaseVersion(response: Pick<LatestReleaseResponse, "url" | "body">): string | null {
+	return parseGitHubReleaseVersion(response.url) ?? (response.body ? parseLatestReleaseTagFromJson(response.body) : null);
 }
 
 /**
@@ -89,24 +84,17 @@ export function shouldReadJsonBody(url: string, contentType: string): boolean {
  * AtomGit 源：网页 `/releases/latest` 是 SPA 壳，地址不会变成 `/releases/tag/vX.Y.Z`，
  * 必须走 OpenAPI `.../releases/latest` 读 `tag_name`（与 CHANGELOG / 扩展热更新同一原因）。
  */
-export function createMacManualUpdateChecker(options?: {
-	fetchLatestRelease?: LatestReleaseFetcher;
-}): (currentVersion: string, latestReleaseUrl?: string) => Promise<ManualReleaseCheckResult> {
+export function createMacManualUpdateChecker(options?: { fetchLatestRelease?: LatestReleaseFetcher }): (currentVersion: string, latestReleaseUrl?: string) => Promise<ManualReleaseCheckResult> {
 	const fetchLatestRelease =
 		options?.fetchLatestRelease ??
 		(async (url: string): Promise<LatestReleaseResponse> => {
 			const response = await net.fetch(url, { redirect: "follow" });
 			const contentType = response.headers.get("content-type") ?? "";
-			const body = shouldReadJsonBody(response.url || url, contentType)
-				? await response.text()
-				: undefined;
+			const body = shouldReadJsonBody(response.url || url, contentType) ? await response.text() : undefined;
 			return { ok: response.ok, status: response.status, url: response.url, body };
 		});
 
-	return async (
-		currentVersion: string,
-		latestReleaseUrl?: string,
-	): Promise<ManualReleaseCheckResult> => {
+	return async (currentVersion: string, latestReleaseUrl?: string): Promise<ManualReleaseCheckResult> => {
 		const response = await fetchLatestRelease(latestReleaseUrl ?? MAC_MANUAL_LATEST_RELEASE_URL);
 		if (!response.ok) {
 			throw new Error(`Latest release request failed (${response.status}).`);

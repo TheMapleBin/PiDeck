@@ -1,10 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 // sessionProxyPolicy 是纯函数模块（无 electron/无 IO），可直接在 node 下测试。
-import {
-	resolveConfigProxyTarget,
-	applyConfigProxyTarget,
-} from "../src/main/sessions/sessionProxyPolicy.ts";
+import { resolveConfigProxyTarget, applyConfigProxyTarget } from "../src/main/sessions/sessionProxyPolicy.ts";
 
 // 测试代理目标解析：配置页「测试连接/拉取模型」的代理模式 → 主进程代理策略。
 
@@ -37,14 +34,8 @@ test("resolveConfigProxyTarget: desktop 模式取 desktopProxyUrl 与 bypass", (
 });
 
 test("resolveConfigProxyTarget: 所选代理 URL 为空时降级 off（地址都没配就无从代理）", () => {
-	assert.deepEqual(
-		resolveConfigProxyTarget({ ...baseSettings, piProxyUrl: "  " }, "pi"),
-		{ mode: "off" },
-	);
-	assert.deepEqual(
-		resolveConfigProxyTarget({ ...baseSettings, desktopProxyUrl: "" }, "desktop"),
-		{ mode: "off" },
-	);
+	assert.deepEqual(resolveConfigProxyTarget({ ...baseSettings, piProxyUrl: "  " }, "pi"), { mode: "off" });
+	assert.deepEqual(resolveConfigProxyTarget({ ...baseSettings, desktopProxyUrl: "" }, "desktop"), { mode: "off" });
 });
 
 test("resolveConfigProxyTarget: off 模式恒为 off", () => {
@@ -76,9 +67,6 @@ test("applyConfigProxyTarget: on 强制开启并覆盖 URL（即使全局 piProx
 });
 
 test("applyConfigProxyTarget: off 强制关闭（即使全局开）", () => {
-	const result = applyConfigProxyTarget(
-		{ ...probeSettings, piProxyEnabled: true },
-		{ mode: "off" },
-	);
+	const result = applyConfigProxyTarget({ ...probeSettings, piProxyEnabled: true }, { mode: "off" });
 	assert.equal(result.piProxyEnabled, false);
 });

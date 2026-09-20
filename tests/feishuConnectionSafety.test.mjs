@@ -8,9 +8,7 @@ const connectionSource = () => readFileSync("src/main/feishu/FeishuConnection.ts
 const configSource = () => readFileSync("src/main/feishu/FeishuConfig.ts", "utf8");
 
 function promptIntegrationSource(source) {
-	return source.match(
-		/async function sendAgentPromptWithIntegrations\([\s\S]*?\n\}\n\nfunction registerIpc/,
-	)?.[0] ?? "";
+	return source.match(/async function sendAgentPromptWithIntegrations\([\s\S]*?\n\}\n\nfunction registerIpc/)?.[0] ?? "";
 }
 
 test("FeishuBridge.start propagates startup failure to IPC callers", () => {
@@ -38,10 +36,7 @@ test("assigning a Session bot is stable-ID addressed and reports rejected bindin
 	assert.match(handler, /status\.botId !== botId/);
 	assert.match(handler, /return \{ success: false, message: feishuT\(currentFeishuLocale\(\), "session\.botMismatch"\) \}/);
 	assert.match(handler, /ensureSessionMirrorForSession\([\s\S]*?sessionId,[\s\S]*?target\.agentId/);
-	assert.ok(
-		handler.indexOf("setSessionBotId(sessionId, botId)") > handler.indexOf("if (!chatId)"),
-		"persistent assignment must happen only after the bridge confirms a chat binding",
-	);
+	assert.ok(handler.indexOf("setSessionBotId(sessionId, botId)") > handler.indexOf("if (!chatId)"), "persistent assignment must happen only after the bridge confirms a chat binding");
 });
 
 test("renderer bot list never receives stored app secrets", () => {

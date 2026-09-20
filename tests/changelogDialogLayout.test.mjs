@@ -19,17 +19,9 @@ const DIALOG_SRC = "src/renderer/src/components/app/settings/ChangelogDialog.tsx
 test("changelog dialog overrides the dialog max-width at the same breakpoint", () => {
 	const src = readFileSync(DIALOG_SRC, "utf8");
 	// 必须存在 sm: 前缀的宽度覆盖 —— 这是唯一能压过 DialogContent 自带 sm:max-w-lg 的形式。
-	assert.match(
-		src,
-		/sm:max-w-\[min\(760px/,
-		"弹窗宽度必须用 sm: 前缀覆盖，否则 DialogContent 自带的 sm:max-w-lg 会胜出",
-	);
+	assert.match(src, /sm:max-w-\[min\(760px/, "弹窗宽度必须用 sm: 前缀覆盖，否则 DialogContent 自带的 sm:max-w-lg 会胜出");
 	// 不能只有无前缀 max-w-*：那样在 ≥640px 视口下无效（正是这个 bug 的形态）。
-	assert.doesNotMatch(
-		src,
-		/className="[^"]*\bmax-w-\[760px\][^"]*"/,
-		"无前缀的 max-w-[760px] 压不过 sm:max-w-lg，已回退到坏形态",
-	);
+	assert.doesNotMatch(src, /className="[^"]*\bmax-w-\[760px\][^"]*"/, "无前缀的 max-w-[760px] 压不过 sm:max-w-lg，已回退到坏形态");
 });
 
 /**
@@ -40,11 +32,7 @@ test("changelog dialog overrides the dialog max-width at the same breakpoint", (
  */
 test("changelog dialog wraps markdown in a markdown-body container", () => {
 	const src = readFileSync(DIALOG_SRC, "utf8");
-	assert.match(
-		src,
-		/className="markdown-body\b/,
-		"MarkdownStream 外面必须挂 markdown-body，否则宽内容会撑破弹窗且不换行",
-	);
+	assert.match(src, /className="markdown-body\b/, "MarkdownStream 外面必须挂 markdown-body，否则宽内容会撑破弹窗且不换行");
 });
 
 /**
@@ -54,9 +42,5 @@ test("changelog dialog wraps markdown in a markdown-body container", () => {
  */
 test("markdown-body provides pre-wrap for paragraphs so plain text still wraps", () => {
 	const css = readFileSync("src/renderer/src/styles/timeline.css", "utf8");
-	assert.match(
-		css,
-		/\.markdown-body p\s*\{[^}]*white-space:\s*pre-wrap/,
-		".markdown-body p 必须保留 white-space: pre-wrap，这是更新日志等静态场景换行的依赖",
-	);
+	assert.match(css, /\.markdown-body p\s*\{[^}]*white-space:\s*pre-wrap/, ".markdown-body p 必须保留 white-space: pre-wrap，这是更新日志等静态场景换行的依赖");
 });

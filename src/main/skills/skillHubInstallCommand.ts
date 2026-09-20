@@ -12,31 +12,31 @@
  * 不存在注入面。本函数不对输入再做校验（调用方 IPC 边界已把关）。
  */
 export function buildSkillHubInstallCommand(input: {
-  pkg: string;
-  /** "--skill <name>"，可为空串 */
-  skillName?: string;
-  /** true = 按全局作用域安装（追加 --global） */
-  global: boolean;
-  /** 便于测试注入，默认取当前平台 */
-  platform?: NodeJS.Platform;
+	pkg: string;
+	/** "--skill <name>"，可为空串 */
+	skillName?: string;
+	/** true = 按全局作用域安装（追加 --global） */
+	global: boolean;
+	/** 便于测试注入，默认取当前平台 */
+	platform?: NodeJS.Platform;
 }): { command: string; args: string[] } {
-  const { pkg, skillName = "", global, platform = process.platform } = input;
+	const { pkg, skillName = "", global, platform = process.platform } = input;
 
-  if (platform === "win32") {
-    // 保持与原实现相同的选项顺序（--agent pi 在 --skill/--global 前，--yes 收尾）
-    let cmdline = `npx skills add ${pkg} --agent pi`;
-    if (skillName) cmdline += ` --skill ${skillName}`;
-    if (global) cmdline += " --global";
-    cmdline += " --yes";
-    return {
-      command: process.env.ComSpec || "cmd.exe",
-      args: ["/d", "/s", "/c", cmdline],
-    };
-  }
+	if (platform === "win32") {
+		// 保持与原实现相同的选项顺序（--agent pi 在 --skill/--global 前，--yes 收尾）
+		let cmdline = `npx skills add ${pkg} --agent pi`;
+		if (skillName) cmdline += ` --skill ${skillName}`;
+		if (global) cmdline += " --global";
+		cmdline += " --yes";
+		return {
+			command: process.env.ComSpec || "cmd.exe",
+			args: ["/d", "/s", "/c", cmdline],
+		};
+	}
 
-  const args = ["skills", "add", pkg, "--agent", "pi"];
-  if (skillName) args.push("--skill", skillName);
-  if (global) args.push("--global");
-  args.push("--yes");
-  return { command: "npx", args };
+	const args = ["skills", "add", pkg, "--agent", "pi"];
+	if (skillName) args.push("--skill", skillName);
+	if (global) args.push("--global");
+	args.push("--yes");
+	return { command: "npx", args };
 }

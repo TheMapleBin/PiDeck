@@ -48,10 +48,7 @@ export type ImageBlobReader = (ref: string) => Promise<ImageBlobPayload | null>;
  * 供「复制 / 保存 / 重发带回参考图」这类需要真实字节的路径使用——
  * 展示路径不要调它，直接用 `imageContentSrc()` 交给 Chromium 流式加载。
  */
-export async function loadImageBase64(
-	image: Pick<ImageContent, "data" | "mimeType" | "ref"> | null | undefined,
-	readBlob: ImageBlobReader,
-): Promise<ImageBlobPayload | null> {
+export async function loadImageBase64(image: Pick<ImageContent, "data" | "mimeType" | "ref"> | null | undefined, readBlob: ImageBlobReader): Promise<ImageBlobPayload | null> {
 	if (!image) return null;
 	if (image.data) return { data: image.data, mimeType: image.mimeType };
 	if (!image.ref) return null;
@@ -69,10 +66,7 @@ export async function loadImageBase64(
  * 批量回填成可发送的内联图片（丢掉取不到字节的条目）。
  * 重发带参考图时用：历史消息里是 ref，composer/请求体要的是 base64。
  */
-export async function hydrateImageContents(
-	images: readonly ImageContent[] | undefined,
-	readBlob: ImageBlobReader,
-): Promise<ImageContent[]> {
+export async function hydrateImageContents(images: readonly ImageContent[] | undefined, readBlob: ImageBlobReader): Promise<ImageContent[]> {
 	if (!images || images.length === 0) return [];
 	const hydrated = await Promise.all(
 		images.map(async (image): Promise<ImageContent | null> => {

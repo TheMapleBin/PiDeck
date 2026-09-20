@@ -39,7 +39,9 @@ const loadPureTsModule = (sourcePath) => {
 			exports: mod.exports,
 			// 纯模块的函数默认参数可能取 process.env（如 v8HeapLimits），透传真实 process
 			process,
-			require: (id) => { throw new Error(`pure module ${path.basename(sourcePath)} must not require(${id})`); },
+			require: (id) => {
+				throw new Error(`pure module ${path.basename(sourcePath)} must not require(${id})`);
+			},
 		},
 		{ filename: path.basename(sourcePath) },
 	);

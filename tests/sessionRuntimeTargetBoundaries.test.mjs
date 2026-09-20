@@ -5,27 +5,15 @@ import { mainIpcSource } from "./helpers/mainIpcSources.mjs";
 
 const main = readFileSync("src/main/index.ts", "utf8");
 const preload = readFileSync("src/preload/index.ts", "utf8");
-const terminalDock = readFileSync(
-	"src/renderer/src/components/terminal/TerminalDock.tsx",
-	"utf8",
-);
+const terminalDock = readFileSync("src/renderer/src/components/terminal/TerminalDock.tsx", "utf8");
 const pet = readFileSync("src/main/pet/index.ts", "utf8");
 const app = readFileSync("src/renderer/src/App.tsx", "utf8");
 const previewApi = readFileSync("src/renderer/src/previewApi.ts", "utf8");
 const browserApi = readFileSync("src/renderer/src/browserApi.ts", "utf8");
 const ipc = readFileSync("src/shared/ipc.ts", "utf8");
-const sessionsPreload = preload.slice(
-	preload.indexOf("\tsessions: {"),
-	preload.indexOf("\n\tcodexSessions:", preload.indexOf("\tsessions: {")),
-);
-const sessionActions = readFileSync(
-	"src/renderer/src/hooks/useSessionActions.ts",
-	"utf8",
-);
-const sessionReferenceModal = readFileSync(
-	"src/renderer/src/components/app/SessionReferenceModal.tsx",
-	"utf8",
-);
+const sessionsPreload = preload.slice(preload.indexOf("\tsessions: {"), preload.indexOf("\n\tcodexSessions:", preload.indexOf("\tsessions: {")));
+const sessionActions = readFileSync("src/renderer/src/hooks/useSessionActions.ts", "utf8");
+const sessionReferenceModal = readFileSync("src/renderer/src/components/app/SessionReferenceModal.tsx", "utf8");
 
 test("terminal creation and listing cross IPC with an owner-validated target", () => {
 	// 终端目标区分 agent（校验 runtime 绑定）与 project（引导页/未激活 agent/历史会话，
@@ -36,18 +24,9 @@ test("terminal creation and listing cross IPC with an owner-validated target", (
 	assert.match(terminalDock, /target: TerminalTarget/);
 	assert.match(terminalDock, /props\.terminal\.ensure\(props\.target\)/);
 	assert.match(terminalDock, /props\.terminal\.create\(props\.target, shell\)/);
-	assert.match(
-		mainIpcSource,
-		/const requireTerminalTarget = \(target: TerminalTarget\)[\s\S]*kind === "project"[\s\S]*validateTarget\(target\)/,
-	);
-	assert.match(
-		mainIpcSource,
-		/terminalList[\s\S]*requireTerminalTarget\(target\)[\s\S]*terminalManager\.list\(target\)/,
-	);
-	assert.match(
-		mainIpcSource,
-		/terminalCreate[\s\S]*requireTerminalTarget\(target\)[\s\S]*terminalManager\.create\(target, shell\)/,
-	);
+	assert.match(mainIpcSource, /const requireTerminalTarget = \(target: TerminalTarget\)[\s\S]*kind === "project"[\s\S]*validateTarget\(target\)/);
+	assert.match(mainIpcSource, /terminalList[\s\S]*requireTerminalTarget\(target\)[\s\S]*terminalManager\.list\(target\)/);
+	assert.match(mainIpcSource, /terminalCreate[\s\S]*requireTerminalTarget\(target\)[\s\S]*terminalManager\.create\(target, shell\)/);
 	assert.doesNotMatch(main, /ipcMain\.handle\(ipcChannels\.terminal/);
 });
 
@@ -73,15 +52,9 @@ test("renderer and preload expose no legacy agents command namespace", () => {
 	for (const source of [preload, previewApi, browserApi]) {
 		assert.doesNotMatch(source, /^\s*agents:\s*\{/m);
 	}
-	assert.doesNotMatch(
-		app,
-		/(?:api|desktopApi|piDesktop)\.agents\.|window\.piDesktop!?\.agents/,
-	);
+	assert.doesNotMatch(app, /(?:api|desktopApi|piDesktop)\.agents\.|window\.piDesktop!?\.agents/);
 	assert.doesNotMatch(main, /ipcMain\.handle\(ipcChannels\.agents/);
-	assert.doesNotMatch(
-		ipc,
-		/agents(List|Create|Rename|Stop|Prompt|Abort|ExportHtml|ForkMessages|ForkSession|CloneSession|PrepareResend|SwitchSession|Reload|EditMessage|DeleteMessage|Restart|Compact|CycleModel|AvailableModels|SetModel|RefreshModels|CycleThinking|SetThinking|UiResponse):/,
-	);
+	assert.doesNotMatch(ipc, /agents(List|Create|Rename|Stop|Prompt|Abort|ExportHtml|ForkMessages|ForkSession|CloneSession|PrepareResend|SwitchSession|Reload|EditMessage|DeleteMessage|Restart|Compact|CycleModel|AvailableModels|SetModel|RefreshModels|CycleThinking|SetThinking|UiResponse):/);
 });
 
 test("Session file operations resolve stable Session IDs before touching paths", () => {
@@ -90,23 +63,14 @@ test("Session file operations resolve stable Session IDs before touching paths",
 	assert.match(preload, /readReferenceMessages: \(sessionId: string\)/);
 	assert.match(main, /async function copyCatalogSession\(sessionId: string\)/);
 	assert.match(main, /const entry = sessionCatalog\.get\(sessionId\)/);
-	const copyCatalogSession = main.slice(
-		main.indexOf("async function copyCatalogSession"),
-		main.indexOf("async function exportCatalogSessionHtml"),
-	);
+	const copyCatalogSession = main.slice(main.indexOf("async function copyCatalogSession"), main.indexOf("async function exportCatalogSessionHtml"));
 	// 静止 clone 与运行中 clone/fork 统一为 fork 身份：物理写入标题后缀，再以 forked 注册 catalog。
 	assert.match(copyCatalogSession, /appendSessionForkSuffix\(title, mainCopy\("session\.forkedSuffix"\)\)/);
 	assert.match(copyCatalogSession, /await sessionScanner\.rename\(result\.sessionPath, forkedTitle\)/);
 	assert.match(copyCatalogSession, /filePath: result\.sessionPath,[\s\S]*forked: true/);
 	assert.match(sessionActions, /copyRecord\(sessionId\)/);
 	assert.match(sessionActions, /exportRecordHtml\(session\.id\)/);
-	assert.match(sessionReferenceModal, /props\.loadMessages\(props\.session\.id\)/);
-	assert.doesNotMatch(
-		ipc,
-		/sessions(?:Rename|Copy|ExportHtml|Delete|ReadMessages|ReadMeta|ReadChatMessages):/,
-	);
-	assert.doesNotMatch(
-		sessionsPreload,
-		/(?:rename|copy|exportHtml|delete|readMessages|readSessionMeta|readChatMessages): \(filePath/,
-	);
+	assert.match(sessionReferenceModal, /props\s*\.?\s*loadMessages\(props\.session\.id\)/);
+	assert.doesNotMatch(ipc, /sessions(?:Rename|Copy|ExportHtml|Delete|ReadMessages|ReadMeta|ReadChatMessages):/);
+	assert.doesNotMatch(sessionsPreload, /(?:rename|copy|exportHtml|delete|readMessages|readSessionMeta|readChatMessages): \(filePath/);
 });

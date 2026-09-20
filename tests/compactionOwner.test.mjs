@@ -13,20 +13,9 @@ import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
  * 注意：模块在 vm 里加载，跨 realm 的数组原型不同，断言一律比较字符串。
  */
 
-const {
-	MAGIC_CONTEXT_WRAPUP_COMMAND,
-	collectPackageNames,
-	ownerNamesLoadedInPaths,
-	packageNameFromSource,
-	parseJsonc,
-	readPiCompactionOwnership,
-	invalidatePiCompactionOwnershipCache,
-	resolvePiCompactionOwnership,
-} = loadTsCommonJs("src/main/pi/compactionOwner.ts");
+const { MAGIC_CONTEXT_WRAPUP_COMMAND, collectPackageNames, ownerNamesLoadedInPaths, packageNameFromSource, parseJsonc, readPiCompactionOwnership, invalidatePiCompactionOwnershipCache, resolvePiCompactionOwnership } = loadTsCommonJs("src/main/pi/compactionOwner.ts");
 
-const { compactRoutedCommand, compactOwnerReason } = loadTsCommonJs(
-	"src/shared/compactFeedback.ts",
-);
+const { compactRoutedCommand, compactOwnerReason } = loadTsCommonJs("src/shared/compactFeedback.ts");
 
 const MC = "@cortexkit/pi-magic-context";
 const BC = "billion-context-pi";
@@ -41,10 +30,7 @@ test("package sources resolve to package names across npm/git/local forms", () =
 	assert.equal(packageNameFromSource("npm:pi-web-access@1.2.3"), "pi-web-access");
 	// 非 npm 源不该被认成接管者
 	assert.equal(packageNameFromSource("git:github.com/a/b"), "git:github.com/a/b");
-	assert.equal(
-		collectPackageNames(["npm:pi-tracker", { source: `npm:${MC}@0.42.5` }, 42]).join(","),
-		`pi-tracker,${MC}`,
-	);
+	assert.equal(collectPackageNames(["npm:pi-tracker", { source: `npm:${MC}@0.42.5` }, 42]).join(","), `pi-tracker,${MC}`);
 });
 
 test("jsonc parsing tolerates comments and trailing commas", () => {
@@ -69,22 +55,29 @@ test("magic-context owns compaction by default, even without a historian model",
 	assert.equal(result.manualCommand, MAGIC_CONTEXT_WRAPUP_COMMAND);
 	// historian 未配置 → 它自己也压不了，这一条必须能提示给用户
 	assert.equal(result.ownerReady, false);
-	assert.equal(result.notes.some((note) => note.includes("historian")), true);
+	assert.equal(
+		result.notes.some((note) => note.includes("historian")),
+		true,
+	);
 });
 
 test("config gates: compaction.enabled=false hands the window back, enabled=false disables MC", () => {
 	assert.equal(
-		ids(resolvePiCompactionOwnership({
-			packages: [`npm:${MC}`],
-			magicContextConfig: { compaction: { enabled: false } },
-		})),
+		ids(
+			resolvePiCompactionOwnership({
+				packages: [`npm:${MC}`],
+				magicContextConfig: { compaction: { enabled: false } },
+			}),
+		),
 		"",
 	);
 	assert.equal(
-		ids(resolvePiCompactionOwnership({
-			packages: [`npm:${MC}`],
-			magicContextConfig: { enabled: false },
-		})),
+		ids(
+			resolvePiCompactionOwnership({
+				packages: [`npm:${MC}`],
+				magicContextConfig: { enabled: false },
+			}),
+		),
 		"",
 	);
 	// historian 模型配好 + 仍在接管 → 可改写，且不再提示「压不了」
@@ -105,14 +98,8 @@ test("config gates: compaction.enabled=false hands the window back, enabled=fals
 });
 
 test("disabled extension entries cannot own compaction", () => {
-	assert.equal(
-		ids(resolvePiCompactionOwnership({ packages: [`npm:${MC}`], disabledExtensions: [MC] })),
-		"",
-	);
-	assert.equal(
-		ids(resolvePiCompactionOwnership({ packages: [`npm:${BC}`], disabledExtensions: [BC] })),
-		"",
-	);
+	assert.equal(ids(resolvePiCompactionOwnership({ packages: [`npm:${MC}`], disabledExtensions: [MC] })), "");
+	assert.equal(ids(resolvePiCompactionOwnership({ packages: [`npm:${BC}`], disabledExtensions: [BC] })), "");
 });
 
 test("billion-context owns compaction but offers no manual command", () => {
@@ -122,10 +109,12 @@ test("billion-context owns compaction but offers no manual command", () => {
 	assert.equal(result.ownerReady, true);
 	// acp.json enabled:false 时不注册钩子
 	assert.equal(
-		ids(resolvePiCompactionOwnership({
-			packages: [`npm:${BC}`],
-			billionContextConfig: { enabled: false },
-		})),
+		ids(
+			resolvePiCompactionOwnership({
+				packages: [`npm:${BC}`],
+				billionContextConfig: { enabled: false },
+			}),
+		),
 		"",
 	);
 });
@@ -134,18 +123,13 @@ test("two owners at once are reported as a conflict", () => {
 	const result = resolvePiCompactionOwnership({ packages: [`npm:${MC}`, `npm:${BC}`] });
 	assert.equal(ids(result), "magic-context,billion-context");
 	assert.equal(result.conflicted, true);
-	assert.equal(result.notes.some((note) => note.includes("多个")), true);
-	// pi 自己的自动压缩开关只进说明，不影响接管事实
 	assert.equal(
-		resolvePiCompactionOwnership({ packages: [`npm:${MC}`], piCompaction: { enabled: false } })
-			.piAutoCompactionEnabled,
-		false,
-	);
-	assert.equal(
-		resolvePiCompactionOwnership({ packages: [`npm:${MC}`], piCompaction: { enabled: true } })
-			.piAutoCompactionEnabled,
+		result.notes.some((note) => note.includes("多个")),
 		true,
 	);
+	// pi 自己的自动压缩开关只进说明，不影响接管事实
+	assert.equal(resolvePiCompactionOwnership({ packages: [`npm:${MC}`], piCompaction: { enabled: false } }).piAutoCompactionEnabled, false);
+	assert.equal(resolvePiCompactionOwnership({ packages: [`npm:${MC}`], piCompaction: { enabled: true } }).piAutoCompactionEnabled, true);
 });
 
 test("manual command is dropped when the session does not register it", () => {
@@ -155,7 +139,10 @@ test("manual command is dropped when the session does not register it", () => {
 		sessionCommandNames: ["ctx-status", "compact"],
 	});
 	assert.equal(result.manualCommand, undefined);
-	assert.equal(result.notes.some((note) => note.includes("/ctx-wrapup")), true);
+	assert.equal(
+		result.notes.some((note) => note.includes("/ctx-wrapup")),
+		true,
+	);
 	// 命令名带 / 前缀也要认
 	assert.equal(
 		resolvePiCompactionOwnership({
@@ -165,10 +152,7 @@ test("manual command is dropped when the session does not register it", () => {
 		MAGIC_CONTEXT_WRAPUP_COMMAND,
 	);
 	// 探测失败（没给命令名单）不阻碍改写
-	assert.equal(
-		resolvePiCompactionOwnership({ packages: [`npm:${MC}`] }).manualCommand,
-		MAGIC_CONTEXT_WRAPUP_COMMAND,
-	);
+	assert.equal(resolvePiCompactionOwnership({ packages: [`npm:${MC}`] }).manualCommand, MAGIC_CONTEXT_WRAPUP_COMMAND);
 });
 
 test("readPiCompactionOwnership reads the real file layout and refreshes on change", () => {
@@ -176,10 +160,7 @@ test("readPiCompactionOwnership reads the real file layout and refreshes on chan
 	try {
 		mkdirSync(join(home, ".pi", "agent"), { recursive: true });
 		mkdirSync(join(home, ".config", "cortexkit"), { recursive: true });
-		writeFileSync(
-			join(home, ".pi", "agent", "settings.json"),
-			JSON.stringify({ packages: [`npm:${MC}@0.42.5`], compaction: { enabled: true } }),
-		);
+		writeFileSync(join(home, ".pi", "agent", "settings.json"), JSON.stringify({ packages: [`npm:${MC}@0.42.5`], compaction: { enabled: true } }));
 		// MC 配置缺失 → 缺省接管
 		const before = readPiCompactionOwnership({ agentHomeDir: home });
 		assert.equal(ids(before), "magic-context");
@@ -206,13 +187,7 @@ test("readPiCompactionOwnership reads the real file layout and refreshes on chan
 
 test("loaded extension paths override the packages list (PiDeck-disabled extensions are not owners)", () => {
 	// 白名单解析给出实际加载的路径（含 Windows 反斜杠与 scoped 包名）→ 以它为准
-	assert.equal(
-		ownerNamesLoadedInPaths([
-			"C:\\Users\\u\\.pi\\agent\\npm\\node_modules\\@cortexkit\\pi-magic-context\\dist\\index.js",
-			"C:\\Users\\u\\.pi\\agent\\npm\\node_modules\\pi-tracker\\dist\\index.js",
-		]).join(","),
-		"magic-context",
-	);
+	assert.equal(ownerNamesLoadedInPaths(["C:\\Users\\u\\.pi\\agent\\npm\\node_modules\\@cortexkit\\pi-magic-context\\dist\\index.js", "C:\\Users\\u\\.pi\\agent\\npm\\node_modules\\pi-tracker\\dist\\index.js"]).join(","), "magic-context");
 	// billion 被禁用（不在路径集合里）→ 即使 packages 里还有它的记录也不算接管者
 	const onlyMagic = resolvePiCompactionOwnership({
 		packages: [`npm:${MC}`, `npm:${BC}`],
@@ -229,29 +204,22 @@ test("loaded extension paths override the packages list (PiDeck-disabled extensi
 		true,
 	);
 	// 一个都没加载 → 没有接管者（原生 compact 可用）
-	assert.equal(
-		ids(resolvePiCompactionOwnership({ packages: [`npm:${MC}`], loadedOwnerNames: [] })),
-		"",
-	);
+	assert.equal(ids(resolvePiCompactionOwnership({ packages: [`npm:${MC}`], loadedOwnerNames: [] })), "");
 	// readPiCompactionOwnership 透传 loadedExtensionPaths（null=无白名单 → 退回 packages）
 	const home = mkdtempSync(join(tmpdir(), "pideck-compaction-owner-paths-"));
 	try {
 		mkdirSync(join(home, ".pi", "agent"), { recursive: true });
-		writeFileSync(
-			join(home, ".pi", "agent", "settings.json"),
-			JSON.stringify({ packages: [`npm:${MC}`, `npm:${BC}`] }),
-		);
+		writeFileSync(join(home, ".pi", "agent", "settings.json"), JSON.stringify({ packages: [`npm:${MC}`, `npm:${BC}`] }));
 		assert.equal(
-			ids(readPiCompactionOwnership({
-				agentHomeDir: home,
-				loadedExtensionPaths: [`C:\\u\\.pi\\agent\\npm\\node_modules\\@cortexkit\\pi-magic-context\\dist\\index.js`],
-			})),
+			ids(
+				readPiCompactionOwnership({
+					agentHomeDir: home,
+					loadedExtensionPaths: [`C:\\u\\.pi\\agent\\npm\\node_modules\\@cortexkit\\pi-magic-context\\dist\\index.js`],
+				}),
+			),
 			"magic-context",
 		);
-		assert.equal(
-			ids(readPiCompactionOwnership({ agentHomeDir: home, loadedExtensionPaths: null })),
-			"magic-context,billion-context",
-		);
+		assert.equal(ids(readPiCompactionOwnership({ agentHomeDir: home, loadedExtensionPaths: null })), "magic-context,billion-context");
 	} finally {
 		try {
 			rmSync(home, { recursive: true, force: true });
@@ -260,14 +228,8 @@ test("loaded extension paths override the packages list (PiDeck-disabled extensi
 });
 
 test("shared markers parse back into the command and reason the renderer shows", () => {
-	assert.equal(
-		compactRoutedCommand("Compaction routed to extension command: /ctx-wrapup"),
-		"/ctx-wrapup",
-	);
+	assert.equal(compactRoutedCommand("Compaction routed to extension command: /ctx-wrapup"), "/ctx-wrapup");
 	assert.equal(compactRoutedCommand("Compaction cancelled by user abort"), null);
-	assert.equal(
-		compactOwnerReason("Compaction cancelled by session_before_compact hook: 该扩展取消了 pi 的压缩"),
-		"该扩展取消了 pi 的压缩",
-	);
+	assert.equal(compactOwnerReason("Compaction cancelled by session_before_compact hook: 该扩展取消了 pi 的压缩"), "该扩展取消了 pi 的压缩");
 	assert.equal(compactOwnerReason("Compaction cancelled"), null);
 });

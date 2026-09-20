@@ -73,14 +73,11 @@ const SECRET_RULES: Array<{ pattern: RegExp; replacement: string | ((...args: st
 	// 值要求至少 1 个字符：`"token": ""` 这种空占位符无需替换，避免无意义噪音；
 	// catch-all 排除引号，避免 `""`/`''` 空串被当作裸值二次命中。
 	{
-		pattern:
-			/"([^"]*(?:api[-_]?key|apikey|access[-_]?token|refresh[-_]?token|token|secret|password|passwd|authorization|cookie|private[-_]?key|credential)[^"]*)"\s*:\s*("(?:[^"\\]|\\.)+"|'[^']+'|[^\s"',;)}\]]+)/gi,
-		replacement: (_match, key: string, value: string) =>
-			`"${key}": ${value.startsWith('"') || value.startsWith("'") ? REDACTED : `"${REDACTED}"`}`,
+		pattern: /"([^"]*(?:api[-_]?key|apikey|access[-_]?token|refresh[-_]?token|token|secret|password|passwd|authorization|cookie|private[-_]?key|credential)[^"]*)"\s*:\s*("(?:[^"\\]|\\.)+"|'[^']+'|[^\s"',;)}\]]+)/gi,
+		replacement: (_match, key: string, value: string) => `"${key}": ${value.startsWith('"') || value.startsWith("'") ? REDACTED : `"${REDACTED}"`}`,
 	},
 	{
-		pattern:
-			/\b(api[-_]?key|apikey|access[-_]?token|refresh[-_]?token|token|secret|password|passwd|authorization|cookie|private[-_]?key|credential)\b(\s*[:=]\s*)(?!\[redacted\])(?:"[^"]*"|'[^']*'|[^\s,;)}\]]+)/gi,
+		pattern: /\b(api[-_]?key|apikey|access[-_]?token|refresh[-_]?token|token|secret|password|passwd|authorization|cookie|private[-_]?key|credential)\b(\s*[:=]\s*)(?!\[redacted\])(?:"[^"]*"|'[^']*'|[^\s,;)}\]]+)/gi,
 		replacement: (_match, key: string, separator: string) => `${key}${separator}${REDACTED}`,
 	},
 	// URL query 里的敏感参数
@@ -97,14 +94,7 @@ const SECRET_RULES: Array<{ pattern: RegExp; replacement: string | ((...args: st
 /** 清洗自由文本里的凭据、邮箱与手机号。 */
 export function redactSecrets(value: string): string {
 	if (typeof value !== "string" || !value) return "";
-	return SECRET_RULES.reduce(
-		(acc, rule) =>
-			acc.replace(
-				rule.pattern,
-				rule.replacement as string & ((...args: string[]) => string),
-			),
-		value,
-	);
+	return SECRET_RULES.reduce((acc, rule) => acc.replace(rule.pattern, rule.replacement as string & ((...args: string[]) => string)), value);
 }
 
 /** 报告出场的唯一入口：先遮蔽路径，再清洗凭据。 */

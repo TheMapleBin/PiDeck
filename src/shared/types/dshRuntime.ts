@@ -59,10 +59,7 @@ export type DshRuntimeStatus = {
  * 任一版本缺失（未装 / 声明读不到）返回 false：没有可比对象不能判定不一致，
  * 宁可放行（保持旧行为）也不误杀。
  */
-export function isDshRuntimeVersionMismatch(
-	declaredVersion: string | undefined,
-	installedVersion: string | undefined,
-): boolean {
+export function isDshRuntimeVersionMismatch(declaredVersion: string | undefined, installedVersion: string | undefined): boolean {
 	if (!declaredVersion || !installedVersion) return false;
 	return compareSemver(declaredVersion, installedVersion) !== 0;
 }
@@ -93,13 +90,7 @@ export function dshUiVisibilityFor(state: DshRuntimeState, installEnabled = true
 }
 
 /** 安装/更新 runtime 的阶段（UI 进度条与文案据此切换）。 */
-export type DshRuntimeInstallPhase =
-	| "downloading"
-	| "verifying"
-	| "extracting"
-	| "finalizing"
-	| "done"
-	| "error";
+export type DshRuntimeInstallPhase = "downloading" | "verifying" | "extracting" | "finalizing" | "done" | "error";
 
 /** 安装进度事件（IPC dsh-runtime:install-progress 推送）。 */
 export type DshRuntimeInstallProgress = {
@@ -122,9 +113,7 @@ export type DshRuntimeInstallProgress = {
  */
 export type DshSendBlockReason = "notInstalled" | "broken" | "outdated";
 
-export function dshSendBlockReason(
-	state: DshRuntimeState,
-): DshSendBlockReason | null {
+export function dshSendBlockReason(state: DshRuntimeState): DshSendBlockReason | null {
 	if (state === "notInstalled") return "notInstalled";
 	if (state === "broken") return "broken";
 	// 版本不一致 = 旧 runtime 不保证能工作，发送同样拦截（强制先重装）。
@@ -138,10 +127,7 @@ export function dshSendBlockReason(
  * （阶段 2 升级/卸载场景），新建会话链路不会因后端不可用而裸报错。
  * "imagegen" 后端不受 DSH runtime 影响，原样透传。
  */
-export function resolveEffectiveAgentBackend(
-	backend: AgentBackend,
-	dshState: DshRuntimeState,
-): AgentBackend {
+export function resolveEffectiveAgentBackend(backend: AgentBackend, dshState: DshRuntimeState): AgentBackend {
 	if (backend === "dsh" && dshState !== "installed") return "pi";
 	return backend;
 }

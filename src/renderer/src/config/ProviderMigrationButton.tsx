@@ -28,9 +28,7 @@ export function ProviderMigrationButton(props: {
 	const [busy, setBusy] = useState(false);
 	/** 目标端已有同名供应商，等用户在弹框里确认覆盖 */
 	const [overwritePending, setOverwritePending] = useState(false);
-	const label = props.direction === "pi-to-dsh"
-		? t("config.migrate.toDsh")
-		: t("config.migrate.toPi");
+	const label = props.direction === "pi-to-dsh" ? t("config.migrate.toDsh") : t("config.migrate.toPi");
 
 	/** 真正执行迁移（预检与覆盖确认都已完成） */
 	const applyMigration = async () => {
@@ -41,10 +39,7 @@ export function ProviderMigrationButton(props: {
 				showNotice(result.error || t("config.migrate.failed"), 5000);
 				return;
 			}
-			showNotice(
-				result.copiedKey ? t("config.migrate.okWithKey", { name: props.provider }) : t("config.migrate.okNoKey", { name: props.provider }),
-				4000,
-			);
+			showNotice(result.copiedKey ? t("config.migrate.okWithKey", { name: props.provider }) : t("config.migrate.okNoKey", { name: props.provider }), 4000);
 			// 对端配置页可能已挂载但未重拉；广播后 DSH/Pi 模型页各自刷新。
 			window.dispatchEvent(new CustomEvent("pideck:provider-migrated", { detail: { direction: props.direction, provider: props.provider } }));
 			props.onMigrated?.();
@@ -62,9 +57,7 @@ export function ProviderMigrationButton(props: {
 		let targetExists = false;
 		try {
 			const preview = await desktopApi.config.previewProviderMigration(props.direction);
-			targetExists = Boolean(
-				preview.providers.find((item) => item.name === props.provider)?.targetExists,
-			);
+			targetExists = Boolean(preview.providers.find((item) => item.name === props.provider)?.targetExists);
 		} catch (error) {
 			showNotice(error instanceof Error ? error.message : t("config.migrate.failed"), 5000);
 			setBusy(false);

@@ -27,7 +27,7 @@ const FIELD_DEFINITIONS: FieldDefinition[] = [
 	{ name: "day of month", min: 1, max: 31 },
 	{ name: "month", min: 1, max: 12 },
 	// Cron accepts both 0 and 7 as Sunday; normalize to Date#getDay's 0.
-	{ name: "day of week", min: 0, max: 7, normalize: (value) => value === 7 ? 0 : value },
+	{ name: "day of week", min: 0, max: 7, normalize: (value) => (value === 7 ? 0 : value) },
 ];
 
 /** Parse strict numeric five-field cron syntax: lists, ranges and step values are supported. */
@@ -54,19 +54,12 @@ export function matchesAutomationCron(cron: ParsedAutomationCron, date: Date): b
 
 	const matchesDayOfMonth = cron.dayOfMonth.values.has(date.getDate());
 	const matchesDayOfWeek = cron.dayOfWeek.values.has(date.getDay());
-	const matchesDay = cron.dayOfMonth.wildcard
-		? matchesDayOfWeek
-		: cron.dayOfWeek.wildcard
-			? matchesDayOfMonth
-			: matchesDayOfMonth || matchesDayOfWeek;
+	const matchesDay = cron.dayOfMonth.wildcard ? matchesDayOfWeek : cron.dayOfWeek.wildcard ? matchesDayOfMonth : matchesDayOfMonth || matchesDayOfWeek;
 	return matchesDay;
 }
 
 /** Find the next local-time cron occurrence after `after`, rounded to the next minute. */
-export function nextAutomationCronOccurrence(
-	expression: string,
-	after: Date,
-): Date | undefined {
+export function nextAutomationCronOccurrence(expression: string, after: Date): Date | undefined {
 	const cron = parseAutomationCron(expression);
 	let timestamp = Math.floor(after.getTime() / MINUTE_MS) * MINUTE_MS + MINUTE_MS;
 	for (let index = 0; index < MAX_SEARCH_MINUTES; index += 1) {
@@ -78,12 +71,7 @@ export function nextAutomationCronOccurrence(
 }
 
 /** Return recent missed occurrences up to `untilInclusive`, newest first. */
-export function missedAutomationCronOccurrences(
-	expression: string,
-	afterExclusive: Date,
-	untilInclusive: Date,
-	limit = 2,
-): Date[] {
+export function missedAutomationCronOccurrences(expression: string, afterExclusive: Date, untilInclusive: Date, limit = 2): Date[] {
 	if (untilInclusive.getTime() <= afterExclusive.getTime() || limit <= 0) return [];
 	const cron = parseAutomationCron(expression);
 	const occurrences: Date[] = [];
@@ -101,11 +89,7 @@ export function missedAutomationCronOccurrences(
 	return occurrences;
 }
 
-export function previewAutomationCron(
-	expression: string,
-	from: Date,
-	count: number,
-): Date[] {
+export function previewAutomationCron(expression: string, from: Date, count: number): Date[] {
 	const runs: Date[] = [];
 	let cursor = from;
 	for (let index = 0; index < Math.max(0, count); index += 1) {

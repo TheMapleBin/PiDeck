@@ -8,16 +8,7 @@
  * - 发送消息走 useChat（/api/chat 流式），不在此处重复实现
  */
 import type { UIMessage } from "ai";
-import type {
-	AvailableModel,
-	ChatMessage,
-	SessionCommandResult,
-	SessionLaunchPreferences,
-	SessionMessagePage,
-	SessionRuntimeTarget,
-	SessionTargetedValue,
-	UpdateSessionRecordInput,
-} from "../../../shared/types";
+import type { AvailableModel, ChatMessage, SessionCommandResult, SessionLaunchPreferences, SessionMessagePage, SessionRuntimeTarget, SessionTargetedValue, UpdateSessionRecordInput } from "../../../shared/types";
 import type { AgentUiResponse } from "../../../shared/types";
 import type { WebState } from "./webTypes";
 
@@ -85,10 +76,7 @@ export async function fetchModels(force = false): Promise<AvailableModel[]> {
  * 新建会话草稿；preferences 携带启动前选择的模型/思考级别（首页直发场景），
  * 无偏好时保持后端默认（pi 配置默认值）。
  */
-export async function createSession(
-	projectId: string,
-	preferences?: SessionLaunchPreferences,
-): Promise<string> {
+export async function createSession(projectId: string, preferences?: SessionLaunchPreferences): Promise<string> {
 	const res = await apiFetch("/api/sessions", {
 		method: "POST",
 		headers: { "content-type": "application/json" },
@@ -103,10 +91,7 @@ export async function createSession(
 
 /** 拉历史消息页（分页），供注入 useChat / 展示。 */
 /** 更新尚未启动 runtime 的会话偏好；运行中的会话由 runtime 命令即时应用。 */
-export async function updateSessionRecord(
-	sessionId: string,
-	patch: UpdateSessionRecordInput,
-): Promise<void> {
+export async function updateSessionRecord(sessionId: string, patch: UpdateSessionRecordInput): Promise<void> {
 	const res = await apiFetch(`/api/sessions/${encodeURIComponent(sessionId)}/update`, {
 		method: "POST",
 		headers: { "content-type": "application/json" },
@@ -115,12 +100,7 @@ export async function updateSessionRecord(
 	if (!res.ok) throw new Error(`update session ${res.status}`);
 }
 
-async function callRuntimeCommand<T>(
-	sessionId: string,
-	target: SessionRuntimeTarget,
-	action: string,
-	body: Record<string, unknown> = {},
-): Promise<T> {
+async function callRuntimeCommand<T>(sessionId: string, target: SessionRuntimeTarget, action: string, body: Record<string, unknown> = {}): Promise<T> {
 	const res = await apiFetch(`/api/sessions/${encodeURIComponent(sessionId)}/runtime/${action}`, {
 		method: "POST",
 		headers: { "content-type": "application/json" },
@@ -136,38 +116,22 @@ async function callRuntimeCommand<T>(
 }
 
 /** 运行中的模型切换会立即发送给 pi，并由主进程同步会话记录。 */
-export function setRuntimeModel(
-	target: SessionRuntimeTarget,
-	provider: string,
-	modelId: string,
-): Promise<unknown> {
+export function setRuntimeModel(target: SessionRuntimeTarget, provider: string, modelId: string): Promise<unknown> {
 	return callRuntimeCommand(target.sessionId, target, "model", { provider, modelId });
 }
 
 /** 运行中的思考级别切换会立即发送给 pi，并由主进程同步会话记录。 */
-export function setRuntimeThinking(
-	target: SessionRuntimeTarget,
-	level: string,
-): Promise<unknown> {
+export function setRuntimeThinking(target: SessionRuntimeTarget, level: string): Promise<unknown> {
 	return callRuntimeCommand(target.sessionId, target, "thinking", { level });
 }
 
 /** 运行中的 DSH 权限切换走 runtime 命令，避免 `/permission` 进入普通消息流。 */
-export function setRuntimePermission(
-	target: SessionRuntimeTarget,
-	preset: string,
-): Promise<unknown> {
+export function setRuntimePermission(target: SessionRuntimeTarget, preset: string): Promise<unknown> {
 	return callRuntimeCommand(target.sessionId, target, "permission", { preset });
 }
 
 /** 手机/Web 端回答 ask_question / confirm / input。 */
-export async function respondToUi(input: {
-	sessionId: string;
-	requestId: string;
-	agentId: string;
-	runtimeGeneration: number;
-	response: AgentUiResponse;
-}): Promise<void> {
+export async function respondToUi(input: { sessionId: string; requestId: string; agentId: string; runtimeGeneration: number; response: AgentUiResponse }): Promise<void> {
 	const res = await apiFetch("/api/ui-response", {
 		method: "POST",
 		headers: { "content-type": "application/json" },
@@ -176,18 +140,12 @@ export async function respondToUi(input: {
 	if (!res.ok) throw new Error(`ui-response ${res.status}`);
 }
 
-export async function fetchMessagePage(
-	sessionId: string,
-	before?: number,
-	pageSize?: number,
-): Promise<SessionMessagePage> {
+export async function fetchMessagePage(sessionId: string, before?: number, pageSize?: number): Promise<SessionMessagePage> {
 	const params = new URLSearchParams();
 	if (before != null) params.set("before", String(before));
 	if (pageSize != null) params.set("pageSize", String(pageSize));
 	const qs = params.toString();
-	const res = await apiFetch(
-		`/api/sessions/${encodeURIComponent(sessionId)}/messages/page${qs ? `?${qs}` : ""}`,
-	);
+	const res = await apiFetch(`/api/sessions/${encodeURIComponent(sessionId)}/messages/page${qs ? `?${qs}` : ""}`);
 	if (!res.ok) throw new Error(`messages ${res.status}`);
 	return (await res.json()) as SessionMessagePage;
 }
@@ -200,12 +158,7 @@ export async function fetchMessagePage(
  */
 export function chatMessagesToUiMessages(messages: ChatMessage[]): UIMessage[] {
 	return messages.map((message) => {
-		const role =
-			message.role === "user"
-				? "user"
-				: message.role === "assistant"
-					? "assistant"
-					: "assistant";
+		const role = message.role === "user" ? "user" : message.role === "assistant" ? "assistant" : "assistant";
 		const parts: UIMessage["parts"] = [];
 		if (message.thinking) {
 			parts.push({ type: "reasoning", text: message.thinking });
@@ -260,14 +213,8 @@ export function fetchDshSubagents(sessionId: string): Promise<{ subagents: WebDs
 }
 
 /** 子代理只读 transcript（分页）。 */
-export function fetchDshSubagentHistory(
-	sessionId: string,
-	childSessionId: string,
-): Promise<{ messages: Array<{ role: string; text: string }>; hasMore: boolean }> {
-	return getJson(
-		`/api/sessions/${encodeURIComponent(sessionId)}/dsh/subagents/${encodeURIComponent(childSessionId)}/history`,
-		{ messages: [], hasMore: false },
-	);
+export function fetchDshSubagentHistory(sessionId: string, childSessionId: string): Promise<{ messages: Array<{ role: string; text: string }>; hasMore: boolean }> {
+	return getJson(`/api/sessions/${encodeURIComponent(sessionId)}/dsh/subagents/${encodeURIComponent(childSessionId)}/history`, { messages: [], hasMore: false });
 }
 
 /** 会话技能目录（skill.list 只读）。 */
@@ -317,13 +264,7 @@ export function fetchDshPlugins(): Promise<{ dynamic: WebDshPlugin[]; static: We
 }
 
 /** 安装动态插件（define：定义源码包，不运行；hostCode 在 host 进程内执行——非安全边界）。 */
-export async function installDshPlugin(input: {
-	sessionId: string;
-	idPrefix: string;
-	name: string;
-	purpose: string;
-	hostCode: string;
-}): Promise<unknown> {
+export async function installDshPlugin(input: { sessionId: string; idPrefix: string; name: string; purpose: string; hostCode: string }): Promise<unknown> {
 	const res = await apiFetch("/api/dsh/plugins/install", {
 		method: "POST",
 		headers: { "content-type": "application/json" },
@@ -337,11 +278,7 @@ export async function installDshPlugin(input: {
 }
 
 /** 动态插件生命周期（run/stop/uninstall；面板手势 requestId=null 无需审批）。 */
-export async function dshPluginAction(
-	pluginId: string,
-	action: "run" | "stop" | "uninstall",
-	input: { sessionId: string; packageId?: string },
-): Promise<unknown> {
+export async function dshPluginAction(pluginId: string, action: "run" | "stop" | "uninstall", input: { sessionId: string; packageId?: string }): Promise<unknown> {
 	const res = await apiFetch(`/api/dsh/plugins/${encodeURIComponent(pluginId)}/${action}`, {
 		method: "POST",
 		headers: { "content-type": "application/json" },

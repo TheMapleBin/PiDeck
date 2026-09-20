@@ -19,10 +19,7 @@ export type LogLineCacheDeps = {
 
 type CachedLines = { fingerprint: string; lines: string[] };
 
-async function fileFingerprint(
-	stat: LogLineCacheDeps["stat"],
-	path: string,
-): Promise<string> {
+async function fileFingerprint(stat: LogLineCacheDeps["stat"], path: string): Promise<string> {
 	try {
 		const s = await stat(path);
 		return `${s.mtimeMs}:${s.size}`;

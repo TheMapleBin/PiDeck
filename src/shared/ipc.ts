@@ -794,5 +794,4 @@ export const ipcChannels = {
 	shellMenuGetState: "shell-menu:get-state",
 	/** 渲染层 → 主进程：启用/取消资源管理器右键菜单注册 */
 	shellMenuSetEnabled: "shell-menu:set-enabled",
-
 } as const;

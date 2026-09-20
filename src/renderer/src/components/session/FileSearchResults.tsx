@@ -65,63 +65,29 @@ export function FileSearchResults(props: {
 					spellCheck={false}
 				/>
 				{isSearching && <span className="mini-loader animate-pideck-spin" aria-hidden="true" />}
-				<Button
-					type="button"
-					variant="ghost"
-					size="icon-sm"
-					className="icon-only inline-grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-					onClick={props.onClear}
-					title={t("common.close")}
-					aria-label={t("common.close")}
-				>
+				<Button type="button" variant="ghost" size="icon-sm" className="icon-only inline-grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground" onClick={props.onClear} title={t("common.close")} aria-label={t("common.close")}>
 					<X size={13} />
 				</Button>
 			</div>
 			<div className="file-search-list min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]">
 				{rows.length === 0 ? (
-					<div className="px-3 py-6 text-center text-xs text-muted-foreground">
-						{isSearching
-							? t("drawer.fileSearchScanning")
-							: t("drawer.fileSearchNoResults", { query: trimmed })}
-					</div>
+					<div className="px-3 py-6 text-center text-xs text-muted-foreground">{isSearching ? t("drawer.fileSearchScanning") : t("drawer.fileSearchNoResults", { query: trimmed })}</div>
 				) : (
-					rows.map(({ item, index }) => (
-						<FileSearchRow
-							key={item.path}
-							item={item}
-							matchIndex={index}
-							matchLength={trimmed.length}
-							onViewFile={props.onViewFile}
-							onFileContextMenu={props.onFileContextMenu}
-						/>
-					))
+					rows.map(({ item, index }) => <FileSearchRow key={item.path} item={item} matchIndex={index} matchLength={trimmed.length} onViewFile={props.onViewFile} onFileContextMenu={props.onFileContextMenu} />)
 				)}
 			</div>
 		</div>
 	);
 }
 
-function FileSearchRow(props: {
-	item: FileSearchResult;
-	matchIndex: number;
-	matchLength: number;
-	onViewFile?: (path: string, openMode?: "preview" | "permanent") => void;
-	onFileContextMenu: (node: FileSearchResult, x: number, y: number) => void;
-}) {
+function FileSearchRow(props: { item: FileSearchResult; matchIndex: number; matchLength: number; onViewFile?: (path: string, openMode?: "preview" | "permanent") => void; onFileContextMenu: (node: FileSearchResult, x: number, y: number) => void }) {
 	const { item, matchIndex, matchLength } = props;
 	// Seti 图标与文件树行同源，视觉上「搜索结果就是文件」而不是另一个列表
 	let icon: ReactNode = null;
 	if (item.type === "file") {
 		try {
 			const { svg, colorName } = getFileIconSeti(item.name);
-			icon = (
-				<span
-					aria-hidden="true"
-					className="file-node-seti-icon"
-					style={{ color: getFileIconColor(colorName) }}
-					dangerouslySetInnerHTML={{ __html: svg }}
-				/>
-			);
+			icon = <span aria-hidden="true" className="file-node-seti-icon" style={{ color: getFileIconColor(colorName) }} dangerouslySetInnerHTML={{ __html: svg }} />;
 		} catch {
 			icon = null;
 		}
@@ -146,9 +112,7 @@ function FileSearchRow(props: {
 				props.onFileContextMenu(item, event.clientX, event.clientY);
 			}}
 		>
-			<span className="file-node-icon">
-				{item.type === "directory" ? <Folder size={18} aria-hidden="true" /> : icon}
-			</span>
+			<span className="file-node-icon">{item.type === "directory" ? <Folder size={18} aria-hidden="true" /> : icon}</span>
 			<span className="file-node-name truncate">
 				{before}
 				{hit && <mark className="bg-transparent font-semibold text-foreground underline decoration-2 underline-offset-2">{hit}</mark>}

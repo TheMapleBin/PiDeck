@@ -58,11 +58,11 @@ function loadPiProcess(spawnImpl) {
 					spawn: spawnImpl,
 				};
 			}
-		if (id === "./PiRpcClient") return { PiRpcClient: FakeRpcClient };
-		if (id === "./PiLocator") return { PiLocator: FakePiLocator };
-		// PiProcess 的 spawn 失败归因模块（cwd 不存在会被误报成 cmd.exe ENOENT）：
-		// vm 沙箱不会自动解析相对模块，新增拆分模块必须在这里登记。
-		if (id === "./piSpawnFailure") return require("../src/main/pi/piSpawnFailure.ts");
+			if (id === "./PiRpcClient") return { PiRpcClient: FakeRpcClient };
+			if (id === "./PiLocator") return { PiLocator: FakePiLocator };
+			// PiProcess 的 spawn 失败归因模块（cwd 不存在会被误报成 cmd.exe ENOENT）：
+			// vm 沙箱不会自动解析相对模块，新增拆分模块必须在这里登记。
+			if (id === "./piSpawnFailure") return require("../src/main/pi/piSpawnFailure.ts");
 			if (id === "../wsl/WslPaths") return paths;
 			if (id === "./piExtensionFilter") return extensionFilter;
 			// 25fd516 起 PiProcess 引入内置扩展参数拼接；本测试只关心 spawn 错误转发，
@@ -78,14 +78,14 @@ function loadPiProcess(spawnImpl) {
 			if (id === "../logging/sharedLogger") {
 				return { getAppLogger: () => null };
 			}
-		if (id === "../sessions/sessionProxyPolicy") {
-			return { applyPiProxyMode: (env) => env };
-		}
-		// killProcessTree（子代理整树终止）：gitProcess.ts 是纯 Node 模块，可直接加载。
-		if (id === "../git/gitProcess") {
-			return require("../src/main/git/gitProcess.ts");
-		}
-		return require(id);
+			if (id === "../sessions/sessionProxyPolicy") {
+				return { applyPiProxyMode: (env) => env };
+			}
+			// killProcessTree（子代理整树终止）：gitProcess.ts 是纯 Node 模块，可直接加载。
+			if (id === "../git/gitProcess") {
+				return require("../src/main/git/gitProcess.ts");
+			}
+			return require(id);
 		},
 	};
 	vm.runInNewContext(transpile("src/main/pi/PiProcess.ts"), sandbox, {
@@ -153,10 +153,7 @@ test("AgentManager attaches lifecycle listeners before process.start", () => {
 	assert.match(source, /attachPiProcessLifecycle\(/);
 	assert.match(source, /buildStartupFailureMessage\(/);
 	// spawnAndGetState：先 attach，再 await process.start（create/reattach 共用握手）
-	const spawnBlock = source.slice(
-		source.indexOf("private async spawnAndGetState"),
-		source.indexOf("private notifyExtensionsDisabled"),
-	);
+	const spawnBlock = source.slice(source.indexOf("private async spawnAndGetState"), source.indexOf("private notifyExtensionsDisabled"));
 	const attachAt = spawnBlock.indexOf("this.attachPiProcessLifecycle");
 	const startAt = spawnBlock.indexOf("await process.start");
 	assert.ok(attachAt >= 0 && startAt > attachAt, "lifecycle must be attached before start()");

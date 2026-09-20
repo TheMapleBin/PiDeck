@@ -92,10 +92,7 @@ function parseFrontMatter(text) {
 		const key = trimmed.slice(0, colon).trim();
 		let value = trimmed.slice(colon + 1).trim();
 		// 去包裹引号（单/双引号）；值内含引号不做转义处理，建议避免
-		if (
-			(value.startsWith('"') && value.endsWith('"')) ||
-			(value.startsWith("'") && value.endsWith("'"))
-		) {
+		if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
 			value = value.slice(1, -1);
 		}
 		fields[key] = value;
@@ -212,11 +209,7 @@ function loadAnnouncementDir(dir) {
  * 结构必须与 shared/types/announcement.ts 的 AnnouncementFeed（version: 1）一致。
  */
 function buildFeed(items) {
-	const sorted = [...items].sort(
-		(a, b) =>
-			Date.parse(b.publishedAt) - Date.parse(a.publishedAt) ||
-			(a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
-	);
+	const sorted = [...items].sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 	return { version: 1, announcements: sorted };
 }
 

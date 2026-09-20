@@ -1,10 +1,5 @@
 import { atom } from "jotai";
-import type {
-	AutomationRun,
-	AutomationSettings,
-	AutomationSnapshot,
-	AutomationTaskSummary,
-} from "../../../shared/types";
+import type { AutomationRun, AutomationSettings, AutomationSnapshot, AutomationTaskSummary } from "../../../shared/types";
 
 /**
  * 主进程定时任务与自动化快照（含 tasks、runs、settings 与 revision）。
@@ -27,13 +22,10 @@ export const automationModalProjectIdAtom = atom<string | null>(null);
 /**
  * 打开定时任务管理弹框；传 projectId 时任务表锁定到该项目（项目菜单入口）。
  */
-export const openAutomationModalAtom = atom(
-	null,
-	(_get, set, projectId?: string) => {
-		set(automationModalProjectIdAtom, projectId ?? null);
-		set(automationModalOpenAtom, true);
-	},
-);
+export const openAutomationModalAtom = atom(null, (_get, set, projectId?: string) => {
+	set(automationModalProjectIdAtom, projectId ?? null);
+	set(automationModalOpenAtom, true);
+});
 
 /**
  * 当前在管理弹窗中选中的任务 ID（null = 未选中或处于新建模式）。
@@ -56,9 +48,7 @@ export const automationIsCreatingTaskAtom = atom<boolean>(false);
 export const automationTasksAtom = atom<AutomationTaskSummary[]>((get) => {
 	const snapshot = get(automationSnapshotAtom);
 	if (!snapshot) return [];
-	return [...snapshot.tasks].sort(
-		(a, b) => b.createdAt - a.createdAt || a.id.localeCompare(b.id),
-	);
+	return [...snapshot.tasks].sort((a, b) => b.createdAt - a.createdAt || a.id.localeCompare(b.id));
 });
 
 /**
@@ -75,12 +65,7 @@ export const automationRunsAtom = atom<AutomationRun[]>((get) => {
  */
 export const automationActiveRunsAtom = atom<AutomationRun[]>((get) => {
 	const runs = get(automationRunsAtom);
-	return runs.filter(
-		(r) =>
-			r.status === "queued" ||
-			r.status === "starting" ||
-			r.status === "running",
-	);
+	return runs.filter((r) => r.status === "queued" || r.status === "starting" || r.status === "running");
 });
 
 /**

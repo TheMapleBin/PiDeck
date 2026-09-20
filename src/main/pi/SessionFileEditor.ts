@@ -1,14 +1,5 @@
 import { randomUUID } from "node:crypto";
-import {
-	open as openFile,
-	readFile,
-	realpath,
-	readdir,
-	rename,
-	stat,
-	unlink,
-	type FileHandle,
-} from "node:fs/promises";
+import { open as openFile, readFile, realpath, readdir, rename, stat, unlink, type FileHandle } from "node:fs/promises";
 import { basename, dirname, join, posix, win32 } from "node:path";
 
 export type SessionFileEnvironment = "native" | "wsl";
@@ -175,9 +166,7 @@ const defaultFs: SessionFileEditorFs = {
 const sharedFileLocks = new Map<string, Promise<void>>();
 
 function errorCode(error: unknown): string | undefined {
-	return error && typeof error === "object" && "code" in error
-		? String((error as { code?: unknown }).code ?? "")
-		: undefined;
+	return error && typeof error === "object" && "code" in error ? String((error as { code?: unknown }).code ?? "") : undefined;
 }
 
 function normalizePhysicalPath(path: string): string {
@@ -201,9 +190,7 @@ function parentIdOf(entry: JsonlEntry): string | null | undefined {
 }
 
 function messageOf(entry: JsonlEntry): Record<string, unknown> | undefined {
-	return entry.message && typeof entry.message === "object" && !Array.isArray(entry.message)
-		? entry.message as Record<string, unknown>
-		: undefined;
+	return entry.message && typeof entry.message === "object" && !Array.isArray(entry.message) ? (entry.message as Record<string, unknown>) : undefined;
 }
 
 function textOf(content: unknown): string {
@@ -226,10 +213,7 @@ function setMessageText(message: Record<string, unknown>, text: string): void {
 		const next: unknown[] = [];
 		let replacedText = false;
 		for (const candidate of content) {
-			const isText = Boolean(
-				candidate && typeof candidate === "object" &&
-				(candidate as Record<string, unknown>).type === "text",
-			);
+			const isText = Boolean(candidate && typeof candidate === "object" && (candidate as Record<string, unknown>).type === "text");
 			if (!isText) {
 				next.push(candidate);
 				continue;
@@ -270,11 +254,7 @@ function parseDocument(bytes: Buffer): JsonlDocument {
 	try {
 		text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
 	} catch (cause) {
-		throw new SessionFileEditorError(
-			"SESSION_FILE_INVALID_JSONL",
-			"Session file is not valid UTF-8",
-			{ cause },
-		);
+		throw new SessionFileEditorError("SESSION_FILE_INVALID_JSONL", "Session file is not valid UTF-8", { cause });
 	}
 	const lines = splitJsonl(text);
 	if (!lines.some((line) => line.content.trim())) {
@@ -290,18 +270,10 @@ function parseDocument(bytes: Buffer): JsonlDocument {
 		try {
 			parsed = JSON.parse(line.content);
 		} catch (cause) {
-			throw new SessionFileEditorError(
-				"SESSION_FILE_INVALID_JSONL",
-				`Session file contains invalid JSONL at line ${index + 1}`,
-				{ cause, details: { line: index + 1 } },
-			);
+			throw new SessionFileEditorError("SESSION_FILE_INVALID_JSONL", `Session file contains invalid JSONL at line ${index + 1}`, { cause, details: { line: index + 1 } });
 		}
 		if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-			throw new SessionFileEditorError(
-				"SESSION_FILE_INVALID_JSONL",
-				`Session file contains a non-object entry at line ${index + 1}`,
-				{ details: { line: index + 1 } },
-			);
+			throw new SessionFileEditorError("SESSION_FILE_INVALID_JSONL", `Session file contains a non-object entry at line ${index + 1}`, { details: { line: index + 1 } });
 		}
 		line.entry = parsed as JsonlEntry;
 		// 墓碑也要进 id 索引：pi 会把最后一条带 id 的记录当 leaf，再沿 parentId
@@ -310,30 +282,19 @@ function parseDocument(bytes: Buffer): JsonlDocument {
 		const entryId = entryIdOf(line.entry);
 		if (entryId) {
 			if (entryLineById.has(entryId)) {
-				throw new SessionFileEditorError(
-					"SESSION_FILE_INVALID_JSONL",
-					`Session file contains duplicate entry ID ${entryId}`,
-					{ details: { line: index + 1 } },
-				);
+				throw new SessionFileEditorError("SESSION_FILE_INVALID_JSONL", `Session file contains duplicate entry ID ${entryId}`, { details: { line: index + 1 } });
 			}
 			entryLineById.set(entryId, index);
 		}
 	}
 	if (sessionHeaderCount !== 1) {
-		throw new SessionFileEditorError(
-			"SESSION_FILE_INVALID_JSONL",
-			`Session file must contain exactly one session header; found ${sessionHeaderCount}`,
-		);
+		throw new SessionFileEditorError("SESSION_FILE_INVALID_JSONL", `Session file must contain exactly one session header; found ${sessionHeaderCount}`);
 	}
 
 	for (const [entryId, lineIndex] of entryLineById) {
 		const parentId = parentIdOf(lines[lineIndex].entry!);
 		if (parentId && !entryLineById.has(parentId)) {
-			throw new SessionFileEditorError(
-				"SESSION_FILE_INVALID_JSONL",
-				`Session entry ${entryId} has a dangling parent ${parentId}`,
-				{ details: { line: lineIndex + 1 } },
-			);
+			throw new SessionFileEditorError("SESSION_FILE_INVALID_JSONL", `Session entry ${entryId} has a dangling parent ${parentId}`, { details: { line: lineIndex + 1 } });
 		}
 	}
 
@@ -343,10 +304,7 @@ function parseDocument(bytes: Buffer): JsonlDocument {
 		let current: string | null | undefined = entryId;
 		while (current && !completed.has(current)) {
 			if (visiting.has(current)) {
-				throw new SessionFileEditorError(
-					"SESSION_FILE_INVALID_JSONL",
-					`Session entry graph contains a cycle at ${current}`,
-				);
+				throw new SessionFileEditorError("SESSION_FILE_INVALID_JSONL", `Session entry graph contains a cycle at ${current}`);
 			}
 			visiting.add(current);
 			const lineIndex = entryLineById.get(current);
@@ -358,10 +316,7 @@ function parseDocument(bytes: Buffer): JsonlDocument {
 }
 
 function serializeDocument(document: JsonlDocument): Buffer {
-	return Buffer.from(
-		document.lines.map((line) => `${line.content}${line.eol}`).join(""),
-		"utf8",
-	);
+	return Buffer.from(document.lines.map((line) => `${line.content}${line.eol}`).join(""), "utf8");
 }
 
 function replaceLine(document: JsonlDocument, lineIndex: number, entry: JsonlEntry): void {
@@ -372,42 +327,26 @@ function replaceLine(document: JsonlDocument, lineIndex: number, entry: JsonlEnt
 function legacyEntryId(target: SessionEntryTarget): string | undefined {
 	if (!target.legacyMessageId || !target.legacyAgentId) return undefined;
 	const prefix = `${target.legacyAgentId}-history-`;
-	return target.legacyMessageId.startsWith(prefix)
-		? target.legacyMessageId.slice(prefix.length)
-		: undefined;
+	return target.legacyMessageId.startsWith(prefix) ? target.legacyMessageId.slice(prefix.length) : undefined;
 }
 
 function validateLocatedRole(entry: JsonlEntry, target: SessionEntryTarget): void {
 	const role = messageOf(entry)?.role;
 	if (role !== target.role) {
-		throw new SessionFileEditorError(
-			"SESSION_ENTRY_ROLE_INVALID",
-			`Session entry role ${String(role)} cannot be used as ${target.role}`,
-		);
+		throw new SessionFileEditorError("SESSION_ENTRY_ROLE_INVALID", `Session entry role ${String(role)} cannot be used as ${target.role}`);
 	}
 }
 
-function locateById(
-	document: JsonlDocument,
-	entryId: string | undefined,
-	target: SessionEntryTarget,
-	activeIds: Set<string>,
-): LocatedEntry | undefined {
+function locateById(document: JsonlDocument, entryId: string | undefined, target: SessionEntryTarget, activeIds: Set<string>): LocatedEntry | undefined {
 	if (!entryId) return undefined;
 	const lineIndex = document.entryLineById.get(entryId);
 	if (lineIndex === undefined) return undefined;
 	if (!activeIds.has(entryId)) {
-		throw new SessionFileEditorError(
-			"SESSION_ENTRY_NOT_FOUND",
-			"The requested entry is not part of the active session branch",
-		);
+		throw new SessionFileEditorError("SESSION_ENTRY_NOT_FOUND", "The requested entry is not part of the active session branch");
 	}
 	const entry = document.lines[lineIndex].entry!;
 	if (entry.type === "deleted") {
-		throw new SessionFileEditorError(
-			"SESSION_ENTRY_NOT_FOUND",
-			"The requested entry has already been deleted",
-		);
+		throw new SessionFileEditorError("SESSION_ENTRY_NOT_FOUND", "The requested entry has already been deleted");
 	}
 	validateLocatedRole(entry, target);
 	return { lineIndex, entry, entryId };
@@ -416,10 +355,7 @@ function locateById(
 function activeBranchIds(document: JsonlDocument, activeLeafId?: string): Set<string> {
 	let leafId = activeLeafId;
 	if (leafId && !document.entryLineById.has(leafId)) {
-		throw new SessionFileEditorError(
-			"SESSION_ENTRY_NOT_FOUND",
-			"The active session branch is no longer present in the file",
-		);
+		throw new SessionFileEditorError("SESSION_ENTRY_NOT_FOUND", "The active session branch is no longer present in the file");
 	}
 	if (!leafId) {
 		for (let index = document.lines.length - 1; index >= 0; index -= 1) {
@@ -464,16 +400,9 @@ function locateEntry(document: JsonlDocument, target: SessionEntryTarget): Locat
 
 	if (candidates.length === 1) return candidates[0];
 	if (candidates.length > 1) {
-		throw new SessionFileEditorError(
-			"SESSION_ENTRY_AMBIGUOUS",
-			"More than one entry matches the requested message on the active branch",
-			{ details: { matches: candidates.length } },
-		);
+		throw new SessionFileEditorError("SESSION_ENTRY_AMBIGUOUS", "More than one entry matches the requested message on the active branch", { details: { matches: candidates.length } });
 	}
-	throw new SessionFileEditorError(
-		"SESSION_ENTRY_NOT_FOUND",
-		"Message was not found on the active session branch",
-	);
+	throw new SessionFileEditorError("SESSION_ENTRY_NOT_FOUND", "Message was not found on the active session branch");
 }
 
 function descendantEntryIds(document: JsonlDocument, rootEntryId: string): Set<string> {
@@ -500,12 +429,7 @@ function descendantEntryIds(document: JsonlDocument, rootEntryId: string): Set<s
  * 再沿 parentId 回溯活动分支。旧墓碑只有 originalEntryId，leaf 会落在
  * 这条「无 id、无父节点」的记录上，get_messages 整页变空。
  */
-function tombstone(
-	entryId: string,
-	now: number,
-	parentId?: string | null,
-	reason?: string,
-): JsonlEntry {
+function tombstone(entryId: string, now: number, parentId?: string | null, reason?: string): JsonlEntry {
 	return {
 		type: "deleted",
 		id: entryId,
@@ -528,9 +452,12 @@ export class SessionFileEditor {
 		this.fs = { ...defaultFs, ...options.fs };
 		this.now = options.now ?? Date.now;
 		this.createUuid = options.randomUUID ?? randomUUID;
-		this.sleep = options.sleep ?? ((milliseconds) => new Promise((resolve) => {
-			setTimeout(resolve, milliseconds);
-		}));
+		this.sleep =
+			options.sleep ??
+			((milliseconds) =>
+				new Promise((resolve) => {
+					setTimeout(resolve, milliseconds);
+				}));
 		this.logger = options.logger;
 		this.maxBackups = Math.max(1, options.maxBackups ?? 3);
 	}
@@ -557,15 +484,9 @@ export class SessionFileEditor {
 			const original = await this.readSessionFile(input.file.hostPath);
 			const document = parseDocument(original);
 			if (document.lines.some((line) => line.entry?._reloadMarker !== undefined)) {
-				throw new SessionFileEditorError(
-					"SESSION_MARKER_CONFLICT",
-					"Session file already contains a reload marker",
-				);
+				throw new SessionFileEditorError("SESSION_MARKER_CONFLICT", "Session file already contains a reload marker");
 			}
-			const { firstEntryId, changedEntryIds } = this.appendEntriesToDocument(
-				document,
-				input.entries,
-			);
+			const { firstEntryId, changedEntryIds } = this.appendEntriesToDocument(document, input.entries);
 			const next = serializeDocument(document);
 			const backupPath = await this.createBackup(input.file.hostPath, original);
 
@@ -573,21 +494,10 @@ export class SessionFileEditor {
 			try {
 				await this.reloadWithMarker(input.file, input.reload, next);
 			} catch (cause) {
-				const reloadFailure = cause instanceof ReloadAttemptFailure
-					? cause
-					: new ReloadAttemptFailure(cause, [next]);
+				const reloadFailure = cause instanceof ReloadAttemptFailure ? cause : new ReloadAttemptFailure(cause, [next]);
 				// rollback 只读 input.file，target 用占位值满足类型（append 无定位目标）。
-				await this.rollback(
-					{ ...input, target: {} as SessionEntryTarget },
-					backupPath,
-					reloadFailure.error,
-					reloadFailure.ownedStates,
-				);
-				throw new SessionFileEditorError(
-					"SESSION_RELOAD_FAILED",
-					"Session reload failed; the original file and runtime were restored",
-					{ cause: reloadFailure.error, backupPath },
-				);
+				await this.rollback({ ...input, target: {} as SessionEntryTarget }, backupPath, reloadFailure.error, reloadFailure.ownedStates);
+				throw new SessionFileEditorError("SESSION_RELOAD_FAILED", "Session reload failed; the original file and runtime were restored", { cause: reloadFailure.error, backupPath });
 			}
 
 			return {
@@ -598,15 +508,9 @@ export class SessionFileEditor {
 		});
 	}
 
-	private appendEntriesToDocument(
-		document: JsonlDocument,
-		entries: AppendMessageEntry[],
-	): { firstEntryId: string; changedEntryIds: string[] } {
+	private appendEntriesToDocument(document: JsonlDocument, entries: AppendMessageEntry[]): { firstEntryId: string; changedEntryIds: string[] } {
 		if (entries.length === 0) {
-			throw new SessionFileEditorError(
-				"SESSION_ENTRY_NOT_FOUND",
-				"No entries to append",
-			);
+			throw new SessionFileEditorError("SESSION_ENTRY_NOT_FOUND", "No entries to append");
 		}
 		// leaf = 文件最后一条带 id 的 message 条目（跳过 session header / deleted 墓碑，
 		// 与 activeBranchIds 无显式 leaf 时的回退语义一致）；首条新消息挂到 leaf 之后，
@@ -622,9 +526,7 @@ export class SessionFileEditor {
 			}
 		}
 
-		const eol = document.lines.length > 0
-			? (document.lines[document.lines.length - 1].eol || "\n")
-			: "\n";
+		const eol = document.lines.length > 0 ? document.lines[document.lines.length - 1].eol || "\n" : "\n";
 		const changedEntryIds: string[] = [];
 		let firstEntryId = "";
 		for (const item of entries) {
@@ -661,11 +563,7 @@ export class SessionFileEditor {
 				if (cause instanceof SessionFileEditorError) throw cause;
 				const reloadCause = cause instanceof ReloadAttemptFailure ? cause.error : cause;
 				if (reloadCause instanceof SessionFileEditorError) throw reloadCause;
-				throw new SessionFileEditorError(
-					"SESSION_RELOAD_FAILED",
-					"Session runtime reload failed",
-					{ cause: reloadCause },
-				);
+				throw new SessionFileEditorError("SESSION_RELOAD_FAILED", "Session runtime reload failed", { cause: reloadCause });
 			}
 		});
 	}
@@ -679,7 +577,10 @@ export class SessionFileEditor {
 		const key = await this.lockKey(file);
 		const previous = sharedFileLocks.get(key) ?? Promise.resolve();
 		const current = previous.then(operation, operation);
-		const tail = current.then(() => undefined, () => undefined);
+		const tail = current.then(
+			() => undefined,
+			() => undefined,
+		);
 		sharedFileLocks.set(key, tail);
 		try {
 			return await current;
@@ -688,19 +589,12 @@ export class SessionFileEditor {
 		}
 	}
 
-	private async mutate(
-		kind: MutationKind,
-		input: MutationInput,
-		newText?: string,
-	): Promise<SessionMutationResult> {
+	private async mutate(kind: MutationKind, input: MutationInput, newText?: string): Promise<SessionMutationResult> {
 		return this.withFileLock(input.file, async () => {
 			const original = await this.readSessionFile(input.file.hostPath);
 			const document = parseDocument(original);
 			if (document.lines.some((line) => line.entry?._reloadMarker !== undefined)) {
-				throw new SessionFileEditorError(
-					"SESSION_MARKER_CONFLICT",
-					"Session file already contains a reload marker",
-				);
+				throw new SessionFileEditorError("SESSION_MARKER_CONFLICT", "Session file already contains a reload marker");
 			}
 			const located = locateEntry(document, input.target);
 			const changedEntryIds = this.applyMutation(document, located, kind, newText);
@@ -711,20 +605,9 @@ export class SessionFileEditor {
 			try {
 				await this.reloadWithMarker(input.file, input.reload, next);
 			} catch (cause) {
-				const reloadFailure = cause instanceof ReloadAttemptFailure
-					? cause
-					: new ReloadAttemptFailure(cause, [next]);
-				await this.rollback(
-					input,
-					backupPath,
-					reloadFailure.error,
-					reloadFailure.ownedStates,
-				);
-				throw new SessionFileEditorError(
-					"SESSION_RELOAD_FAILED",
-					"Session reload failed; the original file and runtime were restored",
-					{ cause: reloadFailure.error, backupPath },
-				);
+				const reloadFailure = cause instanceof ReloadAttemptFailure ? cause : new ReloadAttemptFailure(cause, [next]);
+				await this.rollback(input, backupPath, reloadFailure.error, reloadFailure.ownedStates);
+				throw new SessionFileEditorError("SESSION_RELOAD_FAILED", "Session reload failed; the original file and runtime were restored", { cause: reloadFailure.error, backupPath });
 			}
 
 			return {
@@ -735,19 +618,11 @@ export class SessionFileEditor {
 		});
 	}
 
-	private applyMutation(
-		document: JsonlDocument,
-		located: LocatedEntry,
-		kind: MutationKind,
-		newText?: string,
-	): string[] {
+	private applyMutation(document: JsonlDocument, located: LocatedEntry, kind: MutationKind, newText?: string): string[] {
 		if (kind === "edit") {
 			const message = messageOf(located.entry);
 			if (!message || (message.role !== "user" && message.role !== "assistant")) {
-				throw new SessionFileEditorError(
-					"SESSION_ENTRY_ROLE_INVALID",
-					"Only user and assistant message entries can be edited",
-				);
+				throw new SessionFileEditorError("SESSION_ENTRY_ROLE_INVALID", "Only user and assistant message entries can be edited");
 			}
 			setMessageText(message, newText ?? "");
 			replaceLine(document, located.lineIndex, located.entry);
@@ -768,14 +643,7 @@ export class SessionFileEditor {
 				if (role !== "assistant") return false;
 				const message = messageOf(entry);
 				const content = message?.content;
-				const hasThinking = Array.isArray(content)
-					? content.some((block) => (
-						block && typeof block === "object" &&
-						(block as Record<string, unknown>).type === "thinking" &&
-						typeof (block as Record<string, unknown>).thinking === "string" &&
-						String((block as Record<string, unknown>).thinking).trim() !== ""
-					))
-					: false;
+				const hasThinking = Array.isArray(content) ? content.some((block) => block && typeof block === "object" && (block as Record<string, unknown>).type === "thinking" && typeof (block as Record<string, unknown>).thinking === "string" && String((block as Record<string, unknown>).thinking).trim() !== "") : false;
 				// thinking-only：只有思考块、没有可见文本
 				return hasThinking && !textOf(content).trim();
 			};
@@ -813,19 +681,12 @@ export class SessionFileEditor {
 				const childId = entryIdOf(child);
 				if (childId) changed.push(childId);
 			}
-			replaceLine(
-				document,
-				located.lineIndex,
-				tombstone(located.entryId, this.now(), parentId),
-			);
+			replaceLine(document, located.lineIndex, tombstone(located.entryId, this.now(), parentId));
 			return changed;
 		}
 
 		if (inputRole(located.entry) !== "user") {
-			throw new SessionFileEditorError(
-				"SESSION_ENTRY_ROLE_INVALID",
-				"Only user messages can be truncated for resend",
-			);
+			throw new SessionFileEditorError("SESSION_ENTRY_ROLE_INVALID", "Only user messages can be truncated for resend");
 		}
 		const removeIds = descendantEntryIds(document, located.entryId);
 		for (let index = 0; index < document.lines.length; index += 1) {
@@ -833,11 +694,7 @@ export class SessionFileEditor {
 			if (!entry || entry.type === "deleted") continue;
 			const entryId = entryIdOf(entry);
 			if (!entryId || !removeIds.has(entryId)) continue;
-			replaceLine(
-				document,
-				index,
-				tombstone(entryId, this.now(), parentIdOf(entry), "resend-truncate"),
-			);
+			replaceLine(document, index, tombstone(entryId, this.now(), parentIdOf(entry), "resend-truncate"));
 		}
 		return [...removeIds];
 	}
@@ -851,14 +708,11 @@ export class SessionFileEditor {
 		//
 		// 编辑/删除/重发确实需要完整文档（要定位条目、重算 parentId 链），无法像
 		// 读取那样流式化。所以这里明确拒绝并给可读错误，而不是让应用崩掉。
-		await this.assertInMemoryReadSafe(path);		try {
+		await this.assertInMemoryReadSafe(path);
+		try {
 			return await this.fs.readFile(path);
 		} catch (cause) {
-			throw new SessionFileEditorError(
-				"SESSION_FILE_EMPTY",
-				"Session file could not be read",
-				{ cause },
-			);
+			throw new SessionFileEditorError("SESSION_FILE_EMPTY", "Session file could not be read", { cause });
 		}
 	}
 
@@ -879,22 +733,14 @@ export class SessionFileEditor {
 			return;
 		}
 		if (size <= MAX_IN_MEMORY_SESSION_BYTES) return;
-		throw new SessionFileEditorError(
-			"SESSION_FILE_TOO_LARGE",
-			`Session file is too large to edit (${Math.round(size / (1024 * 1024))}MB, `
-				+ `over the ${Math.round(MAX_IN_MEMORY_SESSION_BYTES / (1024 * 1024))}MB limit)`,
-			{ details: { size, limit: MAX_IN_MEMORY_SESSION_BYTES } },
-		);
+		throw new SessionFileEditorError("SESSION_FILE_TOO_LARGE", `Session file is too large to edit (${Math.round(size / (1024 * 1024))}MB, ` + `over the ${Math.round(MAX_IN_MEMORY_SESSION_BYTES / (1024 * 1024))}MB limit)`, { details: { size, limit: MAX_IN_MEMORY_SESSION_BYTES } });
 	}
 
 	private async createBackup(path: string, original: Buffer): Promise<string> {
 		const directory = dirname(path);
 		const filename = basename(path);
 		const stamp = String(this.now()).padStart(13, "0");
-		const backupPath = join(
-			directory,
-			`${filename}.${stamp}-${this.createUuid()}.edit-backup`,
-		);
+		const backupPath = join(directory, `${filename}.${stamp}-${this.createUuid()}.edit-backup`);
 		let handle: WritableFileHandle | undefined;
 		try {
 			handle = await this.fs.open(backupPath, "wx");
@@ -905,11 +751,7 @@ export class SessionFileEditor {
 		} catch (cause) {
 			await handle?.close().catch(() => undefined);
 			await this.fs.unlink(backupPath).catch(() => undefined);
-			throw new SessionFileEditorError(
-				"SESSION_BACKUP_FAILED",
-				"Session backup could not be created",
-				{ cause, backupPath },
-			);
+			throw new SessionFileEditorError("SESSION_BACKUP_FAILED", "Session backup could not be created", { cause, backupPath });
 		}
 
 		await this.pruneBackups(directory, filename, basename(backupPath));
@@ -917,26 +759,16 @@ export class SessionFileEditor {
 			const verified = await this.fs.readFile(backupPath);
 			if (!verified.equals(original)) throw new Error("Backup content mismatch");
 		} catch (cause) {
-			throw new SessionFileEditorError(
-				"SESSION_BACKUP_FAILED",
-				"Session backup could not be verified",
-				{ cause, backupPath },
-			);
+			throw new SessionFileEditorError("SESSION_BACKUP_FAILED", "Session backup could not be verified", { cause, backupPath });
 		}
 		return backupPath;
 	}
 
-	private async pruneBackups(
-		directory: string,
-		filename: string,
-		protectedBackup: string,
-	): Promise<void> {
+	private async pruneBackups(directory: string, filename: string, protectedBackup: string): Promise<void> {
 		try {
 			const prefix = `${filename}.`;
 			const suffix = ".edit-backup";
-			const backups = (await this.fs.readdir(directory))
-				.filter((candidate) => candidate.startsWith(prefix) && candidate.endsWith(suffix))
-				.sort();
+			const backups = (await this.fs.readdir(directory)).filter((candidate) => candidate.startsWith(prefix) && candidate.endsWith(suffix)).sort();
 			while (backups.length > this.maxBackups) {
 				const oldestIndex = backups.findIndex((candidate) => candidate !== protectedBackup);
 				if (oldestIndex < 0) break;
@@ -951,25 +783,12 @@ export class SessionFileEditor {
 		}
 	}
 
-	private async replaceIfUnchanged(
-		path: string,
-		expected: Buffer,
-		next: Buffer,
-		backupPath?: string,
-	): Promise<void> {
+	private async replaceIfUnchanged(path: string, expected: Buffer, next: Buffer, backupPath?: string): Promise<void> {
 		await this.atomicReplace(path, next, backupPath, expected);
 	}
 
-	private async atomicReplace(
-		path: string,
-		next: Buffer,
-		backupPath?: string,
-		expected?: Buffer,
-	): Promise<void> {
-		const tempPath = join(
-			dirname(path),
-			`.${basename(path)}.${process.pid}.${this.createUuid()}.tmp`,
-		);
+	private async atomicReplace(path: string, next: Buffer, backupPath?: string, expected?: Buffer): Promise<void> {
+		const tempPath = join(dirname(path), `.${basename(path)}.${process.pid}.${this.createUuid()}.tmp`);
 		let handle: WritableFileHandle | undefined;
 		let renamed = false;
 		try {
@@ -982,23 +801,14 @@ export class SessionFileEditor {
 			renamed = true;
 		} catch (cause) {
 			if (cause instanceof SessionFileEditorError) throw cause;
-			throw new SessionFileEditorError(
-				"SESSION_ATOMIC_WRITE_FAILED",
-				"Session file could not be replaced atomically",
-				{ cause, backupPath },
-			);
+			throw new SessionFileEditorError("SESSION_ATOMIC_WRITE_FAILED", "Session file could not be replaced atomically", { cause, backupPath });
 		} finally {
 			await handle?.close().catch(() => undefined);
 			if (!renamed) await this.fs.unlink(tempPath).catch(() => undefined);
 		}
 	}
 
-	private async renameWithRetry(
-		from: string,
-		to: string,
-		expected?: Buffer,
-		backupPath?: string,
-	): Promise<void> {
+	private async renameWithRetry(from: string, to: string, expected?: Buffer, backupPath?: string): Promise<void> {
 		const delays = [0, 20, 75, 200];
 		let lastError: unknown;
 		for (const delay of delays) {
@@ -1006,18 +816,10 @@ export class SessionFileEditor {
 			try {
 				if (expected) {
 					const current = await this.fs.readFile(to).catch((cause) => {
-						throw new SessionFileEditorError(
-							"SESSION_FILE_CHANGED",
-							"Session file could not be verified before committing",
-							{ cause, backupPath },
-						);
+						throw new SessionFileEditorError("SESSION_FILE_CHANGED", "Session file could not be verified before committing", { cause, backupPath });
 					});
 					if (!current.equals(expected)) {
-						throw new SessionFileEditorError(
-							"SESSION_FILE_CHANGED",
-							"Session file changed while the replacement was being committed",
-							{ backupPath },
-						);
+						throw new SessionFileEditorError("SESSION_FILE_CHANGED", "Session file changed while the replacement was being committed", { backupPath });
 					}
 				}
 				await this.fs.rename(from, to);
@@ -1030,28 +832,16 @@ export class SessionFileEditor {
 		throw lastError;
 	}
 
-	private async reloadWithMarker(
-		file: SessionFileRef,
-		reload: () => Promise<void>,
-		expectedBase?: Buffer,
-	): Promise<void> {
+	private async reloadWithMarker(file: SessionFileRef, reload: () => Promise<void>, expectedBase?: Buffer): Promise<void> {
 		const markerId = this.createUuid();
 		const beforeMarker = await this.readSessionFile(file.hostPath);
 		if (expectedBase && !beforeMarker.equals(expectedBase)) {
-			throw new SessionFileEditorError(
-				"SESSION_FILE_CHANGED",
-				"Session file changed before the runtime reload marker was written",
-			);
+			throw new SessionFileEditorError("SESSION_FILE_CHANGED", "Session file changed before the runtime reload marker was written");
 		}
 		const markedDocument = parseDocument(beforeMarker);
-		const existingMarker = markedDocument.lines.find((line) => (
-			line.entry && line.entry._reloadMarker !== undefined
-		));
+		const existingMarker = markedDocument.lines.find((line) => line.entry && line.entry._reloadMarker !== undefined);
 		if (existingMarker) {
-			throw new SessionFileEditorError(
-				"SESSION_MARKER_CONFLICT",
-				"Session file already contains a reload marker",
-			);
+			throw new SessionFileEditorError("SESSION_MARKER_CONFLICT", "Session file already contains a reload marker");
 		}
 		const markerLineIndex = markedDocument.lines.findIndex((line) => line.entry?.type === "session");
 		if (markerLineIndex < 0) {
@@ -1075,14 +865,9 @@ export class SessionFileEditor {
 			try {
 				const current = await this.fs.readFile(file.hostPath);
 				const cleanupDocument = parseDocument(current);
-				const ownMarkerLines = cleanupDocument.lines.filter(
-					(line) => line.entry?._reloadMarker === markerId,
-				);
+				const ownMarkerLines = cleanupDocument.lines.filter((line) => line.entry?._reloadMarker === markerId);
 				if (ownMarkerLines.length > 1) {
-					throw new SessionFileEditorError(
-						"SESSION_MARKER_CONFLICT",
-						"Session reload marker appears more than once",
-					);
+					throw new SessionFileEditorError("SESSION_MARKER_CONFLICT", "Session reload marker appears more than once");
 				}
 				const cleanupLine = ownMarkerLines[0];
 				if (cleanupLine) {
@@ -1093,16 +878,9 @@ export class SessionFileEditor {
 						delete cleanupLine.entry!._reloadMarker;
 						cleanupLine.content = JSON.stringify(cleanupLine.entry);
 					}
-					await this.replaceIfUnchanged(
-						file.hostPath,
-						current,
-						serializeDocument(cleanupDocument),
-					);
+					await this.replaceIfUnchanged(file.hostPath, current, serializeDocument(cleanupDocument));
 				} else if (cleanupDocument.lines.some((line) => line.entry?._reloadMarker !== undefined)) {
-					throw new SessionFileEditorError(
-						"SESSION_MARKER_CONFLICT",
-						"Session reload marker ownership changed during reload",
-					);
+					throw new SessionFileEditorError("SESSION_MARKER_CONFLICT", "Session reload marker ownership changed during reload");
 				}
 			} catch (cleanupError) {
 				if (!reloadError) reloadError = cleanupError;
@@ -1116,95 +894,61 @@ export class SessionFileEditor {
 		}
 
 		if (reloadError) {
-			throw new ReloadAttemptFailure(
-				reloadError,
-				[expectedBase ?? beforeMarker, markedBytes],
-			);
+			throw new ReloadAttemptFailure(reloadError, [expectedBase ?? beforeMarker, markedBytes]);
 		}
 	}
 
-	private async rollback(
-		input: MutationInput,
-		backupPath: string,
-		cause: unknown,
-		ownedStates: Buffer[],
-	): Promise<void> {
+	private async rollback(input: MutationInput, backupPath: string, cause: unknown, ownedStates: Buffer[]): Promise<void> {
 		try {
 			const backup = await this.fs.readFile(backupPath);
 			const current = await this.fs.readFile(input.file.hostPath);
 			if (!ownedStates.some((owned) => owned.equals(current))) {
-				throw new SessionFileEditorError(
-					"SESSION_ROLLBACK_CONFLICT",
-					"Session file changed during reload; automatic rollback was refused",
-					{
-						cause,
-						backupPath,
-						details: {
-							originalError: cause instanceof Error ? cause.message : String(cause),
-						},
+				throw new SessionFileEditorError("SESSION_ROLLBACK_CONFLICT", "Session file changed during reload; automatic rollback was refused", {
+					cause,
+					backupPath,
+					details: {
+						originalError: cause instanceof Error ? cause.message : String(cause),
 					},
-				);
+				});
 			}
 			await this.atomicReplace(input.file.hostPath, backup, backupPath, current);
 		} catch (rollbackError) {
-			if (
-				rollbackError instanceof SessionFileEditorError &&
-				rollbackError.code === "SESSION_ROLLBACK_CONFLICT"
-			) throw rollbackError;
-			if (
-				rollbackError instanceof SessionFileEditorError &&
-				rollbackError.code === "SESSION_FILE_CHANGED"
-			) {
-				throw new SessionFileEditorError(
-					"SESSION_ROLLBACK_CONFLICT",
-					"Session file changed while rollback was being committed",
-					{
-						cause: new AggregateError([cause, rollbackError]),
-						backupPath,
-						details: {
-							originalError: cause instanceof Error ? cause.message : String(cause),
-							rollbackError: rollbackError.message,
-						},
-					},
-				);
-			}
-			throw new SessionFileEditorError(
-				"SESSION_ROLLBACK_FAILED",
-				"Session file rollback failed",
-				{
+			if (rollbackError instanceof SessionFileEditorError && rollbackError.code === "SESSION_ROLLBACK_CONFLICT") throw rollbackError;
+			if (rollbackError instanceof SessionFileEditorError && rollbackError.code === "SESSION_FILE_CHANGED") {
+				throw new SessionFileEditorError("SESSION_ROLLBACK_CONFLICT", "Session file changed while rollback was being committed", {
 					cause: new AggregateError([cause, rollbackError]),
 					backupPath,
 					details: {
 						originalError: cause instanceof Error ? cause.message : String(cause),
-						rollbackError: rollbackError instanceof Error
-							? rollbackError.message
-							: String(rollbackError),
+						rollbackError: rollbackError.message,
 					},
+				});
+			}
+			throw new SessionFileEditorError("SESSION_ROLLBACK_FAILED", "Session file rollback failed", {
+				cause: new AggregateError([cause, rollbackError]),
+				backupPath,
+				details: {
+					originalError: cause instanceof Error ? cause.message : String(cause),
+					rollbackError: rollbackError instanceof Error ? rollbackError.message : String(rollbackError),
 				},
-			);
+			});
 		}
 
 		try {
 			const backup = await this.fs.readFile(backupPath);
 			await this.reloadWithMarker(input.file, input.reload, backup);
 		} catch (rollbackReloadError) {
-			throw new SessionFileEditorError(
-				"SESSION_ROLLBACK_RELOAD_FAILED",
-				"Session file was restored but the runtime could not reload it",
-				{
-					cause: rollbackReloadError,
-					backupPath,
-					details: {
-						originalError: cause instanceof Error ? cause.message : String(cause),
-					},
+			throw new SessionFileEditorError("SESSION_ROLLBACK_RELOAD_FAILED", "Session file was restored but the runtime could not reload it", {
+				cause: rollbackReloadError,
+				backupPath,
+				details: {
+					originalError: cause instanceof Error ? cause.message : String(cause),
 				},
-			);
+			});
 		}
 	}
 }
 
 function inputRole(entry: JsonlEntry): string | undefined {
-	return typeof messageOf(entry)?.role === "string"
-		? String(messageOf(entry)?.role)
-		: undefined;
+	return typeof messageOf(entry)?.role === "string" ? String(messageOf(entry)?.role) : undefined;
 }

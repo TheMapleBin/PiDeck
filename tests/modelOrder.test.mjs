@@ -60,13 +60,7 @@ test("回归：用户实报的乱序目录（MiniMax/Z.ai/Qwen/DeepSeek）保存
 	];
 	assert.deepEqual(
 		sortModelRows(messy).map((row) => row.name),
-		[
-			"DeepSeek: DeepSeek V3.2",
-			"MiniMax H3 Max",
-			"Qwen: Qwen3 Max",
-			"Z.ai: GLM 4.7",
-			"Z.ai: GLM 5",
-		],
+		["DeepSeek: DeepSeek V3.2", "MiniMax H3 Max", "Qwen: Qwen3 Max", "Z.ai: GLM 4.7", "Z.ai: GLM 5"],
 	);
 });
 
@@ -90,11 +84,7 @@ test("parseTokenDanceCatalog：平台 /models 返回顺序即被打乱，解析�
 
 test("parseProviderModelsResponse：/models 解析结果按名称正序（配置页拉取路径）", () => {
 	const parsed = providerModels.parseProviderModelsResponse({
-		data: [
-			{ id: "zzz-model", name: "Zeta Model" },
-			{ id: "aaa-model", name: "Alpha Model" },
-			{ id: "mmm-model" },
-		],
+		data: [{ id: "zzz-model", name: "Zeta Model" }, { id: "aaa-model", name: "Alpha Model" }, { id: "mmm-model" }],
 	});
 	assert.deepEqual(
 		[...parsed].map((model) => model.name ?? model.id),

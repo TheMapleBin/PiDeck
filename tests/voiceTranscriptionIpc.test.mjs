@@ -16,10 +16,7 @@ function loadRegistration() {
 		voiceTranscriptionCancel: "voice:cancel",
 	};
 	const module = { exports: {} };
-	const source = ts.transpileModule(
-		readFileSync("src/main/ipc/voiceTranscriptionIpc.ts", "utf8"),
-		{ compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } },
-	).outputText;
+	const source = ts.transpileModule(readFileSync("src/main/ipc/voiceTranscriptionIpc.ts", "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
 	vm.runInNewContext(source, {
 		module,
 		exports: module.exports,
@@ -51,10 +48,7 @@ test("voice IPC registers narrow handlers and validates transcription input", as
 	};
 	register({ configStore, service });
 
-	assert.deepEqual(
-		Array.from(handlers.keys()).sort(),
-		Object.values(ipcChannels).sort(),
-	);
+	assert.deepEqual(Array.from(handlers.keys()).sort(), Object.values(ipcChannels).sort());
 	const transcribe = handlers.get(ipcChannels.voiceTranscriptionTranscribe);
 	assert.equal((await transcribe({}, { requestId: "bad id", audio: new ArrayBuffer(1), mimeType: "audio/webm" })).error, "invalidRequest");
 	assert.equal((await transcribe({}, { requestId: "request-1", audio: "not-bytes", mimeType: "audio/webm" })).error, "invalidRequest");

@@ -23,7 +23,7 @@ function loadTranspiledModule(filePath, overrides = new Map()) {
 		// jsonlLineStream（会话 JSONL 流式扫描）运行时需要 Buffer
 		Buffer,
 		process,
-		require: (id) => overrides.has(id) ? overrides.get(id) : require(id),
+		require: (id) => (overrides.has(id) ? overrides.get(id) : require(id)),
 		setTimeout,
 	};
 	vm.runInNewContext(outputText, sandbox, { filename: filePath });
@@ -65,10 +65,7 @@ function loadSessionScanner(homePath) {
 		},
 	});
 	const codexMeta = loadCodexMetaModule();
-	const messageContent = loadTranspiledModule(
-		"src/main/pi/messageContent.ts",
-		new Map([["../feishu/docActions", { stripFeishuDocActionHint: (text) => text }]]),
-	);
+	const messageContent = loadTranspiledModule("src/main/pi/messageContent.ts", new Map([["../feishu/docActions", { stripFeishuDocActionHint: (text) => text }]]));
 	const fsRetry = loadTranspiledModule("src/main/utils/fsRetry.ts");
 	const sessionSummaryCache = loadTranspiledModule(
 		"src/main/sessions/sessionSummaryCache.ts",
@@ -194,10 +191,7 @@ test("rename heals legacy PiDeck sessionName head lines that broke pi loading (#
 		const scanner = new SessionScanner();
 		const file = join(home, "session-b.jsonl");
 		// 旧版 PiDeck 的破坏产物：头部前置无 type 的 sessionName 私有行
-		writeSession(file, [
-			{ sessionName: "Old PiDeck name", ts: 1700000000000 },
-			...healthySession,
-		]);
+		writeSession(file, [{ sessionName: "Old PiDeck name", ts: 1700000000000 }, ...healthySession]);
 		assert.notEqual(firstParseableEntry(readLines(file))?.type, "session");
 
 		await scanner.rename(file, "Healed");
@@ -284,12 +278,7 @@ test("copy produces a pi-loadable session with the copy name as session_info (#1
 		const { SessionScanner } = loadSessionScanner(home);
 		const scanner = new SessionScanner();
 		const file = join(home, "session-e.jsonl");
-		writeSession(file, [
-			healthySession[0],
-			{ type: "session_info", id: "bbbb0001", parentId: "aaaa0001", timestamp: "2026-01-01T00:00:00.500Z", name: "Origin" },
-			healthySession[1],
-			healthySession[2],
-		]);
+		writeSession(file, [healthySession[0], { type: "session_info", id: "bbbb0001", parentId: "aaaa0001", timestamp: "2026-01-01T00:00:00.500Z", name: "Origin" }, healthySession[1], healthySession[2]]);
 
 		const summary = await scanner.copy(file);
 

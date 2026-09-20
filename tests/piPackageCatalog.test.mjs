@@ -118,14 +118,8 @@ test("catalogPageUrl 按查询参数拼 URL，默认值不重复携带", () => {
 	const mod = loadModule();
 	assert.equal(mod.catalogPageUrl({}), "https://pi.dev/packages");
 	assert.equal(mod.catalogPageUrl({ page: 1 }), "https://pi.dev/packages");
-	assert.equal(
-		mod.catalogPageUrl({ page: 2, query: "mcp", type: "extension", sort: "downloads" }),
-		"https://pi.dev/packages?page=2&name=mcp&type=extension",
-	);
-	assert.equal(
-		mod.catalogPageUrl({ query: "mcp", sort: "recent" }),
-		"https://pi.dev/packages?name=mcp&sort=recent",
-	);
+	assert.equal(mod.catalogPageUrl({ page: 2, query: "mcp", type: "extension", sort: "downloads" }), "https://pi.dev/packages?page=2&name=mcp&type=extension");
+	assert.equal(mod.catalogPageUrl({ query: "mcp", sort: "recent" }), "https://pi.dev/packages?name=mcp&sort=recent");
 });
 
 test("getPiPackageCatalog 首屏正常返回并填充 total/lastPage/pageSize", async () => {
@@ -141,9 +135,7 @@ test("getPiPackageCatalog 首屏正常返回并填充 total/lastPage/pageSize", 
 			text: async () => fixtureHtml(),
 		};
 	};
-	const catalog = await mod.getPiPackageCatalog(
-		{ page: 1, type: "extension", fetchImpl, now: () => 1_000_000 },
-	);
+	const catalog = await mod.getPiPackageCatalog({ page: 1, type: "extension", fetchImpl, now: () => 1_000_000 });
 	assert.equal(called, 1);
 	assert.equal(catalog.items.length, 50);
 	assert.equal(catalog.total, 3112);
@@ -205,10 +197,7 @@ test("getPiPackageCatalog 无缓存且失败 → 抛错", async () => {
 	const fetchImpl = async () => {
 		throw new Error("network down");
 	};
-	await assert.rejects(
-		mod.getPiPackageCatalog({ page: 1, fetchImpl, now: () => 1_000_000 }),
-		/network down/,
-	);
+	await assert.rejects(mod.getPiPackageCatalog({ page: 1, fetchImpl, now: () => 1_000_000 }), /network down/);
 });
 
 test("getPiPackageCatalog 首屏 0 卡片视为目录不可用 → 抛错且不缓存", async () => {
@@ -219,15 +208,9 @@ test("getPiPackageCatalog 首屏 0 卡片视为目录不可用 → 抛错且不�
 		called += 1;
 		return { ok: true, status: 200, text: async () => "<html><body>empty</body></html>" };
 	};
-	await assert.rejects(
-		mod.getPiPackageCatalog({ page: 1, fetchImpl, now: () => 1_000_000 }),
-		/contained no packages/,
-	);
+	await assert.rejects(mod.getPiPackageCatalog({ page: 1, fetchImpl, now: () => 1_000_000 }), /contained no packages/);
 	// 失败不写缓存：再次调用仍发网络
-	await assert.rejects(
-		mod.getPiPackageCatalog({ page: 1, fetchImpl, now: () => 1_000_000 + 60_000 }),
-		/contained no packages/,
-	);
+	await assert.rejects(mod.getPiPackageCatalog({ page: 1, fetchImpl, now: () => 1_000_000 + 60_000 }), /contained no packages/);
 	assert.equal(called, 2);
 });
 
@@ -235,8 +218,5 @@ test("getPiPackageCatalog HTTP 非 2xx 抛错", async () => {
 	const mod = loadModule();
 	mod.resetPiPackageCatalogCache();
 	const fetchImpl = async () => ({ ok: false, status: 503, text: async () => "" });
-	await assert.rejects(
-		mod.getPiPackageCatalog({ page: 1, fetchImpl, now: () => 1_000_000 }),
-		/status 503/,
-	);
+	await assert.rejects(mod.getPiPackageCatalog({ page: 1, fetchImpl, now: () => 1_000_000 }), /status 503/);
 });

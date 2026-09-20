@@ -1,12 +1,6 @@
 import assert from "node:assert/strict";
 import { existsSync, lstatSync, readFileSync } from "node:fs";
-import {
-	mkdtemp,
-	mkdir,
-	rm,
-	symlink,
-	writeFile,
-} from "node:fs/promises";
+import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
@@ -52,11 +46,7 @@ function loadSkillManagerModule() {
 
 async function createSkillFile(path, name, description = `${name} description`) {
 	await mkdir(dirname(path), { recursive: true });
-	await writeFile(
-		path,
-		`---\nname: ${name}\ndescription: ${description}\n---\n\n# ${name}\n`,
-		"utf8",
-	);
+	await writeFile(path, `---\nname: ${name}\ndescription: ${description}\n---\n\n# ${name}\n`, "utf8");
 }
 
 async function createSkillRoot(home) {
@@ -293,10 +283,7 @@ test("does not recurse forever through a directory symlink cycle", async () => {
 		}
 
 		const { SkillManager } = loadSkillManagerModule();
-		const result = await Promise.race([
-			new SkillManager(home).list(),
-			new Promise((_, reject) => setTimeout(() => reject(new Error("scan timed out")), 1000)),
-		]);
+		const result = await Promise.race([new SkillManager(home).list(), new Promise((_, reject) => setTimeout(() => reject(new Error("scan timed out")), 1000))]);
 		assert.ok(result.skills.some((item) => item.name === "visible-skill"));
 	});
 });
@@ -370,14 +357,8 @@ test("external skill directory import supports both managed global destinations"
 		await manager.importSkillDirectory("pi-global", source, "external-pi");
 		await manager.importSkillDirectory("agents-global", source, "external-agents");
 
-		assert.equal(
-			readFileSync(join(home, ".pi", "agent", "skills", "external-pi", "SKILL.md"), "utf8"),
-			readFileSync(join(source, "SKILL.md"), "utf8"),
-		);
-		assert.equal(
-			readFileSync(join(home, ".agents", "skills", "external-agents", "references", "guide.md"), "utf8"),
-			"preserved attachment\n",
-		);
+		assert.equal(readFileSync(join(home, ".pi", "agent", "skills", "external-pi", "SKILL.md"), "utf8"), readFileSync(join(source, "SKILL.md"), "utf8"));
+		assert.equal(readFileSync(join(home, ".agents", "skills", "external-agents", "references", "guide.md"), "utf8"), "preserved attachment\n");
 	});
 });
 

@@ -23,11 +23,7 @@ export type DshHostWarmupOptions = {
  * 不等待 boot 完成，避免 host 初始化、配置加载或异常影响主窗口可用性；发送链路仍由
  * ensureStarted() 幂等兜底。预热失败只记录诊断日志，用户可从配置概览手动重启恢复。
  */
-export function startDshHostInBackground(
-	host: DshHostStarter,
-	logger: DshHostStartupLogger,
-	options?: DshHostWarmupOptions,
-): void {
+export function startDshHostInBackground(host: DshHostStarter, logger: DshHostStartupLogger, options?: DshHostWarmupOptions): void {
 	// 不用 DSH 的用户（默认后端 pi）跳过预热，避免 utilityProcess 空转占内存。
 	if (options?.enabled === false) return;
 	void host.ensureStarted().catch((error: unknown) => {

@@ -68,9 +68,7 @@ it("迁移进行中 append 的新行不得被迁移快照覆盖丢失（M6）", 
 	// 迁移窗口内并发 append 一条纯文本消息（无图片，不会触碰 fakeBlobs.put）。
 	// 未修复：append 与迁移并发，立刻落盘（waitFor 立即命中），随后被迁移快照覆盖 → 丢行；
 	// 已修复：append 被文件串行锁挡住，直到迁移结束才写入（waitFor 超时后放行闸门）。
-	const appending = store.append(SESSION_ID, [
-		{ id: "m-new", role: "user", text: "appended-during-migration", timestamp: 2 },
-	]);
+	const appending = store.append(SESSION_ID, [{ id: "m-new", role: "user", text: "appended-during-migration", timestamp: 2 }]);
 	await waitFor(() => readFileSync(file, "utf8").includes("appended-during-migration"), 300);
 
 	releaseGate();
@@ -87,7 +85,14 @@ it("并发 append 之间也必须串行（M6 附属回归）", async () => {
 	const { ImageSessionStore } = loadTsCommonJs("src/main/imagegen/ImageSessionStore.ts");
 	const store = new ImageSessionStore({
 		getStorePath: () => storeDir,
-		blobs: { async put() { return null; }, async pruneUnreferenced() { return 0; } },
+		blobs: {
+			async put() {
+				return null;
+			},
+			async pruneUnreferenced() {
+				return 0;
+			},
+		},
 	});
 	// 引用格式文件（不触发迁移），20 条并发追加必须全部落盘、无一被覆盖
 	const first = { id: "base", role: "user", text: "base", timestamp: 0 };

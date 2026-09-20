@@ -4,17 +4,8 @@ import { showNotice } from "../../../utils/notice";
 import { Button } from "../../ui-shadcn/button";
 import { Checkbox } from "../../ui-shadcn/checkbox";
 import { ConfirmDialog } from "../../ui-shadcn/ConfirmDialog";
-import {
-	BackupDetailDialog,
-	RestoreDialog,
-	formatBytes,
-	formatReason,
-	formatTime,
-} from "./SettingsBackupDialogs";
-import type {
-	ConfigBackupDetail,
-	ConfigBackupMeta,
-} from "../../../../../shared/types/backup";
+import { BackupDetailDialog, RestoreDialog, formatBytes, formatReason, formatTime } from "./SettingsBackupDialogs";
+import type { ConfigBackupDetail, ConfigBackupMeta } from "../../../../../shared/types/backup";
 import { SettingsSection } from "./SettingsStorageTab";
 import { SettingRow } from "./SettingRows";
 
@@ -65,12 +56,7 @@ export function BackupTab() {
 	 * "bulk" = 批量删除，备份 id = 对应列表行/恢复弹窗）。
 	 * 结果一律 toast：成功 info、失败 error（用户可感知，不依赖页面内小字）。
 	 */
-	const runAction = async (
-		action: () => Promise<{ ok: boolean; error?: string }>,
-		successKey: TranslationKey,
-		successParams?: Record<string, string | number | boolean | null | undefined>,
-		busyKey: string = "action",
-	) => {
+	const runAction = async (action: () => Promise<{ ok: boolean; error?: string }>, successKey: TranslationKey, successParams?: Record<string, string | number | boolean | null | undefined>, busyKey: string = "action") => {
 		setBusy(busyKey);
 		try {
 			const result = await action();
@@ -88,10 +74,7 @@ export function BackupTab() {
 	};
 
 	const doCreate = () => {
-		void runAction(
-			() => window.piDesktop.configBackups.create("manual"),
-			"settings.backup.createSuccess",
-		);
+		void runAction(() => window.piDesktop.configBackups.create("manual"), "settings.backup.createSuccess");
 	};
 
 	/** 打开恢复选择弹窗：先读取脱敏详情拿到文件清单，再让用户勾选。 */
@@ -132,12 +115,7 @@ export function BackupTab() {
 			message: t("settings.backup.bulkDeleteConfirm", { count: ids.length }),
 			onConfirm: () => {
 				setConfirm(null);
-				void runAction(
-					() => window.piDesktop.configBackups.deleteMany(ids),
-					"settings.backup.bulkDeleteSuccess",
-					{ count: ids.length },
-					"bulk",
-				);
+				void runAction(() => window.piDesktop.configBackups.deleteMany(ids), "settings.backup.bulkDeleteSuccess", { count: ids.length }, "bulk");
 			},
 		});
 	};
@@ -150,12 +128,7 @@ export function BackupTab() {
 			}),
 			onConfirm: () => {
 				setConfirm(null);
-				void runAction(
-					() => window.piDesktop.configBackups.delete(backup.id),
-					"settings.backup.deleteSuccess",
-					undefined,
-					`del-${backup.id}`,
-				);
+				void runAction(() => window.piDesktop.configBackups.delete(backup.id), "settings.backup.deleteSuccess", undefined, `del-${backup.id}`);
 			},
 		});
 	};
@@ -179,10 +152,7 @@ export function BackupTab() {
 
 	const isLoading = backups === null;
 	/** 当前列表是否全部勾选（空列表视为未全选，避免全选态误导）。 */
-	const allSelected =
-		backups !== null &&
-		backups.length > 0 &&
-		backups.every((backup) => selected.has(backup.id));
+	const allSelected = backups !== null && backups.length > 0 && backups.every((backup) => selected.has(backup.id));
 
 	/** 全选/取消全选：整表切换，不动列表外的失效 id（refresh 已负责清理）。 */
 	const toggleSelectAll = () => {
@@ -192,15 +162,7 @@ export function BackupTab() {
 
 	return (
 		<>
-			{confirm && (
-				<ConfirmDialog
-					title={confirm.title}
-					message={confirm.message}
-					danger
-					onConfirm={confirm.onConfirm}
-					onCancel={() => setConfirm(null)}
-				/>
-			)}
+			{confirm && <ConfirmDialog title={confirm.title} message={confirm.message} danger onConfirm={confirm.onConfirm} onCancel={() => setConfirm(null)} />}
 			<BackupDetailDialog detail={detail} open={detailOpen} onOpenChange={setDetailOpen} />
 			<RestoreDialog
 				detail={restoreTarget}
@@ -215,72 +177,33 @@ export function BackupTab() {
 					if (!target) return;
 					void (async () => {
 						// 弹窗保持打开直到恢复完成：按钮转圈（restoring）→ toast 结果 → 关闭。
-						await runAction(
-							() => window.piDesktop.configBackups.restore(target.id, files),
-							"settings.backup.restoreSuccess",
-							undefined,
-							target.id,
-						);
+						await runAction(() => window.piDesktop.configBackups.restore(target.id, files), "settings.backup.restoreSuccess", undefined, target.id);
 						setRestoreTarget(null);
 					})();
 				}}
 			/>
 
 			<SettingsSection title={t("settings.backup.title")} description={t("settings.backup.desc")}>
-				<SettingRow
-					level={1}
-					title={<span>{t("settings.backup.createButton")}</span>}
-					description={t("settings.backup.createDesc")}
-				>
-					<Button
-						variant="secondary"
-						loading={busy === "action"}
-						disabled={busy !== null}
-						onClick={doCreate}
-					>
+				<SettingRow level={1} title={<span>{t("settings.backup.createButton")}</span>} description={t("settings.backup.createDesc")}>
+					<Button variant="secondary" loading={busy === "action"} disabled={busy !== null} onClick={doCreate}>
 						{t("settings.backup.createButton")}
 					</Button>
 				</SettingRow>
-				<p className="px-0.5 pb-1 text-caption text-muted-foreground">
-					{t("settings.backup.hint")}
-				</p>
+				<p className="px-0.5 pb-1 text-caption text-muted-foreground">{t("settings.backup.hint")}</p>
 			</SettingsSection>
 
 			<SettingsSection title={t("settings.backup.listTitle")}>
 				<div className="flex items-center justify-between gap-2 pb-1">
 					{backups && backups.length > 0 ? (
 						<label className="flex cursor-pointer select-none items-center gap-2 px-0.5 text-caption text-muted-foreground">
-							<Checkbox
-								checked={
-									allSelected
-										? true
-										: selected.size > 0
-											? "indeterminate"
-											: false
-								}
-								disabled={busy !== null}
-								onCheckedChange={toggleSelectAll}
-							/>
-							<span>
-								{allSelected
-									? t("common.deselectAll")
-									: t("common.selectAll")}
-							</span>
+							<Checkbox checked={allSelected ? true : selected.size > 0 ? "indeterminate" : false} disabled={busy !== null} onCheckedChange={toggleSelectAll} />
+							<span>{allSelected ? t("common.deselectAll") : t("common.selectAll")}</span>
 						</label>
 					) : (
 						<span />
 					)}
-					<Button
-						variant="ghost"
-						size="sm"
-						className="text-destructive hover:text-destructive"
-						disabled={selected.size === 0 || busy !== null}
-						loading={busy === "bulk"}
-						onClick={confirmBulkDelete}
-					>
-						{selected.size > 0
-							? t("settings.backup.bulkDeleteSelected", { count: selected.size })
-							: t("settings.backup.bulkDelete")}
+					<Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" disabled={selected.size === 0 || busy !== null} loading={busy === "bulk"} onClick={confirmBulkDelete}>
+						{selected.size > 0 ? t("settings.backup.bulkDeleteSelected", { count: selected.size }) : t("settings.backup.bulkDelete")}
 					</Button>
 				</div>
 				{isLoading ? (
@@ -294,42 +217,20 @@ export function BackupTab() {
 							level={1}
 							title={
 								<div className="flex items-center gap-2">
-									<Checkbox
-										checked={selected.has(backup.id)}
-										onCheckedChange={() => toggleSelect(backup.id)}
-									/>
+									<Checkbox checked={selected.has(backup.id)} onCheckedChange={() => toggleSelect(backup.id)} />
 									<span>{formatTime(backup.createdAt)}</span>
 								</div>
 							}
 							description={formatBackupDesc(backup)}
 						>
 							<div className="flex items-center gap-2">
-								<Button
-									variant="ghost"
-									size="sm"
-									disabled={busy !== null}
-									loading={busy === `view-${backup.id}`}
-									onClick={() => void openDetail(backup)}
-								>
+								<Button variant="ghost" size="sm" disabled={busy !== null} loading={busy === `view-${backup.id}`} onClick={() => void openDetail(backup)}>
 									{t("settings.backup.view")}
 								</Button>
-								<Button
-									variant="ghost"
-									size="sm"
-									disabled={busy !== null}
-									loading={busy === `restore-${backup.id}`}
-									onClick={() => void openRestoreDialog(backup)}
-								>
+								<Button variant="ghost" size="sm" disabled={busy !== null} loading={busy === `restore-${backup.id}`} onClick={() => void openRestoreDialog(backup)}>
 									{t("settings.backup.restore")}
 								</Button>
-								<Button
-									variant="ghost"
-									size="sm"
-									className="text-destructive hover:text-destructive"
-									disabled={busy !== null}
-									loading={busy === `del-${backup.id}`}
-									onClick={() => confirmDelete(backup)}
-								>
+								<Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" disabled={busy !== null} loading={busy === `del-${backup.id}`} onClick={() => confirmDelete(backup)}>
 									{t("common.delete")}
 								</Button>
 							</div>

@@ -2,28 +2,21 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
-const {
-	MAC_MANUAL_LATEST_RELEASE_URL,
-	createMacManualUpdateChecker,
-	parseGitHubReleaseVersion,
-	parseLatestReleaseTagFromJson,
-	resolveLatestReleaseVersion,
-	shouldReadJsonBody,
-} = loadTsCommonJs("src/main/update/macManualUpdate.ts", {
+const { MAC_MANUAL_LATEST_RELEASE_URL, createMacManualUpdateChecker, parseGitHubReleaseVersion, parseLatestReleaseTagFromJson, resolveLatestReleaseVersion, shouldReadJsonBody } = loadTsCommonJs("src/main/update/macManualUpdate.ts", {
 	stubs: {
-		electron: { net: { fetch: async () => { throw new Error("not used in test"); } } },
+		electron: {
+			net: {
+				fetch: async () => {
+					throw new Error("not used in test");
+				},
+			},
+		},
 	},
 });
 
 test("parseGitHubReleaseVersion accepts a redirected latest-release tag only", () => {
-	assert.equal(
-		parseGitHubReleaseVersion("https://github.com/ayuayue/PiDeck/releases/tag/v0.7.4"),
-		"0.7.4",
-	);
-	assert.equal(
-		parseGitHubReleaseVersion("https://github.com/ayuayue/PiDeck/releases/tag/0.7.4-beta.1"),
-		"0.7.4-beta.1",
-	);
+	assert.equal(parseGitHubReleaseVersion("https://github.com/ayuayue/PiDeck/releases/tag/v0.7.4"), "0.7.4");
+	assert.equal(parseGitHubReleaseVersion("https://github.com/ayuayue/PiDeck/releases/tag/0.7.4-beta.1"), "0.7.4-beta.1");
 	assert.equal(parseGitHubReleaseVersion("https://github.com/ayuayue/PiDeck/releases/latest"), null);
 	assert.equal(parseGitHubReleaseVersion("https://atomgit.com/ayuayue/PiDeck/releases/latest"), null);
 	assert.equal(parseGitHubReleaseVersion("not a URL"), null);

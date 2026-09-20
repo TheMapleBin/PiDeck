@@ -1,11 +1,7 @@
 import { app, ipcMain } from "electron";
 import { ipcChannels } from "../../shared/ipc";
 import type { AppLogger } from "../logging/AppLogger";
-import {
-	isShellContextMenuRegistered,
-	registerShellContextMenu,
-	unregisterShellContextMenu,
-} from "../integrations/shellContextMenu";
+import { isShellContextMenuRegistered, registerShellContextMenu, unregisterShellContextMenu } from "../integrations/shellContextMenu";
 
 export type ShellMenuIpcDeps = {
 	appLogger: AppLogger;

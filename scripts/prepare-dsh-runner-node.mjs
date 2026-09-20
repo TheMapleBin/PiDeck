@@ -55,11 +55,7 @@ async function downloadZip(target) {
  * 不解压整个 zip（约 30MB 展开），避免引入 unzipper 依赖。
  */
 function extractNodeExe(zipPath) {
-	const result = spawnSync(
-		"tar",
-		["-xf", zipPath, "-C", destDir, `${innerDir}/node.exe`],
-		{ encoding: "utf8", windowsHide: true },
-	);
+	const result = spawnSync("tar", ["-xf", zipPath, "-C", destDir, `${innerDir}/node.exe`], { encoding: "utf8", windowsHide: true });
 	if (result.status !== 0) {
 		throw new Error(`tar extract failed: ${result.stderr || result.stdout || `exit ${result.status}`}`);
 	}

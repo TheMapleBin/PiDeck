@@ -39,4 +39,3 @@ export function formatFullDateTime(ms: number): string {
 	const seconds = pad(d.getSeconds());
 	return `${year}-${month}-${date} ${hours}:${minutes}:${seconds}`;
 }
-

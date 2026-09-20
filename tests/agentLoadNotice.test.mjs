@@ -116,8 +116,9 @@ test("i18n copy covers zh-CN and en-US with count placeholder", () => {
 	const en = readFileSync("src/renderer/src/i18n/rendererCopy.en-US.ts", "utf8");
 	assert.match(zh, /"app\.highAgentCountTitle": "运行的 Agent 有点多，给电脑减减负吧"/);
 	assert.match(zh, /"app\.highAgentCountBody": "当前有 \{count\} 个 Agent/);
-	assert.match(en, /"app\.highAgentCountTitle": "Quite a few agents are running/);
-	assert.match(en, /"app\.highAgentCountBody": "There are currently \{count\} active agents/);
+	// en 文案值可能被格式化到下一行（引号也会改为单引号）：用 [\s\S]{0,8} 容忍换行。
+	assert.match(en, /"app\.highAgentCountTitle":[\s\S]{0,8}["']Quite a few agents are running/);
+	assert.match(en, /"app\.highAgentCountBody":[\s\S]{0,8}["']There are currently \{count\} active agents/);
 	// 静默按钮双语同步
 	assert.match(zh, /"app\.highAgentCountSnooze": "本次不再提醒"/);
 	assert.match(en, /"app\.highAgentCountSnooze": "Don't remind again this session"/);

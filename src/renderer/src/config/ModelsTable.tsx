@@ -5,10 +5,7 @@ import type { ModelItem } from "./configTypes";
 import { ConfigSelect, ConfigComboboxInput, openDocsInSystemBrowser } from "./ConfigShared";
 import { getUserAgentOptions } from "./userAgentPresets";
 import { emptyTierDraft, normalizeTiers, toTierDrafts, type CostTierDraft } from "./modelCostTiers";
-import {
-	countSelectedModelIndexes,
-	getModelSelectionState,
-} from "./modelBatchSelection";
+import { countSelectedModelIndexes, getModelSelectionState } from "./modelBatchSelection";
 import { Button } from "../components/ui-shadcn/button";
 import { Checkbox } from "../components/ui-shadcn/checkbox";
 import { Input } from "../components/ui-shadcn/input";
@@ -18,20 +15,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Popover, PopoverContent, PopoverTrigger } from "../components/ui-shadcn/popover";
 
 /** 模型已知字段（除未知字段外的受管字段），用于计费弹框里提示「高级字段将被保留」。 */
-const KNOWN_MODEL_FIELDS = new Set([
-	"id",
-	"name",
-	"api",
-	"baseUrl",
-	"reasoning",
-	"thinkingLevelMap",
-	"input",
-	"cost",
-	"contextWindow",
-	"maxTokens",
-	"headers",
-	"compat",
-]);
+const KNOWN_MODEL_FIELDS = new Set(["id", "name", "api", "baseUrl", "reasoning", "thinkingLevelMap", "input", "cost", "contextWindow", "maxTokens", "headers", "compat"]);
 
 export type ModelsTableProps = {
 	models: ModelItem[];
@@ -49,11 +33,7 @@ export type ModelsTableProps = {
 	onUpdateModelUserAgent?: (index: number, value: string) => void;
 	/** 读取该行当前的逐模型 UA 覆盖（可选；不传则不渲染该列）。 */
 	getModelUserAgentOverride?: (index: number) => string;
-	onUpdateModelThinkingLevel: (
-		index: number,
-		key: "xhigh" | "max",
-		value: "" | "xhigh" | "max",
-	) => void;
+	onUpdateModelThinkingLevel: (index: number, key: "xhigh" | "max", value: "" | "xhigh" | "max") => void;
 	onDeleteModel: (index: number) => void;
 	/** 重置为自适应（显式刷 endpoint），可选：不传则不渲染重置按钮。 */
 	onResetModel?: (index: number) => void;
@@ -144,11 +124,7 @@ export function ModelsTable(props: ModelsTableProps) {
 						{batchMode && (
 							<TableHead className="w-10 px-2 text-center">
 								<Label className="inline-flex size-7 cursor-pointer items-center justify-center rounded-md hover:bg-bg-hover">
-									<Checkbox
-										checked={selectionState === "checked" ? true : selectionState === "indeterminate" ? "indeterminate" : false}
-										onCheckedChange={() => props.onToggleAll?.(models.length)}
-										aria-label={t("config.selectAllModels")}
-									/>
+									<Checkbox checked={selectionState === "checked" ? true : selectionState === "indeterminate" ? "indeterminate" : false} onCheckedChange={() => props.onToggleAll?.(models.length)} aria-label={t("config.selectAllModels")} />
 								</Label>
 							</TableHead>
 						)}
@@ -187,27 +163,13 @@ export function ModelsTable(props: ModelsTableProps) {
 							props.onUpdateModel(i, "cost", Object.keys(nextCost).length > 0 ? nextCost : undefined);
 						};
 						const modelAdvancedFields = Object.keys(m).filter((key) => !KNOWN_MODEL_FIELDS.has(key));
-						const xhighValue =
-							m.thinkingLevelMap?.xhigh === "xhigh" || m.thinkingLevelMap?.xhigh === "max"
-								? m.thinkingLevelMap.xhigh
-								: "";
-						const maxValue =
-							m.thinkingLevelMap?.max === "xhigh" || m.thinkingLevelMap?.max === "max"
-								? m.thinkingLevelMap.max
-								: "";
-						const hasOnlyManagedThinkingLevelMap =
-							m.thinkingLevelMap &&
-							Object.keys(m.thinkingLevelMap).every((key) => key === "xhigh" || key === "max");
-						const modelComplexFields = ["api", "baseUrl", "thinkingLevelMap", "cost", "headers", "compat"].filter(
-							(key) => m[key] !== undefined && (key !== "thinkingLevelMap" || !hasOnlyManagedThinkingLevelMap),
-						);
+						const xhighValue = m.thinkingLevelMap?.xhigh === "xhigh" || m.thinkingLevelMap?.xhigh === "max" ? m.thinkingLevelMap.xhigh : "";
+						const maxValue = m.thinkingLevelMap?.max === "xhigh" || m.thinkingLevelMap?.max === "max" ? m.thinkingLevelMap.max : "";
+						const hasOnlyManagedThinkingLevelMap = m.thinkingLevelMap && Object.keys(m.thinkingLevelMap).every((key) => key === "xhigh" || key === "max");
+						const modelComplexFields = ["api", "baseUrl", "thinkingLevelMap", "cost", "headers", "compat"].filter((key) => m[key] !== undefined && (key !== "thinkingLevelMap" || !hasOnlyManagedThinkingLevelMap));
 						return (
 							<>
-								<TableRow
-									key={rowKey}
-									className="align-middle"
-									data-state={batchMode && selectedIndexes?.has(i) ? "selected" : undefined}
-								>
+								<TableRow key={rowKey} className="align-middle" data-state={batchMode && selectedIndexes?.has(i) ? "selected" : undefined}>
 									{batchMode && (
 										<TableCell className="w-10 p-2 text-center">
 											<Label className="inline-flex size-7 cursor-pointer items-center justify-center rounded-md hover:bg-bg-hover">
@@ -236,25 +198,13 @@ export function ModelsTable(props: ModelsTableProps) {
 										/>
 									</TableCell>
 									<TableCell className="min-w-0 p-2">
-										<Input
-											value={m.name ?? ""}
-											onChange={(e) => props.onUpdateModel(i, "name", e.target.value)}
-											onBlur={() => props.onBlurAutoFill?.(i, m.id)}
-											placeholder={t("config.modelDisplayName")}
-											className="h-8 min-w-0"
-										/>
+										<Input value={m.name ?? ""} onChange={(e) => props.onUpdateModel(i, "name", e.target.value)} onBlur={() => props.onBlurAutoFill?.(i, m.id)} placeholder={t("config.modelDisplayName")} className="h-8 min-w-0" />
 									</TableCell>
 									<TableCell className="p-2">
 										<Input
 											type="number"
 											value={m.contextWindow ?? ""}
-											onChange={(e) =>
-												props.onUpdateModel(
-													i,
-													"contextWindow",
-													e.target.value ? Number(e.target.value) : undefined,
-												)
-											}
+											onChange={(e) => props.onUpdateModel(i, "contextWindow", e.target.value ? Number(e.target.value) : undefined)}
 											// 未匹配到目录时保持空（不展示 1000000 这类暗示值，避免用户误以为已匹配，
 											// 实际 Pi 只会按自身 128k 回退）。留空 = 交给 Pi 默认，语义与保存结果一致。
 											className="h-8 min-w-0"
@@ -264,13 +214,7 @@ export function ModelsTable(props: ModelsTableProps) {
 										<Input
 											type="number"
 											value={m.maxTokens ?? ""}
-											onChange={(e) =>
-												props.onUpdateModel(
-													i,
-													"maxTokens",
-													e.target.value ? Number(e.target.value) : undefined,
-												)
-											}
+											onChange={(e) => props.onUpdateModel(i, "maxTokens", e.target.value ? Number(e.target.value) : undefined)}
 											// 与 contextWindow 一样保持纯数字，未匹配时不展示 128000 暗示值。
 											className="h-8 min-w-0"
 										/>
@@ -286,7 +230,12 @@ export function ModelsTable(props: ModelsTableProps) {
 											</PopoverTrigger>
 											<PopoverContent align="start" className="w-48 p-2">
 												<div className="config-thinking-levels-cell">
-													{([["xhigh", xhighValue], ["max", maxValue]] as const).map(([key, value]) => (
+													{(
+														[
+															["xhigh", xhighValue],
+															["max", maxValue],
+														] as const
+													).map(([key, value]) => (
 														<div key={key} className="config-thinking-levels-row">
 															<span className="config-thinking-levels-key">{key}</span>
 															<ConfigSelect
@@ -313,10 +262,7 @@ export function ModelsTable(props: ModelsTableProps) {
 									<TableCell className="p-2">
 										<div className="flex flex-col gap-1">
 											<Label className="config-input-option">
-												<Checkbox
-													checked={m.reasoning ?? false}
-													onCheckedChange={(checked) => props.onUpdateModel(i, "reasoning", checked)}
-												/>
+												<Checkbox checked={m.reasoning ?? false} onCheckedChange={(checked) => props.onUpdateModel(i, "reasoning", checked)} />
 												<span>{t("config.reasoning")}</span>
 											</Label>
 											<Label className="config-input-option">
@@ -324,9 +270,7 @@ export function ModelsTable(props: ModelsTableProps) {
 													checked={(m.input ?? []).includes("image")}
 													onCheckedChange={(checked) => {
 														const base = m.input ?? ["text", "image"];
-														const next = checked
-															? [...new Set([...base, "text", "image"])]
-															: ["text"];
+														const next = checked ? [...new Set([...base, "text", "image"])] : ["text"];
 														props.onUpdateModel(i, "input", next);
 													}}
 												/>
@@ -338,12 +282,7 @@ export function ModelsTable(props: ModelsTableProps) {
 									    写了则由 pi 覆盖 provider.headers 的同名键（优先级更高）。 */}
 									{showUaColumn && (
 										<TableCell className="p-2">
-											<ConfigComboboxInput
-												value={props.getModelUserAgentOverride!(i)}
-												options={modelUserAgentOptions}
-												onChange={(value) => props.onUpdateModelUserAgent!(i, value)}
-												placeholder={t("config.modelUserAgentInherit")}
-											/>
+											<ConfigComboboxInput value={props.getModelUserAgentOverride!(i)} options={modelUserAgentOptions} onChange={(value) => props.onUpdateModelUserAgent!(i, value)} placeholder={t("config.modelUserAgentInherit")} />
 										</TableCell>
 									)}
 									{/* 操作列：排序（上移/下移）+ 隐藏 + 重置为自适应 + 计费（Dialog）+ 删除 */}
@@ -351,36 +290,16 @@ export function ModelsTable(props: ModelsTableProps) {
 										<div className="flex items-center justify-end gap-0.5">
 											{props.onMoveModel && (
 												<>
-													<Button
-														variant="ghost"
-														size="icon-sm"
-														className="size-7"
-														onClick={() => props.onMoveModel!(i, "up")}
-														disabled={i === 0}
-														title={t("config.moveModelUp")}
-													>
+													<Button variant="ghost" size="icon-sm" className="size-7" onClick={() => props.onMoveModel!(i, "up")} disabled={i === 0} title={t("config.moveModelUp")}>
 														<ArrowUp className="size-3.5" aria-hidden="true" />
 													</Button>
-													<Button
-														variant="ghost"
-														size="icon-sm"
-														className="size-7"
-														onClick={() => props.onMoveModel!(i, "down")}
-														disabled={i === models.length - 1}
-														title={t("config.moveModelDown")}
-													>
+													<Button variant="ghost" size="icon-sm" className="size-7" onClick={() => props.onMoveModel!(i, "down")} disabled={i === models.length - 1} title={t("config.moveModelDown")}>
 														<ArrowDown className="size-3.5" aria-hidden="true" />
 													</Button>
 												</>
 											)}
 											{props.onHideModel && (
-												<Button
-													variant="ghost"
-													size="icon-sm"
-													className="size-7"
-													onClick={() => props.onHideModel!(i)}
-													title={t("config.hideModel")}
-												>
+												<Button variant="ghost" size="icon-sm" className="size-7" onClick={() => props.onHideModel!(i)} title={t("config.hideModel")}>
 													<EyeOff className="size-3.5" aria-hidden="true" />
 												</Button>
 											)}
@@ -392,22 +311,39 @@ export function ModelsTable(props: ModelsTableProps) {
 											<Button variant="ghost" size="icon-sm" className="size-7" onClick={() => setCostDialogIndex(i)} title={t("config.modelCost")}>
 												<Coins className="size-3.5" aria-hidden="true" />
 											</Button>
-											<Button variant="ghost" size="icon-sm" className="size-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
-												onClick={() => props.onDeleteModel(i)}
-												title={t("config.deleteModel")}
-											>
+											<Button variant="ghost" size="icon-sm" className="size-7 text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => props.onDeleteModel(i)} title={t("config.deleteModel")}>
 												<Trash2 size={14} />
 											</Button>
 										</div>
 									</TableCell>
 								</TableRow>
 								{/* 计费弹框：每行一个受控 Dialog，输入即保存（与表格内编辑行为一致） */}
-								<Dialog open={costDialogIndex === i} onOpenChange={(open) => { if (!open) setCostDialogIndex(null); }}>
+								<Dialog
+									open={costDialogIndex === i}
+									onOpenChange={(open) => {
+										if (!open) setCostDialogIndex(null);
+									}}
+								>
 									<DialogContent className="sm:max-w-3xl">
 										<DialogHeader>
 											<DialogTitle>{t("config.modelCost")}</DialogTitle>
 										</DialogHeader>
-										<div className="grid grid-cols-2 gap-2">{([["input", "config.costInput"], ["output", "config.costOutput"], ["cacheRead", "config.costCacheRead"], ["cacheWrite", "config.costCacheWrite"]] as const).map(([field, label]) => (<label key={field} className="config-model-cost-field"><span>{t(label)}</span>{/* 默认 0：cost 字段缺失会让 pi 启动会话失败，未配置时也显示 0 而非占位符 - */}<Input type="number" min="0" step="any" value={m.cost?.[field] ?? 0} onChange={(e) => updateCost(field, e.target.value)} /></label>))}</div>
+										<div className="grid grid-cols-2 gap-2">
+											{(
+												[
+													["input", "config.costInput"],
+													["output", "config.costOutput"],
+													["cacheRead", "config.costCacheRead"],
+													["cacheWrite", "config.costCacheWrite"],
+												] as const
+											).map(([field, label]) => (
+												<label key={field} className="config-model-cost-field">
+													<span>{t(label)}</span>
+													{/* 默认 0：cost 字段缺失会让 pi 启动会话失败，未配置时也显示 0 而非占位符 - */}
+													<Input type="number" min="0" step="any" value={m.cost?.[field] ?? 0} onChange={(e) => updateCost(field, e.target.value)} />
+												</label>
+											))}
+										</div>
 										<div className="mt-3 border-t pt-3">
 											<div className="mb-1.5 flex items-start justify-between gap-2">
 												<div>
@@ -415,7 +351,8 @@ export function ModelsTable(props: ModelsTableProps) {
 													<div className="text-[11px] leading-relaxed text-text-tertiary">{t("config.costTiersHint")}</div>
 												</div>
 												<Button variant="outline" size="sm" onClick={() => applyTiers([...(tierEditor?.drafts ?? []), emptyTierDraft()])}>
-													<Plus className="size-3.5" />{t("config.costTiersAdd")}
+													<Plus className="size-3.5" />
+													{t("config.costTiersAdd")}
 												</Button>
 											</div>
 											{(tierEditor?.drafts.length ?? 0) > 0 ? (
@@ -462,17 +399,15 @@ export function ModelsTable(props: ModelsTableProps) {
 												{t("config.advancedPreservedModel", {
 													fields: [...modelComplexFields, ...modelAdvancedFields].join(", "),
 												})}
-												<a
-													href="https://pi.dev/docs/latest/models"
-													onClick={openDocsInSystemBrowser("https://pi.dev/docs/latest/models")}
-													className="inline-flex items-center gap-0.5 text-[color:var(--color-accent)] no-underline"
-												>
+												<a href="https://pi.dev/docs/latest/models" onClick={openDocsInSystemBrowser("https://pi.dev/docs/latest/models")} className="inline-flex items-center gap-0.5 text-[color:var(--color-accent)] no-underline">
 													{t("config.docsModels")}
 												</a>
 											</div>
 										)}
 										<DialogFooter>
-											<Button variant="default" size="sm" onClick={() => setCostDialogIndex(null)}>{t("common.done")}</Button>
+											<Button variant="default" size="sm" onClick={() => setCostDialogIndex(null)}>
+												{t("common.done")}
+											</Button>
 										</DialogFooter>
 									</DialogContent>
 								</Dialog>

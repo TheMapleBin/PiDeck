@@ -86,9 +86,7 @@ export function resolveLockPackageKey(fromKey, name, lockPackages, range) {
 	if (candidates.length === 1 || !range) return candidates[0];
 	// 范围匹配用 semver（build 脚本场景，devDependencies 里有；手工实现 semver
 	// 已经出过 ^3.1.0 不满足 3.2.1 的错判，不再手写）。
-	const satisfier = candidates.find(
-		(key) => semver.satisfies(lockPackages[key]?.version ?? "", range, { includePrerelease: true }),
-	);
+	const satisfier = candidates.find((key) => semver.satisfies(lockPackages[key]?.version ?? "", range, { includePrerelease: true }));
 	return satisfier ?? candidates[0];
 }
 

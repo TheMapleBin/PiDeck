@@ -1,22 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { SessionImportCopy } from "./SessionImportCopy";
-import {
-	asArray,
-	extractCursorUserText,
-	joinCursorTextBlocks,
-	parseCursorTimestampFromText,
-	readRecord,
-	readString,
-	type CursorRecord,
-	type ParsedCursorSession,
-} from "./cursorSessionSource";
+import { asArray, extractCursorUserText, joinCursorTextBlocks, parseCursorTimestampFromText, readRecord, readString, type CursorRecord, type ParsedCursorSession } from "./cursorSessionSource";
 import { normalizeImportedToolArguments } from "./importToolArguments";
-import {
-	importedContentHasToolCall,
-	importedUnknownBlockAsText,
-	normalizeImportedStopReason,
-	tryImportedImageBlock,
-} from "./importNormalize";
+import { importedContentHasToolCall, importedUnknownBlockAsText, normalizeImportedStopReason, tryImportedImageBlock } from "./importNormalize";
 
 export type ConvertedCursorSession = {
 	/** 转换结果元数据；`raw` 仅在内存模式（scan 摘要）下由调用方拼装 */
@@ -38,9 +24,7 @@ export type ConvertCursorInput = {
  * 仅供**扫描**使用（entries 是头部小数组，体积有上界）；
  * 导入路径请走 convertCursorSessionTo（流式写盘）。
  */
-export async function convertCursorSession(
-	input: ConvertCursorInput,
-): Promise<ConvertedCursorSession> {
+export async function convertCursorSession(input: ConvertCursorInput): Promise<ConvertedCursorSession> {
 	const lines: string[] = [];
 	const result = await convertCursorSessionTo({
 		...input,
@@ -102,11 +86,7 @@ function contentBlocksOf(entry: CursorRecord): unknown[] {
  * toolResult 行画工具卡，所以每个 tool_use 在没有配对结果时补一条空输出
  * 的 toolResult（参数仍在 assistant.toolCall 里）。源里若已有 tool_result，不重复。
  */
-export function convertCursorContentBlocks(
-	blocks: unknown[],
-	sessionId: string,
-	toolSeq: { n: number },
-): { content: PiContent[]; toolResults: Array<{ id: string; name: string; text: string; isError: boolean }> } {
+export function convertCursorContentBlocks(blocks: unknown[], sessionId: string, toolSeq: { n: number }): { content: PiContent[]; toolResults: Array<{ id: string; name: string; text: string; isError: boolean }> } {
 	const content: PiContent[] = [];
 	const toolResults: Array<{ id: string; name: string; text: string; isError: boolean }> = [];
 
@@ -204,13 +184,7 @@ export function convertCursorContentBlocks(
  * 每个 tool_use 写成 assistant.toolCall，并紧跟一条 toolResult（Cursor 源常缺输出，
  * 结果正文可为空）。连续多条 assistant 行不合并。turn_ended 是控制标记，丢掉。
  */
-export async function convertCursorSessionTo(input: {
-	projectPath: string;
-	session: ParsedCursorSession;
-	translate: SessionImportCopy;
-	entries: Iterable<CursorRecord> | AsyncIterable<CursorRecord>;
-	sink: (line: string) => Promise<void> | void;
-}): Promise<ConvertedCursorSession> {
+export async function convertCursorSessionTo(input: { projectPath: string; session: ParsedCursorSession; translate: SessionImportCopy; entries: Iterable<CursorRecord> | AsyncIterable<CursorRecord>; sink: (line: string) => Promise<void> | void }): Promise<ConvertedCursorSession> {
 	const { projectPath, session, translate, entries, sink } = input;
 	const sessionId = session.meta.sessionId;
 	const timestamp = new Date(session.meta.firstTimestamp).toISOString();
@@ -225,12 +199,7 @@ export async function convertCursorSessionTo(input: {
 		await sink(JSON.stringify(entry));
 	};
 
-	const pushMessage = async (
-		role: "user" | "assistant" | "toolResult",
-		content: PiContent[],
-		extra: Record<string, unknown> = {},
-		timestampValue?: number,
-	) => {
+	const pushMessage = async (role: "user" | "assistant" | "toolResult", content: PiContent[], extra: Record<string, unknown> = {}, timestampValue?: number) => {
 		if (content.length === 0) return;
 		const id = makeId(sessionId, sequence++);
 		const ts = new Date(timestampValue ?? lastTimestamp).toISOString();
@@ -296,9 +265,7 @@ export async function convertCursorSessionTo(input: {
 			for (const item of converted.content) {
 				if (item.type === "text") {
 					const original = readString(item.text);
-					const isUserWrapper =
-						original === raw ||
-						(Boolean(text) && original.includes("<user_query>") && original.includes(text));
+					const isUserWrapper = original === raw || (Boolean(text) && original.includes("<user_query>") && original.includes(text));
 					if (isUserWrapper) {
 						if (!wrapperReplaced) {
 							wrapperReplaced = true;
@@ -357,11 +324,7 @@ export async function convertCursorSessionTo(input: {
 		}
 
 		if (type === "tool_result") {
-			const converted = convertCursorContentBlocks(
-				blocks.length > 0 ? blocks : [entry],
-				sessionId,
-				toolSeq,
-			);
+			const converted = convertCursorContentBlocks(blocks.length > 0 ? blocks : [entry], sessionId, toolSeq);
 			for (const result of converted.toolResults) {
 				await pushMessage(
 					"toolResult",
@@ -377,9 +340,7 @@ export async function convertCursorSessionTo(input: {
 		}
 	}
 
-	const title =
-		cleanCursorTitle(titleState.title) ||
-		translate("session.importedTitle", { source: "Cursor" });
+	const title = cleanCursorTitle(titleState.title) || translate("session.importedTitle", { source: "Cursor" });
 	// 使用 pi 原生 session_info 格式追加在末尾，避免旧版 sessionName 行（无 type 字段）
 	// 在文件头破坏 pi 的首行校验导致会话无法加载（见 #114）。
 	await pushEntry({

@@ -29,11 +29,7 @@ export type ShouldAutoFetchProviderUsageInput = {
  * - interval <= 0（该 provider 关闭间隔轮询）→ 不需要（只靠手动刷新）；
  * - 否则按 interval 分钟过期判定（默认 5 分钟）。
  */
-export function providerUsageEntryStale(
-	entry: Pick<ProviderUsageEntry, "fetchedAt"> | null,
-	intervalMinutes: number = USAGE_PROBE_DEFAULT_INTERVAL_MINUTES,
-	now: number = Date.now(),
-): boolean {
+export function providerUsageEntryStale(entry: Pick<ProviderUsageEntry, "fetchedAt"> | null, intervalMinutes: number = USAGE_PROBE_DEFAULT_INTERVAL_MINUTES, now: number = Date.now()): boolean {
 	if (!entry || entry.fetchedAt == null) return true;
 	if (intervalMinutes <= 0) return false;
 	return now - entry.fetchedAt >= intervalMinutes * 60_000;

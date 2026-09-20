@@ -24,12 +24,7 @@ export const DSH_RUNNER_NODE_SETTINGS_TARGET: SettingsFocusTarget = {
 	section: "dsh-runner-node",
 };
 
-export function showDshRuntimeBlockHint(
-	openSettings: (target: SettingsFocusTarget) => void,
-	state: DshRuntimeState,
-	reason?: string,
-	versions?: { installed?: string; declared?: string },
-): void {
+export function showDshRuntimeBlockHint(openSettings: (target: SettingsFocusTarget) => void, state: DshRuntimeState, reason?: string, versions?: { installed?: string; declared?: string }): void {
 	const message =
 		state === "broken"
 			? t("dsh.runtime.sendBroken", { reason: reason ?? "" })
@@ -61,14 +56,15 @@ export function showDshRunnerNodeHint(openSettings: (target: SettingsFocusTarget
 }
 
 /** DSH 会话用沙箱前探测本机 Node 24；缺了只提示去设置，不拦发送（仍可回退 electron.exe）。 */
-export function maybeHintMissingDshRunnerNode(
-	openSettings: (target: SettingsFocusTarget) => void,
-): void {
+export function maybeHintMissingDshRunnerNode(openSettings: (target: SettingsFocusTarget) => void): void {
 	if (runnerNodeHintShown) return;
 	if (typeof navigator !== "undefined" && !navigator.userAgent.includes("Windows")) return;
-	void desktopApi.sessions.detectDshRunnerNode().then((info) => {
-		if (!info.compatible) showDshRunnerNodeHint(openSettings);
-	}).catch(() => {
-		// 探测失败不打扰：host 仍会走 electron.exe 回退
-	});
+	void desktopApi.sessions
+		.detectDshRunnerNode()
+		.then((info) => {
+			if (!info.compatible) showDshRunnerNodeHint(openSettings);
+		})
+		.catch(() => {
+			// 探测失败不打扰：host 仍会走 electron.exe 回退
+		});
 }

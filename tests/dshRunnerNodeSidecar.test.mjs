@@ -6,12 +6,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
-const {
-	DSH_RUNNER_NODE_ENV,
-	DSH_RUNNER_NODE_DIRNAME,
-	dshRunnerNodeFileName,
-	resolveDshRunnerNodeSidecar,
-} = loadTsCommonJs("src/main/dsh/dshRunnerNodeSidecar.ts");
+const { DSH_RUNNER_NODE_ENV, DSH_RUNNER_NODE_DIRNAME, dshRunnerNodeFileName, resolveDshRunnerNodeSidecar } = loadTsCommonJs("src/main/dsh/dshRunnerNodeSidecar.ts");
 
 test("dshRunnerNodeFileName：win32 是 node.exe，其余是 node", () => {
 	assert.equal(dshRunnerNodeFileName("win32"), "node.exe");
@@ -20,10 +15,7 @@ test("dshRunnerNodeFileName：win32 是 node.exe，其余是 node", () => {
 });
 
 test("resolveDshRunnerNodeSidecar：非 win32 一律不解析", () => {
-	assert.equal(
-		resolveDshRunnerNodeSidecar({ platform: "linux", appPath: "C:\\app", envPath: "C:\\node.exe" }),
-		undefined,
-	);
+	assert.equal(resolveDshRunnerNodeSidecar({ platform: "linux", appPath: "C:\\app", envPath: "C:\\node.exe" }), undefined);
 });
 
 test("resolveDshRunnerNodeSidecar：env 覆盖优先于用户配置 / extraResources 残留", async () => {

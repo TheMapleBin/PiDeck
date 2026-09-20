@@ -12,7 +12,7 @@ const editor = readFileSync("src/renderer/src/components/automation/AutomationTa
 
 test("a project menu opens its own automation task table", () => {
 	assert.match(sidebar, /manageAutomations: \(projectId: string\) => void/);
-	assert.match(sidebar, /onManageAutomations=\{\(\) => \{ actions\.projects\.manageAutomations\(menuProject\.id\)/);
+	assert.match(sidebar, /onManageAutomations=\{\(\) => \{?\s*actions\.projects\.manageAutomations\(menuProject\.id\)/);
 	assert.match(projectMenu, /onManageAutomations: \(\) => void/);
 	assert.match(projectMenu, /<Clock className="size-3\.5"/);
 	assert.match(app, /manageAutomations: \(projectId\) => openAutomationModal\(projectId\)/);

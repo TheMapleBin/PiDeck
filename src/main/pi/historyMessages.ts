@@ -32,19 +32,11 @@ function imageSignature(message: ChatMessage): string {
 
 export function messageFingerprint(message: ChatMessage): string {
 	const role = message.role;
-	const toolCallId =
-		message.role === "tool"
-			? (message.meta as Record<string, unknown> | undefined)?.toolCallId
-			: undefined;
+	const toolCallId = message.role === "tool" ? (message.meta as Record<string, unknown> | undefined)?.toolCallId : undefined;
 	if (typeof toolCallId === "string" && toolCallId) {
 		return `tool\u0000${toolCallId}`;
 	}
-	return [
-		role,
-		stripAnsi(message.text),
-		stripAnsi(message.thinking ?? ""),
-		imageSignature(message),
-	].join("\u0000");
+	return [role, stripAnsi(message.text), stripAnsi(message.thinking ?? ""), imageSignature(message)].join("\u0000");
 }
 
 /**
@@ -75,11 +67,7 @@ const FINGERPRINT_MATCH_TIME_TOLERANCE_MS = 5_000;
  * 指纹相同 → 视为同一条，丢弃运行期副本（以投影为准：位置正确、带 entryId）；
  * 指纹不匹配 → 真正未落盘的进行中消息，保留在尾部等待事件流继续 upsert。
  */
-export function mergeHistoryWithPreservedMessages(
-	historyMessages: ChatMessage[],
-	currentMessages: ChatMessage[],
-	preserveMessagesAfter?: number,
-): ChatMessage[] {
+export function mergeHistoryWithPreservedMessages(historyMessages: ChatMessage[], currentMessages: ChatMessage[], preserveMessagesAfter?: number): ChatMessage[] {
 	if (!preserveMessagesAfter) return historyMessages;
 	// 投影侧指纹预索引（fingerprint → 未消耗下标队列）：大会话投影几千条时避免
 	// 对每条 preserved 做全表扫描（O(p×n) → O(p + n)），后台加载完成不卡主线程。
@@ -92,10 +80,7 @@ export function mergeHistoryWithPreservedMessages(
 	});
 	const consumedHistory = new Set<number>();
 	const preservedMessages = currentMessages.filter((message) => {
-		if (
-			message.timestamp < preserveMessagesAfter ||
-			message.meta?.historyLoading === true
-		) {
+		if (message.timestamp < preserveMessagesAfter || message.meta?.historyLoading === true) {
 			return false;
 		}
 		const fingerprint = messageFingerprint(message);
@@ -105,12 +90,7 @@ export function mergeHistoryWithPreservedMessages(
 		// 且时间须在容差内（同一条消息两通道 timestamp 同源）。两者都满足
 		// 才消耗：既避免双份，又不误删加载期间真实新增的同文本消息。
 		const tailStart = Math.max(0, historyMessages.length - FINGERPRINT_MATCH_TAIL);
-		const timeTolerantCandidates = candidates.filter(
-			(index) =>
-				index >= tailStart &&
-				Math.abs((historyMessages[index].timestamp ?? 0) - (message.timestamp ?? 0)) <=
-					FINGERPRINT_MATCH_TIME_TOLERANCE_MS,
-		);
+		const timeTolerantCandidates = candidates.filter((index) => index >= tailStart && Math.abs((historyMessages[index].timestamp ?? 0) - (message.timestamp ?? 0)) <= FINGERPRINT_MATCH_TIME_TOLERANCE_MS);
 		// 从最新往旧一一消耗（投影尾部即最近写入，先消耗最近的），避免错配删多。
 		for (let i = timeTolerantCandidates.length - 1; i >= 0; i--) {
 			const historyIndex = timeTolerantCandidates[i];
@@ -121,9 +101,7 @@ export function mergeHistoryWithPreservedMessages(
 		}
 		return true;
 	});
-	return preservedMessages.length > 0
-		? [...historyMessages, ...preservedMessages]
-		: historyMessages;
+	return preservedMessages.length > 0 ? [...historyMessages, ...preservedMessages] : historyMessages;
 }
 
 /**
@@ -140,10 +118,7 @@ export function mergeHistoryWithPreservedMessages(
  * 2. 内容指纹 + 时间容差（live 消息没有 entryId，只能按正文核对，与摘要同口径）。
  * 同一身份只消耗一次，时间超容差视为不同消息——宁可换 key（个别消息重挂载）也不能张冠李戴。
  */
-export function stabilizeProjectedIdsFromIdentities(
-	identities: readonly RetainedMessageIdentity[],
-	projectedMessages: ChatMessage[],
-): ChatMessage[] {
+export function stabilizeProjectedIdsFromIdentities(identities: readonly RetainedMessageIdentity[], projectedMessages: ChatMessage[]): ChatMessage[] {
 	if (identities.length === 0 || projectedMessages.length === 0) return projectedMessages;
 	// entryId → 身份：后捕获的覆盖先捕获的（同一文件条目多次重启后可能留下多条身份，
 	// 最新一次捕获才是 UI 当前展示的 id）。
@@ -193,10 +168,7 @@ export function stabilizeProjectedIdsFromIdentities(
  *
  * 幂等：旧缓存已是投影版时，指纹匹配到的是同 id，重写无副作用。
  */
-export function stabilizeReloadedMessageIds(
-	previousMessages: ChatMessage[],
-	projectedMessages: ChatMessage[],
-): ChatMessage[] {
+export function stabilizeReloadedMessageIds(previousMessages: ChatMessage[], projectedMessages: ChatMessage[]): ChatMessage[] {
 	if (previousMessages.length === 0 || projectedMessages.length === 0) {
 		return projectedMessages;
 	}
@@ -219,10 +191,7 @@ export function stabilizeReloadedMessageIds(
 			const prevIndex = candidates[i];
 			if (consumed.has(prevIndex)) continue;
 			const prev = previousMessages[prevIndex];
-			if (
-				Math.abs((prev.timestamp ?? 0) - (message.timestamp ?? 0)) >
-				FINGERPRINT_MATCH_TIME_TOLERANCE_MS
-			) {
+			if (Math.abs((prev.timestamp ?? 0) - (message.timestamp ?? 0)) > FINGERPRINT_MATCH_TIME_TOLERANCE_MS) {
 				continue;
 			}
 			consumed.add(prevIndex);

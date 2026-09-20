@@ -34,82 +34,53 @@ export type StoreSearchBarProps = {
 	onKeyDown?: (event: ReactKeyboardEvent<HTMLInputElement>) => void;
 };
 
-export const StoreSearchBar = forwardRef<HTMLInputElement, StoreSearchBarProps>(
-	function StoreSearchBar(
-		{
-			value,
-			onChange,
-			placeholder,
-			onSearch,
-			searchDisabled,
-			searching = false,
-			suggestions,
-			onSuggestionClick,
-			className,
-			autoFocus,
-			onKeyDown,
-		},
-		ref,
-	) {
-		return (
-			<div className={cn("flex min-w-0 flex-col gap-2.5", className)}>
-				<div className="flex min-w-0 items-center gap-2">
-					{/* beui input 胶囊搜索框：h-9 对齐应用控件节奏（官方默认 h-11 偏大）；
+export const StoreSearchBar = forwardRef<HTMLInputElement, StoreSearchBarProps>(function StoreSearchBar({ value, onChange, placeholder, onSearch, searchDisabled, searching = false, suggestions, onSuggestionClick, className, autoFocus, onKeyDown }, ref) {
+	return (
+		<div className={cn("flex min-w-0 flex-col gap-2.5", className)}>
+			<div className="flex min-w-0 items-center gap-2">
+				{/* beui input 胶囊搜索框：h-9 对齐应用控件节奏（官方默认 h-11 偏大）；
 					    disabled/autoFocus/onKeyDown 均透传，受控值走 value+onChange。 */}
-					<MotionInput
-						ref={ref}
-						value={value}
-						onChange={onChange}
-						placeholder={placeholder}
-						disabled={searching}
-						autoFocus={autoFocus}
-						onKeyDown={onKeyDown}
-						leftIcon={<Search />}
-						className="min-w-0 flex-1"
-						classNames={{
-							field: "h-9",
-							input: "text-[13px]",
-						}}
-					/>
-					{onSearch ? (
-						<Button
-							variant="default"
-							size="icon-sm"
-							className="size-9 shrink-0 rounded-full"
-							onClick={onSearch}
-							disabled={searchDisabled || searching}
-							aria-label={t("common.search")}
-							title={t("common.search")}
-						>
-							{searching ? (
-								<Loader2 size={14} className="animate-pideck-spin" />
-							) : (
-								<Search size={14} strokeWidth={1.8} />
-							)}
-						</Button>
-					) : null}
-				</div>
-				{suggestions && suggestions.length > 0 ? (
-					<div className="flex flex-wrap gap-1.5">
-						{suggestions.map((s) => (
-							<Button
-								key={s}
-								variant="ghost"
-								size="sm"
-								// 悬停只改「面」和「面上的前景」两组 token（bg-accent = 悬停浅面，
-								// text-accent-foreground = 该面上的正文色），与 ghost Button 变体同语义。
-								// 禁止写 hover:text-accent：Tailwind 主题里 --color-accent 指向 --color-bg-active
-								// （背景色），当文字色用会与悬停底色同值，亮/暗两种模式下都表现为
-								// 「悬停后变色块、文字消失」。
-								className="h-7 rounded-full border border-border-subtle bg-bg-muted px-2.5 text-caption font-normal text-text-secondary hover:border-accent hover:bg-accent hover:text-accent-foreground"
-								onClick={() => onSuggestionClick?.(s)}
-							>
-								{s}
-							</Button>
-						))}
-					</div>
+				<MotionInput
+					ref={ref}
+					value={value}
+					onChange={onChange}
+					placeholder={placeholder}
+					disabled={searching}
+					autoFocus={autoFocus}
+					onKeyDown={onKeyDown}
+					leftIcon={<Search />}
+					className="min-w-0 flex-1"
+					classNames={{
+						field: "h-9",
+						input: "text-[13px]",
+					}}
+				/>
+				{onSearch ? (
+					<Button variant="default" size="icon-sm" className="size-9 shrink-0 rounded-full" onClick={onSearch} disabled={searchDisabled || searching} aria-label={t("common.search")} title={t("common.search")}>
+						{searching ? <Loader2 size={14} className="animate-pideck-spin" /> : <Search size={14} strokeWidth={1.8} />}
+					</Button>
 				) : null}
 			</div>
-		);
-	},
-);
+			{suggestions && suggestions.length > 0 ? (
+				<div className="flex flex-wrap gap-1.5">
+					{suggestions.map((s) => (
+						<Button
+							key={s}
+							variant="ghost"
+							size="sm"
+							// 悬停只改「面」和「面上的前景」两组 token（bg-accent = 悬停浅面，
+							// text-accent-foreground = 该面上的正文色），与 ghost Button 变体同语义。
+							// 禁止写 hover:text-accent：Tailwind 主题里 --color-accent 指向 --color-bg-active
+							// （背景色），当文字色用会与悬停底色同值，亮/暗两种模式下都表现为
+							// 「悬停后变色块、文字消失」。
+							className="h-7 rounded-full border border-border-subtle bg-bg-muted px-2.5 text-caption font-normal text-text-secondary hover:border-accent hover:bg-accent hover:text-accent-foreground"
+							onClick={() => onSuggestionClick?.(s)}
+						>
+							{s}
+						</Button>
+					))}
+				</div>
+			) : null}
+		</div>
+	);
+});

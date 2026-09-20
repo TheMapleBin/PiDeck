@@ -1,15 +1,4 @@
-import {
-	existsSync,
-	mkdirSync,
-	openSync,
-	closeSync,
-	readFileSync,
-	readdirSync,
-	renameSync,
-	statSync,
-	unlinkSync,
-	writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, openSync, closeSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 
 /**
@@ -139,7 +128,10 @@ export function readProcIdentity(pid: number, options?: LockProbeOptions): ProcI
 	}
 	const close = raw.lastIndexOf(")");
 	if (close < 0) return null;
-	const fields = raw.slice(close + 1).trim().split(/\s+/);
+	const fields = raw
+		.slice(close + 1)
+		.trim()
+		.split(/\s+/);
 	const state = fields[0];
 	if (!state) return null;
 	// starttime 是第 22 字段；comm 之后的 tokens 从第 3 字段开始，故下标为 22 - 3
@@ -187,16 +179,11 @@ export function procStartWallClockMs(pid: number, options?: LockProbeOptions): n
  *
  * 非 Linux（无 /proc）：只能 signal 0，返回 live/unverified 由上层用握手超时兜底。
  */
-export function assessLockOwner(
-	payload: LockPayload,
-	options?: LockProbeOptions,
-): LockOwnerAssessment {
+export function assessLockOwner(payload: LockPayload, options?: LockProbeOptions): LockOwnerAssessment {
 	const platform = options?.platform ?? process.platform;
 	if (platform !== "linux") {
 		const alive = (options?.isPidAlive ?? isPidAliveDefault)(payload.pid);
-		return alive
-			? { verdict: "unverified", detail: `pid ${payload.pid} alive (no /proc identity)` }
-			: { verdict: "dead", detail: `pid ${payload.pid} not alive` };
+		return alive ? { verdict: "unverified", detail: `pid ${payload.pid} alive (no /proc identity)` } : { verdict: "dead", detail: `pid ${payload.pid} not alive` };
 	}
 
 	const identity = readProcIdentity(payload.pid, options);
@@ -206,11 +193,7 @@ export function assessLockOwner(
 	if (identity.state === "Z" || identity.state === "X") {
 		return { verdict: "zombie", detail: `pid ${payload.pid} state ${identity.state}` };
 	}
-	if (
-		payload.procStartTicks !== undefined &&
-		identity.startTicks !== null &&
-		payload.procStartTicks !== identity.startTicks
-	) {
+	if (payload.procStartTicks !== undefined && identity.startTicks !== null && payload.procStartTicks !== identity.startTicks) {
 		return {
 			verdict: "recycled",
 			detail: `pid ${payload.pid} start ticks ${identity.startTicks} != lock ${payload.procStartTicks}`,
@@ -247,18 +230,13 @@ export function readLockPayload(lockPath: string): LockPayload | null {
 		pid,
 		version: typeof record.version === "string" ? record.version : "",
 		at: typeof at === "number" && Number.isFinite(at) ? at : 0,
-		...(typeof ticks === "number" && Number.isFinite(ticks)
-			? { procStartTicks: ticks }
-			: {}),
+		...(typeof ticks === "number" && Number.isFinite(ticks) ? { procStartTicks: ticks } : {}),
 		...(record.ready === true ? { ready: true } : {}),
 	};
 }
 
 /** 独占创建锁文件；EEXIST 与「写不进去」必须区分对待，前者是正常竞态，后者是环境故障。 */
-function writeLockExclusive(
-	lockPath: string,
-	payload: LockPayload,
-): { ok: true } | { ok: false; code: string } {
+function writeLockExclusive(lockPath: string, payload: LockPayload): { ok: true } | { ok: false; code: string } {
 	try {
 		// wx：文件已存在则失败，避免双主实例竞态
 		const fd = openSync(lockPath, "wx");
@@ -269,19 +247,12 @@ function writeLockExclusive(
 		}
 		return { ok: true };
 	} catch (error) {
-		const code =
-			typeof error === "object" && error !== null && "code" in error
-				? String((error as { code?: unknown }).code)
-				: "UNKNOWN";
+		const code = typeof error === "object" && error !== null && "code" in error ? String((error as { code?: unknown }).code) : "UNKNOWN";
 		return { ok: false, code };
 	}
 }
 
-function buildPayload(
-	version: string,
-	options?: LockProbeOptions,
-	ready = false,
-): LockPayload {
+function buildPayload(version: string, options?: LockProbeOptions, ready = false): LockPayload {
 	const identity = readProcIdentity(process.pid, options);
 	const startTicks = identity?.startTicks;
 	const payload: LockPayload = {
@@ -302,11 +273,7 @@ function buildPayload(
  * 旧实现把这些情况也当成「已有实例在运行」，配合次实例的 `app.exit(0)`
  * 就变成用户完全看不到反馈的启动失败——这里改为让调用方降级继续启动。
  */
-export function claimVersionLock(
-	lockPath: string,
-	version: string,
-	options?: LockProbeOptions,
-): ClaimOutcome {
+export function claimVersionLock(lockPath: string, version: string, options?: LockProbeOptions): ClaimOutcome {
 	const payload = buildPayload(version, options);
 	const first = writeLockExclusive(lockPath, payload);
 	if (first.ok) return { status: "acquired", tookOver: false, reason: "fresh lock" };
@@ -336,12 +303,7 @@ export function claimVersionLock(
  *
  * 用有界重试代替递归：锁路径可能是个目录、或被别的进程反复重建，
  * 无界递归会把「启动卡死」换成「启动栈溢出」。 */
-export function takeOverVersionLock(
-	lockPath: string,
-	version: string,
-	reason: string,
-	options?: LockProbeOptions,
-): ClaimOutcome {
+export function takeOverVersionLock(lockPath: string, version: string, reason: string, options?: LockProbeOptions): ClaimOutcome {
 	let detail = reason;
 	for (let attempt = 0; attempt < 3; attempt += 1) {
 		try {
@@ -415,10 +377,7 @@ function fileAgeMs(path: string, now: number): number {
  * 扫描锁目录，给出每个锁文件的持有者判定。
  * 体检报告与启动时的陈旧锁回收共用同一份判定，避免两处规则漂移。
  */
-export function inspectInstanceLocks(
-	locksDir: string,
-	options?: LockProbeOptions,
-): { locks: LockFileInspection[]; orphanFocusFiles: string[] } {
+export function inspectInstanceLocks(locksDir: string, options?: LockProbeOptions): { locks: LockFileInspection[]; orphanFocusFiles: string[] } {
 	const now = options?.now ?? Date.now();
 	let entries: string[] = [];
 	try {
@@ -478,10 +437,7 @@ export function inspectInstanceLocks(
  * 只删「可证明主人已死」的锁（见 assessLockOwner），活着的其它版本实例不受影响
  * ——不同版本并行是产品的既有能力。
  */
-export function collectStaleLockFiles(
-	locksDir: string,
-	options?: LockProbeOptions,
-): Array<{ fileName: string; reason: string }> {
+export function collectStaleLockFiles(locksDir: string, options?: LockProbeOptions): Array<{ fileName: string; reason: string }> {
 	const { locks, orphanFocusFiles } = inspectInstanceLocks(locksDir, options);
 	const removed: Array<{ fileName: string; reason: string }> = [];
 	for (const lock of locks) {

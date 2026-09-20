@@ -136,10 +136,7 @@ test("awaitKey：交换出去的 verifier 与授权 URL 里的 challenge 严格�
 
 	const verifier = exchange.calls[0].body.code_verifier;
 	const challenge = new URL(started.authUrl).searchParams.get("code_challenge");
-	assert.equal(
-		createHash("sha256").update(verifier, "utf8").digest("base64url"),
-		challenge,
-	);
+	assert.equal(createHash("sha256").update(verifier, "utf8").digest("base64url"), challenge);
 });
 
 test("awaitKey：code 先于调用到达（用户秒授权）也能取到结果", async () => {

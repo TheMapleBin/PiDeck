@@ -52,14 +52,10 @@ export function resolveDevVitePort(branch: string | undefined): number {
 		hash ^= segment.charCodeAt(i);
 		hash = Math.imul(hash, 16777619);
 	}
-	return 5182 + (hash >>> 0) % 100;
+	return 5182 + ((hash >>> 0) % 100);
 }
 
-export function readDevGitBranch(input: {
-	env?: NodeJS.ProcessEnv;
-	cwd?: string;
-	execGit?: (cwd: string) => string | undefined;
-} = {}): string | undefined {
+export function readDevGitBranch(input: { env?: NodeJS.ProcessEnv; cwd?: string; execGit?: (cwd: string) => string | undefined } = {}): string | undefined {
 	const env = input.env ?? process.env;
 	const fromEnv = env[DEV_BRANCH_ENV]?.trim();
 	if (fromEnv) return fromEnv;

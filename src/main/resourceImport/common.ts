@@ -38,9 +38,7 @@ export function pathInside(root: string, target: string): boolean {
 }
 
 export function targetKey(target: ResourceImportTarget): string {
-	return target.scope === "global"
-		? `global:${target.locationId}`
-		: `project:${target.projectId}:${target.locationId}`;
+	return target.scope === "global" ? `global:${target.locationId}` : `project:${target.projectId}:${target.locationId}`;
 }
 
 export function redactPreviewUrl(value: string): string {
@@ -62,9 +60,7 @@ export function redactPreviewUrl(value: string): string {
 		// candidate preview when this helper is used by a caller with a partially
 		// converted definition.  Mask credential-looking query values before returning
 		// the diagnostic string so malformed input cannot bypass the redaction guard.
-		return redactSensitiveText(value
-			.replace(/([?&](?:token|secret|password|passwd|api[-_]?key|authorization|auth)=)[^&#\s]*/gi, "$1***")
-			.replace(/((?:token|secret|password|passwd|api[-_]?key|authorization|auth)\s*[:=]\s*)[^\s&#]+/gi, "$1***"), PREVIEW_TEXT_MAX);
+		return redactSensitiveText(value.replace(/([?&](?:token|secret|password|passwd|api[-_]?key|authorization|auth)=)[^&#\s]*/gi, "$1***").replace(/((?:token|secret|password|passwd|api[-_]?key|authorization|auth)\s*[:=]\s*)[^\s&#]+/gi, "$1***"), PREVIEW_TEXT_MAX);
 	}
 }
 
@@ -76,14 +72,8 @@ export function redactPreviewUrl(value: string): string {
 export function redactSensitiveText(value: string, maxLength = PREVIEW_TEXT_MAX): string {
 	let safe = value
 		.replace(/[\u0000-\u001f\u007f]/g, " ")
-		.replace(
-			/((?:token|secret|password|passwd|api[-_]?key|authorization|auth|bearer[_-]?token|cookie)\s*[:=]\s*)(?:bearer\s+)?("[^"]*"|'[^']*'|[^\s,;]+)/gi,
-			"$1***",
-		)
-		.replace(
-			/(--?(?:token|secret|password|passwd|api[-_]?key|authorization|auth|cookie)\s+)(?:bearer\s+)?("[^"]*"|'[^']*'|[^\s,;]+)/gi,
-			"$1***",
-		);
+		.replace(/((?:token|secret|password|passwd|api[-_]?key|authorization|auth|bearer[_-]?token|cookie)\s*[:=]\s*)(?:bearer\s+)?("[^"]*"|'[^']*'|[^\s,;]+)/gi, "$1***")
+		.replace(/(--?(?:token|secret|password|passwd|api[-_]?key|authorization|auth|cookie)\s+)(?:bearer\s+)?("[^"]*"|'[^']*'|[^\s,;]+)/gi, "$1***");
 	if (safe.length > maxLength) safe = `${safe.slice(0, maxLength)}…`;
 	return safe;
 }
@@ -162,30 +152,15 @@ export function redactPreviewCommand(command: string | undefined): string | unde
 	// session value, so redact the complete option payload up to a shell separator rather
 	// than attempting to identify only familiar header names.  Losing part of a preview is
 	// preferable to leaking a credential through IPC.
-	value = value.replace(
-		/(--(?:header|headers|http-header|http-headers|request-header|additional-header)(?:\s+|=))[^;|&\r\n]*/gi,
-		"$1***",
-	);
+	value = value.replace(/(--(?:header|headers|http-header|http-headers|request-header|additional-header)(?:\s+|=))[^;|&\r\n]*/gi, "$1***");
 	value = value.replace(/(-H(?:\s+|=))[^;|&\r\n]*/g, "$1***");
 	value = value.replace(/-H(?=[^\s=])[^;|&\r\n]*/g, "-H***");
 	// Authorization flags commonly use two argv-like values (`Bearer <token>`).
 	// Mask both values so the first replacement cannot leave the credential behind.
-	value = value.replace(
-		/(--?(?:authorization|auth)(?:\s+|=))(?:(bearer)\s+)?("[^"]*"|'[^']*'|[^\s]+)/gi,
-		(_match, prefix: string, scheme: string | undefined) => `${prefix}***${scheme ? " ***" : ""}`,
-	);
-	value = value.replace(
-		/(--?(?:token|secret|password|passwd|api[-_]?key)(?:\s+|=))("[^"]*"|'[^']*'|[^\s]+)/gi,
-		"$1***",
-	);
-	value = value.replace(
-		/(\b[A-Z][A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|PASSWD|API[-_]?KEY|AUTH[A-Z0-9_]*)[A-Z0-9_]*\s*=\s*)("[^"]*"|'[^']*'|[^\s]+)/gi,
-		"$1***",
-	);
-	value = value.replace(
-		/((?:token|secret|password|passwd|api[-_]?key|authorization|auth)\s*[:=]\s*)[^\s,;"']+/gi,
-		"$1***",
-	);
+	value = value.replace(/(--?(?:authorization|auth)(?:\s+|=))(?:(bearer)\s+)?("[^"]*"|'[^']*'|[^\s]+)/gi, (_match, prefix: string, scheme: string | undefined) => `${prefix}***${scheme ? " ***" : ""}`);
+	value = value.replace(/(--?(?:token|secret|password|passwd|api[-_]?key)(?:\s+|=))("[^"]*"|'[^']*'|[^\s]+)/gi, "$1***");
+	value = value.replace(/(\b[A-Z][A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|PASSWD|API[-_]?KEY|AUTH[A-Z0-9_]*)[A-Z0-9_]*\s*=\s*)("[^"]*"|'[^']*'|[^\s]+)/gi, "$1***");
+	value = value.replace(/((?:token|secret|password|passwd|api[-_]?key|authorization|auth)\s*[:=]\s*)[^\s,;"']+/gi, "$1***");
 	return redactSensitiveText(value, PREVIEW_TEXT_MAX);
 }
 

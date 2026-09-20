@@ -26,14 +26,13 @@ import { existsSync, readFileSync, renameSync, statSync, writeFileSync } from "n
 import { dirname, join } from "node:path";
 
 /** 补丁后代码的标志串：存在即视为已打补丁（幂等判据，与具体注释文案无关）。 */
-const PATCH_MARKER = 'process.env.DSH_BILL_BACKFILL';
+const PATCH_MARKER = "process.env.DSH_BILL_BACKFILL";
 
 /** dsh-bill@0.14 lifecycle 链中的回填调用（全文唯一，见 lib/index.js 生命周期段）。 */
 const TARGET_SNIPPET = ".then(() => backfillFromLog())";
 
 /** 守卫替换：默认跳过回填，env 显式为 "1" 时保留官方行为。 */
-const REPLACEMENT_SNIPPET =
-	'.then(() => { /* pideck: startup backfill off (set DSH_BILL_BACKFILL=1 to restore) */ if (process.env.DSH_BILL_BACKFILL === "1") return backfillFromLog(); })';
+const REPLACEMENT_SNIPPET = '.then(() => { /* pideck: startup backfill off (set DSH_BILL_BACKFILL=1 to restore) */ if (process.env.DSH_BILL_BACKFILL === "1") return backfillFromLog(); })';
 
 /** 从入口文件向上找 dsh-bill 包根（含 package.json 且 name 匹配）；找不到返回 null。 */
 function findDshBillPackageDir(entryPath: string): string | null {
@@ -62,10 +61,7 @@ function findDshBillPackageDir(entryPath: string): string | null {
  * @param log 进度/告警回调（scope 固定 dsh-host，由调用方提供）。
  * @returns 是否实际写入了补丁（已打过 / 找不到目标 / 写失败都返回 false）。
  */
-export function applyDshBillBackfillPatch(
-	dshBillEntryPath: string,
-	log: (message: string, detail?: unknown) => void,
-): boolean {
+export function applyDshBillBackfillPatch(dshBillEntryPath: string, log: (message: string, detail?: unknown) => void): boolean {
 	if (!dshBillEntryPath || !existsSync(dshBillEntryPath)) {
 		log("dsh-bill 回填补丁跳过：入口文件不存在", { dshBillEntryPath });
 		return false;
@@ -74,10 +70,7 @@ export function applyDshBillBackfillPatch(
 	// 候选文件：包根 lib/index.js（标准布局）优先，入口文件本身兜底（main 指向
 	// 非标准路径的版本）。取第一个存在且包含目标/标志串的文件。
 	const packageDir = findDshBillPackageDir(dshBillEntryPath);
-	const candidates = [
-		...(packageDir ? [join(packageDir, "lib", "index.js")] : []),
-		dshBillEntryPath,
-	];
+	const candidates = [...(packageDir ? [join(packageDir, "lib", "index.js")] : []), dshBillEntryPath];
 	let targetPath: string | null = null;
 	let content: string | null = null;
 	for (const candidate of candidates) {

@@ -9,10 +9,7 @@ import ts from "typescript";
 import vm from "node:vm";
 
 function loadHookModule() {
-	const source = readFileSync(
-		"src/renderer/src/hooks/useComposerModeAvailability.ts",
-		"utf8",
-	);
+	const source = readFileSync("src/renderer/src/hooks/useComposerModeAvailability.ts", "utf8");
 	// 只对纯函数求值：hook 的 React/desktopApi 是外部依赖，mock 掉副作用路径，
 	// 仅转译后取 computeVisibleModes 导出做断言（行为不依赖真实扩展列表）。
 	const { outputText } = ts.transpileModule(source, {

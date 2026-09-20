@@ -1,14 +1,5 @@
-import {
-	buildImageGenApiBody,
-	buildImageGenEditsForm,
-	imageGenOutputMimeType,
-	parseImageGenOutputFormat,
-} from "../../shared/imageGenParams";
-import type {
-	ImageGenApiStyle,
-	ImageGenProviderExtraParams,
-	ImageGenReferenceMode,
-} from "../../shared/imageGenConfig";
+import { buildImageGenApiBody, buildImageGenEditsForm, imageGenOutputMimeType, parseImageGenOutputFormat } from "../../shared/imageGenParams";
+import type { ImageGenApiStyle, ImageGenProviderExtraParams, ImageGenReferenceMode } from "../../shared/imageGenConfig";
 import type { ImageContent } from "../../shared/types";
 import type { ImageGenRequest, ImageGenResult } from "../../shared/types/imagegen";
 
@@ -35,12 +26,14 @@ export type ProviderCredentials = {
  *   （已脱敏、截断），文案由渲染层 i18n 映射。
  */
 export class ImageGenService {
-	constructor(private deps: {
-		/** 按生图供应商 id 查 baseUrl/apiKey/extraParams；查不到返回 null（notConfigured） */
-		getProviderCredentials: (provider: string) => Promise<ProviderCredentials | null>;
-		/** 主进程日志（不记录 apiKey） */
-		log: (message: string, ...args: unknown[]) => void;
-	}) {}
+	constructor(
+		private deps: {
+			/** 按生图供应商 id 查 baseUrl/apiKey/extraParams；查不到返回 null（notConfigured） */
+			getProviderCredentials: (provider: string) => Promise<ProviderCredentials | null>;
+			/** 主进程日志（不记录 apiKey） */
+			log: (message: string, ...args: unknown[]) => void;
+		},
+	) {}
 
 	/** 生图主入口：供应商凭据缺失直接返回 notConfigured，不发网络请求。 */
 	async generate(request: ImageGenRequest): Promise<ImageGenResult> {
@@ -56,16 +49,11 @@ export class ImageGenService {
 				output_format: false,
 				watermark: false,
 			};
-			const outputFormat = extraParams.output_format
-				? parseImageGenOutputFormat(request.outputFormat, null)
-				: null;
+			const outputFormat = extraParams.output_format ? parseImageGenOutputFormat(request.outputFormat, null) : null;
 			// 参考图门禁：供应商声明 none/未声明时直接拒绝，避免把图发给不认的接口白扣费
 			// 只有带内联字节的图片能进请求：历史生图消息里的参考图是落盘引用（ref），
 			// 这里过滤掉（渲染层在重发路径已按需回填为 base64）。
-			const refs = (request.referenceImages ?? []).filter(
-				(image): image is ImageContent & { data: string } =>
-					typeof image.data === "string" && image.data.length > 0,
-			);
+			const refs = (request.referenceImages ?? []).filter((image): image is ImageContent & { data: string } => typeof image.data === "string" && image.data.length > 0);
 			const referenceMode = credentials.referenceMode ?? "none";
 			if (refs.length > 0 && referenceMode === "none") {
 				return { ok: false, error: "referenceUnsupported" };
@@ -73,21 +61,18 @@ export class ImageGenService {
 			let response: Response;
 			if (refs.length > 0 && referenceMode === "edits") {
 				// OpenAI gpt-image-1 风格：multipart 到 /images/edits；响应结构与 generations 一致
-				response = await fetch(
-					normalizeImagesEditsUrl(credentials.baseUrl),
-					{
-						method: "POST",
-						headers: { Authorization: `Bearer ${credentials.apiKey.trim()}` },
-						body: buildImageGenEditsForm({
-							model: request.model,
-							prompt: request.prompt,
-							images: refs,
-							extraParams,
-							size: request.size,
-						}),
-						signal: AbortSignal.timeout(180_000),
-					},
-				);
+				response = await fetch(normalizeImagesEditsUrl(credentials.baseUrl), {
+					method: "POST",
+					headers: { Authorization: `Bearer ${credentials.apiKey.trim()}` },
+					body: buildImageGenEditsForm({
+						model: request.model,
+						prompt: request.prompt,
+						images: refs,
+						extraParams,
+						size: request.size,
+					}),
+					signal: AbortSignal.timeout(180_000),
+				});
 			} else {
 				// 方言与参考图形态：image-field 时参考图并入 JSON body，builder 按方言组装
 				// （openai/方舟 → dataURI 数组；siliconflow → 首张单 dataURI string）
@@ -99,33 +84,25 @@ export class ImageGenService {
 					watermark: request.watermark,
 					outputFormat: outputFormat ?? undefined,
 					apiStyle: credentials.apiStyle ?? "openai",
-					referenceImages:
-						refs.length > 0 && referenceMode === "image-field" ? refs : undefined,
+					referenceImages: refs.length > 0 && referenceMode === "image-field" ? refs : undefined,
 				});
-				response = await fetch(
-					imagesUrl,
-					{
-						method: "POST",
-						headers: {
-							"Content-Type": "application/json",
-							Authorization: `Bearer ${credentials.apiKey.trim()}`,
-						},
-						body: JSON.stringify(body),
-						// 生图慢（常见 10-60s），用 AbortSignal.timeout 兜底避免挂死
-						signal: AbortSignal.timeout(180_000),
+				response = await fetch(imagesUrl, {
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+						Authorization: `Bearer ${credentials.apiKey.trim()}`,
 					},
-				);
+					body: JSON.stringify(body),
+					// 生图慢（常见 10-60s），用 AbortSignal.timeout 兜底避免挂死
+					signal: AbortSignal.timeout(180_000),
+				});
 			}
 			if (!response.ok) {
 				const detail = await readHttpErrorDetail(response);
 				this.deps.log("imagegen", "generate failed", { status: response.status, detail });
 				return {
 					ok: false,
-					error: response.status === 401 || response.status === 403
-						? "invalidKey"
-						: response.status === 404 || response.status === 405
-							? "badBaseUrl"
-							: "http",
+					error: response.status === 401 || response.status === 403 ? "invalidKey" : response.status === 404 || response.status === 405 ? "badBaseUrl" : "http",
 					detail,
 				};
 			}
@@ -139,13 +116,10 @@ export class ImageGenService {
 				return { ok: false, error: "responseTooLarge" };
 			}
 			// 通用兜底：OpenAI/方舟读 data[0]，硅基读 images[0]，不依赖方言判断
-			const item: { b64_json?: string; url?: string } | undefined =
-				payload.data?.[0] ?? payload.images?.[0];
+			const item: { b64_json?: string; url?: string } | undefined = payload.data?.[0] ?? payload.images?.[0];
 			if (item?.b64_json) {
 				// b64 无 content-type：只有勾选并发送了 output_format 才按 jpeg/png 标记
-				const mimeType = extraParams.output_format
-					? imageGenOutputMimeType(outputFormat)
-					: "image/png";
+				const mimeType = extraParams.output_format ? imageGenOutputMimeType(outputFormat) : "image/png";
 				return {
 					ok: true,
 					image: { type: "image", data: item.b64_json, mimeType },
@@ -209,9 +183,7 @@ export class ImageGenService {
 	/** 读取 JSON 响应并施加体积上限；超限返回 null。
 	 *  无 body 的替身走 response.json()（原行为）；空 body 的 JSON.parse 异常由
 	 *  generate 外层 catch 归并为 network——与 response.json() 抛错路径一致。 */
-	private async readJsonCapped(
-		response: CappedResponseLike & { json?(): Promise<unknown> },
-	): Promise<unknown | null> {
+	private async readJsonCapped(response: CappedResponseLike & { json?(): Promise<unknown> }): Promise<unknown | null> {
 		const body = response.body;
 		if (body && typeof body.getReader === "function") {
 			const buffer = await this.readBodyCapped(response);
@@ -249,10 +221,7 @@ type CappedResponseLike = {
  * 业务规则：用户要看到拒绝原因（审核、尺寸、额度），不能只回 HTTP 状态码；
  * 同时不能把 API Key / 超长 HTML 原样丢进时间线。
  */
-async function readHttpErrorDetail(response: {
-	status: number;
-	text: () => Promise<string>;
-}): Promise<string> {
+async function readHttpErrorDetail(response: { status: number; text: () => Promise<string> }): Promise<string> {
 	let body = "";
 	try {
 		body = await response.text();
@@ -265,9 +234,7 @@ async function readHttpErrorDetail(response: {
 	const vendor = redactSecrets(extractVendorErrorText(body)).trim();
 	if (!vendor) return String(response.status);
 	const combined = `${response.status}: ${vendor}`;
-	return combined.length > IMAGE_GEN_ERROR_DETAIL_LIMIT
-		? `${combined.slice(0, IMAGE_GEN_ERROR_DETAIL_LIMIT)}…`
-		: combined;
+	return combined.length > IMAGE_GEN_ERROR_DETAIL_LIMIT ? `${combined.slice(0, IMAGE_GEN_ERROR_DETAIL_LIMIT)}…` : combined;
 }
 
 function extractVendorErrorText(raw: string): string {
@@ -335,9 +302,7 @@ function uniquePreserve(items: string[]): string[] {
 
 /** 错误正文里偶发夹带 key，回传前打码，避免进时间线/日志。 */
 function redactSecrets(text: string): string {
-	return text
-		.replace(/sk-[A-Za-z0-9_-]{8,}/g, "sk-***")
-		.replace(/(api[_-]?key|authorization|bearer)\s*[:=]\s*["']?[^"'\s,]+/gi, "$1=***");
+	return text.replace(/sk-[A-Za-z0-9_-]{8,}/g, "sk-***").replace(/(api[_-]?key|authorization|bearer)\s*[:=]\s*["']?[^"'\s,]+/gi, "$1=***");
 }
 
 /**

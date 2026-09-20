@@ -2,14 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
-const {
-	QUOTE_EXCLUDED_SELECTOR,
-	MAX_QUOTE_CHARS,
-	isQuotableRange,
-	computeToolbarPosition,
-} = loadTsCommonJs(
-	"src/renderer/src/components/session/timeline/selectionToolbarPolicy.ts",
-);
+const { QUOTE_EXCLUDED_SELECTOR, MAX_QUOTE_CHARS, isQuotableRange, computeToolbarPosition } = loadTsCommonJs("src/renderer/src/components/session/timeline/selectionToolbarPolicy.ts");
 
 test("isQuotableRange requires a single message and non-excluded endpoints", () => {
 	const base = {
@@ -43,27 +36,15 @@ test("computeToolbarPosition prefers above the selection and clamps into viewpor
 	const viewport = { width: 1000, height: 800 };
 	const size = { width: 132, height: 32 };
 	// 选区在中间：浮层居中悬于上方，留 6px gap
-	const mid = computeToolbarPosition(
-		{ top: 400, left: 400, width: 200, height: 24 },
-		viewport,
-		size,
-	);
+	const mid = computeToolbarPosition({ top: 400, left: 400, width: 200, height: 24 }, viewport, size);
 	assert.equal(mid.top, 400 - 6 - 32);
 	assert.equal(mid.left, 400 + (200 - 132) / 2);
 
 	// 选区贴近顶部：翻转到下方
-	const top = computeToolbarPosition(
-		{ top: 10, left: 100, width: 300, height: 24 },
-		viewport,
-		size,
-	);
+	const top = computeToolbarPosition({ top: 10, left: 100, width: 300, height: 24 }, viewport, size);
 	assert.equal(top.top, 10 + 24 + 6);
 
 	// 水平溢出夹紧到视口右边距内
-	const edge = computeToolbarPosition(
-		{ top: 400, left: 950, width: 200, height: 24 },
-		viewport,
-		size,
-	);
+	const edge = computeToolbarPosition({ top: 400, left: 950, width: 200, height: 24 }, viewport, size);
 	assert.equal(edge.left, 1000 - 8 - 132);
 });

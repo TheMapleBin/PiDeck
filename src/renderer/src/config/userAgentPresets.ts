@@ -60,8 +60,7 @@ export const USER_AGENT_PRESETS: readonly UserAgentPreset[] = [
 	{ value: "curl/8.5.0", groupKey: "config.userAgentGroupHttpClient" },
 	// 真实 Chrome UA：少数网关按浏览器特征放行，保留完整格式（仅 UA 头部，不改其他指纹）。
 	{
-		value:
-			"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+		value: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
 		labelKey: "config.userAgentBrowser",
 		groupKey: "config.userAgentGroupHttpClient",
 	},
@@ -83,10 +82,7 @@ export function getUserAgentOptions(): Array<{ value: string; label: string; gro
 		// 传 i18n key 进去还得在渲染层再翻一次，多一层耦合。
 		...(preset.groupKey ? { group: t(preset.groupKey) } : {}),
 	}));
-	return [
-		{ value: USER_AGENT_UNSET, label: t("config.userAgentRuntimeDefault") },
-		...presetOptions,
-	];
+	return [{ value: USER_AGENT_UNSET, label: t("config.userAgentRuntimeDefault") }, ...presetOptions];
 }
 
 /**

@@ -14,12 +14,7 @@
  */
 import { useCallback, useEffect, useRef } from "react";
 import { useAtomValue, useSetAtom } from "jotai";
-import type {
-	ProviderUsageResult,
-	UsageProbeBackend,
-	UsageProbeProviderState,
-	UsageProbeStatesResult,
-} from "../../../shared/types/providerUsage";
+import type { ProviderUsageResult, UsageProbeBackend, UsageProbeProviderState, UsageProbeStatesResult } from "../../../shared/types/providerUsage";
 import { normalizeDshDeepseekProvider } from "../../../shared/dshProviderNames";
 import { desktopApi } from "../desktopApi";
 import {
@@ -34,10 +29,7 @@ import {
 	resolveProviderUsageAtom,
 	type ProviderUsageEntry,
 } from "../atoms/provider-usage-atoms";
-import {
-	USAGE_PROBE_DEFAULT_INTERVAL_MINUTES,
-	shouldAutoFetchProviderUsage,
-} from "./providerUsageAutoQuery";
+import { USAGE_PROBE_DEFAULT_INTERVAL_MINUTES, shouldAutoFetchProviderUsage } from "./providerUsageAutoQuery";
 import { selectWarmupProviders, warmupDelayMs } from "./providerUsageWarmup";
 
 export {
@@ -67,12 +59,7 @@ const inFlight = new Map<string, Promise<void>>();
  * @param provider 原始 provider 名（主进程按它解析端点/配置）
  * @param cacheKey 渲染层缓存 key（与 provider 相同；DSH 链路为 `dsh:<provider>`）
  */
-function startFetch(
-	provider: string,
-	cacheKey: string,
-	resolve: (key: string, result: ProviderUsageResult) => void,
-	backend: UsageProbeBackend = "pi",
-): void {
+function startFetch(provider: string, cacheKey: string, resolve: (key: string, result: ProviderUsageResult) => void, backend: UsageProbeBackend = "pi"): void {
 	if (inFlight.has(cacheKey)) return;
 	const promise = desktopApi.config
 		.fetchUsage(provider, backend)
@@ -88,10 +75,7 @@ function startFetch(
 }
 
 /** 订阅单个 provider 的用量查询状态（徽章只读展示用）：未加载到 = undefined。 */
-export function useProviderUsageState(
-	provider: string | undefined,
-	backend: UsageProbeBackend = "pi",
-): UsageProbeProviderState | undefined {
+export function useProviderUsageState(provider: string | undefined, backend: UsageProbeBackend = "pi"): UsageProbeProviderState | undefined {
 	const cacheKey = provider ? usageCacheKey(provider, backend) : "";
 	return useAtomValue(providerUsageStateAtomFamily(cacheKey));
 }
@@ -107,10 +91,7 @@ const statesInFlight = new Map<string, Promise<UsageProbeStatesResult>>();
  * - 结果按 usageCacheKey 写入 atom，同一签名并发挂载共享一次 IPC；
  * - 拉取期间把 backend 标为 loading，避免卡片在「状态未知」时抢发一轮白请求。
  */
-export function useProviderUsageStatesLoader(
-	providers: string[],
-	backend: UsageProbeBackend = "pi",
-): void {
+export function useProviderUsageStatesLoader(providers: string[], backend: UsageProbeBackend = "pi"): void {
 	const merge = useSetAtom(mergeProviderUsageStatesAtom);
 	const markStatus = useSetAtom(markProviderUsageStatesStatusAtom);
 	// 用字符串签名做依赖：调用方每次渲染传新数组也不会重跑 effect。
@@ -123,11 +104,7 @@ export function useProviderUsageStatesLoader(
 		const signature = backend === "pi" ? "pi" : `dsh|${providerKey}`;
 		let cancelled = false;
 		markStatus(backend, "loading");
-		const pending =
-			statesInFlight.get(signature) ??
-			desktopApi.config
-				.listUsageProbeStates({ providers: list, backend })
-				.catch(() => ({ providers: {}, errors: [] }));
+		const pending = statesInFlight.get(signature) ?? desktopApi.config.listUsageProbeStates({ providers: list, backend }).catch(() => ({ providers: {}, errors: [] }));
 		statesInFlight.set(signature, pending);
 		void pending.then((result) => {
 			// 卸载后仍写 atoms 无害（状态是跨组件共享的），但标记状态要避免覆盖后一次加载。
@@ -149,17 +126,12 @@ export function useProviderUsageStatesLoader(
  * 保存只写了 usage-probes.json，必须回读一次才能让徽章立即从「未启用」变「查询中」。
  * 只请求该 provider（pi 侧主进程仍全量解析，dsh 侧只回名单内），开销与一次刷新同级。
  */
-export function useRefreshProviderUsageState(): (
-	provider: string,
-	backend?: UsageProbeBackend,
-) => Promise<void> {
+export function useRefreshProviderUsageState(): (provider: string, backend?: UsageProbeBackend) => Promise<void> {
 	const merge = useSetAtom(mergeProviderUsageStatesAtom);
 	return useCallback(
 		async (provider: string, backend: UsageProbeBackend = "pi") => {
 			if (!provider) return;
-			const result = await desktopApi.config
-				.listUsageProbeStates({ providers: [provider], backend })
-				.catch(() => ({ providers: {}, errors: [] }));
+			const result = await desktopApi.config.listUsageProbeStates({ providers: [provider], backend }).catch(() => ({ providers: {}, errors: [] }));
 			const entries: Record<string, UsageProbeProviderState> = {};
 			for (const [name, state] of Object.entries(result.providers)) {
 				entries[usageCacheKey(name, backend)] = state;
@@ -178,10 +150,7 @@ export function useRefreshProviderUsageState(): (
  * 自动查询前置条件 = 该 provider 的开关为真（徽章开关/弹窗「是否启用」，默认关）；
  * 本 hook 自己拉一次该 provider 的状态（pi 全量/单条同一次 IPC，dsh 按名字）。
  * 开关打开后按 intervalMinutes 排下一次自动刷新（0 = 不轮询；默认 5 分钟）。 */
-export function useProviderUsageEntry(
-	provider: string | undefined,
-	backend: UsageProbeBackend = "pi",
-): ProviderUsageEntry {
+export function useProviderUsageEntry(provider: string | undefined, backend: UsageProbeBackend = "pi"): ProviderUsageEntry {
 	const cacheKey = provider ? usageCacheKey(provider, backend) : undefined;
 	// 自己拉状态：调用方（卡片/圆球/选择器）不必各自记着先加载状态表。
 	useProviderUsageStatesLoader(provider ? [provider] : [], backend);
@@ -192,10 +161,7 @@ export function useProviderUsageEntry(
 	// provider 级开关：未显式开启（状态未到或 enabled=false）一律不自动查。
 	const queryEnabled = state?.enabled === true;
 	// 生效间隔：已查到结果用配置值（0 = 该 provider 不轮询）；未查到用状态表/默认值。
-	const intervalMinutes =
-		entry.result?.intervalMinutes ??
-		state?.intervalMinutes ??
-		USAGE_PROBE_DEFAULT_INTERVAL_MINUTES;
+	const intervalMinutes = entry.result?.intervalMinutes ?? state?.intervalMinutes ?? USAGE_PROBE_DEFAULT_INTERVAL_MINUTES;
 	useEffect(() => {
 		if (!provider || !cacheKey || !queryEnabled) return;
 		// 走新鲜期（从未查过或已过 interval 才发）。
@@ -262,9 +228,7 @@ export function useProviderUsageStartupWarmup(): void {
 		if (piStatus === "idle" && dshStatus === "idle") return;
 		started.current = true;
 		const targets = selectWarmupProviders(states);
-		const timers = targets.map((target, index) =>
-			window.setTimeout(() => refresh(target.provider, target.backend), warmupDelayMs(index)),
-		);
+		const timers = targets.map((target, index) => window.setTimeout(() => refresh(target.provider, target.backend), warmupDelayMs(index)));
 		return () => {
 			for (const timer of timers) window.clearTimeout(timer);
 		};

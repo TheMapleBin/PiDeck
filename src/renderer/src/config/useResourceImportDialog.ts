@@ -1,13 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { t } from "../i18n";
 import { desktopApi } from "../desktopApi";
-import type {
-	ResourceImportCandidate,
-	ResourceImportKind,
-	ResourceImportReport,
-	ResourceImportScanResult,
-	ResourceImportTarget,
-} from "../../../shared/types/resourceImport";
+import type { ResourceImportCandidate, ResourceImportKind, ResourceImportReport, ResourceImportScanResult, ResourceImportTarget } from "../../../shared/types/resourceImport";
 
 // Keep the renderer on the same restricted desktop bridge used elsewhere.  The hook
 // never receives a raw filesystem path or an MCP definition from its caller.
@@ -47,11 +41,7 @@ export function targetMatches(left: ResourceImportTarget, right: ResourceImportT
  */
 export function useResourceImportDialog(options: UseResourceImportDialogOptions) {
 	const [open, setOpen] = useState(Boolean(options.open));
-	const [target, setTarget] = useState<ResourceImportTarget>(() =>
-		options.kind === "skill" && options.fixedProjectId
-			? { scope: "project", projectId: options.fixedProjectId, locationId: "project-pi" }
-			: { scope: "global", locationId: "pi-global" },
-	);
+	const [target, setTarget] = useState<ResourceImportTarget>(() => (options.kind === "skill" && options.fixedProjectId ? { scope: "project", projectId: options.fixedProjectId, locationId: "project-pi" } : { scope: "global", locationId: "pi-global" }));
 	const [scan, setScan] = useState<ResourceImportScanResult | null>(null);
 	const [selected, setSelected] = useState<Set<string>>(new Set());
 	const [loading, setLoading] = useState(false);
@@ -65,31 +55,31 @@ export function useResourceImportDialog(options: UseResourceImportDialogOptions)
 		onImportedRef.current = options.onImported;
 	}, [options.onImported]);
 
-	const availableProjects = useMemo(
-		() => options.projects.filter((project) => project.kind !== "chat" && (!options.fixedProjectId || project.id === options.fixedProjectId)),
-		[options.fixedProjectId, options.projects],
-	);
+	const availableProjects = useMemo(() => options.projects.filter((project) => project.kind !== "chat" && (!options.fixedProjectId || project.id === options.fixedProjectId)), [options.fixedProjectId, options.projects]);
 	const targetOptionEntries = useMemo(() => {
-		const entries: ResourceImportTargetOption[] = options.kind === "mcp"
-			? [{
-				value: "global:pi-global",
-				label: t("config.import.targetGlobalMcp"),
-				target: { scope: "global", locationId: "pi-global" },
-			}]
-			: options.fixedProjectId
-				? []
-				: [
-					{
-						value: "global:pi-global",
-						label: t("config.import.targetPiSkills"),
-						target: { scope: "global", locationId: "pi-global" },
-					},
-					{
-						value: "global:agents-global",
-						label: t("config.import.targetAgentsSkills"),
-						target: { scope: "global", locationId: "agents-global" },
-					},
-				];
+		const entries: ResourceImportTargetOption[] =
+			options.kind === "mcp"
+				? [
+						{
+							value: "global:pi-global",
+							label: t("config.import.targetGlobalMcp"),
+							target: { scope: "global", locationId: "pi-global" },
+						},
+					]
+				: options.fixedProjectId
+					? []
+					: [
+							{
+								value: "global:pi-global",
+								label: t("config.import.targetPiSkills"),
+								target: { scope: "global", locationId: "pi-global" },
+							},
+							{
+								value: "global:agents-global",
+								label: t("config.import.targetAgentsSkills"),
+								target: { scope: "global", locationId: "agents-global" },
+							},
+						];
 		for (const project of availableProjects) {
 			if (options.kind === "mcp") {
 				entries.push({
@@ -115,14 +105,8 @@ export function useResourceImportDialog(options: UseResourceImportDialogOptions)
 		return entries;
 	}, [availableProjects, options.fixedProjectId, options.kind]);
 
-	const targetOptions = useMemo(
-		() => targetOptionEntries.map(({ value, label }) => ({ value, label })),
-		[targetOptionEntries],
-	);
-	const selectedTargetEntry = useMemo(
-		() => targetOptionEntries.find((entry) => targetMatches(entry.target, target)) ?? targetOptionEntries[0],
-		[target, targetOptionEntries],
-	);
+	const targetOptions = useMemo(() => targetOptionEntries.map(({ value, label }) => ({ value, label })), [targetOptionEntries]);
+	const selectedTargetEntry = useMemo(() => targetOptionEntries.find((entry) => targetMatches(entry.target, target)) ?? targetOptionEntries[0], [target, targetOptionEntries]);
 	const selectedTargetValue = selectedTargetEntry?.value ?? "";
 	// Option entries are recreated when the project list is refreshed. Their stable
 	// value, rather than object identity, determines whether a new scan is needed.
@@ -131,29 +115,32 @@ export function useResourceImportDialog(options: UseResourceImportDialogOptions)
 	// stale target object in an IPC request.
 	const effectiveTarget = selectedTargetEntry?.target ?? target;
 
-	const runScan = useCallback(async (nextTarget: ResourceImportTarget) => {
-		const generation = ++requestGeneration.current;
-		setLoading(true);
-		setError(null);
-		setSelected(new Set());
-		setReport(null);
-		try {
-			const response = await api.resourceImport.scan({
-				kind: options.kind,
-				sourceProjectId: options.sourceProjectId,
-				target: nextTarget,
-			});
-			if (generation !== requestGeneration.current) return;
-			if (!response.ok) throw new Error(response.error.message);
-			setScan(response.result);
-		} catch (caught) {
-			if (generation !== requestGeneration.current) return;
-			setScan(null);
-			setError(caught instanceof Error ? caught.message : String(caught));
-		} finally {
-			if (generation === requestGeneration.current) setLoading(false);
-		}
-	}, [options.kind, options.sourceProjectId]);
+	const runScan = useCallback(
+		async (nextTarget: ResourceImportTarget) => {
+			const generation = ++requestGeneration.current;
+			setLoading(true);
+			setError(null);
+			setSelected(new Set());
+			setReport(null);
+			try {
+				const response = await api.resourceImport.scan({
+					kind: options.kind,
+					sourceProjectId: options.sourceProjectId,
+					target: nextTarget,
+				});
+				if (generation !== requestGeneration.current) return;
+				if (!response.ok) throw new Error(response.error.message);
+				setScan(response.result);
+			} catch (caught) {
+				if (generation !== requestGeneration.current) return;
+				setScan(null);
+				setError(caught instanceof Error ? caught.message : String(caught));
+			} finally {
+				if (generation === requestGeneration.current) setLoading(false);
+			}
+		},
+		[options.kind, options.sourceProjectId],
+	);
 
 	useEffect(() => {
 		if (options.open === undefined) return;
@@ -191,17 +178,21 @@ export function useResourceImportDialog(options: UseResourceImportDialogOptions)
 		void runScan(selectedTargetEntry.target);
 	}, [open, runScan, selectedTargetKey]);
 
-	const selectTarget = useCallback((value: string) => {
-		const next = targetOptionEntries.find((entry) => entry.value === value)?.target;
-		if (next) setTarget(next);
-	}, [targetOptionEntries]);
+	const selectTarget = useCallback(
+		(value: string) => {
+			const next = targetOptionEntries.find((entry) => entry.value === value)?.target;
+			if (next) setTarget(next);
+		},
+		[targetOptionEntries],
+	);
 
-	const toggleAll = useCallback((checked: boolean) => {
-		if (!scan) return;
-		setSelected(checked
-			? new Set(scan.candidates.filter(canImportResource).map((candidate) => candidate.candidateId))
-			: new Set());
-	}, [scan]);
+	const toggleAll = useCallback(
+		(checked: boolean) => {
+			if (!scan) return;
+			setSelected(checked ? new Set(scan.candidates.filter(canImportResource).map((candidate) => candidate.candidateId)) : new Set());
+		},
+		[scan],
+	);
 
 	const toggleCandidate = useCallback((candidateId: string, checked: boolean) => {
 		setSelected((current) => {
@@ -233,19 +224,22 @@ export function useResourceImportDialog(options: UseResourceImportDialogOptions)
 		}
 	}, [applying, effectiveTarget, scan, selected]);
 
-	const handleOpenChange = useCallback((nextOpen: boolean) => {
-		if (applying) return;
-		if (!nextOpen) {
-			// Ignore any late scan response after cancel and return the trigger to an idle
-			// state, rather than leaving it disabled until the old request resolves.
-			requestGeneration.current += 1;
-			setLoading(false);
-			setScan(null);
-			setSelected(new Set());
-			setReport(null);
-		}
-		setOpen(nextOpen);
-	}, [applying]);
+	const handleOpenChange = useCallback(
+		(nextOpen: boolean) => {
+			if (applying) return;
+			if (!nextOpen) {
+				// Ignore any late scan response after cancel and return the trigger to an idle
+				// state, rather than leaving it disabled until the old request resolves.
+				requestGeneration.current += 1;
+				setLoading(false);
+				setScan(null);
+				setSelected(new Set());
+				setReport(null);
+			}
+			setOpen(nextOpen);
+		},
+		[applying],
+	);
 
 	return {
 		open,

@@ -59,11 +59,7 @@ export class AutomationScheduler {
 		}
 	}
 
-	private async evaluateTask(
-		task: AutomationTask,
-		runs: readonly import("../../shared/types").AutomationRun[],
-		now: number,
-	): Promise<void> {
+	private async evaluateTask(task: AutomationTask, runs: readonly import("../../shared/types").AutomationRun[], now: number): Promise<void> {
 		if (task.schedule.type !== "cron") return;
 
 		const lastScheduled = task.lastScheduledAt ?? task.createdAt;
@@ -94,14 +90,17 @@ export class AutomationScheduler {
 
 		// Single-flight check: if an active run already exists for this task, skip this occurrence
 		if (hasActiveAutomationRun(runs, task.id)) {
-			await this.store.createRun({
-				task,
-				trigger: triggerType,
-				scheduledFor: scheduledTime,
-				status: "skipped",
-				skippedReason: "task-already-running",
-				error: "Skipped: previous run of this task is still active",
-			}, now);
+			await this.store.createRun(
+				{
+					task,
+					trigger: triggerType,
+					scheduledFor: scheduledTime,
+					status: "skipped",
+					skippedReason: "task-already-running",
+					error: "Skipped: previous run of this task is still active",
+				},
+				now,
+			);
 			return;
 		}
 
@@ -110,13 +109,16 @@ export class AutomationScheduler {
 				await this.onTrigger(task, scheduledTime, triggerType);
 			} catch (err) {
 				// Failed to enqueue or start
-				await this.store.createRun({
-					task,
-					trigger: triggerType,
-					scheduledFor: scheduledTime,
-					status: "failed",
-					error: err instanceof Error ? err.message : String(err),
-				}, now);
+				await this.store.createRun(
+					{
+						task,
+						trigger: triggerType,
+						scheduledFor: scheduledTime,
+						status: "failed",
+						error: err instanceof Error ? err.message : String(err),
+					},
+					now,
+				);
 			}
 		}
 	}

@@ -70,25 +70,15 @@ test("每个锚点在设置页源码里真实渲染（防「搜到却跳不动�
 		);
 		if (!hit) missing.push(`settings-section-${anchor.slug} (${anchor.tab})`);
 	}
-	assert.deepEqual(
-		missing,
-		[],
-		`以下锚点在设置页源码里找不到，命令面板点进去会静默无反应：\n  ${missing.join("\n  ")}`,
-	);
+	assert.deepEqual(missing, [], `以下锚点在设置页源码里找不到，命令面板点进去会静默无反应：\n  ${missing.join("\n  ")}`);
 });
 
 test("每条锚点都带标题 key 与搜索别名", () => {
 	const anchors = loadAnchors();
 	assert.ok(anchors.length > 0, "锚点清单不应为空");
 	for (const anchor of anchors) {
-		assert.ok(
-			anchor.labelKey.startsWith("settings."),
-			`labelKey 应指向设置页文案: ${anchor.slug} → ${anchor.labelKey}`,
-		);
-		assert.ok(
-			Array.isArray(anchor.keywords) && anchor.keywords.length > 0,
-			`缺少搜索别名会让「中文标题搜不到」的场景失效: ${anchor.slug}`,
-		);
+		assert.ok(anchor.labelKey.startsWith("settings."), `labelKey 应指向设置页文案: ${anchor.slug} → ${anchor.labelKey}`);
+		assert.ok(Array.isArray(anchor.keywords) && anchor.keywords.length > 0, `缺少搜索别名会让「中文标题搜不到」的场景失效: ${anchor.slug}`);
 	}
 });
 

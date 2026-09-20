@@ -13,11 +13,7 @@ export type { FetchedModel };
  * listing 没有的字段由调用方再用 pi-ai 目录补（见 ModelsTab / DshModelsEditor），
  * 仍没有就空着，不写猜的默认值。
  */
-export function buildModelsFromFetchedSelection(
-	fetchedModels: FetchedModel[],
-	selectedModelIds: string[],
-	existingModels: ModelItem[],
-): ModelItem[] {
+export function buildModelsFromFetchedSelection(fetchedModels: FetchedModel[], selectedModelIds: string[], existingModels: ModelItem[]): ModelItem[] {
 	const existingIds = new Set(existingModels.map((model) => model.id));
 	const selectedIds = new Set(selectedModelIds);
 	const result = fetchedModels

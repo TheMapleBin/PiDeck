@@ -35,16 +35,9 @@ type DiffFileHandler = (path: string, originalContent?: string, content?: string
 
 // EnvironmentDialog 已收敛到 overlays/OverlayComponents（唯一实现，含 pi 环境三步引导），
 // 这里仅保留 re-export 兼容旧 import 路径。
-export { EnvironmentDialog } from '../overlays/OverlayComponents';
+export { EnvironmentDialog } from "../overlays/OverlayComponents";
 
-export function ConfirmDialog(props: {
-	title: string;
-	message: string;
-	onConfirm: () => void;
-	onCancel: () => void;
-	confirmLabel?: string;
-	danger?: boolean;
-}) {
+export function ConfirmDialog(props: { title: string; message: string; onConfirm: () => void; onCancel: () => void; confirmLabel?: string; danger?: boolean }) {
 	// 实现已收敛到 ui-shadcn/ConfirmDialog（AlertDialog），此处仅保留兼容转发，
 	// 避免一次性改动所有 import 路径；后续批量替换 import 后删除本包装。
 	return <ShadcnConfirmDialog {...props} />;
@@ -55,26 +48,26 @@ export function ConfirmDialog(props: {
 // 保持旧 import 路径继续工作
 // ============================================================
 export {
-  SessionStatus,
-  LogoMark,
-  AgentAvatar,
-  EmptyState,
-  ToolCard,
-  ToolGroupCard,
-  DiagnosticMessageCard,
-  ThinkingBlock,
-  RespondingIndicator,
-  AssistantText,
-  UserBubble,
-  ImagePreviewModal,
-  stripMarkdown,
-  MultiSelectModal,
-  ConversationOutline,
-  DrawerContent,
-  SessionFileSummary,
-  SessionHistoryModal,
-  PromptSuggestions,
-  FileContextMenu,
+	SessionStatus,
+	LogoMark,
+	AgentAvatar,
+	EmptyState,
+	ToolCard,
+	ToolGroupCard,
+	DiagnosticMessageCard,
+	ThinkingBlock,
+	RespondingIndicator,
+	AssistantText,
+	UserBubble,
+	ImagePreviewModal,
+	stripMarkdown,
+	MultiSelectModal,
+	ConversationOutline,
+	DrawerContent,
+	SessionFileSummary,
+	SessionHistoryModal,
+	PromptSuggestions,
+	FileContextMenu,
 } from "../session/SurfaceComponents";
 export { TurnRow } from "../session/turn";
 
@@ -88,8 +81,7 @@ function loadDevBranch(): Promise<string | undefined> {
 	if (cachedDevBranch !== undefined) return Promise.resolve(cachedDevBranch);
 	devBranchPromise ??= (async () => {
 		try {
-			const info = await (window as unknown as { piDesktop?: { app?: { info: () => Promise<{ devBranch?: string }> } } })
-				.piDesktop?.app?.info();
+			const info = await (window as unknown as { piDesktop?: { app?: { info: () => Promise<{ devBranch?: string }> } } }).piDesktop?.app?.info();
 			cachedDevBranch = info?.devBranch?.trim() || undefined;
 			return cachedDevBranch;
 		} catch {
@@ -170,11 +162,7 @@ export function BrandLockup() {
 			{/* 默认静态定格；点击 logo 才播官方 tetromino 拼装动画，不随会话启动自动播。 */}
 			{showLogo && <PiLogoCanvas size={18} playOnClick />}
 			<span className="flex min-w-0 flex-col justify-center gap-1">
-				<TextShimmer
-					as="span"
-					enabled={shimmerOn}
-					className="brand-wordmark truncate text-[18px] font-[PiDeckDepartureMono] font-bold uppercase leading-none"
-				>
+				<TextShimmer as="span" enabled={shimmerOn} className="brand-wordmark truncate text-[18px] font-[PiDeckDepartureMono] font-bold uppercase leading-none">
 					PiDeck
 				</TextShimmer>
 				{branch && <span className="truncate text-[13px] font-medium leading-none text-muted-foreground">{branch}</span>}
@@ -182,5 +170,3 @@ export function BrandLockup() {
 		</div>
 	);
 }
-
-

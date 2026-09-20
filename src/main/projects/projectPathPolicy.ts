@@ -35,23 +35,11 @@ export function projectPathKey(path: string): string {
  */
 export function isEphemeralProjectPath(path: string): boolean {
 	const key = projectPathKey(path);
-	return (
-		/\/pideck-mockpi-/.test(key)
-		|| /\/pideck-e2e-/.test(key)
-		|| /\/pideck-git-e2e/.test(key)
-		|| /\/pideck-history-/.test(key)
-		|| /\/pideck-preview-promote-e2e/.test(key)
-		|| /\/pideck-wb-/.test(key)
-		|| /\/pideck-fv-/.test(key)
-		|| /\/pideck-feishu-e2e/.test(key)
-	);
+	return /\/pideck-mockpi-/.test(key) || /\/pideck-e2e-/.test(key) || /\/pideck-git-e2e/.test(key) || /\/pideck-history-/.test(key) || /\/pideck-preview-promote-e2e/.test(key) || /\/pideck-wb-/.test(key) || /\/pideck-fv-/.test(key) || /\/pideck-feishu-e2e/.test(key);
 }
 
 /** 用户已从侧栏移除的路径（目录可能还在，也不能被自动导入再注册）。 */
-export function isDismissedProjectPath(
-	path: string,
-	dismissed: readonly string[],
-): boolean {
+export function isDismissedProjectPath(path: string, dismissed: readonly string[]): boolean {
 	const key = projectPathKey(path);
 	return dismissed.some((item) => projectPathKey(item) === key);
 }

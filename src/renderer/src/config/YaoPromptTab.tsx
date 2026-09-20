@@ -12,19 +12,14 @@ const PAGE_SIZE = 20;
 
 async function getInstalledPromptNames(projectId?: string): Promise<Set<string>> {
 	try {
-		const list: PiPromptTemplateListResult = projectId
-			? await desktopApi.prompts.listByProject(projectId)
-			: await desktopApi.prompts.list();
+		const list: PiPromptTemplateListResult = projectId ? await desktopApi.prompts.listByProject(projectId) : await desktopApi.prompts.list();
 		return new Set(list.templates.filter((template) => template.userCreated).map((template) => template.name.toLowerCase()));
 	} catch {
 		return new Set();
 	}
 }
 
-export function YaoPromptTab(props: {
-	onImported?: () => void;
-	projectId?: string;
-}) {
+export function YaoPromptTab(props: { onImported?: () => void; projectId?: string }) {
 	const [initialLoading, setInitialLoading] = useState(true);
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -56,10 +51,7 @@ export function YaoPromptTab(props: {
 		setInitialLoading(true);
 		setError(null);
 		try {
-			const [result, installed] = await Promise.all([
-				desktopApi.yaoPrompts.list(),
-				getInstalledPromptNames(props.projectId),
-			]);
+			const [result, installed] = await Promise.all([desktopApi.yaoPrompts.list(), getInstalledPromptNames(props.projectId)]);
 			setData(result);
 			setInstalledNames(installed);
 			// 默认停留「全部」而不是 categories[0]：分类按 count DESC 排序，
@@ -75,19 +67,17 @@ export function YaoPromptTab(props: {
 		}
 	};
 
-	;
-
 	const loadPrompts = async () => {
 		setLoading(true);
 		setError(null);
 		try {
-		const result = await desktopApi.yaoPrompts.list({
-			category: activeCategory ?? undefined,
-			search: appliedSearch.trim() || undefined,
-			page,
-			pageSize: PAGE_SIZE,
-		});
-			setData((previous) => previous ? { ...previous, ...result, categories: previous.categories } : result);
+			const result = await desktopApi.yaoPrompts.list({
+				category: activeCategory ?? undefined,
+				search: appliedSearch.trim() || undefined,
+				page,
+				pageSize: PAGE_SIZE,
+			});
+			setData((previous) => (previous ? { ...previous, ...result, categories: previous.categories } : result));
 		} catch (err) {
 			console.error("[YaoPrompts] Search failed", err);
 			setError(t("config.yaoLoadError"));
@@ -159,19 +149,24 @@ export function YaoPromptTab(props: {
 				{error && <div className="mb-3.5 rounded-sm border border-danger/20 bg-danger-soft px-3.5 py-2.5 text-control leading-relaxed text-danger whitespace-pre-line">{error}</div>}
 				{/* toast 已改用 sonner */}
 				<div className="prompt-store-toolbar">
-					<Button size="sm"  variant="outline" onClick={() => { setPreviewItem(null); setPreviewDetail(null); }}>
+					<Button
+						size="sm"
+						variant="outline"
+						onClick={() => {
+							setPreviewItem(null);
+							setPreviewDetail(null);
+						}}
+					>
 						<ArrowLeft size={14} strokeWidth={1.8} />
 						{t("config.promptStoreBack")}
 					</Button>
-					<Button
-						 size="sm" variant="default"
-						onClick={() => void handleImport(previewItem)}
-						disabled={importingSlug === previewItem.slug}
-					>
+					<Button size="sm" variant="default" onClick={() => void handleImport(previewItem)} disabled={importingSlug === previewItem.slug}>
 						{importingSlug === previewItem.slug ? (
 							t("config.promptStoreImporting")
 						) : (
-							<><Download size={14} strokeWidth={1.8} /> {t("config.promptStoreImport")}</>
+							<>
+								<Download size={14} strokeWidth={1.8} /> {t("config.promptStoreImport")}
+							</>
 						)}
 					</Button>
 				</div>
@@ -181,9 +176,7 @@ export function YaoPromptTab(props: {
 					<div className="prompt-store-preview">
 						<div className="prompt-store-preview-header">
 							<h3>{previewDetail.title}</h3>
-							{previewDetail.description && (
-								<p className="prompt-store-description">{previewDetail.description}</p>
-							)}
+							{previewDetail.description && <p className="prompt-store-description">{previewDetail.description}</p>}
 						</div>
 						<div className="prompt-store-preview-content">
 							<pre>{previewDetail.promptContent}</pre>
@@ -235,19 +228,12 @@ export function YaoPromptTab(props: {
 				<>
 					{/* 分类导航 */}
 					<div className="yao-category-bar">
-						<button
-							className={`yao-category-chip ${!activeCategory ? "active" : ""}`}
-							onClick={() => handleCategoryChange(null)}
-						>
+						<button className={`yao-category-chip ${!activeCategory ? "active" : ""}`} onClick={() => handleCategoryChange(null)}>
 							{t("config.yaoAll")}
 							<small>{data.categories.reduce((s, c) => s + c.count, 0)}</small>
 						</button>
 						{data.categories.map((cat) => (
-							<button
-								key={cat.slug}
-								className={`yao-category-chip ${activeCategory === cat.slug ? "active" : ""}`}
-								onClick={() => handleCategoryChange(cat.slug)}
-							>
+							<button key={cat.slug} className={`yao-category-chip ${activeCategory === cat.slug ? "active" : ""}`} onClick={() => handleCategoryChange(cat.slug)}>
 								{cat.name}
 								<small>{cat.count}</small>
 							</button>
@@ -255,18 +241,14 @@ export function YaoPromptTab(props: {
 					</div>
 
 					{/* 提示词列表 */}
-				<div className="prompt-store-results">
-					{loading ? (
-						<div className="py-12 text-center text-control text-text-tertiary">{t("common.loading")}</div>
-					) : activePrompts.length === 0 ? (
-						<div className="py-12 text-center text-control text-text-tertiary">{t("config.yaoNoMatches")}</div>
+					<div className="prompt-store-results">
+						{loading ? (
+							<div className="py-12 text-center text-control text-text-tertiary">{t("common.loading")}</div>
+						) : activePrompts.length === 0 ? (
+							<div className="py-12 text-center text-control text-text-tertiary">{t("config.yaoNoMatches")}</div>
 						) : (
 							activePrompts.map((item) => (
-								<article
-									key={item.slug}
-									className="prompt-store-card"
-									onClick={() => void handlePreview(item)}
-								>
+								<article key={item.slug} className="prompt-store-card" onClick={() => void handlePreview(item)}>
 									<div className="prompt-store-card-main">
 										<strong className="prompt-store-card-title">
 											{item.title}
@@ -276,13 +258,13 @@ export function YaoPromptTab(props: {
 												</span>
 											)}
 										</strong>
-										{item.description && (
-											<p className="prompt-store-card-desc">{item.description}</p>
-										)}
+										{item.description && <p className="prompt-store-card-desc">{item.description}</p>}
 										{item.tags.length > 0 && (
 											<div className="yao-card-tags">
 												{item.tags.slice(0, 3).map((tag) => (
-													<span key={tag} className="prompt-store-tag">{tag}</span>
+													<span key={tag} className="prompt-store-tag">
+														{tag}
+													</span>
 												))}
 											</div>
 										)}
@@ -290,8 +272,12 @@ export function YaoPromptTab(props: {
 									<div className="prompt-store-card-actions">
 										{!installedNames.has(item.slug.toLowerCase()) && (
 											<Button
-												 variant="default" size="sm"
-												onClick={(e) => { e.stopPropagation(); void handleImport(item); }}
+												variant="default"
+												size="sm"
+												onClick={(e) => {
+													e.stopPropagation();
+													void handleImport(item);
+												}}
 												disabled={importingSlug === item.slug}
 											>
 												{importingSlug === item.slug ? t("config.promptStoreImporting") : t("config.promptStoreImport")}
@@ -304,13 +290,7 @@ export function YaoPromptTab(props: {
 					</div>
 
 					{/* 分页控件：共享 Pagination 组件，带 aria-label 与禁用态 */}
-					{totalPages > 1 && (
-						<Pagination
-							page={page}
-							totalPages={totalPages}
-							onPageChange={setPage}
-						/>
-					)}
+					{totalPages > 1 && <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />}
 				</>
 			)}
 		</div>

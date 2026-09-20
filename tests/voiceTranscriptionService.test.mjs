@@ -91,16 +91,25 @@ test("rejects unsupported MIME and oversized audio before fetching", async () =>
 		log: () => {},
 	});
 	assert.equal((await service.transcribe({ requestId: "bad-1", audio, mimeType: "text/plain" })).error, "invalidRequest");
-	assert.equal((await service.transcribe({
-		requestId: "bad-2",
-		audio: new ArrayBuffer(25 * 1024 * 1024 + 1),
-		mimeType: "audio/webm",
-	})).error, "invalidRequest");
+	assert.equal(
+		(
+			await service.transcribe({
+				requestId: "bad-2",
+				audio: new ArrayBuffer(25 * 1024 * 1024 + 1),
+				mimeType: "audio/webm",
+			})
+		).error,
+		"invalidRequest",
+	);
 	assert.equal(calls, 0);
 });
 
 test("maps status and malformed responses without returning upstream bodies or keys", async () => {
-	for (const [status, expected] of [[401, "invalidKey"], [404, "badBaseUrl"], [500, "http"]]) {
+	for (const [status, expected] of [
+		[401, "invalidKey"],
+		[404, "badBaseUrl"],
+		[500, "http"],
+	]) {
 		const service = new VoiceTranscriptionService({
 			getCredentials: async () => credentials,
 			fetch: async () => new Response(`secret body ${credentials.apiKey}`, { status }),
@@ -122,9 +131,10 @@ test("timeout aborts the request and maps to timeout", async () => {
 	const service = new VoiceTranscriptionService({
 		getCredentials: async () => credentials,
 		timeoutMs: 5,
-		fetch: async (_url, init) => new Promise((_resolve, reject) => {
-			init.signal.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
-		}),
+		fetch: async (_url, init) =>
+			new Promise((_resolve, reject) => {
+				init.signal.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
+			}),
 		log: () => {},
 	});
 	const result = await service.transcribe({ requestId: "timeout", audio, mimeType: "audio/wav" });

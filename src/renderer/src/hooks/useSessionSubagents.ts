@@ -13,9 +13,7 @@ import { useAtomValue } from "jotai";
 import { useEffect, useMemo, useState } from "react";
 import type { PiSubagentEntry, PiSubagentStatus } from "../../../shared/types";
 import { desktopApi } from "../desktopApi";
-import {
-	sessionRuntimeUiBySessionIdAtomFamily,
-} from "../atoms";
+import { sessionRuntimeUiBySessionIdAtomFamily } from "../atoms";
 import { isTerminalSubagentStatus } from "../components/session/subagentStatus";
 
 /* ------------------------------------------------------------------ */
@@ -42,9 +40,7 @@ interface BridgeSnapshot {
 	}>;
 }
 
-const VALID_STATUSES = new Set([
-	"queued", "running", "completed", "steered", "aborted", "stopped", "error",
-]);
+const VALID_STATUSES = new Set(["queued", "running", "completed", "steered", "aborted", "stopped", "error"]);
 
 function parseBridgeSnapshot(lines: readonly string[] | undefined): {
 	pluginActive: boolean | undefined;
@@ -81,10 +77,7 @@ function parseBridgeSnapshot(lines: readonly string[] | undefined): {
 	}
 }
 
-export function mergeSubagentEntries(
-	records: PiSubagentEntry[],
-	bridgeLines: readonly string[] | undefined,
-): { merged: PiSubagentEntry[]; pluginActive: boolean | undefined } {
+export function mergeSubagentEntries(records: PiSubagentEntry[], bridgeLines: readonly string[] | undefined): { merged: PiSubagentEntry[]; pluginActive: boolean | undefined } {
 	const bridge = parseBridgeSnapshot(bridgeLines);
 	const byId = new Map<string, PiSubagentEntry>();
 
@@ -153,12 +146,8 @@ const SNAPSHOT_STATE_TO_STATUS: Record<string, PiSubagentStatus> = {
  * 补充；id 为插件 asyncId，与主进程派发回执推导的条目 id 同源。损坏载荷返回
  * []（fail-soft，不影响其他源）。
  */
-export function parseSubagentAsyncSnapshot(
-	lines: readonly string[] | undefined,
-): PiSubagentEntry[] {
-	const line = lines?.find((candidate) =>
-		typeof candidate === "string" && candidate.startsWith(SUBAGENT_ASYNC_LINE_PREFIX),
-	);
+export function parseSubagentAsyncSnapshot(lines: readonly string[] | undefined): PiSubagentEntry[] {
+	const line = lines?.find((candidate) => typeof candidate === "string" && candidate.startsWith(SUBAGENT_ASYNC_LINE_PREFIX));
 	if (!line) return [];
 	try {
 		const snapshot = JSON.parse(line.slice(SUBAGENT_ASYNC_LINE_PREFIX.length)) as {
@@ -200,10 +189,7 @@ export function parseSubagentAsyncSnapshot(
  * 一直停在 running——无条件覆盖会让僵尸条目永远「运行中」，时长无限增长
  * （用户实测「几千分钟」）。
  */
-export function applyAsyncSnapshotEntries(
-	existing: PiSubagentEntry[],
-	asyncEntries: PiSubagentEntry[],
-): PiSubagentEntry[] {
+export function applyAsyncSnapshotEntries(existing: PiSubagentEntry[], asyncEntries: PiSubagentEntry[]): PiSubagentEntry[] {
 	if (asyncEntries.length === 0) return existing;
 	const byId = new Map(existing.map((entry) => [entry.id, entry]));
 	for (const entry of asyncEntries) {
@@ -231,9 +217,7 @@ export function applyAsyncSnapshotEntries(
 /* Hook                                                               */
 /* ------------------------------------------------------------------ */
 
-export function useSessionSubagents(
-	sessionId: string,
-): {
+export function useSessionSubagents(sessionId: string): {
 	entries: PiSubagentEntry[];
 	pluginActive: boolean | undefined;
 	loading: boolean;
@@ -247,12 +231,8 @@ export function useSessionSubagents(
 	// 运行时为 undefined，必须可选链防护，否则整卡渲染崩溃。
 	const runtimeUi = useAtomValue(sessionRuntimeUiBySessionIdAtomFamily(sessionId));
 	const widgets = runtimeUi?.widgets;
-	const bridgeLines = widgets?.["pi-deck-subagents"] as
-		| readonly string[]
-		| undefined;
-	const subagentAsyncLines = widgets?.["subagent-async"] as
-		| readonly string[]
-		| undefined;
+	const bridgeLines = widgets?.["pi-deck-subagents"] as readonly string[] | undefined;
+	const subagentAsyncLines = widgets?.["subagent-async"] as readonly string[] | undefined;
 
 	// 主进程 IPC：拉取 record（初次 / 会话切换时）。
 	// runtime 绑定出现（agentId 从 undefined 变为实例，或重启换代）时重拉：
@@ -280,14 +260,8 @@ export function useSessionSubagents(
 	}, [sessionId, runtimeUi?.agentId]);
 
 	// 合并：record（主进程侧已含工具推导）+ tintinweb 桥接 → 叠加 nicobailon async 条目
-	const { merged, pluginActive } = useMemo(
-		() => mergeSubagentEntries(records, bridgeLines),
-		[records, bridgeLines],
-	);
-	const entries = useMemo(
-		() => applyAsyncSnapshotEntries(merged, parseSubagentAsyncSnapshot(subagentAsyncLines)),
-		[merged, subagentAsyncLines],
-	);
+	const { merged, pluginActive } = useMemo(() => mergeSubagentEntries(records, bridgeLines), [records, bridgeLines]);
+	const entries = useMemo(() => applyAsyncSnapshotEntries(merged, parseSubagentAsyncSnapshot(subagentAsyncLines)), [merged, subagentAsyncLines]);
 
 	return { entries, pluginActive, loading };
 }

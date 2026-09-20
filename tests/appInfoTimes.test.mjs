@@ -70,10 +70,7 @@ test("开发态优先构建产物时间，无产物时回退 package.json", () =
 
 	assert.ok(result.buildTime, "开发态应有 buildTime");
 	// mtimeIso 经 Date 转 ISO（毫秒截断），容忍亚毫秒误差
-	assert.ok(
-		Math.abs(new Date(result.buildTime).getTime() - statSync(buildOut).mtimeMs) < 1,
-		"应取构建产物 mtime",
-	);
+	assert.ok(Math.abs(new Date(result.buildTime).getTime() - statSync(buildOut).mtimeMs) < 1, "应取构建产物 mtime");
 	assert.equal(result.installedAt, undefined);
 });
 
@@ -91,9 +88,6 @@ test("开发态无构建产物时回退 package.json 时间", () => {
 	});
 
 	assert.ok(result.buildTime, "应有 buildTime");
-	assert.ok(
-		Math.abs(new Date(result.buildTime).getTime() - statSync(manifest).mtimeMs) < 1,
-		"应回退 package.json mtime",
-	);
+	assert.ok(Math.abs(new Date(result.buildTime).getTime() - statSync(manifest).mtimeMs) < 1, "应回退 package.json mtime");
 	assert.equal(result.installedAt, undefined);
 });

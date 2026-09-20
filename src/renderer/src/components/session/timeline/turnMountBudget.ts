@@ -34,11 +34,7 @@ export interface MountedStepsWindow<T> {
  * 更早的步骤由调用方渲染「显示更早 N 条」入口，点击后以 showAll=true 重新调用。
  * limit <= 0 视为未启用预算（返回原列表）。
  */
-export function boundMountedSteps<T>(
-	items: readonly T[],
-	limit: number = TIMELINE_MOUNTED_STEP_LIMIT,
-	showAll = false,
-): MountedStepsWindow<T> {
+export function boundMountedSteps<T>(items: readonly T[], limit: number = TIMELINE_MOUNTED_STEP_LIMIT, showAll = false): MountedStepsWindow<T> {
 	if (showAll || limit <= 0 || items.length <= limit) {
 		return { items, hiddenCount: 0 };
 	}

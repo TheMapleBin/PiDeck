@@ -1,10 +1,6 @@
 import { ipcMain, shell } from "electron";
 import { ipcChannels } from "../../shared/ipc";
-import {
-	BUILTIN_CONTENT_UPDATE_ALLOWED_BRANCHES,
-	BUILTIN_CONTENT_UPDATE_DEFAULT_BRANCH,
-	type BuiltinContentUpdater,
-} from "../updates/builtinContentUpdater";
+import { BUILTIN_CONTENT_UPDATE_ALLOWED_BRANCHES, BUILTIN_CONTENT_UPDATE_DEFAULT_BRANCH, type BuiltinContentUpdater } from "../updates/builtinContentUpdater";
 import type { PromptStoreUpdater } from "../prompts/promptStoreUpdater";
 import type { SkillStoreUpdater } from "../skills/skillStoreUpdater";
 
@@ -26,10 +22,7 @@ type ChannelGroup = {
  *
  * 输入校验在边界：分支只接受 main/dev 字面量（防 URL 注入），非法值回退默认分支。
  */
-export function registerContentStoreIpc(
-	updater: PromptStoreUpdater | SkillStoreUpdater,
-	channels: ChannelGroup,
-): void {
+export function registerContentStoreIpc(updater: PromptStoreUpdater | SkillStoreUpdater, channels: ChannelGroup): void {
 	ipcMain.handle(channels.status, () => updater.getStatus());
 	ipcMain.handle(channels.check, (_event, branch: unknown) => {
 		return updater.checkRemote(sanitizeBranch(branch));
@@ -48,10 +41,7 @@ export function registerContentStoreIpc(
 
 /** 白名单分支校验：只允许 main/dev，非法值回退 main（防 URL 注入）。 */
 function sanitizeBranch(branch: unknown): string {
-	return typeof branch === "string"
-		&& (BUILTIN_CONTENT_UPDATE_ALLOWED_BRANCHES as readonly string[]).includes(branch)
-		? branch
-		: BUILTIN_CONTENT_UPDATE_DEFAULT_BRANCH;
+	return typeof branch === "string" && (BUILTIN_CONTENT_UPDATE_ALLOWED_BRANCHES as readonly string[]).includes(branch) ? branch : BUILTIN_CONTENT_UPDATE_DEFAULT_BRANCH;
 }
 
 /** 提示词商店官方模板更新的 IPC 通道组。 */

@@ -5,10 +5,7 @@
  * - 自定义：pideck-sound://custom/<文件名>（主进程协议白名单校验后读 userData/sounds）。
  * 与 shared/types/soundAlert.ts 的引用格式（预设 id / custom:<file>）一一对应。
  */
-import {
-	parseSoundAlertRef,
-	type SoundAlertPresetId,
-} from "../../../shared/types/soundAlert";
+import { parseSoundAlertRef, type SoundAlertPresetId } from "../../../shared/types/soundAlert";
 
 // 静态引用：Vite 会把每个 wav 复制进 assets/ 并替换为 hashed URL（见 electron-vite build 产物）
 const PRESET_URLS: Record<SoundAlertPresetId, string> = {

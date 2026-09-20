@@ -22,59 +22,49 @@ import { usePaneGitInfo } from "../../hooks/usePaneGitInfo";
  */
 
 export function SessionStartSurface(props: {
-  sessionId: string;
-  /** 可选项目切换器：引导页（无会话空态）传入，标明并可切换下一次发送将会话创建到哪个项目 */
-  projectSwitcher?: ReactNode;
-  /** 引导页虚拟会话没有 SessionRecord，用选中项目兑底加载 @ 引用文件树。 */
-  bootstrapProjectId?: string;
+	sessionId: string;
+	/** 可选项目切换器：引导页（无会话空态）传入，标明并可切换下一次发送将会话创建到哪个项目 */
+	projectSwitcher?: ReactNode;
+	/** 引导页虚拟会话没有 SessionRecord，用选中项目兑底加载 @ 引用文件树。 */
+	bootstrapProjectId?: string;
 }) {
-  const services = useSessionPaneServices();
-  // 起始页展示的分支属于“下一个会话将落地”的项目：引导页（虚拟会话）用选中项目，
-  // 真实匿名会话用其 record 自身项目。分屏下两个 worktree 各开空会话时，
-  // 各自起始页显示各自 worktree 的分支，不跟随 App 聚焦项目（栏级 usePaneGitInfo）。
-  const sessionRecord = useAtomValue(sessionRecordByIdAtomFamily(props.sessionId));
-  const startProjectId = props.bootstrapProjectId ?? sessionRecord?.projectId;
-  const { gitInfo } = usePaneGitInfo(startProjectId);
-  const queuedTrackRef = useRef<HTMLElement | null>(null);
-  const activeQueuedPrompts = services.queuedPromptsBySession[props.sessionId] ?? [];
+	const services = useSessionPaneServices();
+	// 起始页展示的分支属于“下一个会话将落地”的项目：引导页（虚拟会话）用选中项目，
+	// 真实匿名会话用其 record 自身项目。分屏下两个 worktree 各开空会话时，
+	// 各自起始页显示各自 worktree 的分支，不跟随 App 聚焦项目（栏级 usePaneGitInfo）。
+	const sessionRecord = useAtomValue(sessionRecordByIdAtomFamily(props.sessionId));
+	const startProjectId = props.bootstrapProjectId ?? sessionRecord?.projectId;
+	const { gitInfo } = usePaneGitInfo(startProjectId);
+	const queuedTrackRef = useRef<HTMLElement | null>(null);
+	const activeQueuedPrompts = services.queuedPromptsBySession[props.sessionId] ?? [];
 
-  return (
-    // session-start-surface 保留类名供壁纸模式契约（bg-transparent 透出下层壁纸）；
-    // pt-[18vh] 把重心压向视口中心（输入框顶约 36-40%、框心 ~55%），接近 DeepSeek
-    // 新会话页；[--font-size-input] 在容器作用域放大输入框字号（14→15.5px），
-    // 只影响本页，不改全局 token（会话页输入框保持原尺寸）。
-    <div className="session-start-surface flex min-h-full w-full flex-col items-center gap-8 bg-transparent px-6 pb-10 pt-[18vh] [--font-size-input:15.5px] [--line-height-input:25px]">
-      <LogoMark size={72} />
-      {props.projectSwitcher}
-      {/* 复用会话页底部输入框组件：高度随内容撑开，底部栏（模型/思考/模式/安全级别/git）与发送按钮全保留 */}
-      <div className="w-full max-w-[980px]">
-        <ComposerArea
-          sessionId={props.sessionId}
-          gitInfo={gitInfo}
-          enqueue={services.enqueueSessionPrompt}
-          ensureSessionId={services.ensureSessionId}
-          bootstrapProjectId={props.bootstrapProjectId}
-          widgets={
-            <>
-              <SessionTodoStrip sessionId={props.sessionId} />
-              <SessionFilesStrip sessionId={props.sessionId} />
-              <SessionSubagentsStrip sessionId={props.sessionId} />
-              <SessionGoalStrip sessionId={props.sessionId} />
-            </>
-          }
-          queuePanel={
-            <QueuedPromptPanel
-              trackRef={queuedTrackRef}
-              sessionId={props.sessionId}
-              prompts={activeQueuedPrompts}
-              visiblePrompts={activeQueuedPrompts}
-              onRetract={services.queueRetract}
-              onDiscard={services.queueDiscard}
-              onChangeBehavior={services.queueChangeBehavior}
-            />
-          }
-        />
-      </div>
-    </div>
-  );
+	return (
+		// session-start-surface 保留类名供壁纸模式契约（bg-transparent 透出下层壁纸）；
+		// pt-[18vh] 把重心压向视口中心（输入框顶约 36-40%、框心 ~55%），接近 DeepSeek
+		// 新会话页；[--font-size-input] 在容器作用域放大输入框字号（14→15.5px），
+		// 只影响本页，不改全局 token（会话页输入框保持原尺寸）。
+		<div className="session-start-surface flex min-h-full w-full flex-col items-center gap-8 bg-transparent px-6 pb-10 pt-[18vh] [--font-size-input:15.5px] [--line-height-input:25px]">
+			<LogoMark size={72} />
+			{props.projectSwitcher}
+			{/* 复用会话页底部输入框组件：高度随内容撑开，底部栏（模型/思考/模式/安全级别/git）与发送按钮全保留 */}
+			<div className="w-full max-w-[980px]">
+				<ComposerArea
+					sessionId={props.sessionId}
+					gitInfo={gitInfo}
+					enqueue={services.enqueueSessionPrompt}
+					ensureSessionId={services.ensureSessionId}
+					bootstrapProjectId={props.bootstrapProjectId}
+					widgets={
+						<>
+							<SessionTodoStrip sessionId={props.sessionId} />
+							<SessionFilesStrip sessionId={props.sessionId} />
+							<SessionSubagentsStrip sessionId={props.sessionId} />
+							<SessionGoalStrip sessionId={props.sessionId} />
+						</>
+					}
+					queuePanel={<QueuedPromptPanel trackRef={queuedTrackRef} sessionId={props.sessionId} prompts={activeQueuedPrompts} visiblePrompts={activeQueuedPrompts} onRetract={services.queueRetract} onDiscard={services.queueDiscard} onChangeBehavior={services.queueChangeBehavior} />}
+				/>
+			</div>
+		</div>
+	);
 }

@@ -193,14 +193,10 @@ function TokenDanceSetupDialog(props: {
 		<Dialog open={props.open} onOpenChange={(open) => (open ? undefined : close())}>
 			<DialogContent className="max-w-md">
 				<DialogHeader>
-					<DialogTitle>
-						{t(props.configured ? "config.tokendance.keyTitle" : "config.tokendance.installTitle")}
-					</DialogTitle>
+					<DialogTitle>{t(props.configured ? "config.tokendance.keyTitle" : "config.tokendance.installTitle")}</DialogTitle>
 				</DialogHeader>
 				<div className="flex min-w-0 flex-col gap-3 text-sm leading-relaxed text-text-secondary">
-					<p className="text-muted-foreground">
-						{t(props.configured ? "config.tokendance.keyDesc" : "config.tokendance.installDesc", { count: props.modelCount })}
-					</p>
+					<p className="text-muted-foreground">{t(props.configured ? "config.tokendance.keyDesc" : "config.tokendance.installDesc", { count: props.modelCount })}</p>
 
 					{/* 写入清单只在首次配置时展示；已配置只更新 Key，不再重复列优势 */}
 					{!props.configured && (
@@ -220,16 +216,12 @@ function TokenDanceSetupDialog(props: {
 									{t("config.tokendance.advantageCredit")}
 								</li>
 							</ul>
-							<p className="rounded-sm border border-border-subtle bg-bg-subtle/60 px-2.5 py-2 text-[11px] text-muted-foreground">
-								{t("config.tokendance.installWrites")}
-							</p>
+							<p className="rounded-sm border border-border-subtle bg-bg-subtle/60 px-2.5 py-2 text-[11px] text-muted-foreground">{t("config.tokendance.installWrites")}</p>
 						</>
 					)}
 
 					{/* 归因说明：Key 会带上 app_url，用户可核对不是 PiDeck 偷偷收集信息 */}
-					<p className="text-[11px] text-text-tertiary">
-						{t("config.tokendance.oauthAppUrl", { appUrl: TOKENDANCE_APP_URL })}
-					</p>
+					<p className="text-[11px] text-text-tertiary">{t("config.tokendance.oauthAppUrl", { appUrl: TOKENDANCE_APP_URL })}</p>
 
 					{/* 进度反馈：waiting 是主路径的关键提示，告诉用户「回浏览器点确认就行」 */}
 					{(waiting || busy) && (
@@ -239,9 +231,7 @@ function TokenDanceSetupDialog(props: {
 						</p>
 					)}
 
-					{error && (
-						<p className="rounded-sm border border-danger/20 bg-danger-soft px-2.5 py-1.5 text-xs text-danger">{error}</p>
-					)}
+					{error && <p className="rounded-sm border border-danger/20 bg-danger-soft px-2.5 py-1.5 text-xs text-danger">{error}</p>}
 
 					{/* 手动降级区：只在自动接收不可用（或用户主动选择）时展开，避免主路径被干扰 */}
 					{phase === "manual" && (
@@ -262,30 +252,14 @@ function TokenDanceSetupDialog(props: {
 								<div className="min-w-0 flex-1">
 									<p className="text-xs">{t("config.tokendance.oauthStepCode")}</p>
 									<div className="mt-1.5 flex items-center gap-1.5">
-										<Input
-											value={code}
-											onChange={(e) => setCode(e.target.value)}
-											placeholder={t("config.tokendance.oauthCodePlaceholder")}
-											className="h-8 min-w-0 flex-1"
-										/>
-										<Button
-											variant="secondary"
-											size="sm"
-											className="h-8 shrink-0"
-											disabled={!code.trim() || !flow}
-											onClick={() => void handleExchangeCode()}
-										>
+										<Input value={code} onChange={(e) => setCode(e.target.value)} placeholder={t("config.tokendance.oauthCodePlaceholder")} className="h-8 min-w-0 flex-1" />
+										<Button variant="secondary" size="sm" className="h-8 shrink-0" disabled={!code.trim() || !flow} onClick={() => void handleExchangeCode()}>
 											<KeyRound className="size-3.5" aria-hidden="true" />
 											{t("config.tokendance.oauthExchange")}
 										</Button>
 									</div>
 									{flow && (
-										<Button
-											variant="ghost"
-											size="sm"
-											className="mt-1.5 h-7 px-0 text-[11px]"
-											onClick={() => void desktopApi.app.openExternal(flow.authUrl, true).catch(() => undefined)}
-										>
+										<Button variant="ghost" size="sm" className="mt-1.5 h-7 px-0 text-[11px]" onClick={() => void desktopApi.app.openExternal(flow.authUrl, true).catch(() => undefined)}>
 											<ExternalLink className="size-3.5" aria-hidden="true" />
 											{t("config.tokendance.oauthReopen")}
 										</Button>
@@ -299,20 +273,8 @@ function TokenDanceSetupDialog(props: {
 								<div className="min-w-0 flex-1">
 									<p className="text-xs">{t("config.tokendance.keyOptionPaste")}</p>
 									<div className="mt-1.5 flex items-center gap-1.5">
-										<Input
-											value={pastedKey}
-											onChange={(e) => setPastedKey(e.target.value)}
-											placeholder={t("config.tokendance.keyPastePlaceholder")}
-											className="h-8 min-w-0 flex-1 font-mono"
-											type="password"
-										/>
-										<Button
-											variant="secondary"
-											size="sm"
-											className="h-8 shrink-0"
-											disabled={!pastedKey.trim()}
-											onClick={() => void handlePasteKey()}
-										>
+										<Input value={pastedKey} onChange={(e) => setPastedKey(e.target.value)} placeholder={t("config.tokendance.keyPastePlaceholder")} className="h-8 min-w-0 flex-1 font-mono" type="password" />
+										<Button variant="secondary" size="sm" className="h-8 shrink-0" disabled={!pastedKey.trim()} onClick={() => void handlePasteKey()}>
 											<KeyRound className="size-3.5" aria-hidden="true" />
 											{t("config.tokendance.keyApply")}
 										</Button>
@@ -333,17 +295,8 @@ function TokenDanceSetupDialog(props: {
 						</Button>
 					)}
 					{/* 主按钮：一次点击完成授权 + 写入；waiting 时允许重开授权页重试 */}
-					<Button
-						variant="default"
-						size="sm"
-						onClick={() => void handleOneClick()}
-						disabled={busy || waiting}
-					>
-						{busy || waiting ? (
-							<Loader2 className="size-3.5 animate-pideck-spin" aria-hidden="true" />
-						) : (
-							<PlugZap className="size-3.5" aria-hidden="true" />
-						)}
+					<Button variant="default" size="sm" onClick={() => void handleOneClick()} disabled={busy || waiting}>
+						{busy || waiting ? <Loader2 className="size-3.5 animate-pideck-spin" aria-hidden="true" /> : <PlugZap className="size-3.5" aria-hidden="true" />}
 						{t(props.configured ? "config.tokendance.setupPrimaryUpdate" : "config.tokendance.setupPrimary")}
 					</Button>
 				</DialogFooter>
@@ -428,14 +381,7 @@ export function TokenDancePanel(props: TokenDancePanelProps) {
 	return (
 		<section className="config-builtin-provider-panel mb-2.5 rounded-lg border border-dashed border-border-subtle bg-bg-subtle/40 p-3.5">
 			{/* 整行标题可点击展开/收起：折叠态下右侧图标小，用户可能注意不到，整行即开关 */}
-			<button
-				type="button"
-				className="flex w-full items-center gap-2 text-left"
-				onClick={() => setExpanded((v) => !v)}
-				aria-expanded={expanded}
-				aria-label={t("config.tokendance.expandDetails")}
-				title={t("config.tokendance.expandDetails")}
-			>
+			<button type="button" className="flex w-full items-center gap-2 text-left" onClick={() => setExpanded((v) => !v)} aria-expanded={expanded} aria-label={t("config.tokendance.expandDetails")} title={t("config.tokendance.expandDetails")}>
 				<span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-[var(--color-accent-soft)]">
 					<Sparkles className="size-3.5 text-[var(--color-accent)]" aria-hidden="true" />
 				</span>
@@ -447,69 +393,59 @@ export function TokenDancePanel(props: TokenDancePanelProps) {
 					</span>
 				)}
 				<span className="min-w-0 flex-1 truncate text-micro text-text-tertiary">{t("config.tokendance.subtitle")}</span>
-				<span className="shrink-0 text-text-tertiary">
-					{expanded ? <ChevronUp className="size-4" aria-hidden="true" /> : <ChevronDown className="size-4" aria-hidden="true" />}
-				</span>
+				<span className="shrink-0 text-text-tertiary">{expanded ? <ChevronUp className="size-4" aria-hidden="true" /> : <ChevronDown className="size-4" aria-hidden="true" />}</span>
 			</button>
 
-			{expanded && (<>
-			{/* 平台优势（聚合 + 特价 + 新用户体验额度）；详情给官网链接，由用户自行核对 */}
-			<ul className="mt-2 grid gap-1 text-xs text-text-secondary">
-				<li className="flex items-start gap-1.5">
-					<span className="mt-0.5 shrink-0 text-[var(--color-accent)]">●</span>
-					{t("config.tokendance.advantageOne")}
-				</li>
-				<li className="flex items-start gap-1.5">
-					<span className="mt-0.5 shrink-0 text-[var(--color-accent)]">●</span>
-					{t("config.tokendance.advantageTwo")}
-				</li>
-				{/* 新用户体验额度：注册即送，先试后充，降低首次使用门槛 */}
-				<li className="flex items-start gap-1.5">
-					<span className="mt-0.5 shrink-0 text-[var(--color-accent)]">●</span>
-					{t("config.tokendance.advantageCredit")}
-				</li>
-			</ul>
+			{expanded && (
+				<>
+					{/* 平台优势（聚合 + 特价 + 新用户体验额度）；详情给官网链接，由用户自行核对 */}
+					<ul className="mt-2 grid gap-1 text-xs text-text-secondary">
+						<li className="flex items-start gap-1.5">
+							<span className="mt-0.5 shrink-0 text-[var(--color-accent)]">●</span>
+							{t("config.tokendance.advantageOne")}
+						</li>
+						<li className="flex items-start gap-1.5">
+							<span className="mt-0.5 shrink-0 text-[var(--color-accent)]">●</span>
+							{t("config.tokendance.advantageTwo")}
+						</li>
+						{/* 新用户体验额度：注册即送，先试后充，降低首次使用门槛 */}
+						<li className="flex items-start gap-1.5">
+							<span className="mt-0.5 shrink-0 text-[var(--color-accent)]">●</span>
+							{t("config.tokendance.advantageCredit")}
+						</li>
+					</ul>
 
-			<div className="mt-2 grid gap-1.5 text-xs text-text-secondary">
-				<div className="flex items-center gap-1.5">
-					<span className="min-w-[72px] shrink-0 text-text-tertiary">{t("config.field.baseUrl")}</span>
-					<code className="truncate font-mono text-[11px] text-text-primary">{TOKENDANCE_BASE_URL}</code>
-				</div>
-				<div className="flex items-center gap-1.5">
-					<span className="min-w-[72px] shrink-0 text-text-tertiary">{t("config.tokendance.modelsCount")}</span>
-					{catalog.loading ? (
-						<Loader2 className="size-3 animate-pideck-spin text-text-tertiary" aria-hidden="true" />
-					) : catalog.error ? (
-						<span className="text-danger">{t("config.tokendance.catalogError")}</span>
-					) : (
-						<span>
-							{catalog.models.length}
-							{catalog.fromCache ? ` · ${t("config.tokendance.fromCache")}` : ""}
-						</span>
-					)}
-				</div>
-				<div className="flex items-center gap-1.5">
-					<span className="min-w-[72px] shrink-0 text-text-tertiary">{t("config.tokendance.appUrlLabel")}</span>
-					<code className="truncate font-mono text-[11px] text-text-primary">{TOKENDANCE_APP_URL}</code>
-				</div>
-			</div>
+					<div className="mt-2 grid gap-1.5 text-xs text-text-secondary">
+						<div className="flex items-center gap-1.5">
+							<span className="min-w-[72px] shrink-0 text-text-tertiary">{t("config.field.baseUrl")}</span>
+							<code className="truncate font-mono text-[11px] text-text-primary">{TOKENDANCE_BASE_URL}</code>
+						</div>
+						<div className="flex items-center gap-1.5">
+							<span className="min-w-[72px] shrink-0 text-text-tertiary">{t("config.tokendance.modelsCount")}</span>
+							{catalog.loading ? (
+								<Loader2 className="size-3 animate-pideck-spin text-text-tertiary" aria-hidden="true" />
+							) : catalog.error ? (
+								<span className="text-danger">{t("config.tokendance.catalogError")}</span>
+							) : (
+								<span>
+									{catalog.models.length}
+									{catalog.fromCache ? ` · ${t("config.tokendance.fromCache")}` : ""}
+								</span>
+							)}
+						</div>
+						<div className="flex items-center gap-1.5">
+							<span className="min-w-[72px] shrink-0 text-text-tertiary">{t("config.tokendance.appUrlLabel")}</span>
+							<code className="truncate font-mono text-[11px] text-text-primary">{TOKENDANCE_APP_URL}</code>
+						</div>
+					</div>
 
-			<p className="mt-2 text-[11px] leading-relaxed text-text-tertiary">{t("config.tokendance.hint")}</p>
-			</>)}
+					<p className="mt-2 text-[11px] leading-relaxed text-text-tertiary">{t("config.tokendance.hint")}</p>
+				</>
+			)}
 
 			<div className="mt-3 flex flex-wrap items-center gap-1.5">
-				<Button
-					size="sm"
-					variant="default"
-					onClick={() => void openSetup()}
-					disabled={props.configured || installing}
-					title={props.configured ? t("config.tokendance.alreadyConfiguredTitle") : undefined}
-				>
-					{installing ? (
-						<Loader2 className="size-3.5 animate-pideck-spin" aria-hidden="true" />
-					) : (
-						<PlugZap className="size-3.5" aria-hidden="true" />
-					)}
+				<Button size="sm" variant="default" onClick={() => void openSetup()} disabled={props.configured || installing} title={props.configured ? t("config.tokendance.alreadyConfiguredTitle") : undefined}>
+					{installing ? <Loader2 className="size-3.5 animate-pideck-spin" aria-hidden="true" /> : <PlugZap className="size-3.5" aria-hidden="true" />}
 					{props.configured ? t("config.tokendance.alreadyConfigured") : t("config.tokendance.addToConfig")}
 				</Button>
 				{props.configured && (
@@ -525,13 +461,7 @@ export function TokenDancePanel(props: TokenDancePanelProps) {
 			</div>
 
 			{/* 单一操作弹窗：授权 + 交换 Key + 写入配置一次完成 */}
-			<TokenDanceSetupDialog
-				open={setupOpen}
-				onOpenChange={setSetupOpen}
-				configured={props.configured}
-				modelCount={catalog.models.length}
-				onDone={props.onInstalled}
-			/>
+			<TokenDanceSetupDialog open={setupOpen} onOpenChange={setSetupOpen} configured={props.configured} modelCount={catalog.models.length} onDone={props.onInstalled} />
 		</section>
 	);
 }

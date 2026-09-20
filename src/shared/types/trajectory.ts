@@ -2,15 +2,7 @@
  * 会话 JSONL 里的非对话过程事件。
  * 时间线只投影 user/assistant/tool；轨迹复盘单独读这些条目，不改聊天渲染。
  */
-export type SessionProcessEventKind =
-	| "session"
-	| "sessionInfo"
-	| "modelChange"
-	| "thinkingChange"
-	| "compaction"
-	| "custom"
-	| "import"
-	| "retry";
+export type SessionProcessEventKind = "session" | "sessionInfo" | "modelChange" | "thinkingChange" | "compaction" | "custom" | "import" | "retry";
 
 export type SessionProcessEvent = {
 	id: string;

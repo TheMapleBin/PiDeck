@@ -23,7 +23,8 @@ export function VoiceTranscriptionSettingsSection() {
 
 	useEffect(() => {
 		let active = true;
-		void desktopApi.voiceTranscription.getConfig()
+		void desktopApi.voiceTranscription
+			.getConfig()
 			.then((next) => {
 				if (active) setConfig(next);
 			})
@@ -64,68 +65,27 @@ export function VoiceTranscriptionSettingsSection() {
 	};
 
 	return (
-		<SettingsSection
-			title={t("voice.settings.title")}
-			description={t("voice.settings.description")}
-		>
+		<SettingsSection title={t("voice.settings.title")} description={t("voice.settings.description")}>
 			<SettingRow title={t("voice.settings.baseUrl")} alignEnd={false}>
-				<Input
-					value={config.baseUrl}
-					disabled={loading || saving}
-					onChange={(event) => setConfig((current) => ({ ...current, baseUrl: event.target.value }))}
-				/>
+				<Input value={config.baseUrl} disabled={loading || saving} onChange={(event) => setConfig((current) => ({ ...current, baseUrl: event.target.value }))} />
 			</SettingRow>
 			<SettingRow title={t("voice.settings.apiKey")} alignEnd={false}>
-				<Input
-					type="password"
-					value={apiKey}
-					disabled={loading || saving}
-					placeholder={config.hasApiKey
-						? t("voice.settings.apiKeyConfigured")
-						: t("voice.settings.apiKeyMissing")}
-					autoComplete="off"
-					onChange={(event) => setApiKey(event.target.value)}
-				/>
+				<Input type="password" value={apiKey} disabled={loading || saving} placeholder={config.hasApiKey ? t("voice.settings.apiKeyConfigured") : t("voice.settings.apiKeyMissing")} autoComplete="off" onChange={(event) => setApiKey(event.target.value)} />
 			</SettingRow>
 			<SettingRow title={t("voice.settings.model")} alignEnd={false}>
-				<Input
-					value={config.model}
-					disabled={loading || saving}
-					onChange={(event) => setConfig((current) => ({ ...current, model: event.target.value }))}
-				/>
+				<Input value={config.model} disabled={loading || saving} onChange={(event) => setConfig((current) => ({ ...current, model: event.target.value }))} />
 			</SettingRow>
-			<SettingRow
-				title={t("voice.settings.language")}
-				description={t("voice.settings.languageDescription")}
-				alignEnd={false}
-			>
-				<Input
-					value={config.language}
-					disabled={loading || saving}
-					placeholder={t("voice.settings.languagePlaceholder")}
-					onChange={(event) => setConfig((current) => ({ ...current, language: event.target.value }))}
-				/>
+			<SettingRow title={t("voice.settings.language")} description={t("voice.settings.languageDescription")} alignEnd={false}>
+				<Input value={config.language} disabled={loading || saving} placeholder={t("voice.settings.languagePlaceholder")} onChange={(event) => setConfig((current) => ({ ...current, language: event.target.value }))} />
 			</SettingRow>
 			<SettingRow title={t("voice.settings.actions")}>
 				<div className="flex items-center gap-2">
 					{config.hasApiKey ? (
-						<Button
-							type="button"
-							variant="outline"
-							size="sm"
-							disabled={loading || saving}
-							onClick={() => void save(true)}
-						>
+						<Button type="button" variant="outline" size="sm" disabled={loading || saving} onClick={() => void save(true)}>
 							{t("voice.settings.clearKey")}
 						</Button>
 					) : null}
-					<Button
-						type="button"
-						size="sm"
-						loading={saving}
-						disabled={loading}
-						onClick={() => void save(false)}
-					>
+					<Button type="button" size="sm" loading={saving} disabled={loading} onClick={() => void save(false)}>
 						{t("voice.settings.save")}
 					</Button>
 				</div>

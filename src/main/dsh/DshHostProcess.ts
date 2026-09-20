@@ -154,20 +154,14 @@ export class DshHostProcess {
 				if (wasReady) {
 					if (this.runtimeCrashes < this.maxRestarts) {
 						this.runtimeCrashes += 1;
-						this.log(
-							"dsh-host",
-							`host crashed after ready (code=${code}); auto-restarting (crash ${this.runtimeCrashes}/${this.maxRestarts})`,
-						);
+						this.log("dsh-host", `host crashed after ready (code=${code}); auto-restarting (crash ${this.runtimeCrashes}/${this.maxRestarts})`);
 						void this.restartAfterCrash(this.runtimeCrashes);
 					} else {
 						this.log("dsh-host", "host crash restart limit reached; giving up");
 					}
 				} else if (this.bootFailures < this.maxRestarts) {
 					this.bootFailures += 1;
-					this.log(
-						"dsh-host",
-						`host exited before ready (code=${code}); auto-restarting (boot ${this.bootFailures}/${this.maxRestarts})`,
-					);
+					this.log("dsh-host", `host exited before ready (code=${code}); auto-restarting (boot ${this.bootFailures}/${this.maxRestarts})`);
 					void this.restartAfterCrash(this.bootFailures);
 				} else {
 					this.log("dsh-host", "host boot failure restart limit reached; giving up");

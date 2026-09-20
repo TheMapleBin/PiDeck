@@ -11,13 +11,7 @@ import type { UsageProbeBackend } from "../../../../shared/types/providerUsage";
 import { t } from "../../i18n";
 import { Button } from "../ui-shadcn/button";
 
-export function UsageQueryEntryButton(props: {
-	provider: string;
-	backend?: UsageProbeBackend;
-	onOpen: () => void;
-	className?: string;
-	iconClassName?: string;
-}) {
+export function UsageQueryEntryButton(props: { provider: string; backend?: UsageProbeBackend; onOpen: () => void; className?: string; iconClassName?: string }) {
 	return (
 		<Button
 			variant="ghost"

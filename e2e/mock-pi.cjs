@@ -29,11 +29,7 @@ if (process.argv.includes("--version")) {
 //（modelListCache.parsePiListModels，无需启动 agent），列序：
 // provider  model  context  max-out  thinking  images
 if (process.argv.includes("--list-models")) {
-	process.stdout.write(
-		"provider  model           context  max-out  thinking  images\n" +
-		"mock      mock-model      128000   8192     yes       no\n" +
-		"mock      mock-model-pro  256000   8192     yes       no\n",
-	);
+	process.stdout.write("provider  model           context  max-out  thinking  images\n" + "mock      mock-model      128000   8192     yes       no\n" + "mock      mock-model-pro  256000   8192     yes       no\n");
 	process.exit(0);
 }
 
@@ -47,20 +43,20 @@ function log(direction, payload) {
 	try {
 		fs.mkdirSync(path.dirname(LOG_PATH), { recursive: true });
 		fs.appendFileSync(LOG_PATH, `${direction} ${JSON.stringify(payload)}\n`);
-	} catch { /* 日志失败不影响协议 */ }
+	} catch {
+		/* 日志失败不影响协议 */
+	}
 }
 
 // sessionId 按 cwd 稳定哈希：重启 Agent（杀进程重 spawn）后桌面端期望
 // 同一会话文件被重新接管（#113 3.2-6 续聊语义），不能按时间乱变。
 const crypto = require("node:crypto");
-const sessionId =
-	"mock-" + crypto.createHash("md5").update(process.cwd()).digest("hex").slice(0, 10);
+const sessionId = "mock-" + crypto.createHash("md5").update(process.cwd()).digest("hex").slice(0, 10);
 // 桌面端 resume 历史会话时会传 --session <path>（PiProcess.start:305 → finalPiArgs.push("--session", sessionPath)）。
 // 真实 pi 会加载该文件续写；mock 必须同样尊重它，否则「未启动会话重发」会在 mock 自己的
 // mock-<hash>.jsonl 里另起炉灶，丢掉截断前保留的历史（编辑后的首轮回复从时间线消失）。
 const sessionArgIndex = process.argv.indexOf("--session");
-const resumeSessionPath =
-	sessionArgIndex >= 0 && process.argv[sessionArgIndex + 1] ? process.argv[sessionArgIndex + 1] : null;
+const resumeSessionPath = sessionArgIndex >= 0 && process.argv[sessionArgIndex + 1] ? process.argv[sessionArgIndex + 1] : null;
 // 模型/思考级别有状态跟踪：桌面端 set_model/set_thinking_level 后会重新
 // get_state 拉取（AgentManager.getRuntimeState），mock 必须返回更新后的值。
 const MODELS = [
@@ -106,14 +102,20 @@ function ensureSessionFile() {
 			fs.writeFileSync(settingsPath, JSON.stringify({ sessionDir: ".pi/sessions" }, null, 2));
 		}
 		fs.writeFileSync(PROJECT_SESSION_FILE_PATH, "", { flag: "a" });
-	} catch { /* 写失败仅影响 fork/历史恢复类用例 */ }
+	} catch {
+		/* 写失败仅影响 fork/历史恢复类用例 */
+	}
 	sessionFile = TMP_SESSION_FILE_PATH;
 }
 // 重启后的新进程：tmp 文件已存在则恢复 sessionFile（桌面端 reattach 语义）。
 // resume 模式下 sessionFile 已指向 --session 传入的文件，不能被残留的 tmp 文件覆盖。
 if (!resumeSessionPath && fs.existsSync(TMP_SESSION_FILE_PATH)) {
 	sessionFile = TMP_SESSION_FILE_PATH;
-	try { sessionHeaderWritten = fs.statSync(TMP_SESSION_FILE_PATH).size > 0; } catch { /* ignore */ }
+	try {
+		sessionHeaderWritten = fs.statSync(TMP_SESSION_FILE_PATH).size > 0;
+	} catch {
+		/* ignore */
+	}
 }
 // 启动即落盘：get_state 必须返回真实 sessionFile，桌面端才会给 catalog 记录 attach
 // filePath（canAttachRuntimeMetadata），会话才走「有文件」的编辑/删除/重发路径而非匿名路径。
@@ -146,17 +148,23 @@ const ASK_MARKERS = {
 	ASK_CONFIRM: { method: "confirm", title: "确认继续吗？" },
 	ASK_INPUT: { method: "input", title: "请输入你的名字", placeholder: "例如：张三" },
 	ASK_EDITOR: { method: "editor", title: "请写下修改意见", placeholder: "多行内容" },
-	ASK_BATCH: { method: "input", title: JSON.stringify({ __piDeckBatchAsk: 1, questions: [
-		{ id: "b1", type: "select", question: "选择框架", options: ["React", "Vue"] },
-		{ id: "b2", type: "confirm", question: "使用 TypeScript？" },
-		{ id: "b3", type: "input", question: "项目名", placeholder: "my-app" },
-	] }) },
+	ASK_BATCH: {
+		method: "input",
+		title: JSON.stringify({
+			__piDeckBatchAsk: 1,
+			questions: [
+				{ id: "b1", type: "select", question: "选择框架", options: ["React", "Vue"] },
+				{ id: "b2", type: "confirm", question: "使用 TypeScript？" },
+				{ id: "b3", type: "input", question: "项目名", placeholder: "my-app" },
+			],
+		}),
+	},
 };
 let pendingAsk = null; // { requestId, method, title, marker }
 let askAnswerLog = []; // 记录每次 ask 的答案，供 E2E 主进程侧断言
 
 function emitAsk(marker, markerConfig) {
-	const requestId = "ask-" + (nextEntrySeq++);
+	const requestId = "ask-" + nextEntrySeq++;
 	pendingAsk = { requestId, method: markerConfig.method, marker };
 	emit({
 		type: "extension_ui_request",
@@ -225,19 +233,23 @@ if (sessionFile && fs.existsSync(sessionFile)) {
 					if (role === "user" || role === "assistant") {
 						const text = Array.isArray(entry.message.content)
 							? entry.message.content
-								.filter((b) => b && b.type === "text")
-								.map((b) => b.text)
-								.join("")
+									.filter((b) => b && b.type === "text")
+									.map((b) => b.text)
+									.join("")
 							: (entry.message.content ?? "");
 						if (text) {
 							conversationMessages.push({ role, content: [{ type: "text", text }] });
 						}
 					}
 				}
-			} catch { /* 单行损坏跳过 */ }
+			} catch {
+				/* 单行损坏跳过 */
+			}
 		}
 		if (maxSeq > 0) nextEntrySeq = maxSeq + 1;
-	} catch { /* 读失败保持默认序号 */ }
+	} catch {
+		/* 读失败保持默认序号 */
+	}
 }
 
 /** 把对话写成可被 SessionHistoryReader 分页读取的真实 JSONL（#113 3.2-9） */
@@ -248,48 +260,60 @@ function appendSessionMessages(userText, assistantText) {
 	const lines = [];
 	if (!sessionHeaderWritten) {
 		const headerId = `e${nextEntrySeq++}`;
-		lines.push(JSON.stringify({
-			// 文件头必须是 type "session"：SessionFileEditor 以此统计 header
-			//（type "session_info" 只是追加的改名记录，头用它会报「found 0 headers」）。
-			type: "session",
-			version: 3,
-			id: headerId,
-			parentId: null,
-			name: userText.slice(0, 40) || "mock session",
-			cwd: process.cwd(),
-			timestamp: new Date(now).toISOString(),
-		}));
+		lines.push(
+			JSON.stringify({
+				// 文件头必须是 type "session"：SessionFileEditor 以此统计 header
+				//（type "session_info" 只是追加的改名记录，头用它会报「found 0 headers」）。
+				type: "session",
+				version: 3,
+				id: headerId,
+				parentId: null,
+				name: userText.slice(0, 40) || "mock session",
+				cwd: process.cwd(),
+				timestamp: new Date(now).toISOString(),
+			}),
+		);
 		lastEntryId = headerId;
 		sessionHeaderWritten = true;
 	}
 	const userParent = lastEntryId;
 	const userId = `e${nextEntrySeq++}`;
-	lines.push(JSON.stringify({
-		type: "message",
-		id: userId,
-		parentId: userParent,
-		timestamp: new Date(now).toISOString(),
-		message: { role: "user", content: [{ type: "text", text: userText }] },
-	}));
+	lines.push(
+		JSON.stringify({
+			type: "message",
+			id: userId,
+			parentId: userParent,
+			timestamp: new Date(now).toISOString(),
+			message: { role: "user", content: [{ type: "text", text: userText }] },
+		}),
+	);
 	const assistantId = `e${nextEntrySeq++}`;
-	lines.push(JSON.stringify({
-		type: "message",
-		id: assistantId,
-		parentId: userId,
-		timestamp: new Date(now + 1).toISOString(),
-		message: { role: "assistant", content: [{ type: "text", text: assistantText }] },
-	}));
+	lines.push(
+		JSON.stringify({
+			type: "message",
+			id: assistantId,
+			parentId: userId,
+			timestamp: new Date(now + 1).toISOString(),
+			message: { role: "assistant", content: [{ type: "text", text: assistantText }] },
+		}),
+	);
 	lastEntryId = assistantId;
 	const payload = lines.join("\n") + "\n";
 	// 双写：tmp（runtime sessionFile）+ 项目 sessions（历史扫描）。
 	// resume 模式下 sessionFile 已在项目 sessions 目录（--session 指向），
 	// 项目镜像就是同一文件，再写一次会把整段对话重复一遍。
-	try { fs.appendFileSync(sessionFile, payload); } catch { /* ignore */ }
+	try {
+		fs.appendFileSync(sessionFile, payload);
+	} catch {
+		/* ignore */
+	}
 	if (PROJECT_SESSION_FILE_PATH !== sessionFile) {
 		try {
 			fs.mkdirSync(PROJECT_SESSIONS_DIR, { recursive: true });
 			fs.appendFileSync(PROJECT_SESSION_FILE_PATH, payload);
-		} catch { /* ignore */ }
+		} catch {
+			/* ignore */
+		}
 	}
 }
 
@@ -320,45 +344,45 @@ function startStream(userText, options = {}) {
 	const reply = options.raw
 		? userText
 		: userText.includes("BURST")
-		? "Mock 回复：「BURST」" +
-		  "第一段缓慢吐字节奏稳定，然后密集输出段以极快速度连续推送多字符用于复现真实模型突发输出导致的蹦字现象，这段文本会在一两百毫秒内一次性灌入渲染层。"
-		: userText.includes("LONG")
-		? "Mock 回复：「LONG」" +
-		  Array.from({ length: 120 })
-			.map((_, i) => `第 ${i + 1} 行：长回答示例文本，用于撑高时间线高度（滚动/贴底类用例需要内容溢出视口）。`)
-			.join("\n")
-		: userText.includes("MDEMO")
-		? [			"以下是渲染元素巡检：",
-			"",
-			"修改了 src/main/index.ts 和 ./docs/ui-2.0-revamp-plan.md，详见 https://github.com/miaojingang/pi-desktop 。",
-			"",
-			"> 引用块：重构期间禁止静默吞掉对方改动，每个冲突都要确认能力归属。",
-			"",
-			"行内代码 `npm run typecheck` 必须通过。",
-			"",
-			"```ts",
-			"const gate = await runTypecheck();",
-			"if (!gate.ok) throw new Error(\"typecheck failed\");",
-			"```",
-			"",
-			"| 批次 | 状态 | 说明 |",
-			"| --- | --- | --- |",
-			"| U2 | ✅ | Streamdown 渲染管线 |",
-			"| U5 | ✅ | 组件清扫 |",
-			"",
-			"```mermaid",
-			"graph LR",
-			"  A[启动] --> B{校验}",
-			"  B -->|通过| C[执行]",
-			"  B -->|失败| D[报错]",
-			"  C --> E[结束]",
-			"```",
-			"",
-			"行内公式 $x^2 + y^2 = z^2$ 与块级公式：",
-			"",
-			"$$\\int_0^1 x^2 \\, dx = \\frac{1}{3}$$",
-		].join("\n")
-		: `Mock 回复：「${userText.slice(0, 40)}」流式渲染验证完成。`;
+			? "Mock 回复：「BURST」" + "第一段缓慢吐字节奏稳定，然后密集输出段以极快速度连续推送多字符用于复现真实模型突发输出导致的蹦字现象，这段文本会在一两百毫秒内一次性灌入渲染层。"
+			: userText.includes("LONG")
+				? "Mock 回复：「LONG」" +
+					Array.from({ length: 120 })
+						.map((_, i) => `第 ${i + 1} 行：长回答示例文本，用于撑高时间线高度（滚动/贴底类用例需要内容溢出视口）。`)
+						.join("\n")
+				: userText.includes("MDEMO")
+					? [
+							"以下是渲染元素巡检：",
+							"",
+							"修改了 src/main/index.ts 和 ./docs/ui-2.0-revamp-plan.md，详见 https://github.com/miaojingang/pi-desktop 。",
+							"",
+							"> 引用块：重构期间禁止静默吞掉对方改动，每个冲突都要确认能力归属。",
+							"",
+							"行内代码 `npm run typecheck` 必须通过。",
+							"",
+							"```ts",
+							"const gate = await runTypecheck();",
+							'if (!gate.ok) throw new Error("typecheck failed");',
+							"```",
+							"",
+							"| 批次 | 状态 | 说明 |",
+							"| --- | --- | --- |",
+							"| U2 | ✅ | Streamdown 渲染管线 |",
+							"| U5 | ✅ | 组件清扫 |",
+							"",
+							"```mermaid",
+							"graph LR",
+							"  A[启动] --> B{校验}",
+							"  B -->|通过| C[执行]",
+							"  B -->|失败| D[报错]",
+							"  C --> E[结束]",
+							"```",
+							"",
+							"行内公式 $x^2 + y^2 = z^2$ 与块级公式：",
+							"",
+							"$$\\int_0^1 x^2 \\, dx = \\frac{1}{3}$$",
+						].join("\n")
+					: `Mock 回复：「${userText.slice(0, 40)}」流式渲染验证完成。`;
 	const chunkCount = slow ? 18 : burst ? 24 : 12;
 	const per = Math.max(1, Math.ceil(reply.length / chunkCount));
 	streamChunks = [];
@@ -424,10 +448,7 @@ function startStream(userText, options = {}) {
 				stopReason: "stop",
 			};
 			appendSessionMessages(userText, reply);
-			conversationMessages.push(
-				{ role: "user", content: [{ type: "text", text: userText }] },
-				{ role: "assistant", content: [{ type: "text", text: reply }] },
-			);
+			conversationMessages.push({ role: "user", content: [{ type: "text", text: userText }] }, { role: "assistant", content: [{ type: "text", text: reply }] });
 			emit({ type: "message_end", message: full });
 			// steer 队列非空：同 run 继续（无 agent_end/agent_settled 间隔）
 			if (drainSteerMessagesIntoRun()) return;

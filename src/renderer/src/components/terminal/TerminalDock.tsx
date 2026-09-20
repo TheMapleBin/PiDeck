@@ -1,11 +1,4 @@
-import {
-	useEffect,
-	useMemo,
-	useRef,
-	useState,
-	type MouseEvent as ReactMouseEvent,
-	type PointerEvent,
-} from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
@@ -103,11 +96,7 @@ export function TerminalDock(props: {
 	const activeTabIdRef = useRef("");
 	const buffersRef = useRef<Record<string, string>>({});
 	// 归属键：决定加载 gate 与 pending 占位判断；project 终端由父级显式传入
-	const sessionKey =
-		props.sessionKey ??
-		(props.target.kind === "agent"
-			? `agent:${props.target.agentId}`
-			: `project:${props.target.projectId}`);
+	const sessionKey = props.sessionKey ?? (props.target.kind === "agent" ? `agent:${props.target.agentId}` : `project:${props.target.projectId}`);
 	/* copyNotice 已改用 toast (sonner) 实现 */
 	const [tabs, setTabs] = useState<TerminalTab[]>([]);
 	const [activeTabId, setActiveTabId] = useState("");
@@ -118,25 +107,16 @@ export function TerminalDock(props: {
 	const [loading, setLoading] = useState(false);
 	const [contentReady, setContentReady] = useState(false);
 	const [motionOpen, setMotionOpen] = useState(false);
-	const [appTheme, setAppTheme] = useState(
-		() => document.documentElement.dataset.theme ?? "light",
-	);
+	const [appTheme, setAppTheme] = useState(() => document.documentElement.dataset.theme ?? "light");
 	/** 壁纸模式：终端背景跟随输出区同档透明度（canvas/DOM 渲染的背景必须走 JS） */
-	const [wallpaperMode, setWallpaperMode] = useState(
-		() => document.documentElement.dataset.bgImage === "on",
-	);
+	const [wallpaperMode, setWallpaperMode] = useState(() => document.documentElement.dataset.bgImage === "on");
 	/** 可用 shell 列表 */
-	const [shells, setShells] = useState<
-		{ shell: string; label: string; available: boolean }[]
-	>([]);
+	const [shells, setShells] = useState<{ shell: string; label: string; available: boolean }[]>([]);
 	const [shellMenuOpen, setShellMenuOpen] = useState(false);
 	const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
 	const theme = TERMINAL_THEMES[themeId];
 	const xtermTheme = useMemo(() => {
-		const base =
-			themeId === "pi-soft" && appTheme === "dark" && "xtermDark" in theme
-				? theme.xtermDark
-				: theme.xterm;
+		const base = themeId === "pi-soft" && appTheme === "dark" && "xtermDark" in theme ? theme.xtermDark : theme.xterm;
 		if (!wallpaperMode || !base.background.startsWith("#")) return base;
 		// 注：xterm 的颜色解析只支持 hex（含 9 位 #RRGGBBAA），
 		// "transparent"/rgba() 会解析失败回退黑色——必须输出 hex+alpha。
@@ -151,9 +131,7 @@ export function TerminalDock(props: {
 				return { ...base, background: `${base.background}00` };
 			}
 			// 深色主题：保留主题底色 + 全局面板档 alpha（深底深透，浅字仍可读）。
-			const raw = getComputedStyle(document.documentElement)
-				.getPropertyValue("--wallpaper-panel-alpha")
-				.trim();
+			const raw = getComputedStyle(document.documentElement).getPropertyValue("--wallpaper-panel-alpha").trim();
 			const mix = Number.parseFloat(raw);
 			const alpha = Number.isFinite(mix) ? Math.min(1, Math.max(0, mix / 100)) : 0.8;
 			const alphaHex = Math.round(alpha * 255)
@@ -178,10 +156,7 @@ export function TerminalDock(props: {
 			setContentReady(false);
 			return;
 		}
-		const timer = window.setTimeout(
-			() => setContentReady(true),
-			TERMINAL_OPEN_ANIMATION_MS,
-		);
+		const timer = window.setTimeout(() => setContentReady(true), TERMINAL_OPEN_ANIMATION_MS);
 		return () => window.clearTimeout(timer);
 	}, [open]);
 
@@ -242,9 +217,7 @@ export function TerminalDock(props: {
 		};
 	}, [
 		// target 序列化键：agent 绑定变更（restart）或项目切换都会重建终端实例
-		props.target.kind === "agent"
-			? `agent:${props.target.agentId}:${props.target.runtimeGeneration}`
-			: `project:${props.target.projectId}`,
+		props.target.kind === "agent" ? `agent:${props.target.agentId}:${props.target.runtimeGeneration}` : `project:${props.target.projectId}`,
 		props.terminal,
 		open,
 		contentReady,
@@ -270,23 +243,15 @@ export function TerminalDock(props: {
 
 	useEffect(() => {
 		const offData = props.terminal.onData((payload) => {
-			buffersRef.current[payload.tabId] =
-				(buffersRef.current[payload.tabId] ?? "") + payload.data;
+			buffersRef.current[payload.tabId] = (buffersRef.current[payload.tabId] ?? "") + payload.data;
 			if (payload.tabId === activeTabIdRef.current) {
 				xtermRef.current?.write(payload.data);
 			}
 		});
 		const offExit = props.terminal.onExit((payload) => {
-			setTabs((current) =>
-				current.map((tab) =>
-					tab.id === payload.tabId
-						? { ...tab, exited: true, exitCode: payload.exitCode }
-						: tab,
-				),
-			);
+			setTabs((current) => current.map((tab) => (tab.id === payload.tabId ? { ...tab, exited: true, exitCode: payload.exitCode } : tab)));
 			const exitText = `\r\n[process exited${payload.exitCode != null ? ` with code ${payload.exitCode}` : ""}]\r\n`;
-			buffersRef.current[payload.tabId] =
-				(buffersRef.current[payload.tabId] ?? "") + exitText;
+			buffersRef.current[payload.tabId] = (buffersRef.current[payload.tabId] ?? "") + exitText;
 			if (payload.tabId === activeTabIdRef.current) xtermRef.current?.write(exitText);
 		});
 		return () => {
@@ -305,11 +270,8 @@ export function TerminalDock(props: {
 		// xterm.js 需要具体字体串（canvas 测量用），不能用 var()，故挂载时展开一次；
 		// 设置变更后新开的终端生效，已开终端保持本次会话字体（xterm 无热更新入口）。
 		const rootStyle = getComputedStyle(document.documentElement);
-		const fontFamily =
-			rootStyle.getPropertyValue("--font-family-mono").trim() ||
-			'"Cascadia Mono", Consolas, monospace';
-		const fontSize =
-			parseFloat(rootStyle.getPropertyValue("--font-size-control")) || 13;
+		const fontFamily = rootStyle.getPropertyValue("--font-family-mono").trim() || '"Cascadia Mono", Consolas, monospace';
+		const fontSize = parseFloat(rootStyle.getPropertyValue("--font-size-control")) || 13;
 
 		const terminal = new Terminal({
 			cursorBlink: true,
@@ -366,11 +328,7 @@ export function TerminalDock(props: {
 	useEffect(() => {
 		fitRef.current?.fit();
 		if (activeTab && xtermRef.current && !activeTab.exited) {
-			void props.terminal.resize(
-				activeTab.id,
-				xtermRef.current.cols,
-				xtermRef.current.rows,
-			);
+			void props.terminal.resize(activeTab.id, xtermRef.current.cols, xtermRef.current.rows);
 		}
 	}, [props.height, activeTab, props.terminal]);
 
@@ -420,9 +378,7 @@ export function TerminalDock(props: {
 		props.onClose();
 	}
 
-	async function copySelectionOnContextMenu(
-		event: ReactMouseEvent<HTMLDivElement>,
-	) {
+	async function copySelectionOnContextMenu(event: ReactMouseEvent<HTMLDivElement>) {
 		const selection = xtermRef.current?.getSelection();
 		if (!selection) return;
 
@@ -438,177 +394,137 @@ export function TerminalDock(props: {
 		window.requestAnimationFrame(() => xtermRef.current?.focus());
 	}
 
-
 	// #115 U5：dock 高度由外层 react-resizable-panels 面板持有（分隔条拖拽），
 	// 手写 pointer 拖拽与 .terminal-resize-handle 已删除；这里充满父面板即可。
 	return (
-		<section
-			className={`terminal-dock${collapsed ? " collapsed" : ""}`}
-			data-theme={themeId}
-			data-open={open}
-			data-motion-state={props.closing || !motionOpen ? "hidden" : "visible"}
-			style={{ height: "100%" }}
-		>
-		<header className="terminal-dock-header flex shrink-0 items-center justify-between gap-2 border-b px-2">
-			{/* Shell 下拉菜单 absolute 向上弹出会超出 terminal-tabs（overflow-hidden）而被裁剪，
+		<section className={`terminal-dock${collapsed ? " collapsed" : ""}`} data-theme={themeId} data-open={open} data-motion-state={props.closing || !motionOpen ? "hidden" : "visible"} style={{ height: "100%" }}>
+			<header className="terminal-dock-header flex shrink-0 items-center justify-between gap-2 border-b px-2">
+				{/* Shell 下拉菜单 absolute 向上弹出会超出 terminal-tabs（overflow-hidden）而被裁剪，
 			    所以左侧整体包一层无 overflow 的容器，选择器独立于 tabs 滚动域之外 */}
-			<div className="flex min-w-0 items-center">
-			<div className="terminal-tabs flex min-w-0 items-center gap-0.5 overflow-hidden">
-				{tabs.map((tab) => (
-					<div
-						key={tab.id}
-						className={`terminal-tab inline-flex max-w-[9rem] items-center gap-0.5 rounded-md px-0.5 pl-2${tab.id === activeTab?.id ? " active" : ""}`}
-					>
-						<Button
-							variant="ghost" size="sm" className="terminal-tab-label h-auto min-w-0 flex-1 justify-start truncate px-2 py-0.5 max-w-[6.5rem] min-w-0 flex-1 truncate text-left"
-							onClick={() => {
-								setActiveTabId(tab.id);
-								props.onCollapsedChange(false);
-								focusTerminalSoon();
-							}}
-							title={tab.cwd}
-						>
-							{tab.title}
-							{tab.exited ? ` · ${t("terminal.exited")}` : ""}
-						</Button>
-						<Button
-							type="button"
-							variant="ghost" size="icon-xs" className="terminal-tab-close size-5 grid size-5 shrink-0 place-items-center rounded-sm opacity-60"
-							onClick={(event) => {
-								event.stopPropagation();
-								void closeTab(tab);
-							}}
-							title={t("terminal.closeCurrent")}
-						>
-							<X size={12} />
+				<div className="flex min-w-0 items-center">
+					<div className="terminal-tabs flex min-w-0 items-center gap-0.5 overflow-hidden">
+						{tabs.map((tab) => (
+							<div key={tab.id} className={`terminal-tab inline-flex max-w-[9rem] items-center gap-0.5 rounded-md px-0.5 pl-2${tab.id === activeTab?.id ? " active" : ""}`}>
+								<Button
+									variant="ghost"
+									size="sm"
+									className="terminal-tab-label h-auto min-w-0 flex-1 justify-start truncate px-2 py-0.5 max-w-[6.5rem] min-w-0 flex-1 truncate text-left"
+									onClick={() => {
+										setActiveTabId(tab.id);
+										props.onCollapsedChange(false);
+										focusTerminalSoon();
+									}}
+									title={tab.cwd}
+								>
+									{tab.title}
+									{tab.exited ? ` · ${t("terminal.exited")}` : ""}
+								</Button>
+								<Button
+									type="button"
+									variant="ghost"
+									size="icon-xs"
+									className="terminal-tab-close size-5 grid size-5 shrink-0 place-items-center rounded-sm opacity-60"
+									onClick={(event) => {
+										event.stopPropagation();
+										void closeTab(tab);
+									}}
+									title={t("terminal.closeCurrent")}
+								>
+									<X size={12} />
+								</Button>
+							</div>
+						))}
+						<Button type="button" variant="ghost" size="icon-xs" className="terminal-icon-btn size-6 inline-grid size-6 shrink-0 place-items-center rounded-md" onClick={() => void addTab()} title={t("terminal.new")} disabled={loading || !contentReady}>
+							<Plus size={14} />
 						</Button>
 					</div>
-				))}
-				<Button
-					type="button"
-					variant="ghost" size="icon-xs" className="terminal-icon-btn size-6 inline-grid size-6 shrink-0 place-items-center rounded-md"
-					onClick={() => void addTab()}
-					title={t("terminal.new")}
-					disabled={loading || !contentReady}
-				>
-					<Plus size={14} />
-				</Button>
-			</div>
-				{/* Shell 选择器：点击创建指定 shell 的终端。必须用 Portal 化的 Popover——
+					{/* Shell 选择器：点击创建指定 shell 的终端。必须用 Portal 化的 Popover——
 				    dock 挂在 react-resizable-panels 的 Panel 里，Panel 内层是 overflow:auto
 				    容器，菜单向上弹出会被裁剪（表现为「下拉没有值」）；Popover 渲染到 body，
 				    不受任何祖先 overflow 影响，且自带碰撞翻转与外部点击关闭。 */}
-				<Popover open={shellMenuOpen} onOpenChange={setShellMenuOpen}>
-					<PopoverTrigger asChild>
-						<Button
-							type="button"
-							variant="ghost" size="icon-xs" className="terminal-icon-btn size-6 inline-grid size-6 place-items-center rounded-md"
-							title={t("terminal.selectShell")}
-							disabled={loading || !contentReady}
-						>
-							<ChevronDown size={12} />
-						</Button>
-					</PopoverTrigger>
-					<PopoverContent side="top" align="start" className="w-44 gap-0.5 p-1.5">
-						<strong className="px-1 py-0.5 text-xs">{t("terminal.selectShell")}</strong>
-						{shells.length === 0 && (
-							<span className="block px-1 py-1 text-[11px] text-muted-foreground">
-								{t("terminal.shellEmpty")}
+					<Popover open={shellMenuOpen} onOpenChange={setShellMenuOpen}>
+						<PopoverTrigger asChild>
+							<Button type="button" variant="ghost" size="icon-xs" className="terminal-icon-btn size-6 inline-grid size-6 place-items-center rounded-md" title={t("terminal.selectShell")} disabled={loading || !contentReady}>
+								<ChevronDown size={12} />
+							</Button>
+						</PopoverTrigger>
+						<PopoverContent side="top" align="start" className="w-44 gap-0.5 p-1.5">
+							<strong className="px-1 py-0.5 text-xs">{t("terminal.selectShell")}</strong>
+							{shells.length === 0 && <span className="block px-1 py-1 text-[11px] text-muted-foreground">{t("terminal.shellEmpty")}</span>}
+							{shells.map((s) => (
+								<Button
+									key={s.shell}
+									type="button"
+									variant="ghost"
+									size="sm"
+									className={`h-auto w-full justify-start rounded-md px-2 py-1 text-left text-xs hover:bg-accent${s.available ? "" : " unavailable opacity-50"}`}
+									onClick={() => {
+										if (!s.available) return;
+										void addTabWithShell(s.shell);
+									}}
+									title={s.available ? undefined : t("terminal.shellNotAvailable")}
+								>
+									{s.label}
+								</Button>
+							))}
+						</PopoverContent>
+					</Popover>
+				</div>
+				<div className="terminal-actions flex shrink-0 items-center gap-0.5">
+					<Popover open={themeMenuOpen} onOpenChange={setThemeMenuOpen}>
+						<PopoverTrigger asChild>
+							<Button type="button" variant="ghost" size="icon-xs" className="terminal-icon-btn size-6 inline-grid size-6 place-items-center rounded-md" title={t("terminal.more")}>
+								<MoreHorizontal size={14} />
+							</Button>
+						</PopoverTrigger>
+						<PopoverContent side="top" align="end" className="w-48 gap-1 p-2">
+							<strong className="px-1 text-xs">{t("terminal.theme")}</strong>
+							<span className="px-1 text-[11px] text-muted-foreground">
+								{t("terminal.themeCurrent")}: {theme.label}
 							</span>
-						)}
-						{shells.map((s) => (
-							<Button
-								key={s.shell}
-								type="button"
-								variant="ghost"
-								size="sm"
-								className={`h-auto w-full justify-start rounded-md px-2 py-1 text-left text-xs hover:bg-accent${s.available ? "" : " unavailable opacity-50"}`}
-								onClick={() => {
-									if (!s.available) return;
-									void addTabWithShell(s.shell);
-								}}
-								title={s.available ? undefined : t("terminal.shellNotAvailable")}
-							>
-								{s.label}
-							</Button>
-						))}
-					</PopoverContent>
-				</Popover>
-			</div>
-			<div className="terminal-actions flex shrink-0 items-center gap-0.5">
-				<Popover open={themeMenuOpen} onOpenChange={setThemeMenuOpen}>
-					<PopoverTrigger asChild>
-						<Button
-							type="button"
-							variant="ghost" size="icon-xs" className="terminal-icon-btn size-6 inline-grid size-6 place-items-center rounded-md"
-							title={t("terminal.more")}
-						>
-							<MoreHorizontal size={14} />
-						</Button>
-					</PopoverTrigger>
-					<PopoverContent side="top" align="end" className="w-48 gap-1 p-2">
-						<strong className="px-1 text-xs">{t("terminal.theme")}</strong>
-						<span className="px-1 text-[11px] text-muted-foreground">{t("terminal.themeCurrent")}: {theme.label}</span>
-						{Object.entries(TERMINAL_THEMES).map(([id, item]) => (
-							<Button
-								key={id}
-								type="button"
-								variant="ghost"
-								size="sm"
-								className={`h-auto w-full justify-start rounded-md px-2 py-1 text-left text-xs hover:bg-accent${id === themeId ? " active bg-accent" : ""}`}
-								onClick={() => {
-									setThemeId(id as TerminalThemeId);
-									setThemeMenuOpen(false);
-								}}
-							>
-								{item.label}
-							</Button>
-						))}
-					</PopoverContent>
-				</Popover>
-				<Button
-					type="button"
-					variant="ghost" size="icon-xs" className="terminal-icon-btn size-6 inline-grid size-6 place-items-center rounded-md"
-					onClick={() => {
-						props.onCollapsedChange(!collapsed);
-						focusTerminalSoon();
-					}}
-					title={collapsed ? t("terminal.expand") : t("terminal.collapse")}
-				>
-					{collapsed ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-				</Button>
-				<Button
-					type="button"
-					variant="ghost" size="icon-xs" className="terminal-icon-btn size-6 inline-grid size-6 place-items-center rounded-md"
-					onClick={() => setConfirmCloseAllOpen(true)}
-					title={t("terminal.closeAll")}
-					disabled={tabs.length === 0}
-				>
-					<X size={14} />
-				</Button>
-			</div>
-		</header>
+							{Object.entries(TERMINAL_THEMES).map(([id, item]) => (
+								<Button
+									key={id}
+									type="button"
+									variant="ghost"
+									size="sm"
+									className={`h-auto w-full justify-start rounded-md px-2 py-1 text-left text-xs hover:bg-accent${id === themeId ? " active bg-accent" : ""}`}
+									onClick={() => {
+										setThemeId(id as TerminalThemeId);
+										setThemeMenuOpen(false);
+									}}
+								>
+									{item.label}
+								</Button>
+							))}
+						</PopoverContent>
+					</Popover>
+					<Button
+						type="button"
+						variant="ghost"
+						size="icon-xs"
+						className="terminal-icon-btn size-6 inline-grid size-6 place-items-center rounded-md"
+						onClick={() => {
+							props.onCollapsedChange(!collapsed);
+							focusTerminalSoon();
+						}}
+						title={collapsed ? t("terminal.expand") : t("terminal.collapse")}
+					>
+						{collapsed ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+					</Button>
+					<Button type="button" variant="ghost" size="icon-xs" className="terminal-icon-btn size-6 inline-grid size-6 place-items-center rounded-md" onClick={() => setConfirmCloseAllOpen(true)} title={t("terminal.closeAll")} disabled={tabs.length === 0}>
+						<X size={14} />
+					</Button>
+				</div>
+			</header>
 			{!collapsed && (
-				<div
-					className="terminal-pane-shell"
-					onPointerDownCapture={focusTerminalSoon}
-					onContextMenu={(event) => void copySelectionOnContextMenu(event)}
-				>
+				<div className="terminal-pane-shell" onPointerDownCapture={focusTerminalSoon} onContextMenu={(event) => void copySelectionOnContextMenu(event)}>
 					{(loading || !contentReady) && <div className="terminal-placeholder">{t("terminal.starting")}</div>}
 					<div ref={containerRef} className="terminal-xterm" />
 					{/* copyNotice 已改用 toast (sonner) 实现 */}
 				</div>
 			)}
-			{confirmCloseAllOpen && (
-				<ConfirmDialog
-					title={t("terminal.closeAllConfirm")}
-					message={t("terminal.closeAllDescription")}
-					confirmLabel={t("terminal.closeAll")}
-					danger
-					onConfirm={() => void closeAllTabs()}
-					onCancel={() => setConfirmCloseAllOpen(false)}
-				/>
-			)}
+			{confirmCloseAllOpen && <ConfirmDialog title={t("terminal.closeAllConfirm")} message={t("terminal.closeAllDescription")} confirmLabel={t("terminal.closeAll")} danger onConfirm={() => void closeAllTabs()} onCancel={() => setConfirmCloseAllOpen(false)} />}
 		</section>
 	);
 }

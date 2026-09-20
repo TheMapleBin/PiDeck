@@ -5,17 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
-const {
-	inferMcpTransport,
-	isMcpServerName,
-	mergeMcpServers,
-	mcpLayerPaths,
-	parseMcpConfigFile,
-	probeHttpUrl,
-	probeStdioCommand,
-	validateMcpServer,
-	loadMcpConfigSnapshot,
-} = loadTsCommonJs("src/main/config/mcpConfig.ts");
+const { inferMcpTransport, isMcpServerName, mergeMcpServers, mcpLayerPaths, parseMcpConfigFile, probeHttpUrl, probeStdioCommand, validateMcpServer, loadMcpConfigSnapshot } = loadTsCommonJs("src/main/config/mcpConfig.ts");
 
 test("mcp server names reject empty and path-like values", () => {
 	assert.equal(isMcpServerName("chrome-devtools"), true);
@@ -76,7 +66,10 @@ test("ownedByWritable is true only when the transport definition lives in the Pi
 
 test("mcp layer paths include project files only when a project root is given", () => {
 	const globalOnly = mcpLayerPaths("/home/me", "/home/me/.pi/agent");
-	assert.equal(globalOnly.some((layer) => layer.kind === "project"), false);
+	assert.equal(
+		globalOnly.some((layer) => layer.kind === "project"),
+		false,
+	);
 	assert.equal(globalOnly.find((layer) => layer.kind === "pi-agent")?.writable, true);
 	const withProject = mcpLayerPaths("/home/me", "/home/me/.pi/agent", "/repo");
 	assert.ok(withProject.some((layer) => layer.path.endsWith(".mcp.json")));
@@ -106,16 +99,8 @@ test("loadMcpConfigSnapshot merges layers and exposes writable raw", async () =>
 	const agentDir = join(home, ".pi", "agent");
 	await mkdir(join(home, ".config", "mcp"), { recursive: true });
 	await mkdir(agentDir, { recursive: true });
-	await writeFile(
-		join(home, ".config", "mcp", "mcp.json"),
-		JSON.stringify({ mcpServers: { shared: { command: "npx", args: ["-y", "shared"] } } }),
-		"utf8",
-	);
-	await writeFile(
-		join(agentDir, "mcp.json"),
-		JSON.stringify({ mcpServers: { local: { url: "https://mcp.local/mcp" } } }, null, 2),
-		"utf8",
-	);
+	await writeFile(join(home, ".config", "mcp", "mcp.json"), JSON.stringify({ mcpServers: { shared: { command: "npx", args: ["-y", "shared"] } } }), "utf8");
+	await writeFile(join(agentDir, "mcp.json"), JSON.stringify({ mcpServers: { local: { url: "https://mcp.local/mcp" } } }, null, 2), "utf8");
 	const snapshot = await loadMcpConfigSnapshot(agentDir, undefined, home);
 	assert.equal(snapshot.servers.length, 2);
 	assert.ok(snapshot.servers.some((item) => item.name === "shared"));
@@ -130,11 +115,7 @@ test("broken writable mcp.json keeps raw, reports error, and does not wipe other
 	const agentDir = join(home, ".pi", "agent");
 	await mkdir(join(home, ".config", "mcp"), { recursive: true });
 	await mkdir(agentDir, { recursive: true });
-	await writeFile(
-		join(home, ".config", "mcp", "mcp.json"),
-		JSON.stringify({ mcpServers: { shared: { command: "npx" } } }),
-		"utf8",
-	);
+	await writeFile(join(home, ".config", "mcp", "mcp.json"), JSON.stringify({ mcpServers: { shared: { command: "npx" } } }), "utf8");
 	await writeFile(join(agentDir, "mcp.json"), "{ not json", "utf8");
 	const snapshot = await loadMcpConfigSnapshot(agentDir, undefined, home);
 	assert.ok(snapshot.writableError);
@@ -150,18 +131,11 @@ test("malformed writable server entries preserve raw JSON and block visual savin
 	const agentDir = join(home, ".pi", "agent");
 	try {
 		await mkdir(agentDir, { recursive: true });
-		await writeFile(
-			join(agentDir, "mcp.json"),
-			JSON.stringify({ mcpServers: { valid: { command: "npx" }, damaged: 42 } }, null, 2),
-			"utf8",
-		);
+		await writeFile(join(agentDir, "mcp.json"), JSON.stringify({ mcpServers: { valid: { command: "npx" }, damaged: 42 } }, null, 2), "utf8");
 		const snapshot = await loadMcpConfigSnapshot(agentDir, undefined, home);
 		assert.match(snapshot.writableError ?? "", /damaged.*object/i);
 		assert.match(snapshot.writableRaw, /"damaged"\s*:\s*42/);
-		assert.deepEqual(
-			{ ...snapshot.writableFile, mcpServers: { ...snapshot.writableFile.mcpServers } },
-			{ mcpServers: {} },
-		);
+		assert.deepEqual({ ...snapshot.writableFile, mcpServers: { ...snapshot.writableFile.mcpServers } }, { mcpServers: {} });
 	} finally {
 		await rm(root, { recursive: true, force: true });
 	}
@@ -177,11 +151,7 @@ test("project MCP layer junction cannot escape the registered project root", asy
 		await mkdir(agentDir, { recursive: true });
 		await mkdir(project, { recursive: true });
 		await mkdir(outsidePi, { recursive: true });
-		await writeFile(
-			join(outsidePi, "mcp.json"),
-			JSON.stringify({ mcpServers: { secret: { command: "outside" } } }),
-			"utf8",
-		);
+		await writeFile(join(outsidePi, "mcp.json"), JSON.stringify({ mcpServers: { secret: { command: "outside" } } }), "utf8");
 		try {
 			await symlink(outsidePi, join(project, ".pi"), process.platform === "win32" ? "junction" : "dir");
 		} catch (error) {
@@ -192,7 +162,10 @@ test("project MCP layer junction cannot escape the registered project root", asy
 			throw error;
 		}
 		const snapshot = await loadMcpConfigSnapshot(agentDir, project, home);
-		assert.equal(snapshot.servers.some((server) => server.name === "secret"), false);
+		assert.equal(
+			snapshot.servers.some((server) => server.name === "secret"),
+			false,
+		);
 		assert.equal(snapshot.layers.find((layer) => layer.kind === "project-pi")?.exists, false);
 	} finally {
 		await rm(root, { recursive: true, force: true });
