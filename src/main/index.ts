@@ -230,6 +230,7 @@ import { SettingsStore } from "./settings/SettingsStore";
 import { SecurityStore } from "./security/SecurityStore";
 import { applyDesktopProxy } from "./settings/DesktopProxy";
 import { GitService } from "./git/GitService";
+import { GitRefsWatcher } from "./git/GitRefsWatcher";
 import { WorktreeService } from "./git/WorktreeService";
 import { ConfigManager } from "./config/ConfigManager";
 import { ConfigBackupManager } from "./config/ConfigBackupManager";
@@ -339,6 +340,8 @@ let settingsStore: SettingsStore;
 let securityStore: SecurityStore;
 let worktreeService: WorktreeService;
 let gitService: GitService;
+/** refs 变化监听：面板订阅 push/commit/fetch，主进程推送后角标秒级跟平（轮询仍作兜底） */
+let gitRefsWatcher: GitRefsWatcher;
 let piLocator: PiLocator;
 let agentManager: AgentManager;
 /** 全局模型 capability snapshot；仅在启动/配置变更时临时拉起 Pi。 */
@@ -2754,6 +2757,8 @@ function registerIpc() {
 		appLogger,
 		mainCopy: mainCopy as (key: string, params?: Record<string, string | number>) => string,
 		gitService,
+		gitRefsWatcher: gitRefsWatcher,
+		getMainWindow: () => mainWindow,
 		piLocator,
 		projectStore,
 		settingsStore,
@@ -3177,6 +3182,9 @@ app
 			},
 		});
 		gitService = new GitService();
+		gitRefsWatcher = new GitRefsWatcher({ logger: appLogger });
+		// C12：退出清理登记（before-quit 统一 runAll；disposeAll 同时清空事件订阅）
+		quitCleanup.register("git-refs-watcher", () => gitRefsWatcher.disposeAll());
 		worktreeService = new WorktreeService(mainCopy);
 		piLocator = new PiLocator(mainCopy);
 		// DSH 用量链路（backend="dsh"）：配置落 $DSH_HOME/usage-probes.json、凭据从

@@ -28,6 +28,11 @@ export type GitDrawerApi = {
 	pull: (projectId: string, repoPath?: string) => Promise<void>;
 	fetch: (projectId: string, repoPath?: string) => Promise<void>;
 	aheadBehind: (projectId: string, repoPath?: string) => Promise<GitAheadBehind | null>;
+	/** 订阅仓库 refs 变化，返回 watchId；由 GitPanel 在挂载期间持有并与 unwatchRefs 配对 */
+	watchRefs: (projectId: string, repoPath?: string) => Promise<string>;
+	unwatchRefs: (watchId: string) => Promise<void>;
+	/** refs 变化推送订阅（返回值退订）；payload 为 watchId */
+	onRefsChanged: (listener: (watchId: string) => void) => () => void;
 	deleteFiles: (projectId: string, paths: string[], repoPath?: string) => Promise<void>;
 	branches: (projectId: string, repoPath?: string) => Promise<GitBranchInfo>;
 	checkout: (projectId: string, branch: string, repoPath?: string) => Promise<GitBranchInfo>;
@@ -83,6 +88,10 @@ function createScopedGitApi(gitApi: GitDrawerApi, repoPath: string | undefined, 
 		pull: (id: string) => gitApi.pull(id, repoPath),
 		fetch: (id: string) => gitApi.fetch(id, repoPath),
 		aheadBehind: (id: string) => gitApi.aheadBehind(id, repoPath),
+		// refs 监听的 scope 同样固定在仓库路径上（多仓并排时各自监听自己的仓库）
+		watchRefs: (id: string) => gitApi.watchRefs(id, repoPath),
+		unwatchRefs: (watchId: string) => gitApi.unwatchRefs(watchId),
+		onRefsChanged: gitApi.onRefsChanged,
 		deleteFiles: (id: string, paths: string[]) => gitApi.deleteFiles(id, paths, repoPath),
 	};
 }
@@ -249,6 +258,9 @@ export function GitDrawerHost(props: GitDrawerHostProps) {
 				pull={scopedApi.pull}
 				fetch={scopedApi.fetch}
 				aheadBehind={scopedApi.aheadBehind}
+				watchRefs={scopedApi.watchRefs}
+				unwatchRefs={scopedApi.unwatchRefs}
+				onRefsChanged={scopedApi.onRefsChanged}
 				deleteFiles={scopedApi.deleteFiles}
 			/>
 		);

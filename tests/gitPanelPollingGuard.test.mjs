@@ -45,6 +45,29 @@ test("readAheadBehind 只读本地 refs，失败静默保持上次值", () => {
 	assert.match(readBlock, /writeAheadBehindCache\(projectId, currentRepoScopeKey, result\)/);
 });
 
+/**
+ * 角标读取不得重叠，也不得在窗口不可见时白跑。
+ *
+ * 背景：角标改为每 5 秒重读后，调用频次提高了 60 倍。慢仓库（大历史 / 网络盘）
+ * 单次 rev-list 可能超过一轮心跳，不做串行化就会一轮叠一个 git 子进程；窗口最小化 /
+ * 被遮挡时这一轮结果没有用户在看，却要白扫一遍 worktree（status 是这套轮询里最贵的一步）。
+ */
+test("本地角标读取串行化：同一时刻只有一个 rev-list 在飞", () => {
+	const readBlock = source.slice(source.indexOf("const readAheadBehind = useCallback"), source.indexOf("const refreshAheadBehind = useCallback"));
+	assert.match(readBlock, /const inFlight = aheadBehindInFlightRef\.current;/);
+	// 等到前一个读落地再读：既防堆叠，也保证 fetch 之后的调用拿到新 refs
+	assert.match(readBlock, /if \(inFlight\) await inFlight;/);
+	// 只清自己登记的那一次，否则等待中的后来者会被错误解锁
+	assert.match(readBlock, /if \(aheadBehindInFlightRef\.current === task\) aheadBehindInFlightRef\.current = null;/);
+});
+
+test("窗口不可见时跳过 5 秒轮询（可见性而非聚焦：切到终端仍要跟平角标）", () => {
+	const intervalBlock = source.slice(source.indexOf("每 5 秒拉取一次最新工作区状态"), source.indexOf("窗口重新获得焦点时补一次静默刷新"));
+	assert.match(intervalBlock, /if \(document\.hidden\) return;/);
+	// 必须在发起 status 之前短路，否则省不下最贵的那一步
+	assert.ok(intervalBlock.indexOf("document.hidden") < intervalBlock.indexOf("void refresh(true);"), "可见性判断应先于 refresh");
+});
+
 test("refreshAheadBehind 先本地计数再 fetch，fetch 失败不丢本地结果", () => {
 	const refreshBlock = source.slice(source.indexOf("const refreshAheadBehind = useCallback"), source.indexOf("const refresh = useCallback"));
 	// 本地先读一次（立即反馈）；fetchRemote=false 时到此为止，不做任何网络请求
@@ -115,7 +138,11 @@ test("refresh 成功路径清除仓库/工具标记（git init 或安装 git 后
 
 test("静默失败同样置位非仓库/未安装标记（置位逻辑不在 !silent 分支内）", () => {
 	// catch 块中置位先于 !silent UI 清理分支执行
-	const catchBlock = source.slice(source.indexOf("} catch (caught) {"), source.indexOf("} finally {"));
+	// 终止锚点必须从起始位置往后找：早期写法用的是全文件第一个 `} finally {`，
+	// 只要前面（如 readAheadBehind 的在途请求收尾）新增一个 try/finally，
+	// slice 起点就会大于终点拿到空串，断言假失败。
+	const catchStart = source.indexOf("} catch (caught) {");
+	const catchBlock = source.slice(catchStart, source.indexOf("} finally {", catchStart));
 	const silentGuard = catchBlock.indexOf("if (!silent) {");
 	assert.ok(silentGuard >= 0, "应存在 !silent 分支");
 	// 置位语句必须出现在 !silent 之前——silent 轮询失败也要能停住轮询

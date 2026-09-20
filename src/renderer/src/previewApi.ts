@@ -820,6 +820,10 @@ export function createPreviewApi(): PiDesktopApi {
 			fetch: async () => undefined,
 			// 预览环境无真实远程：恒返回 null（不显示 push/pull 角标）
 			aheadBehind: async () => null,
+			// 预览环境无主进程监听：恒返回空 watchId，onRefsChanged 是空订阅（不推送）
+			watchRefs: async () => "",
+			unwatchRefs: async () => {},
+			onRefsChanged: () => () => {},
 			deleteFiles: async () => {},
 			// 预览环境无真实子进程：恒报告「PATH 中的 git 可用」
 			detectExecutable: async () => ({

@@ -406,6 +406,18 @@ export const ipcChannels = {
 	gitFetch: "git:fetch",
 	/** 当前分支相对上游的提交差距（ahead/behind），驱动 push/pull 角标 */
 	gitAheadBehind: "git:ahead-behind",
+	/**
+	 * 订阅某个仓库的 refs 变化（commit/push/fetch/切分支），返回 watchId。
+	 * 主进程按 (projectId, repoPath) 复用 fs.watch 句柄，与 gitUnwatchRefs 成对使用。
+	 */
+	gitWatchRefs: "git:watch-refs",
+	/** 退订 refs 监听：计数归零时主进程才关闭句柄（面板卸载 / 切仓库时调用） */
+	gitUnwatchRefs: "git:unwatch-refs",
+	/**
+	 * refs 变化推送（主进程 → 渲染层，订阅式）：payload 为 watchId，
+	 * 每个面板只处理自己订阅的那一份（多仓项目共用同一条通道）。
+	 */
+	gitRefsChanged: "git:refs-changed",
 	/** 从磁盘删除变更文件（移入回收站，可恢复） */
 	gitDeleteFiles: "git:delete-files",
 	/**
