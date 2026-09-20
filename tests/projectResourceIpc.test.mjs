@@ -14,7 +14,7 @@ test("project resource IPC is registered through one-way dependencies", () => {
 });
 
 test("project resource IPC retains all handlers and manager-owned path checks", () => {
-	for (const channel of ["projectResourcesList", "projectResourcesOpenDirectory", "projectResourcesDeleteSkill", "projectResourcesDeleteExtension", "projectResourcesToggleSkill", "projectResourcesToggleExtension", "projectResourcesRenameSkill"]) {
+	for (const channel of ["projectResourcesList", "projectResourcesOpenDirectory", "projectResourcesCreateSkill", "projectResourcesDeleteSkill", "projectResourcesDeleteExtension", "projectResourcesToggleSkill", "projectResourcesToggleExtension", "projectResourcesRenameSkill"]) {
 		assert.match(projectResourceIpc, new RegExp(`ipcChannels\\.${channel}`));
 	}
 	assert.match(projectResourceIpc, /projectResourceManager\.ensureResourceDirectory\(projectId\.trim\(\), kind\)/);
@@ -51,6 +51,7 @@ test("project resource IPC rejects malformed renderer input before calling the m
 			toggleExtension: failIfCalled,
 			toggleInheritedResource: failIfCalled,
 			renameSkill: failIfCalled,
+			createSkill: failIfCalled,
 			discovery: failIfCalled,
 		},
 	});
@@ -58,6 +59,8 @@ test("project resource IPC rejects malformed renderer input before calling the m
 	await assert.rejects(handlers.get(ipcChannels.projectResourcesList)({}, 42), /Invalid project id/);
 	await assert.rejects(handlers.get(ipcChannels.projectResourcesDiscovery)({}, 42), /Invalid project id/);
 	await assert.rejects(handlers.get(ipcChannels.projectResourcesOpenDirectory)({}, "p", "outside"), /Invalid project resource directory input/);
+	await assert.rejects(handlers.get(ipcChannels.projectResourcesCreateSkill)({}, { projectId: "p", name: "x" }), /Invalid project skill input/);
+	await assert.rejects(handlers.get(ipcChannels.projectResourcesCreateSkill)({}, { projectId: "p", name: "x", description: "desc", locationId: "pi-global" }), /Invalid project skill input/);
 	await assert.rejects(handlers.get(ipcChannels.projectResourcesToggleSkill)({}, "p", "path", "yes"), /Invalid project skill toggle input/);
 	await assert.rejects(handlers.get(ipcChannels.projectResourcesToggleInherited)({}, { projectId: "p", kind: "skill", key: "", enabled: false }), /Invalid project inherited resource toggle input/);
 	assert.equal(managerCalls, 0);

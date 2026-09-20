@@ -65,6 +65,10 @@ export function useSessionPreferenceState(options: {
 	const [favoritesLoaded, setFavoritesLoaded] = useState(false);
 	/** 最近使用的供应商（最新在前）：模型选择器按此优先排列供应商分组。 */
 	const [recentProviders, setRecentProviders] = useState<string[]>([]);
+	/** Pi 供应商自定义顺序（模型页拖拽/上移下移写入）：模型选择器严格按此排列分组。 */
+	const [providerOrder, setProviderOrder] = useState<string[]>([]);
+	/** DSH 供应商自定义顺序（与 Pi 侧分开存放，避免两套配置互相污染）。 */
+	const [dshProviderOrder, setDshProviderOrder] = useState<string[]>([]);
 	/** 用户隐藏的供应商（Pi 模型页眼睛开关）：Pi 后端模型选择器与循环按 provider 过滤。 */
 	const [hiddenProviders, setHiddenProviders] = useState<string[]>([]);
 	/** 用户隐藏的模型（选择器内隐藏 / 已隐藏折叠区恢复）：循环候选同样排除。 */
@@ -76,6 +80,8 @@ export function useSessionPreferenceState(options: {
 			.then((settings) => {
 				setFavoriteModels(settings.favoriteModels ?? []);
 				setRecentProviders(settings.recentProviders ?? []);
+				setProviderOrder(settings.providerOrder ?? []);
+				setDshProviderOrder(settings.dshProviderOrder ?? []);
 				setHiddenProviders(settings.hiddenProviders ?? []);
 				setHiddenModels(settings.hiddenModels ?? []);
 			})
@@ -303,6 +309,8 @@ export function useSessionPreferenceState(options: {
 		favoriteModels,
 		favoritesLoaded,
 		recentProviders,
+		providerOrder,
+		dshProviderOrder,
 		hiddenProviders,
 		hiddenModels,
 		modelPending,

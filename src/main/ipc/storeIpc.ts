@@ -95,6 +95,16 @@ export function registerStoreIpc({ promptManager, skillManager, xuePromptManager
 	ipcMain.handle(ipcChannels.promptsListByProject, async (_event, projectId: unknown) => {
 		return promptManager.listByProject(projectRoot(projectId));
 	});
+	ipcMain.handle(ipcChannels.promptsCreateInProject, async (_event, projectId: unknown, input: unknown) => {
+		const validInput = promptInput(input);
+		const root = projectRoot(projectId);
+		const result = await promptManager.createInProject(root, validInput);
+		void appLogger.info("prompt", "Project prompt template created", {
+			projectId,
+			name: validInput.name,
+		});
+		return result;
+	});
 	ipcMain.handle(ipcChannels.promptsDeleteInProject, async (_event, projectId: unknown, name: unknown) => {
 		const validName = requireText(name, "project prompt name", 256);
 		const root = projectRoot(projectId);

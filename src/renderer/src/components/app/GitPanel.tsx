@@ -8,6 +8,7 @@ import { ConfirmDialog } from "./AppParts";
 import { dismissNotice, showNotice, type NoticeId } from "../../utils/notice";
 import { writeClipboard } from "../../utils/clipboard";
 import { htmlToPlainText, readClipboardHtmlConsistent, readClipboardText } from "../../utils/clipboard";
+import { deepEqual } from "../../utils/deepEqual";
 import type { BranchDiffResult, CommitDetail, CommitEntry, GitAheadBehind, GitChangedFile, GitDiscardResource, GitResource, GitResourceGroupType, GitResourceGroups } from "../../../../shared/types";
 import { GitStatus } from "../../../../shared/types";
 import { EMPTY_GIT_COMMIT_COMPOSER, gitCommitComposerByScopeAtom, gitCommitScopeKey, openSettingsAtom, patchGitCommitComposer, type GitCommitComposerState } from "../../atoms";
@@ -128,6 +129,14 @@ type GitPanelProps = {
 	fetch?: (projectId: string) => Promise<void>;
 	/** 当前分支相对上游的提交差距；无上游返回 null（不显示角标） */
 	aheadBehind?: (projectId: string) => Promise<GitAheadBehind | null>;
+	/**
+	 * 订阅本仓库的 refs 变化（commit/push/fetch/切分支），返回 watchId 供事件过滤。
+	 * 与 unwatchRefs 成对：面板卸载/切仓库时必须退订，否则主进程监听句柄会留到退出。
+	 */
+	watchRefs?: (projectId: string) => Promise<string>;
+	unwatchRefs?: (watchId: string) => Promise<void>;
+	/** refs 变化推送订阅（返回值退订）；payload 为 watchId */
+	onRefsChanged?: (listener: (watchId: string) => void) => () => void;
 	/** 从磁盘删除变更文件（移入回收站） */
 	deleteFiles?: (projectId: string, paths: string[]) => Promise<void>;
 };
@@ -435,6 +444,12 @@ export function GitPanel(props: GitPanelProps) {
 	fetchRef.current = props.fetch;
 	const aheadBehindRef = useRef(props.aheadBehind);
 	aheadBehindRef.current = props.aheadBehind;
+	// 角标读取串行化：心跳与手动刷新可能同时要读，慢仓库（大历史 / 网络盘）单次 rev-list
+	// 超过一轮时会把 git 子进程一轮一轮叠起来，而旧结果反正会被作用域守卫丢弃。
+	const aheadBehindInFlightRef = useRef<Promise<void> | null>(null);
+	// 已写入 localStorage 的角标快照：值没变就不重复写（localStorage 是渲染线程同步存储，
+	// 5 秒一次的无效写入既占主线程也没意义）。key 带上作用域，切项目/仓库时自然失效。
+	const aheadBehindPersistedRef = useRef<{ key: string; value: GitAheadBehind | null } | null>(null);
 	// historyOnly 没有独立仓库标题；changesOnly 把仓库名并进分支栏，不再额外预留标题高度。
 	const panelChromeHeight = layout === "historyOnly" ? 0 : BRANCH_BAR_HEIGHT;
 	const statusRequestRef = useRef(0);
@@ -566,31 +581,75 @@ export function GitPanel(props: GitPanelProps) {
 	}, [layout, paneState, props.projectId, repoScopeKey]);
 
 	/**
-	 * 刷新 push/pull 角标：先 fetch 远程跟踪引用，再对比本地差距。
-	 * 静默失败（无远程/离线/非仓库）时保持上次角标，不打扰用户。
+	 * 读取 push/pull 角标：只读本地 refs，不 fetch、不走网络。
 	 *
-	 * fetch/aheadBehind 通过 ref 读取：GitDrawerHost 的作用域包装器可能随外层
-	 * render 重建，但不应因此重新安排 5 分钟计时器。
+	 * 为什么单独拆出一支：`HEAD...@{u}` 的差距完全由本地 refs 决定——AI 在终端里
+	 * commit / push / 切分支后本地 refs 立即更新，直接重读就能把角标归零。
+	 * 若只在 fetch 成功后才计数，fetch 慢或失败（离线/需凭据）时角标会长时间停在旧值
+	 * （历史缺陷：AI 推完要等到下一轮 5 分钟 fetch 才消失）。
+	 *
+	 * aheadBehind 经 ref 读取：宿主包装器可能随外层 render 重建，不应因此重排定时器。
 	 */
-	const refreshAheadBehind = useCallback(async () => {
-		const fetch = fetchRef.current;
+	const readAheadBehind = useCallback(async () => {
 		const aheadBehind = aheadBehindRef.current;
-		if (!fetch || !aheadBehind) return;
+		if (!aheadBehind) return;
+		// 等前一个读落地再读：既怕子进程堆积，也要保证本调用拿到的是 fetch 之后的 refs。
+		const inFlight = aheadBehindInFlightRef.current;
+		if (inFlight) await inFlight;
 		const projectId = props.projectId;
 		const currentRepoScopeKey = repoScopeKey;
-		try {
-			await fetch(projectId);
-			if (projectId !== projectIdRef.current || currentRepoScopeKey !== repoScopeKeyRef.current) return;
-			const result = await aheadBehind(projectId);
-			if (projectId === projectIdRef.current && currentRepoScopeKey === repoScopeKeyRef.current) {
-				setAheadBehind(result);
-				// 成功后写缓存：重挂/切 tab 回来能秒显上次角标；null（无上游）时清缓存
+		const task = (async () => {
+			try {
+				const result = await aheadBehind(projectId);
+				if (projectId !== projectIdRef.current || currentRepoScopeKey !== repoScopeKeyRef.current) return;
+				// 数值没变就保留原对象：GitAheadBehind 每次都是新引用，直接 set 等于每 5 秒
+				// 白重渲染一次整个面板（含变更树 / 图谱子树）。
+				setAheadBehind((current) => (deepEqual(current, result) ? current : result));
+				const scopeKey = `${projectId}::${currentRepoScopeKey}`;
+				const persisted = aheadBehindPersistedRef.current;
+				if (persisted?.key === scopeKey && deepEqual(persisted.value, result)) return;
+				// 写缓存：重挂/切 tab 回来能秒显上次角标；null（无上游）时清缓存
 				writeAheadBehindCache(projectId, currentRepoScopeKey, result);
+				aheadBehindPersistedRef.current = { key: scopeKey, value: result };
+			} catch {
+				// 静默失败：非仓库/无上游时角标保持上次已知值，不弹错误
 			}
-		} catch {
-			// 静默失败：离线/无远程时角标保持上次已知值，不弹错误
+		})();
+		aheadBehindInFlightRef.current = task;
+		try {
+			await task;
+		} finally {
+			// 只清自己这一次：等待中的后来者会在它后面重新登记
+			if (aheadBehindInFlightRef.current === task) aheadBehindInFlightRef.current = null;
 		}
 	}, [props.projectId, repoScopeKey]);
+
+	/**
+	 * 刷新 push/pull 角标。
+	 *
+	 * @param fetchRemote - 是否先 `git fetch` 再计数：
+	 *   true  → 手动刷新与 5 分钟定时器（要知道别人推到远程的新提交，behind 才准）；
+	 *   false → 本地事件驱动（外部 commit/push/切分支、窗口重新聚焦），只读本地 refs。
+	 *
+	 * 顺序刻意是「先本地 → 再 fetch → 再本地」：第一步不依赖网络，用户点刷新或 AI
+	 * 在终端 push 完后角标能立即变；fetch 仅用于校正 behind，失败也不阻挡本地计数。
+	 */
+	const refreshAheadBehind = useCallback(
+		async (fetchRemote = true) => {
+			await readAheadBehind();
+			if (!fetchRemote) return;
+			const fetch = fetchRef.current;
+			if (!fetch) return;
+			try {
+				await fetch(props.projectId);
+			} catch {
+				// 静默失败：离线/无远程时保留上一次 fetch 的 behind，ahead 已由本地计数更新
+				return;
+			}
+			await readAheadBehind();
+		},
+		[props.projectId, readAheadBehind],
+	);
 
 	/**
 	 * 拉取最新 Git 工作区状态。
@@ -617,7 +676,7 @@ export function GitPanel(props: GitPanelProps) {
 					// 刷新成功说明当前目录可用，恢复仓库/工具标记（手动 git init 或安装 git 后自动恢复轮询）
 					setNotAGitRepo(false);
 					setGitNotInstalled(false);
-					// 仅首次/手动刷新成功后再 fetch：5 秒静默轮询不应打远程。
+					// 非 silent refresh 成功后顺带刷角标（内含 fetch 远程校正 behind），不必再单独 fetch
 					if (!silent) void refreshAheadBehind();
 				}
 			} catch (caught) {
@@ -683,17 +742,92 @@ export function GitPanel(props: GitPanelProps) {
 		void refresh();
 	}, [layout, refresh]);
 
-	// 静默轮询：每 5 秒拉取一次最新工作区状态，不显示 loading 动画、不覆盖错误。
+	// 静默轮询：每 5 秒拉取一次最新工作区状态 + 重读本地 ahead/behind 角标。
 	// 非 git 仓库 / 未安装 git 时暂停轮询——状态恢复（git init / 安装 git）后由
 	// refresh 成功路径清标记，interval 随依赖重建自动恢复。
+	//
+	// 角标为何也走这里：`HEAD...@{u}` 只依赖本地 refs，AI 在终端里 commit/push 后
+	// 本地 refs 立即变化，5 秒内就能把「已推送」的角标归零；只读本地不发网络，
+	// 代价是一次 `git rev-list`，比 5 分钟一轮的 fetch 快得多（fetch 仍用于发现
+	// 别人推到远端的新提交）。mutation（push/pull 进行中）跳过，避免读到中间态
+	// 把角标写回旧值。
 	useEffect(() => {
 		if (layout === "historyOnly") return;
 		const timer = window.setInterval(() => {
 			if (notAGitRepo || gitNotInstalled) return;
+			// 窗口最小化 / 被完全遮挡时不跑：这一轮没有用户在看，却要白扫一遍 worktree
+			// （status 是这套轮询里最贵的一步，大仓尤其明显）。判「可见」而不是「聚焦」——
+			// 用户切到终端让 AI push 时窗口失去焦点但仍可见，角标必须继续跟平；
+			// 重新可见后由 focus 监听与下一轮心跳补齐。
+			if (document.hidden) return;
+			if (mutationRunningRef.current) return;
 			void refresh(true);
+			void readAheadBehind();
 		}, 5000);
 		return () => window.clearInterval(timer);
-	}, [layout, refresh, notAGitRepo, gitNotInstalled]);
+	}, [layout, refresh, readAheadBehind, notAGitRepo, gitNotInstalled]);
+
+	// 窗口重新获得焦点时补一次静默刷新：常见用法是切到终端让 AI commit/push 再切回来，
+	// 不必要等下一轮 5 秒轮询（角标只读本地 refs，代价很低）。
+	useEffect(() => {
+		if (layout === "historyOnly") return;
+		const onFocus = () => {
+			if (notAGitRepo || gitNotInstalled || mutationRunningRef.current) return;
+			void refresh(true);
+			void readAheadBehind();
+		};
+		window.addEventListener("focus", onFocus);
+		return () => window.removeEventListener("focus", onFocus);
+	}, [layout, refresh, readAheadBehind, notAGitRepo, gitNotInstalled]);
+
+	/** 本面板的 refs 监听 id：主进程按 (projectId, repoPath) 分配，多仓时每个面板各一份 */
+	const refsWatchIdRef = useRef<string | null>(null);
+
+	// refs 变化推送：AI 在终端里 commit/push/切分支后主进程检测到 refs 签名变化并推送，
+	// 面板重读状态与角标。检测上限 = 主进程轮询间隔（1.5 秒），比「下一轮 5 秒轮询」快一个档；
+	// 5 秒轮询保留为兜底（工作区文件改动不写 refs，检测不会触发，变更列表仍靠轮询）。
+	//
+	// 三个刻意的约束：
+	// - 订阅/退订必须成对：主进程按 watchId 计数，退订后计数归零才会停掉该仓库的轮询；
+	// - 推送到达时只做 silent 刷新（不 fetch）：否则 fetch → 改写 refs → 再推送，
+	//   会形成往返回环；behind 的远程校正仍走手动刷新与 5 分钟定时器；
+	// - watchId 未就绪或事件不属于本面板（同一条通道 N 个面板共用）时直接忽略。
+	useEffect(() => {
+		if (layout === "historyOnly") return;
+		const watchRefs = props.watchRefs;
+		const unwatchRefs = props.unwatchRefs;
+		const onRefsChanged = props.onRefsChanged;
+		if (!watchRefs || !unwatchRefs || !onRefsChanged) return;
+		if (notAGitRepo || gitNotInstalled) return;
+		const projectId = props.projectId;
+		let disposed = false;
+		const unsubscribe = onRefsChanged((changedId) => {
+			if (disposed || refsWatchIdRef.current !== changedId) return;
+			// mutation 进行中/窗口不可见时不抢刷新：push 自身已有收尾刷新，隐藏时等 focus 补齐
+			if (mutationRunningRef.current || document.hidden) return;
+			void refresh(true);
+			void readAheadBehind();
+		});
+		void watchRefs(projectId)
+			.then((watchId) => {
+				// 卸载后才拿到 id：立即退订，否则主进程句柄会残留到最后一个订阅者退出
+				if (disposed) {
+					void unwatchRefs(watchId);
+					return;
+				}
+				refsWatchIdRef.current = watchId;
+			})
+			.catch(() => {
+				// 订阅失败不提示：refs 推送只是加速手段，轮询仍在兜底
+			});
+		return () => {
+			disposed = true;
+			unsubscribe();
+			const watchId = refsWatchIdRef.current;
+			refsWatchIdRef.current = null;
+			if (watchId) void unwatchRefs(watchId);
+		};
+	}, [layout, props.projectId, props.watchRefs, props.unwatchRefs, props.onRefsChanged, refresh, readAheadBehind, notAGitRepo, gitNotInstalled]);
 
 	// 定时 fetch 远程：每 5 分钟刷新一次 ahead/behind 角标。
 	// 首次 fetch 改走 refresh 成功路径，避免未确认仓库时立刻 spawn `git fetch`。
@@ -960,8 +1094,9 @@ export function GitPanel(props: GitPanelProps) {
 		try {
 			await props.push(projectId);
 			if (projectId !== projectIdRef.current) return;
+			// refresh() 的非 silent 成功路径会先读本地角标再 fetch：push 后本地 refs 已更新，
+			// ahead 立即归零且不依赖 fetch 成败，不必再单独等一轮角标刷新。
 			await refresh();
-			await refreshAheadBehind();
 		} catch (caught) {
 			if (projectId === projectIdRef.current) {
 				const text = gitOperationErrorText(caught);
@@ -1005,8 +1140,8 @@ export function GitPanel(props: GitPanelProps) {
 		try {
 			await props.pull(projectId);
 			if (projectId !== projectIdRef.current) return;
+			// 同 push：pull 后本地 refs 已是最终结果，本地角标计数先给出准确值
 			await refresh();
-			await refreshAheadBehind();
 		} catch (caught) {
 			if (projectId === projectIdRef.current) {
 				// 拉取失败同样不常驻面板错误区，避免错误条占位挤压变更列表。

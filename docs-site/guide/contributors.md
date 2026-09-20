@@ -76,7 +76,7 @@ title: 贡献者
   <div class="contributor-info">
     <strong>bfzha</strong>
     <span class="contributor-handle">@bfzha</span>
-    <p>VS Code 风格 Git 面板与复杂工作流支持、会话内存瘦身与流式渲染优化、时间线查看位置保持、技能/提示词/扩展启停开关、资源作用域与 pi 0.85 解析器对齐 (#68, #145, #144, #143, #142, #141)</p>
+    <p>VS Code 风格 Git 面板与复杂工作流支持、会话内存瘦身与流式渲染优化、时间线查看位置保持、技能/提示词/扩展启停开关、资源作用域与 pi 0.85 解析器对齐 (#68, #145, #144, #143, #142, #141)、运行控制语义拆分、内置 Web 服务绑环回与令牌鉴权、shell 文案与状态图标修复</p>
     <a href="https://github.com/bfzha" target="_blank" rel="noreferrer">GitHub</a>
   </div>
 </div>
@@ -168,6 +168,36 @@ title: 贡献者
     <span class="contributor-handle">@sgafxh</span>
     <p>请求体超限后的会话恢复、修复 Windows 启动 pi 闪 CMD 窗口 (#188, #180)</p>
     <a href="https://github.com/sgafxh" target="_blank" rel="noreferrer">GitHub</a>
+  </div>
+</div>
+
+<div class="contributor-card">
+  <div class="contributor-avatar">jz</div>
+  <div class="contributor-info">
+    <strong>juzijun233</strong>
+    <span class="contributor-handle">@juzijun233</span>
+    <p>稳定性与安全加固系列：主进程 PATH 探测异步化（消除启动冻结）、迟到流式事件拒绝、事件三元组补齐、通道白名单、超大 diff 截断、PiRpcClient 行缓冲上限、按会话订阅隔离（分屏互不牵连）等</p>
+    <a href="https://github.com/juzijun233" target="_blank" rel="noreferrer">GitHub</a>
+  </div>
+</div>
+
+<div class="contributor-card">
+  <div class="contributor-avatar">xy</div>
+  <div class="contributor-info">
+    <strong>xiaYuTian11</strong>
+    <span class="contributor-handle">@xiaYuTian11</span>
+    <p>侧栏项目树显示当前 Git 分支 (#232)、时间线滚动抖动与切会话跳顶跳底修复 (#224)、会话 Tab 宽度上限与字号 (#226)、技能重命名按类型分流 (#227)</p>
+    <a href="https://github.com/xiaYuTian11" target="_blank" rel="noreferrer">GitHub</a>
+  </div>
+</div>
+
+<div class="contributor-card">
+  <div class="contributor-avatar">qx</div>
+  <div class="contributor-info">
+    <strong>Q-xuan</strong>
+    <span class="contributor-handle">@Q-xuan</span>
+    <p>行内代码里的文件引用重新可点 (#228)</p>
+    <a href="https://github.com/Q-xuan" target="_blank" rel="noreferrer">GitHub</a>
   </div>
 </div>
 

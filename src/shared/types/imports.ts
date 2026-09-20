@@ -225,8 +225,9 @@ export type CursorImportReport = {
 //
 // 场景：项目目录被移动/改名后，pi 会话仍按「旧 cwd 的 encoded 分组目录」留在
 // ~/.pi/agent/sessions 下，与新项目的路径不再匹配 → 侧栏看不到历史。
-// 该导入源让用户手动指一个目录（旧项目目录 / pi sessions 根 / 某个 encoded 分组目录），
+// 该导入源让用户从一个「现有会话目录」列表里点选（旧项目目录 / 某个 encoded 分组目录），
 // 把其中的会话挂到当前项目下（只建 catalog 引用，不复制、不改写原文件）。
+// 也可以手动选任意目录：目录本身是项目路径时按原工作目录匹配。
 
 /** 目录会话导入状态：未入册 / 已在 catalog（导入 = 把归属改到当前项目）。 */
 export type DirectoryImportStatus = "new" | "current";
@@ -260,4 +261,37 @@ export type DirectoryImportReport = {
 	results: DirectoryImportResult[];
 	imported: number;
 	failed: number;
+};
+
+/**
+ * 选定目录的形态（决定弹窗是列出会话，还是提示「你选的是 pi 主目录」）。
+ * - sessions-root：pi sessions 根（列出树内全部会话）
+ * - group：某个 encoded 分组目录（列出该目录内的会话）
+ * - project：项目目录本身（按会话记录里的原工作目录命中）
+ * - ancestor：sessions 树的祖先目录（~/.pi / ~/.pi/agent 等），命中必为 0，需要提示改选
+ * - none：以上都不是且没有命中
+ */
+export type DirectorySourceKind = "sessions-root" | "group" | "project" | "ancestor" | "none";
+
+/** 扫描结果：会话行 + 目录形态（形态供渲染层区分「该目录确实没有会话」与「选错了层级」）。 */
+export type DirectorySessionScanResult = {
+	sessions: DirectorySessionSummary[];
+	kind: DirectorySourceKind;
+};
+
+/**
+ * 「现有会话目录」列表项（弹窗首屏让用户点选，避免手选到 ~/.pi 这类没有意义的层级）。
+ * 列表只包含真的有会话的分组目录，选中即必有结果。
+ */
+export type DirectorySessionSourceDir = {
+	/** pi 会话分组目录（`~/.pi/agent/sessions/<encoded-cwd>`，或 settings 里配置的 sessionDir） */
+	dir: string;
+	/** 分组目录名还原出的原工作目录（扫描器给出；拿不到时缺省） */
+	projectPath?: string;
+	/** 该目录下的会话数 */
+	sessionCount: number;
+	/** 该目录下最近一次会话的更新时间 */
+	lastUsedAt: number;
+	/** 原工作目录当前是否仍在磁盘上（false = 目录已移动/删除，正是要找回的历史） */
+	projectPathExists: boolean;
 };

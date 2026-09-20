@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from "react";
-import type { MouseEvent } from "react";
+import type { MouseEvent, ReactNode } from "react";
 import { Check, Copy, Eye, EyeOff } from "lucide-react";
 import { t } from "../i18n";
 import { writeClipboard } from "../utils/clipboard";
@@ -185,7 +185,7 @@ export function ConfigComboboxInput(props: { value: string; options: Array<{ val
 							<Fragment key={section.group ?? `__ungrouped_${sectionIndex}`}>
 								{section.group && (
 									// 分组标题不可选中：cmdk 会把 CommandItem 当选项，标题用 div 避免干扰键盘导航。
-									<div className="px-2 pt-2 pb-1 text-[11px] font-medium text-text-tertiary">section.group</div>
+									<div className="px-2 pt-2 pb-1 text-[11px] font-medium text-text-tertiary">{section.group}</div>
 								)}
 								{section.items.map((option) => (
 									<CommandItem key={option.value} value={option.value} onSelect={() => commit(option.value)}>
@@ -238,5 +238,37 @@ export function ApiTypeInput(props: { value: string; onChange: (value: string) =
 				))}
 			</SelectContent>
 		</Select>
+	);
+}
+
+/**
+ * 资源新建卡片外壳（提示词 / 技能等「新建」区共用，保证各处长相一致）。
+ * 表单区固定收窄到 max-w-3xl：配置页内容区在宽窗口下可达 1000px+，
+ * 输入框铺满整行会显得松散且难扫读；收窄后名称/位置/描述在任何窗口宽度下都是可读的字段宽度。
+ */
+export function CreateResourceCard(props: { title: string; submit: ReactNode; children: ReactNode }) {
+	return (
+		<section className="grid gap-3 rounded-lg border border-border-subtle bg-bg-muted p-3.5">
+			<strong className="text-control font-semibold text-foreground">{props.title}</strong>
+			<div className="grid max-w-3xl gap-2.5">
+				{props.children}
+				{/* 提交按钮靠右收尾：与字段左对齐同一条轴线，不再孤零零贴在卡片左下角 */}
+				<div className="flex justify-end">{props.submit}</div>
+			</div>
+		</section>
+	);
+}
+
+/**
+ * 新建卡片的字段结构：标签一行、控件一行。
+ * 刻意用原生 <label> + Tailwind，不用 shadcn Label 原语：Label 自带 flex + gap-2，
+ * 会把「名称 / 描述」这类两字中文标签挤成一字一行的竖排（原生 label 同时保留包裹控件的关联语义）。
+ */
+export function CreateResourceField(props: { label: string; children: ReactNode }) {
+	return (
+		<label className="grid gap-1">
+			<span className="text-caption text-text-secondary">{props.label}</span>
+			{props.children}
+		</label>
 	);
 }

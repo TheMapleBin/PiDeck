@@ -1,6 +1,6 @@
 import { Button } from "../components/ui-shadcn/button";
-import { useEffect, useRef, useState } from "react";
-import { ChevronDown, ChevronRight, Copy, Eye, EyeOff, ExternalLink, SquarePen, Trash2, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, ChevronRight, Copy, Eye, EyeOff, ExternalLink, GripVertical, SquarePen, Trash2, X } from "lucide-react";
 import { t } from "../i18n";
 import { desktopApi } from "../desktopApi";
 import type { ModelItem, ModelsFile, ProviderConfig } from "./configTypes";
@@ -24,6 +24,8 @@ import { AddProviderDialog } from "./AddProviderDialog";
 import type { ProviderDialogInitial } from "./AddProviderDialog";
 import type { AddProviderDraft } from "./addProviderDraft";
 import { splitVisibleAndHiddenProviders } from "./providerVisibility";
+import { applyProviderOrder } from "../utils/providerOrder";
+import { useProviderReorder } from "../hooks/useProviderReorder";
 import { ModelsTable } from "./ModelsTable";
 import type { MutableRefObject } from "react";
 
@@ -60,6 +62,14 @@ export function ModelsTab(props: {
 	hiddenProviders: string[];
 	/** 切换供应商隐藏状态（父级持久化到 AppSettings.hiddenProviders）。 */
 	onToggleHiddenProvider: (name: string) => void;
+	/** 供应商卡片自定义顺序（父级持有并持久化到 AppSettings.providerOrder）。 */
+	providerOrder?: string[];
+	/** 排序作用域：与认证页共享的并集顺序（由父级用 models.json + auth.json 算出）。 */
+	providerOrderScope?: string[];
+	/** 卡片重排回调：拖拽/上移下移算出新的完整顺序后交给父级持久化。 */
+	onReorderProviders?: (nextOrder: string[]) => void;
+	/** 清空自定义顺序（列表上方的「恢复默认顺序」）。 */
+	onResetProviders?: () => void;
 	/** 用户隐藏的模型标识列表（格式："provider/modelId"）。 */
 	hiddenModels?: string[];
 	/** 切换单个模型的隐藏状态（父级持久化到 AppSettings.hiddenModels）。 */
@@ -100,7 +110,7 @@ export function ModelsTab(props: {
 	onUpdateModelThinkingLevel: (providerName: string, index: number, key: "xhigh" | "max", value: "" | "xhigh" | "max") => void;
 	/** 逐模型 User-Agent 覆盖（落到 provider.modelOverrides），可选。 */
 	onUpdateModelUserAgent?: (providerName: string, index: number, value: string) => void;
-	/** 读取某模型当前的 UA 覆盖值（可选；与上一个回调成对出现才渲染该列）。 */
+	/** 读取某模型当前的 UA 覆盖值（可选；与上一个回调成对出现才渲染操作列的 UA 按钮）。 */
 	getModelUserAgentOverride?: (providerName: string, index: number) => string;
 	onDeleteModel: (providerName: string, index: number) => void;
 	onDeleteModels: (providerName: string, indexes: number[]) => void;
@@ -119,7 +129,10 @@ export function ModelsTab(props: {
 	const { data, expandedProvider, saving } = props;
 	const providerNames = Object.keys(data.providers);
 	// 隐藏开关：主列表只显示未隐藏项，隐藏项进页面底部「已隐藏」折叠区（设置页隐藏开关）
-	const { visible: visibleProviderNames, hidden: hiddenProviderNames } = splitVisibleAndHiddenProviders(providerNames, props.hiddenProviders ?? []);
+	// 自定义排序只作用于展示：先按用户拖拽/上移下移结果重排完整列表，再切分可见/隐藏。
+	// 用完整列表而非仅可见列表：隐藏区也遵循同一顺序，恢复显示时不会突然跳到列表最前。
+	const orderedProviderNames = applyProviderOrder(providerNames, props.providerOrder);
+	const { visible: visibleProviderNames, hidden: hiddenProviderNames } = splitVisibleAndHiddenProviders(orderedProviderNames, props.hiddenProviders ?? []);
 	// 底部已隐藏折叠区展开状态（默认收起，避免一屏多折叠区）
 	const [hiddenSectionOpen, setHiddenSectionOpen] = useState(false);
 	// 自动获取后的待保存选择：与 provider 分开存储，避免多个 provider 同时展开时选中状态互相污染。
@@ -188,6 +201,24 @@ export function ModelsTab(props: {
 
 	// 深链聚焦：滚动到目标供应商卡片并短暂高亮（展开由父级 ConfigModalContent 处理）。
 	const providerCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+	/**
+	 * 拖拽/上移下移的统一出口：算出新的完整顺序交给父级持久化。
+	 * 顺序无变化时（拖回原位）也照常上报，由主进程 SettingsStore 的「值未变则剔除」拦下写盘，
+	 * 避免这里再维护一份比较逻辑。
+	 */
+	const reorderProviders = useCallback(
+		(nextOrder: string[]) => {
+			props.onReorderProviders?.(nextOrder);
+		},
+		[props.onReorderProviders],
+	);
+
+	// 拖动与上移/下移的状态机（落点判定、拖动中半透明、插入指示线、边界禁用）内聚在共享 hook，
+	// DSH 模型页的供应商卡片复用同一份，避免两页规则漂移。
+	// 拖拽的作用域是「模型 + 认证」两页的并集（providerOrderScope）：认证页独有的供应商也要参与
+	// 同一份顺序，否则在认证页排一次会在并集里丢掉它们，模型页的顺序跟着回到默认。
+	const providerReorder = useProviderReorder({ names: props.providerOrderScope?.length ? props.providerOrderScope : orderedProviderNames, visibleNames: visibleProviderNames, onReorder: reorderProviders });
 	const [highlightProvider, setHighlightProvider] = useState<string | null>(null);
 	useEffect(() => {
 		if (!props.focusProvider) return;
@@ -262,6 +293,20 @@ export function ModelsTab(props: {
 							)}
 						</div>
 					</div>
+
+					{/* 排序说明：顺序是跨页共用的偏好（AppSettings.providerOrder），
+					    不写在这里用户只能靠试——拖了之后模型选择器也跟着变会让人困惑。 */}
+					{visibleProviderNames.length > 1 && (
+						<div className="mb-2.5 flex items-start gap-2 text-[11px] leading-relaxed text-text-tertiary">
+							<ArrowUpDown size={12} className="mt-0.5 shrink-0" aria-hidden="true" />
+							<span className="min-w-0 flex-1">{t("config.providerOrderHint")}</span>
+							{(props.providerOrder?.length ?? 0) > 0 && props.onResetProviders && (
+								<Button variant="ghost" size="sm" className="h-5 shrink-0 px-1.5 text-[11px] font-normal text-text-tertiary hover:text-text-primary" onClick={props.onResetProviders} disabled={saving}>
+									{t("config.providerOrderReset")}
+								</Button>
+							)}
+						</div>
+					)}
 
 					{/* Provider 配置指南 */}
 					{showGuide && (
@@ -363,11 +408,15 @@ export function ModelsTab(props: {
 									key={name}
 									ref={(element) => {
 										providerCardRefs.current[name] = element;
+										providerReorder.registerCard(name, element);
 									}}
-									className={`config-provider-card overflow-hidden rounded-lg border border-border-subtle bg-bg-panel transition-[border-color,box-shadow,background-color] duration-150${isExpanded ? " border-[color-mix(in_srgb,var(--color-accent)_32%,var(--color-border-subtle))] shadow-[var(--shadow-border)] overflow-visible" : ""}${highlightProvider === name ? " ring-2 ring-[color:var(--color-accent)]" : ""}`}
+									className={`config-provider-card relative overflow-hidden rounded-lg border border-border-subtle bg-bg-panel transition-[border-color,box-shadow,background-color,opacity] duration-150${providerReorder.draggingName === name ? " opacity-50" : ""}${isExpanded ? " border-[color-mix(in_srgb,var(--color-accent)_32%,var(--color-border-subtle))] shadow-[var(--shadow-border)] overflow-visible" : ""}${highlightProvider === name ? " ring-2 ring-[color:var(--color-accent)]" : ""}`}
+									{...providerReorder.cardProps(name)}
 								>
+									{/* 拖拽插入指示线：贴卡片内缘（卡片是 overflow-hidden，放到卡片外会被剪掉） */}
+									{providerReorder.dropTarget?.name === name && <span className={`absolute ${providerReorder.dropTarget.position === "before" ? "top-0" : "bottom-0"} right-0 left-0 z-10 h-0.5 bg-[color:var(--color-accent)]`} />}
 									{/* 整行点击展开/收起；右侧操作区 stopPropagation，避免点复制/删除/用量配置时误折叠。 */}
-									<div className="flex cursor-pointer items-center justify-between px-3.5 py-2 transition-colors duration-150 hover:bg-bg-hover" onClick={() => props.onToggleProvider(name)}>
+									<div data-provider-head="" className="group flex cursor-pointer items-center justify-between px-3.5 py-2 transition-colors duration-150 hover:bg-bg-hover" onClick={() => props.onToggleProvider(name)}>
 										{batchMode && (
 											<Label className="mr-2.5 inline-flex size-4 shrink-0 items-center justify-center" onClick={(e) => e.stopPropagation()}>
 												<Checkbox
@@ -385,6 +434,39 @@ export function ModelsTab(props: {
 											</Label>
 										)}
 										<div className="flex min-w-0 flex-1 items-center gap-2.5">
+											{/* 拖拽手柄：draggable 落在按钮上（Button 直接透传原生属性），只有按住手柄才能拖动，避免整行点击展开被拖拽抢掉 */}
+											<Button variant="ghost" size="icon-sm" className="size-6 shrink-0 cursor-grab text-muted-foreground active:cursor-grabbing" title={t("config.dragProvider")} {...providerReorder.gripProps(name)} onClick={(event) => event.stopPropagation()}>
+												<GripVertical size={14} />
+											</Button>
+											{/* 上移/下移：悬停浮现（键盘聚焦也可见），到顶/到底禁用；disabled 带 pointer-events-none，不会抢整行点击 */}
+											<div className="flex shrink-0 items-center">
+												<Button
+													variant="ghost"
+													size="icon-sm"
+													className="size-6 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+													disabled={!providerReorder.canMove(name, -1)}
+													title={t("config.moveProviderUp")}
+													onClick={(event) => {
+														event.stopPropagation();
+														providerReorder.moveBy(name, -1);
+													}}
+												>
+													<ArrowUp size={13} />
+												</Button>
+												<Button
+													variant="ghost"
+													size="icon-sm"
+													className="size-6 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+													disabled={!providerReorder.canMove(name, 1)}
+													title={t("config.moveProviderDown")}
+													onClick={(event) => {
+														event.stopPropagation();
+														providerReorder.moveBy(name, 1);
+													}}
+												>
+													<ArrowDown size={13} />
+												</Button>
+											</div>
 											<span className="min-w-0 truncate text-control font-semibold text-text-primary">{name}</span>
 											{/* 折叠态把「N 模型」和用量收进标题行，避免底部再占一条 h-9 空行。用量拦截点击，避免点刷新时误折叠卡片。 */}
 											<span className="shrink-0 rounded-full border border-border-subtle px-1.5 py-px font-mono text-micro tabular-nums text-muted-foreground">{t("config.count.models", { count: provider.models.length })}</span>

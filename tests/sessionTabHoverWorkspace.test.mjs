@@ -63,12 +63,16 @@ test("EditorWorkbenchTab 用富 Tooltip 显示 标题 + 完整路径", () => {
 	assert.match(body, /\{tab\.title \? \(/);
 });
 
-test("面包屑工作区段加胶囊底色，与标题段拉开对比", () => {
+test("面包屑工作区段用可见灰底 + 近正文色文字，与标题段拉开对比", () => {
 	const breadcrumb = sessionHeader.match(/\{projectName \? \(\s*<span[\s\S]*?\{projectName\}\s*<\/span>\s*\) : null\}/);
 	assert.ok(breadcrumb, "project breadcrumb segment should be discoverable");
-	// bg-muted 胶囊：项目段在明暗主题下都有底色可辨。
-	assert.match(breadcrumb[0], /bg-muted/);
+	// 2026-09 用户反馈「项目不够明显」：bg-muted(#f4f4f5) 在浅色主题的 bg-background(#ffffff)
+	// 上几乎不可见，改用 bg-accent(=--color-bg-active) 实底，明暗主题都能看见色块。
+	assert.match(breadcrumb[0], /bg-accent/);
 	assert.match(breadcrumb[0], /rounded/);
+	// 项目段文字比 text-muted-foreground 更接近正文（用户要「明显」），但仍不进到 font-medium。
+	assert.match(breadcrumb[0], /text-foreground\/\d+/);
+	assert.doesNotMatch(breadcrumb[0], /font-medium/);
 	// 标题段保持无底色（对比来自项目段，不整行加胶囊）。
-	assert.doesNotMatch(sessionHeader, /session-pane-title[^"]*bg-muted/);
+	assert.doesNotMatch(sessionHeader, /session-pane-title[^"]*bg-accent/);
 });

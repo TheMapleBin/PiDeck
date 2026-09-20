@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "version": "1.0.0",
-  "bundleSha256": "6e08c34c2ca1d62802e1f86cc7dba6d5cbde0579d197ea74f4c7c676c9781eec",
+  "bundleSha256": "603249f4cf0db88293b42715ffbc9a742d2725d3f94aa0292746fa72458e7ed7",
   "fileCount": 13,
   "files": [
     {
@@ -66,8 +66,8 @@
     },
     {
       "name": "pi-deck-vision.ts",
-      "sha256": "a3369bc9b6ddebe2fff4cad7c7cdae93a16b9b403e13ffa37b069148d0a7e577",
-      "bytes": 50332
+      "sha256": "90b38ad76b8deaa632914ed0680c2cdaac437d52d32de80abcd9206583467897",
+      "bytes": 56104
     }
   ]
 }

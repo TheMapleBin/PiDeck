@@ -43,10 +43,12 @@ test("large settings dialogs inherit page wallpaper transparency", () => {
 	const modelsTableSource = readFileSync("src/renderer/src/config/ModelsTable.tsx", "utf8");
 	const surfacesSource = readFileSync("src/renderer/src/styles/surfaces.css", "utf8");
 
-	// 设置和项目资源管理是工作台式弹框，应跟随页面透明度；普通确认弹框仍保留
-	// 更高的可读性基线，避免把两类交互的视觉规则混在一起。
-	assert.match(settingsSource, /settings-modal[^\n]*\[--wallpaper-dialog-alpha:var\(--wallpaper-panel-alpha,30%\)\]/);
-	assert.match(projectResourcesSource, /config-modal[^\n]*\[--wallpaper-dialog-alpha:var\(--wallpaper-panel-alpha,30%\)\]/);
+	// 用户反馈「有些弹窗页面太透了」后：设置/项目资源这类工作台弹框不再按面板档降透明度
+	// （背景图可见度 80% 时仅 30% 不透明，弹窗下方正文会透进设置内容、观感发虚），
+	// 统一走通用弹窗的 ≥90% 基线——组件上因此不再有 --wallpaper-dialog-alpha
+	// 内联覆盖（那份覆盖只会重复 CSS 基线的值，还因 utilities 层优先级更难改）。
+	assert.doesNotMatch(settingsSource, /--wallpaper-dialog-alpha/);
+	assert.doesNotMatch(projectResourcesSource, /--wallpaper-dialog-alpha/);
 	assert.match(surfacesSource, /:root\[data-bg-image="on"\] \.config-modal \.config-layout[\s\S]*?background: transparent;/);
 	assert.match(modelsSource, /config-provider-card/);
 	assert.match(modelsSource, /config-provider-body/);
@@ -60,14 +62,24 @@ test("Pi management and feedback dialogs inherit page wallpaper transparency", (
 	const environmentSource = readFileSync("src/renderer/src/components/overlays/OverlayComponents.tsx", "utf8");
 	const feedbackSource = readFileSync("src/renderer/src/features/feedback/FeedbackDialog.tsx", "utf8");
 
-	// Pi 环境管理和问题反馈都是完整业务面板，应与设置/项目资源管理使用同一透明度，
-	// 其内部卡片和 textarea 才能继承主题 token，而不是被通用 Dialog 的 90% 基线锁住。
-	assert.match(piSource, /config-modal[^\n]*\[--wallpaper-dialog-alpha:var\(--wallpaper-panel-alpha,30%\)\]/);
-	assert.match(environmentSource, /environment-dialog[^\n]*\[--wallpaper-dialog-alpha:var\(--wallpaper-panel-alpha,30%\)\]/);
+	// Pi 环境管理和问题反馈都是完整业务面板，与设置/项目资源管理同档：走通用弹窗的
+	// ≥90% 基线，不再各自按面板档降透明度；内部卡片继承主题 token 由 CSS 承担。
+	assert.doesNotMatch(piSource, /--wallpaper-dialog-alpha/);
+	assert.doesNotMatch(environmentSource, /--wallpaper-dialog-alpha/);
 	// FeedbackDialog 现在直接使用通用 dialog-content；壁纸透明度由 foundation.css 的
 	// 通用规则提供，业务组件不再在 overlay host 上注入旧的内联 alpha。
 	assert.match(feedbackSource, /<DialogContent[\s\S]*?className=\{cn\(/);
 	assert.match(css, /:root\[data-bg-image="on"\] \[data-slot="dialog-content"\][\s\S]*?--wallpaper-dialog-alpha: max\(90%, calc\(var\(--wallpaper-panel-alpha, 30%\) \+ 35%\)\);/);
+});
+
+test("all wallpaper dialogs share one readable baseline (no panel-alpha downgrade)", () => {
+	// 回归守卫：弹窗透明度只保留「弹窗基线」一档。若有人再把某个弹窗（或草稿本）
+	// 按面板档降档，背景图模式下该弹窗立刻发虚——这里逐条锁住。
+	assert.doesNotMatch(css, /--wallpaper-dialog-alpha:\s*var\(--wallpaper-panel-alpha,\s*30%\)/, "no surface may downgrade dialogs to panel alpha");
+	// 草稿本与 shadcn DialogContent 共用同一条基线规则（同一份 bg token 注入）。
+	assert.match(css, /:root\[data-bg-image="on"\] \[data-slot="dialog-content"\],[\s\S]{0,240}?:root\[data-bg-image="on"\] \.scratch-pad-panel \{[\s\S]{0,240}?--wallpaper-dialog-alpha: max\(90%, calc\(var\(--wallpaper-panel-alpha, 30%\) \+ 35%\)\);/);
+	// 工作台弹框仍要扁平化内部卡片底色，避免双层半透明（≈51%）白形成磨砂补丁。
+	assert.match(css, /\[data-slot="dialog-content"\]\.environment-dialog \{[\s\S]{0,700}?--color-bg-panel: transparent;[\s\S]{0,200}?--color-card: transparent;[\s\S]{0,200}?--color-bg-muted: transparent;/);
 });
 
 test("App.tsx toggles wallpaper mode marker with background image setting", () => {

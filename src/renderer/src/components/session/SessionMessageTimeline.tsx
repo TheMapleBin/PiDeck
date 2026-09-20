@@ -19,7 +19,7 @@ import { t } from "../../i18n";
 import { cn } from "../../lib/utils";
 import { Loader2 } from "lucide-react";
 import { showNotice } from "../../utils/notice";
-import { composeFailureNotice, isToastOnlyFailureMessage, reduceFailureNoticePass, type FailureNoticePassState } from "./timelineFailureNotice";
+import { composeFailureNotice, reduceFailureNoticePass, type FailureNoticePassState } from "./timelineFailureNotice";
 import { SessionStartSurface } from "./SessionStartSurface";
 import { NotifyMessageCard, shouldRenderNotifyCard } from "./NotifyMessageCard";
 import { MessageScroller } from "../agents/message-scroller";
@@ -900,9 +900,7 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
 							);
 						}
 						if (message.role === "error") {
-							// 重试状态提示（retryScheduled/retrySucceeded 等）仍只弹 toast；
-							// 其余失败类同 toast 一起渲染诊断卡片，错误信息留痕可排查（见 TOAST_ONLY_FAILURE_KEYS）。
-							if (isToastOnlyFailureMessage(message)) return null;
+							// 失败类消息与 toast 并存渲染诊断卡片：toast 即时提醒，卡片留痕可排查。
 							return <DiagnosticMessageCard key={message.id} message={message} />;
 						}
 						if (message.role === "system") {
@@ -925,9 +923,8 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
 							if (meta?.type === "compaction") {
 								return null;
 							}
-							// 重试状态提示（retryScheduled/retrySucceeded 等）
-							// 属于「重试提示」，只弹 toast、不占时间线；失败类系统诊断照常渲染卡片。
-							if (isToastOnlyFailureMessage(message)) return null;
+							// 系统诊断（含自动重试状态）一律渲染卡片：重试此前只弹 toast，
+							// 用户事后无从确认重试发生/重试到第几次，这里与 toast 并存留痕。
 							return <DiagnosticMessageCard key={message.id} message={message} />;
 						}
 						return null;

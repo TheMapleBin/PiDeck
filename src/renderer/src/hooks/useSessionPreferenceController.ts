@@ -35,6 +35,9 @@ export type SessionPreferenceController = {
 	/** 收藏 / 最近 / 隐藏供应商 / 隐藏模型：选择器展示 + 循环候选 */
 	favoriteModels: string[];
 	recentProviders: string[];
+	/** 供应商自定义顺序（模型页排序结果）：选择器严格按此展示分组，DSH 与 Pi 分开。 */
+	providerOrder: string[];
+	dshProviderOrder: string[];
 	hiddenProviders: string[];
 	hiddenModels: string[];
 	/** 技能选择器需要的会话身份（避免组件再订一次 record/runtime 原子） */
@@ -452,6 +455,8 @@ export function useSessionPreferenceController(options: {
 		currentThinkingLevel,
 		favoriteModels,
 		recentProviders: state.recentProviders,
+		providerOrder: state.providerOrder,
+		dshProviderOrder: state.dshProviderOrder,
 		hiddenProviders,
 		hiddenModels,
 		projectId: state.projectId,

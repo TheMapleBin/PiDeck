@@ -1002,6 +1002,15 @@ export class SessionScanner {
 		return originalPath;
 	}
 
+	/**
+	 * 当前环境的会话扫描根（最近一次 list() 记录的根集合；未扫描过时退回默认根）。
+	 * 供目录导入判断「用户选的目录是不是会话树的祖先」（如 ~/.pi），这类目录命中必为 0 而需要提示。
+	 */
+	getSessionScanRoots(): string[] {
+		if (this.activeScanRoots.length > 0) return [...this.activeScanRoots];
+		return [this.defaultSessionsRoot];
+	}
+
 	/** 列出当前环境全部已归档会话（供恢复 UI 展示；带归档前原始路径供按项目归属过滤） */
 	async listArchived(): Promise<ArchivedPiSession[]> {
 		// 归档目录可能分布在任意扫描根下（默认全局根 + 项目 sessionDir），

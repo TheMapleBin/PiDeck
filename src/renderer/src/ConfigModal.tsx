@@ -12,6 +12,7 @@ import type { FetchedModel, ConfigProxyMode } from "../../shared/types/fetchedMo
 import { Component, forwardRef, useRef, useState, useEffect, useCallback, useImperativeHandle, useMemo, type ReactNode, type Ref } from "react";
 import type { PiDesktopApi } from "../../preload";
 import { AuthTab } from "./config/AuthTab";
+import { buildProviderOrderScope } from "./utils/providerOrder";
 import { ModelsTab } from "./config/ModelsTab";
 import { TokenDancePanel, type TokendanceInstallOutcome } from "./config/TokenDancePanel";
 import { UsageProbeConfigDialog } from "./config/UsageProbeConfigDialog";
@@ -32,9 +33,9 @@ import { t } from "./i18n";
 import { CodeMirrorEditor } from "./components/app/CodeMirrorEditor";
 import { translateBuiltinPromptDescription } from "./composerBehavior";
 import type { AuthFile, ConfigTab, ModelItem, ModelsFile, SettingsFile } from "./config/configTypes";
-import type { ConfigFileDiagnostic, PiExtensionListResult, PiExtensionSummary, PiPromptTemplateListResult, PiPromptTemplateSummary, PiSkillListResult, PiSkillSummary, Project, ProjectResourceDiscoveryResult, ProjectResourceListResult } from "../../shared/types";
+import type { ConfigFileDiagnostic, PiExtensionListResult, PiExtensionSummary, PiPromptTemplateListResult, PiPromptTemplateSummary, PiSkillListResult, PiSkillLocation, PiSkillSummary, Project, ProjectResourceDiscoveryResult, ProjectResourceListResult } from "../../shared/types";
 import { globalPromptOverrideKey, globalSkillOverrideKey, isGlobalSkillSourceId } from "../../shared/resourceIdentity";
-import { emptyDiscoveryData, emptyProjectResourceData, isGlobalSkill, isProjectExtension, isProjectPrompt, isProjectSkill } from "./config/resourceScopeModel";
+import { emptyDiscoveryData, emptyProjectResourceData, GLOBAL_SKILL_SOURCES, isGlobalSkill, isProjectExtension, isProjectPrompt, isProjectSkill, PROJECT_SKILL_SOURCES } from "./config/resourceScopeModel";
 import { getModelUserAgentOverride, getProviderHeaders, KNOWN_PROVIDER_ENDPOINTS, setModelUserAgentOverride } from "./config/providerHeaders";
 import { TOKENDANCE_PROVIDER } from "../../shared/tokendance";
 import { ALL_CONFIG_DIRTY_KEYS, dirtyKeysClearedByReload, dirtyKeysPreservedOnReload, reconcileConfigDirty } from "./config/configDirtyMarks";
@@ -291,7 +292,7 @@ class ConfigModalErrorBoundary extends Component<{ open: boolean; onClose: () =>
 		// #115：错误兜底直接走 shadcn Dialog（components/ui/Modal 薄包装已退役）
 		return (
 			<Dialog open={this.props.open} onOpenChange={(next) => !next && this.props.onClose()}>
-				<DialogContent showCloseButton={false} className={cn("flex flex-col gap-0 overflow-hidden p-0", configModalSizeClass, "config-modal", "[--wallpaper-dialog-alpha:var(--wallpaper-panel-alpha,30%)]")}>
+				<DialogContent showCloseButton={false} className={cn("flex flex-col gap-0 overflow-hidden p-0", configModalSizeClass, "config-modal")}>
 					<DialogHeader className="flex-row items-center justify-between px-4 py-3">
 						<DialogTitle>{t("config.loadFailed")}</DialogTitle>
 						<DialogClose asChild>
@@ -510,7 +511,18 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 	const bumpResourceGeneration = useCallback(() => {
 		resourceGenerationRef.current += 1;
 	}, []);
+	const [creatingSkill, setCreatingSkill] = useState(false);
 	const [uninstallingExtensionSource, setUninstallingExtensionSource] = useState<string | null>(null);
+	const [newSkillName, setNewSkillName] = useState("");
+	const [newSkillDescription, setNewSkillDescription] = useState("");
+	const [newSkillLocationId, setNewSkillLocationId] = useState<PiSkillLocation["id"]>("pi-global");
+	/** Keep the create target inside the selected resource scope. */
+	useEffect(() => {
+		const allowed = skillsData.locations.filter((location) => (resourceScope === "project" ? PROJECT_SKILL_SOURCES.has(location.id) : GLOBAL_SKILL_SOURCES.has(location.id)));
+		if (allowed.length > 0 && !allowed.some((location) => location.id === newSkillLocationId)) {
+			setNewSkillLocationId(allowed[0].id);
+		}
+	}, [newSkillLocationId, resourceScope, skillsData.locations]);
 	const [deleteSkillConfirm, setDeleteSkillConfirm] = useState<PiSkillSummary | null>(null);
 	const [editingGlobalSkill, setEditingGlobalSkill] = useState<PiSkillSummary | null>(null);
 	const [editGlobalContent, setEditGlobalContent] = useState("");
@@ -521,6 +533,9 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 		templates: [],
 		globalDir: "",
 	});
+	const [creatingPrompt, setCreatingPrompt] = useState(false);
+	const [newPromptName, setNewPromptName] = useState("");
+	const [newPromptDescription, setNewPromptDescription] = useState("");
 	const [editingPrompt, setEditingPrompt] = useState<PiPromptTemplateSummary | null>(null);
 	const [editPromptContent, setEditPromptContent] = useState("");
 	const [editPromptLoading, setEditPromptLoading] = useState(false);
@@ -584,6 +599,13 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 	const [hiddenModels, setHiddenModels] = useState<string[]>([]);
 	/** 用户隐藏的认证供应商列表（持久化到 AppSettings.hiddenAuthProviders）。 */
 	const [hiddenAuthProviders, setHiddenAuthProviders] = useState<string[]>([]);
+	/**
+	 * 供应商卡片自定义顺序（Pi 页与 DSH 页各存一份，持久化到 AppSettings）。
+	 * 与 hiddenProviders 同类：属于 UI 展示偏好，不写进 models.json / DSH 配置，
+	 * 因此无需担心被外部改写 pi 配置的工具覆盖。
+	 */
+	const [providerOrder, setProviderOrder] = useState<string[]>([]);
+	const [dshProviderOrder, setDshProviderOrder] = useState<string[]>([]);
 	/** 切换供应商隐藏状态：本地立即生效 + 持久化到 AppSettings（不影响 models.json 配置本身）。 */
 	const handleToggleHiddenProvider = useCallback((name: string) => {
 		setHiddenProviders((prev) => {
@@ -609,6 +631,36 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 			return next;
 		});
 	}, []);
+	/**
+	 * 供应商卡片重排：本地立即生效 + 持久化。
+	 * 顺序未变（例如拖回原位）也照常写一次——主进程 SettingsStore 会把无变化的键从 patch 里剔除，
+	 * 这里不再重复一份比较逻辑。
+	 */
+	const handleReorderProviders = useCallback((next: string[]) => {
+		setProviderOrder(next);
+		void api.settings.update({ providerOrder: next }).catch(() => undefined);
+	}, []);
+	/** DSH 模型页的供应商卡片重排（与 Pi 页分开存，两页的供应商集合不同）。 */
+	const handleReorderDshProviders = useCallback((next: string[]) => {
+		setDshProviderOrder(next);
+		void api.settings.update({ dshProviderOrder: next }).catch(() => undefined);
+	}, []);
+	/** 恢复默认顺序：清空自定义顺序（空数组）——两页与模型选择器立即回到配置本身的顺序。 */
+	const handleResetProviderOrder = useCallback(() => {
+		setProviderOrder([]);
+		void api.settings.update({ providerOrder: [] }).catch(() => undefined);
+	}, []);
+	/** DSH 页的「恢复默认顺序」（与 Pi 页分开清，避免改一页把另一页也重置）。 */
+	const handleResetDshProviderOrder = useCallback(() => {
+		setDshProviderOrder([]);
+		void api.settings.update({ dshProviderOrder: [] }).catch(() => undefined);
+	}, []);
+	/**
+	 * 「模型」与「认证」页共享的排序作用域：两页的供应商集合可能不同（models.json 与 auth.json
+	 * 各自独立增删），把并集交给排序 hook 当「完整顺序」，在任一页拖动都只会改变该项在并集里的位置，
+	 * 另一页独有的供应商保持原位。仅收录仍然存在的供应商，已删除的名字会在下次拖动时被顺带清掉。
+	 */
+	const providerOrderScope = useMemo(() => buildProviderOrderScope([Object.keys(modelsData.providers), Object.keys(authData)], providerOrder), [modelsData.providers, authData, providerOrder]);
 	// 打开配置页时读取 AppSettings.hiddenProviders、hiddenModels 与 hiddenAuthProviders
 	useEffect(() => {
 		let cancelled = false;
@@ -619,6 +671,8 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 					setHiddenProviders(settings.hiddenProviders ?? []);
 					setHiddenModels(settings.hiddenModels ?? []);
 					setHiddenAuthProviders(settings.hiddenAuthProviders ?? []);
+					setProviderOrder(settings.providerOrder ?? []);
+					setDshProviderOrder(settings.dshProviderOrder ?? []);
 				}
 			})
 			.catch(() => undefined);
@@ -1627,6 +1681,34 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 		});
 	};
 
+	/** 创建新 prompt template */
+	const handleCreatePrompt = async () => {
+		setCreatingPrompt(true);
+		setError(null);
+		try {
+			if (resourceScope === "project" && projectId) {
+				await api.prompts.createInProject(projectId, {
+					name: newPromptName,
+					description: newPromptDescription,
+				});
+			} else {
+				await api.prompts.create({
+					name: newPromptName,
+					description: newPromptDescription,
+				});
+			}
+			setNewPromptName("");
+			setNewPromptDescription("");
+			bumpResourceGeneration();
+			await refreshPrompts();
+			showToast(t("config.promptCreatedToast"));
+		} catch (e) {
+			setError(e instanceof Error ? e.message : String(e));
+		} finally {
+			setCreatingPrompt(false);
+		}
+	};
+
 	/** 确认删除 prompt template */
 	const confirmDeletePrompt = async (target: PiPromptTemplateSummary) => {
 		setError(null);
@@ -1815,6 +1897,37 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 			locations,
 			skills: [...projectResult.skills, ...globalResult.skills.filter(isGlobalSkill)],
 		});
+	};
+
+	const handleCreateSkill = async () => {
+		setCreatingSkill(true);
+		setError(null);
+		try {
+			if (resourceScope === "project" && projectId) {
+				const locationId = newSkillLocationId === "project-agents" ? "project-agents" : "project-pi";
+				await api.projectResources.createSkill({
+					projectId,
+					name: newSkillName,
+					description: newSkillDescription,
+					locationId,
+				});
+			} else {
+				await api.skills.create({
+					name: newSkillName,
+					description: newSkillDescription,
+					locationId: newSkillLocationId,
+				});
+			}
+			setNewSkillName("");
+			setNewSkillDescription("");
+			bumpResourceGeneration();
+			await refreshSkills();
+			showToast(t("config.skillCreatedToast"));
+		} catch (e) {
+			setError(e instanceof Error ? e.message : String(e));
+		} finally {
+			setCreatingSkill(false);
+		}
 	};
 
 	const handleToggleSkill = async (skill: PiSkillSummary, enabled: boolean) => {
@@ -2318,7 +2431,9 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 				<TabsContent value="dsh" forceMount className="flex min-h-0 min-w-0 flex-1 data-[state=inactive]:hidden">
 					{/* runtime 安装态不再整页替换：概览页内嵌 DshRuntimeSection 状态自适应区块，
 					    未装→安装引导，已装→版本/目录/卸载/导入，一个页面操作完。 */}
-					{dshRuntimeStatus.state !== "checking" ? <DshConfigTab ref={dshConfigRef} onDirtyChange={handleDshDirtyChange} dirtyNavIds={dshDirtyNavIds} onOpenUsageProbeDialog={(provider) => openUsageProbeDialogFor(provider, "dsh")} /> : null}
+					{dshRuntimeStatus.state !== "checking" ? (
+						<DshConfigTab ref={dshConfigRef} onDirtyChange={handleDshDirtyChange} dirtyNavIds={dshDirtyNavIds} onOpenUsageProbeDialog={(provider) => openUsageProbeDialogFor(provider, "dsh")} providerOrder={dshProviderOrder} onReorderProviders={handleReorderDshProviders} onResetProviders={handleResetDshProviderOrder} />
+					) : null}
 				</TabsContent>
 				<TabsContent value="pi" forceMount className="flex min-h-0 min-w-0 flex-1 data-[state=inactive]:hidden">
 					{/* 默认浅色主题整页同底（bg-background），避免顶栏白 / 下方多层灰的割裂感。
@@ -2408,6 +2523,10 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 											providerPageSaveRef={providerPageSaveRef}
 											hiddenProviders={hiddenProviders}
 											onToggleHiddenProvider={handleToggleHiddenProvider}
+											providerOrder={providerOrder}
+											providerOrderScope={providerOrderScope}
+											onReorderProviders={handleReorderProviders}
+											onResetProviders={handleResetProviderOrder}
 											hiddenModels={hiddenModels}
 											onToggleHiddenModel={handleToggleHiddenModel}
 											fetchingProvider={fetchingProvider}
@@ -2491,6 +2610,10 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 										saving={saving}
 										modelsData={modelsData}
 										hiddenAuthProviders={hiddenAuthProviders}
+										providerOrder={providerOrder}
+										providerOrderScope={providerOrderScope}
+										onReorderProviders={handleReorderProviders}
+										onResetProviders={handleResetProviderOrder}
 										onToggleHiddenAuthProvider={handleToggleHiddenAuthProvider}
 										onToggleAuth={(name) => setExpandedAuth(expandedAuth === name ? null : name)}
 										onStartAddAuth={() => {
@@ -2584,14 +2707,23 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 											discoverySkills={discoveryData.skills}
 											data={skillsData}
 											loading={loading}
+											creating={creatingSkill}
+											newName={newSkillName}
+											newDescription={newSkillDescription}
+											newLocationId={newSkillLocationId}
 											onRefresh={refreshSkills}
 											onOpenRoot={() => {
 												if (resourceScope === "project" && effectiveProjectId) {
-													void api.projectResources.openDirectory(effectiveProjectId, "project-pi").catch((err) => setError(err instanceof Error ? err.message : String(err)));
+													const kind = newSkillLocationId === "project-agents" ? "project-agents" : "project-pi";
+													void api.projectResources.openDirectory(effectiveProjectId, kind).catch((err) => setError(err instanceof Error ? err.message : String(err)));
 													return;
 												}
 												void api.skills.openFolder().catch((err) => setError(err instanceof Error ? err.message : String(err)));
 											}}
+											onChangeNewName={setNewSkillName}
+											onChangeNewDescription={setNewSkillDescription}
+											onChangeNewLocation={setNewSkillLocationId}
+											onCreate={handleCreateSkill}
 											onToggle={handleToggleSkill}
 											onDelete={setDeleteSkillConfirm}
 											onEdit={handleEditGlobalSkill}
@@ -2613,6 +2745,9 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 										discoveryPrompts={discoveryData.prompts}
 										data={promptsData}
 										loading={loading}
+										creating={creatingPrompt}
+										newName={newPromptName}
+										newDescription={newPromptDescription}
 										editingTemplate={editingPrompt}
 										editContent={editPromptContent}
 										editLoading={editPromptLoading}
@@ -2628,6 +2763,9 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 										onDelete={setDeletePromptConfirm}
 										onEdit={handleEditPrompt}
 										onRename={handleRenamePrompt}
+										onChangeNewName={setNewPromptName}
+										onChangeNewDescription={setNewPromptDescription}
+										onCreate={handleCreatePrompt}
 										onToggle={handleTogglePrompt}
 										onQuickSave={handleQuickSavePrompt}
 										onCancelEdit={handleCancelEditPrompt}
@@ -2806,7 +2944,7 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 	// 独立模式：完整 Dialog（标题栏含保存/导出/导入/关闭；内容与嵌入模式完全一致）
 	return (
 		<Dialog open={open} onOpenChange={(next) => !next && handleClose()}>
-			<DialogContent showCloseButton={false} className={cn("flex flex-col gap-0 overflow-hidden p-0", configModalSizeClass, "config-modal", "[--wallpaper-dialog-alpha:var(--wallpaper-panel-alpha,30%)]")}>
+			<DialogContent showCloseButton={false} className={cn("flex flex-col gap-0 overflow-hidden p-0", configModalSizeClass, "config-modal")}>
 				{/* 顶栏/侧栏控件与设置弹窗、会话顶栏统一到 sm / text-sm 密度 */}
 				<DialogHeader className="flex-row items-center justify-between px-4 py-2.5">
 					<DialogTitle className="text-sm font-semibold tracking-tight">{t("config.title")}</DialogTitle>

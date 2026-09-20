@@ -10,6 +10,7 @@ export const ipcChannels = {
 	projectsChanged: "projects:changed",
 	projectResourcesList: "project-resources:list",
 	projectResourcesOpenDirectory: "project-resources:open-directory",
+	projectResourcesCreateSkill: "project-resources:create-skill",
 	projectResourcesDeleteSkill: "project-resources:delete-skill",
 	projectResourcesToggleSkill: "project-resources:toggle-skill",
 	projectResourcesDeleteExtension: "project-resources:delete-extension",
@@ -276,9 +277,15 @@ export const ipcChannels = {
 	cursorSessionsImport: "cursor-sessions:import",
 	/**
 	 * 外置目录会话导入（项目目录移动/改名后找回历史）：扫描用户选定的目录
-	 * （旧项目目录 / pi sessions 根 / 某个 encoded 分组目录）里的会话。
+	 * （旧项目目录 / 某个 encoded 分组目录 / pi sessions 根）里的会话。
+	 * 返回 { sessions, kind }；kind=ancestor 表示用户选到了 ~/.pi 这类会话树的祖先目录。
 	 */
 	directorySessionsScan: "directory-sessions:scan",
+	/**
+	 * 列出 pi 现有的会话目录（按会话文件所在分组目录聚合，带原工作目录/会话数/最后使用）。
+	 * 弹窗首屏点选入口：只列真的有会话的目录，避免用户手选到没有意义的层级。
+	 */
+	directorySessionsListSources: "directory-sessions:list-sources",
 	/** 把选定目录里的会话挂到当前项目（只建 catalog 引用，不复制原文件）。 */
 	directorySessionsImport: "directory-sessions:import",
 	settingsGet: "settings:get",
@@ -291,6 +298,7 @@ export const ipcChannels = {
 	settingsApplyWindow: "settings:apply-window",
 	skillsList: "skills:list",
 	skillsReadContent: "skills:read-content",
+	skillsCreate: "skills:create",
 	skillsToggle: "skills:toggle",
 	skillsDelete: "skills:delete",
 	skillsOpenFolder: "skills:open-folder",
@@ -301,6 +309,7 @@ export const ipcChannels = {
 	promptsOpenFolder: "prompts:open-folder",
 	promptsEdit: "prompts:edit",
 	promptsListByProject: "prompts:list-by-project",
+	promptsCreateInProject: "prompts:create-in-project",
 	promptsDeleteInProject: "prompts:delete-in-project",
 	promptsRename: "prompts:rename",
 	promptsRenameInProject: "prompts:rename-in-project",
@@ -400,6 +409,18 @@ export const ipcChannels = {
 	gitFetch: "git:fetch",
 	/** 当前分支相对上游的提交差距（ahead/behind），驱动 push/pull 角标 */
 	gitAheadBehind: "git:ahead-behind",
+	/**
+	 * 订阅某个仓库的 refs 变化（commit/push/fetch/切分支），返回 watchId。
+	 * 主进程按 (projectId, repoPath) 复用一份 1.5 秒签名轮询（零句柄），与 gitUnwatchRefs 成对使用。
+	 */
+	gitWatchRefs: "git:watch-refs",
+	/** 退订 refs 监听：计数归零时主进程才停掉该仓库的轮询（面板卸载 / 切仓库时调用） */
+	gitUnwatchRefs: "git:unwatch-refs",
+	/**
+	 * refs 变化推送（主进程 → 渲染层，订阅式）：payload 为 watchId，
+	 * 每个面板只处理自己订阅的那一份（多仓项目共用同一条通道）。
+	 */
+	gitRefsChanged: "git:refs-changed",
 	/** 从磁盘删除变更文件（移入回收站，可恢复） */
 	gitDeleteFiles: "git:delete-files",
 	/**

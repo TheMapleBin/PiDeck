@@ -45,6 +45,34 @@ test("Batch ask selected options carry a check mark for low-contrast themes", ()
 	assert.match(overlay, /props\.answer === true \? <Check size=\{14\} className="shrink-0 text-\[var\(--color-success\)\]" aria-hidden="true" \/> : null/);
 	assert.match(overlay, /props\.answer === false \? <Check size=\{14\} className="shrink-0 text-\[var\(--color-success\)\]" aria-hidden="true" \/> : null/);
 	assert.match(overlay, /选中态对勾标记：主题色 accent 对比度低时只靠边框\/背景变色难分辨已选项/);
+	// 单卡单选（最常走的 ask 路径）同样补 Check：夜间模式下底色差可能不明显，
+	// 非颜色线索是最后一道保障。
+	assert.match(overlay, /selectedOption === option \? <Check size=\{14\} className="shrink-0 text-\[var\(--color-success\)\]" aria-hidden="true" \/> : null/);
+});
+
+/**
+ * 用户反馈「夜间模式 ask 选中样式不明显」的回归守卫。
+ *
+ * ask 选项是 shadcn Button variant="outline"：utilities 层的 bg-background /
+ * dark:bg-input/30 / dark:border-input 按层序（legacy < utilities）稳压 legacy 的
+ * `.ask-inline-bar-option.selected`——亮色下只剩边框变色，暗色下选中与未选中完全同色。
+ * 所以选中态必须由组件层 utility（含 dark: 对手类）表达，twMerge 才会丢掉冲突的
+ * variant 类；否则「加了选中样式但看不见」会再次静默发生。
+ */
+test("selected ask options stay visible under the outline variant's dark utilities", () => {
+	assert.match(overlay, /const ASK_OPTION_SELECTED_CLASS\s*=\s*"selected border-\[var\(--color-accent\)\][^"]*dark:border-\[var\(--color-accent\)\][^"]*dark:bg-\[color:color-mix/);
+	// 声明 1 处 + 5 个渲染点（批量单选/多选/confirm 是/否/单卡单选）全部要带上。
+	const uses = overlay.match(/ASK_OPTION_SELECTED_CLASS/g) ?? [];
+	assert.equal(uses.length, 6, "selected-state utility must be declared once and used at every ask option site");
+	// 旧写法（只挂 legacy class）在两种主题下都会静默失效，禁止回归。
+	assert.doesNotMatch(overlay, /\? " selected" : ""/);
+	// 批量题目 tab 同理：tab 上有 bg-transparent / border-border-subtle / text-text-secondary
+	// 三个 utility，legacy 的 .ask-batch-tab.active 同样被压死。
+	assert.match(overlay, /const ASK_TAB_ACTIVE_CLASS\s*=\s*"active border-\[var\(--color-accent\)\]/);
+	assert.match(overlay, /const ASK_TAB_ANSWERED_CLASS\s*=\s*"answered border-\[var\(--color-success\)\]/);
+	assert.doesNotMatch(overlay, /\$\{active \? " active" : ""\}/);
+	// legacy 里不得再留一份永远被压过的选中态样式（留着会让人以为改 CSS 有效）。
+	assert.doesNotMatch(timelineStyles, /\.ask-inline-bar-option\.selected\s*\{/);
 });
 
 test("Plan/simple select options render as single-row optically aligned buttons", () => {

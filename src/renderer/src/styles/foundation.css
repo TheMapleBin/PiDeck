@@ -2676,16 +2676,16 @@ select:focus-visible {
 :root[data-bg-image="on"] .terminal-xterm .xterm-screen {
   background: transparent !important;
 }
-/* 壁纸模式下弹窗（shadcn Dialog）比普通面板再实一档：统一各弹窗透明度，
-   与侧栏/会话区/抽屉同一基色，不透明度更高保证内容可读。
+/* 壁纸模式下弹窗（shadcn Dialog + 草稿本）统一用「弹窗基线」：比普通面板实一档，
+   与侧栏/会话区/抽屉同一基色，≥90% 不透明度保证内容可读。弹窗下方仍是页面正文，
+   面板档（背景图可见度 80% → 30%）会让正文透进弹窗内容（用户反馈「有些弹窗
+   页面太透了」）——所以弹窗只有这一档，不再有按业务类型降档的例外。
    关键：在 dialog-content 上局部覆盖 bg 系列变量（CSS 变量继承）——
    弹窗内 section 卡片/控件引用同一档位，消除 Header 透、Body 实的多层叠加。 */
 :root[data-bg-image="on"] [data-slot="dialog-content"],
-/* 草稿本：与弹框共享同基色令牌注入（header/body 同基色顶部一体）；
-   最终透明度由下方独立规则覆盖为面板档（跟随背景图滑块）。 */
+/* 草稿本：与弹框共享同基色令牌注入（header/body 同基色顶部一体），透明度同样
+   走弹窗基线——它是书写平面，面板档会把下层正文透进正文影响书写。 */
 :root[data-bg-image="on"] .scratch-pad-panel {
-  /* 弹窗下方仍是页面正文，透明度过低会把 Markdown 文字透进设置内容；普通弹框
-     保持 90% 基线，业务工作台可在本规则之后单独降到页面面板档。 */
   --wallpaper-dialog-alpha: max(90%, calc(var(--wallpaper-panel-alpha, 30%) + 35%));
   background-color: color-mix(in srgb, var(--wallpaper-base, var(--color-bg-app)) var(--wallpaper-dialog-alpha), transparent);
   --color-bg-panel: color-mix(in srgb, var(--wallpaper-base, var(--color-bg-app)) var(--wallpaper-dialog-alpha), transparent);
@@ -2710,32 +2710,24 @@ select:focus-visible {
 :root[data-bg-image="on"] .copy-menu-popover {
   --color-bg-popover: color-mix(in srgb, var(--wallpaper-base, var(--color-bg-app)) var(--wallpaper-panel-alpha, 30%), transparent);
 }
-/* Pi 配置管理是工作台式弹框，header、layout、sidebar、main、content 全部覆盖
-   通用 Dialog 的 90% 基线，最终共享同一个页面透明度。 */
+/* 工作台大弹框（Pi 配置管理 / 设置 / 项目资源 / 环境管理）：只做内部透明化，
+   透明度走通用弹窗基线，不再单独降档。此前它们跟随面板档（背景图可见度 80%
+   → 仅 30% 不透明），弹窗下方的正文会透进设置内容、文字与下层互相穿透，
+   观感发虚（用户反馈「有些弹窗页面太透了」）。 */
 :root[data-bg-image="on"] [data-slot="dialog-content"].config-modal,
 :root[data-bg-image="on"] [data-slot="dialog-content"].settings-modal,
 :root[data-bg-image="on"] [data-slot="dialog-content"].project-resources-dialog,
 :root[data-bg-image="on"] [data-slot="dialog-content"].environment-dialog {
-  /* 这些都是完整工作台弹框，header 与内容必须共享页面面板档透明度。 */
-  --wallpaper-dialog-alpha: var(--wallpaper-panel-alpha, 30%);
-  /* 弹窗内卡片/列表项透明化：弹窗自身已有 panel-alpha 底色，内部元素若再叠一层
-     bg-panel/muted（同样 30%）会形成双层半透明白（≈51%），观感像磨砂灰白补丁。
+  /* 弹窗内卡片/列表项透明化：弹窗自身已有弹窗基线底色，内部元素若再叠一层
+     bg-panel/muted 会形成双层半透明（≈51%）白，观感像磨砂灰白补丁。
      默认态透明透出弹窗底色（单层）；hover/active/输入框保留底色提供交互反馈与边界。
      --color-bg-subtle 经 @theme inline 映射到 --color-bg-muted，随之一同透明。 */
   --color-bg-panel: transparent;
   --color-card: transparent;
   --color-bg-muted: transparent;
 }
-/* 草稿本是独立书写平面：壁纸模式下面板底色统一为系统面板色并跟随背景图透明度
-   （内部控件/textarea 经 BG_TOKENS 内联注入与滑块联动）。overlay 已不画遮罩
-   （2026-12：草稿本改为悬浮便签，不再全屏遮挡），无需再盖背景图。 */
-:root[data-bg-image="on"] .scratch-pad-panel {
-  /* 草稿本是独立书写平面，但底色统一为系统面板色并跟随背景图透明度：
-     内部控件（工具条/textarea 等）经 BG_TOKENS 内联注入已与滑块联动（30% 档），
-     面板底色此前被 100% 强改纯白，视觉突兀且滑块失效；改为同档半透明后
-     三者同色同档，背景图透出，可读性由壁纸取色兜底。 */
-  --wallpaper-dialog-alpha: var(--wallpaper-panel-alpha, 30%);
-}
+/* 草稿本透明度已在通用弹窗基线规则里与弹框同档（见上），此处不再单独降档；
+   overlay 不画遮罩（草稿本为悬浮便签，不全屏遮挡），无需再盖背景图。 */
 
 /* 大弹框内容级联入场（DialogContent stagger prop）：content 整体淡入的同时，
    直接子元素（header/body/footer…）按序轻微浮起，延迟窗口控制在 content

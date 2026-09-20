@@ -230,6 +230,7 @@ import { SettingsStore } from "./settings/SettingsStore";
 import { SecurityStore } from "./security/SecurityStore";
 import { applyDesktopProxy } from "./settings/DesktopProxy";
 import { GitService } from "./git/GitService";
+import { GitRefsWatcher } from "./git/GitRefsWatcher";
 import { WorktreeService } from "./git/WorktreeService";
 import { ConfigManager } from "./config/ConfigManager";
 import { ConfigBackupManager } from "./config/ConfigBackupManager";
@@ -339,6 +340,8 @@ let settingsStore: SettingsStore;
 let securityStore: SecurityStore;
 let worktreeService: WorktreeService;
 let gitService: GitService;
+/** refs 变化监听：面板订阅 push/commit/fetch，主进程推送后角标秒级跟平（轮询仍作兜底） */
+let gitRefsWatcher: GitRefsWatcher;
 let piLocator: PiLocator;
 let agentManager: AgentManager;
 /** 全局模型 capability snapshot；仅在启动/配置变更时临时拉起 Pi。 */
@@ -2754,6 +2757,8 @@ function registerIpc() {
 		appLogger,
 		mainCopy: mainCopy as (key: string, params?: Record<string, string | number>) => string,
 		gitService,
+		gitRefsWatcher: gitRefsWatcher,
+		getMainWindow: () => mainWindow,
 		piLocator,
 		projectStore,
 		settingsStore,
@@ -2769,10 +2774,9 @@ function registerIpc() {
 	setPiAiCatalogUserDataDir(app.getPath("userData"));
 	const catalogUpdater = new PiAiCatalogUpdater({
 		userDataDir: app.getPath("userData"),
-		// 目录更新/检测复用应用更新的 GitHub 镜像配置（settings.updateSource），
-		// 国内用户切镜像后自动走代理前缀，无需为目录单独维护一套源。
+		// 目录更新/检测复用应用更新的源偏好（settings.updateSource）：
+		// github → raw 直连优先；atomgit 等 → AtomGit OpenAPI 优先，两者互为兜底。
 		source: () => settingsStore.get().updateSource,
-		customHost: () => settingsStore.get().customUpdateSourceUrl,
 	});
 	// 内置扩展热更新：版本号不跟 PiDeck 应用版本走（见 resources/extensions/extensions-manifest.json），
 	// 打包态 resources 只读，更新写进 userData 覆盖层，路径解析侧覆盖层优先 → 重启会话即生效。
@@ -3147,6 +3151,8 @@ app
 					return false;
 				}
 			},
+			// 会话扫描根：用于识别「用户选到了 ~/.pi 这类会话树祖先目录」，在弹窗里提示改选。
+			readSessionRoots: () => sessionScanner.getSessionScanRoots(),
 			onError: (sourcePath, error) => {
 				void appLogger?.warn("session", "Directory session import failed", {
 					sourcePath,
@@ -3175,6 +3181,9 @@ app
 			},
 		});
 		gitService = new GitService();
+		gitRefsWatcher = new GitRefsWatcher({ logger: appLogger });
+		// C12：退出清理登记（before-quit 统一 runAll；disposeAll 同时清空事件订阅）
+		quitCleanup.register("git-refs-watcher", () => gitRefsWatcher.disposeAll());
 		worktreeService = new WorktreeService(mainCopy);
 		piLocator = new PiLocator(mainCopy);
 		// DSH 用量链路（backend="dsh"）：配置落 $DSH_HOME/usage-probes.json、凭据从
