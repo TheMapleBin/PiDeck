@@ -37,7 +37,9 @@ test("footer sizes to content and does not hug a measured pixel height", () => {
 	assert.doesNotMatch(composerArea, /ResizeObserver/);
 	assert.doesNotMatch(composerArea, /defaultHeight/);
 	assert.match(composerArea, /style=\{composerFooterStyle\(\)\}/);
-	assert.match(composerArea, /className="flex min-h-0 min-w-0 flex-col gap-2 overflow-y-auto overscroll-contain pb-px empty:hidden"/);
+	// widget 卡片共用这一层纵向滚动；必须预留原生 thin scrollbar 槽位，
+	// 否则临界溢出时滚动条开关会改变卡片宽度并触发二次布局。
+	assert.match(composerArea, /className="[^"]*overflow-y-auto[^"]*\[scrollbar-gutter:stable\][^"]*"/);
 	assert.match(composerArea, /composer-box relative flex w-full min-w-0 shrink-0 flex-col/);
 	assert.doesNotMatch(composerArea, /composer-box relative flex min-h-0 w-full min-w-0 flex-1 flex-col/);
 });
