@@ -1741,15 +1741,23 @@ export function registerSessionIpc(deps: SessionIpcDeps): void {
 	// ── 外置目录会话导入（项目目录移动/改名后找回历史）──────────────────────
 	// 与其它导入源的区别：源目录由用户现选，且不复制文件——只把 catalog 记录的项目归属
 	// 改成当前项目（原文件原地不动），所以导入后要广播 catalog 刷新让侧栏立即出现这批历史。
+	// 「现有会话目录」列表（弹窗首屏默认内容）：只列真的有会话的分组目录，选中即必有结果。
+	ipcMain.handle(ipcChannels.directorySessionsListSources, async () => {
+		const sources = await directorySessionImporter.listSourceDirectories();
+		void appLogger.debug("session", "Directory session sources listed", { count: sources.length });
+		return sources;
+	});
 	ipcMain.handle(ipcChannels.directorySessionsScan, async (_event, projectId: string, dir: unknown) => {
 		const project = projectStore.get(projectId);
 		if (!project) throw new Error(`Project not found: ${projectId}`);
-		const sessions = await directorySessionImporter.scan(requireImportDirectory(dir));
+		const result = await directorySessionImporter.scan(requireImportDirectory(dir));
 		void appLogger.debug("session", "Directory sessions scanned", {
 			projectId,
-			count: sessions.length,
+			count: result.sessions.length,
+			// kind=ancestor 说明用户选到了会话树的祖先目录（~/.pi 等），弹窗会提示改选。
+			kind: result.kind,
 		});
-		return sessions;
+		return result;
 	});
 	ipcMain.handle(ipcChannels.directorySessionsImport, async (_event, projectId: string, dir: unknown, sourcePaths: unknown) => {
 		const project = projectStore.get(projectId);

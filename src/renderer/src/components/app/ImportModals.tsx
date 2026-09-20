@@ -20,11 +20,14 @@ import type {
 	CursorSessionSummary,
 	CursorImportReport,
 	DirectorySessionSummary,
+	DirectorySessionSourceDir,
+	DirectorySourceKind,
 	DirectoryImportReport,
 	Project,
 } from "../../../../shared/types";
 import { Checkbox } from "../ui-shadcn/checkbox";
 import { Label } from "../../components/ui-shadcn/label";
+import { DirectoryImportSourceList } from "./DirectoryImportSourceList";
 
 function displayPath(path?: string) {
 	if (!path) return "";
@@ -323,8 +326,16 @@ function SessionImportModal<T extends ImportSessionLike>(props: {
 	onToggle: (sourcePath: string) => void;
 	onToggleAll: () => void;
 	onImport: () => void;
-	/** 头部附加控件（目录导入的「选择目录 + 只看失效目录」）；缺省不渲染。 */
+	/** 头部附加控件（目录导入的「来源目录 + 只看失效目录」）；缺省不渲染。 */
 	headerExtra?: ReactNode;
+	/** 头部副标题（缺省展示项目名）；目录导入用它标出「目标项目」。 */
+	headerSubtitle?: ReactNode;
+	/** 工具栏左侧文案（目录导入首屏换成「现有会话目录」）；缺省为「N 个会话 + 项目路径」。 */
+	toolbarCopy?: { title: ReactNode; hint?: ReactNode };
+	/** 工具栏右侧按钮组（目录导入首屏换成「选目录 + 刷新」）；缺省为刷新/全选/导入。 */
+	toolbarActions?: ReactNode;
+	/** 弹窗主体内容（目录导入首屏用会话目录列表替代会话行）；缺省按 loading/空态/列表渲染。 */
+	bodyOverride?: ReactNode;
 	/** 空列表时的替代内容（目录导入被过滤器清空时的提示 +「显示全部」）；缺省用通用空态。 */
 	emptyOverride?: ReactNode;
 	/** 行内附加元信息（目录导入展示原工作目录）；缺省展示源文件体积。 */
@@ -345,31 +356,37 @@ function SessionImportModal<T extends ImportSessionLike>(props: {
 					</DialogClose>
 				</DialogHeader>
 				<div className="modal-header-sub">
-					<small>{props.project.name}</small>
+					<small>{props.headerSubtitle ?? props.project.name}</small>
 				</div>
 				{props.headerExtra}
 				<div className="codex-import-toolbar">
 					<div>
-						<strong>{copy("importCount", { count: props.sessions.length })}</strong>
-						<span>{displayPath(props.project.path)}</span>
+						<strong>{props.toolbarCopy?.title ?? copy("importCount", { count: props.sessions.length })}</strong>
+						<span>{props.toolbarCopy?.hint ?? displayPath(props.project.path)}</span>
 					</div>
 					<div className="codex-import-actions">
-						<Button variant="outline" size="sm" className="h-7 px-2.5 text-xs shadow-none rounded-lg gap-1.5" onClick={props.onRefresh} disabled={props.loading || props.importing}>
-							<RefreshCw size={14} />
-							{t("common.refresh")}
-						</Button>
-						<Button variant="outline" size="sm" className="h-7 px-2.5 text-xs shadow-none rounded-lg gap-1.5" onClick={props.onToggleAll} disabled={props.sessions.length === 0}>
-							<Check size={14} />
-							{allSelected ? copy("selectNone") : t("common.selectAll")}
-						</Button>
-						<Button variant="default" size="sm" className="primary-action h-7 px-2.5 text-xs shadow-none rounded-lg gap-1.5" onClick={props.onImport} disabled={props.importing || props.selectedPaths.length === 0}>
-							<UploadCloud size={14} />
-							{props.importing ? copy("importing") : copy("importSelected", { count: props.selectedPaths.length })}
-						</Button>
+						{props.toolbarActions ?? (
+							<>
+								<Button variant="outline" size="sm" className="h-7 px-2.5 text-xs shadow-none rounded-lg gap-1.5" onClick={props.onRefresh} disabled={props.loading || props.importing}>
+									<RefreshCw size={14} />
+									{t("common.refresh")}
+								</Button>
+								<Button variant="outline" size="sm" className="h-7 px-2.5 text-xs shadow-none rounded-lg gap-1.5" onClick={props.onToggleAll} disabled={props.sessions.length === 0}>
+									<Check size={14} />
+									{allSelected ? copy("selectNone") : t("common.selectAll")}
+								</Button>
+								<Button variant="default" size="sm" className="primary-action h-7 px-2.5 text-xs shadow-none rounded-lg gap-1.5" onClick={props.onImport} disabled={props.importing || props.selectedPaths.length === 0}>
+									<UploadCloud size={14} />
+									{props.importing ? copy("importing") : copy("importSelected", { count: props.selectedPaths.length })}
+								</Button>
+							</>
+						)}
 					</div>
 				</div>
 				<div className="codex-import-body">
-					{props.loading ? (
+					{props.bodyOverride ? (
+						props.bodyOverride
+					) : props.loading ? (
 						<div className="history-loading">
 							<div className="loader animate-pideck-spin" />
 							<span>{copy("scanning")}</span>
@@ -457,7 +474,9 @@ function formatDirectoryStatus(status: ImportStatusValue) {
 
 /**
  * 目录会话导入弹窗（项目目录移动/改名后找回历史）。
- * 与其它导入源不同：源目录由用户现选，头部多一行「选择目录 + 只看失效目录」，
+ *
+ * 与其它导入源不同：源目录不是固定位置 —— 首屏先列出 pi 现有会话目录（点选即扫，必有结果），
+ * 手选任意目录作为兜底；已选目录时可一键清除回到列表，避免困在选错的目录（如 ~/.pi）里。
  * 行内元信息展示会话记录里的原工作目录（失效时标注），而不是源文件体积。
  */
 export function DirectoryImportModal(props: {
@@ -468,17 +487,29 @@ export function DirectoryImportModal(props: {
 	importing: boolean;
 	report: DirectoryImportReport | null;
 	directory: string | null;
+	/** 本次扫描的目录形态（ancestor = 用户选到了 ~/.pi 这类会话树祖先目录） */
+	scanKind: DirectorySourceKind | null;
+	/** pi 现有会话目录列表（首屏点选入口） */
+	sources: DirectorySessionSourceDir[];
+	sourcesLoading: boolean;
 	onlyMissingCwd: boolean;
 	/** 被「只看原目录已失效」过滤掉的会话数（>0 时给出一键显示全部的出口）。 */
 	hiddenByFilter: number;
 	onSetOnlyMissingCwd: (value: boolean) => void;
 	onChooseDirectory: () => void;
+	/** 点选首屏列表里的会话目录 */
+	onChooseSourceDir: (dir: string) => void;
+	/** 清除已选目录，回到首屏列表 */
+	onClearDirectory: () => void;
+	onRefreshSources: () => void;
 	onClose: () => void;
 	onRefresh: () => void;
 	onToggle: (sourcePath: string) => void;
 	onToggleAll: () => void;
 	onImport: () => void;
 }) {
+	// 未选目录 = 首屏：工具栏与主体换成「现有会话目录」列表（没有源目录可扫时不摆无关的会话工具）。
+	const pickingSource = props.directory === null;
 	return (
 		<SessionImportModal
 			copyPrefix="directoryImport"
@@ -494,21 +525,57 @@ export function DirectoryImportModal(props: {
 			onToggle={props.onToggle}
 			onToggleAll={props.onToggleAll}
 			onImport={props.onImport}
+			headerSubtitle={
+				<>
+					{t("directoryImport.targetProject")}
+					<strong className="ml-1 text-text-primary">{props.project.name}</strong>
+				</>
+			}
 			headerExtra={
 				<div className="flex flex-wrap items-center gap-2 px-4 pb-3 text-xs text-muted-foreground">
-					<Button variant="outline" size="sm" className="h-7 gap-1.5 rounded-lg px-2.5 text-xs shadow-none" onClick={props.onChooseDirectory} disabled={props.importing}>
-						<FolderOpen size={14} />
-						{t("directoryImport.chooseDirectory")}
-					</Button>
-					<code className="min-w-0 flex-1 truncate" title={props.directory ?? undefined}>
-						{props.directory ?? t("directoryImport.noDirectory")}
-					</code>
-					<Label className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap">
-						<Checkbox checked={props.onlyMissingCwd} onCheckedChange={(value) => props.onSetOnlyMissingCwd(Boolean(value))} />
-						{t("directoryImport.onlyMissingCwd")}
-					</Label>
+					<span className="whitespace-nowrap">{t("directoryImport.sourceLabel")}</span>
+					<span className="flex min-w-0 flex-1 items-center gap-1.5">
+						<code className="min-w-0 truncate" title={props.directory ?? undefined}>
+							{props.directory ?? t("directoryImport.noDirectory")}
+						</code>
+						{props.directory && (
+							<Button variant="ghost" size="sm" className="h-6 shrink-0 px-1.5 text-xs" onClick={props.onClearDirectory} disabled={props.importing}>
+								{t("directoryImport.clearDirectory")}
+							</Button>
+						)}
+					</span>
+					{/* 过滤器只在已有会话行时有意义：首屏列表是「选目录」，摆过滤开关只会让人以为没扫到东西。 */}
+					{!pickingSource && (
+						<Label className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap">
+							<Checkbox checked={props.onlyMissingCwd} onCheckedChange={(value) => props.onSetOnlyMissingCwd(Boolean(value))} />
+							{t("directoryImport.onlyMissingCwd")}
+						</Label>
+					)}
 				</div>
 			}
+			toolbarCopy={
+				pickingSource
+					? {
+							title: t("directoryImport.sourceListTitle", { count: props.sources.length }),
+							hint: t("directoryImport.sourceListDesc"),
+						}
+					: undefined
+			}
+			toolbarActions={
+				pickingSource ? (
+					<>
+						<Button variant="outline" size="sm" className="h-7 px-2.5 text-xs shadow-none rounded-lg gap-1.5" onClick={props.onChooseDirectory}>
+							<FolderOpen size={14} />
+							{t("directoryImport.chooseOther")}
+						</Button>
+						<Button variant="outline" size="sm" className="h-7 px-2.5 text-xs shadow-none rounded-lg gap-1.5" onClick={props.onRefreshSources} disabled={props.sourcesLoading}>
+							<RefreshCw size={14} />
+							{t("common.refresh")}
+						</Button>
+					</>
+				) : undefined
+			}
+			bodyOverride={pickingSource ? <DirectoryImportSourceList sources={props.sources} loading={props.sourcesLoading} onPick={props.onChooseSourceDir} onChooseManually={props.onChooseDirectory} /> : undefined}
 			renderMeta={(session) =>
 				session.projectPath ? (
 					<span title={session.projectPath}>
@@ -520,7 +587,17 @@ export function DirectoryImportModal(props: {
 				)
 			}
 			emptyOverride={
-				props.hiddenByFilter > 0 ? (
+				props.scanKind === "ancestor" ? (
+					// 选到会话树的祖先目录（~/.pi 等）：扫描器会返回 kind=ancestor 与 0 条结果，
+					// 必须解释「为什么是空的」并给回到目录列表的出口，否则用户会以为功能坏了。
+					<div className="codex-import-empty">
+						<strong>{t("directoryImport.ancestorTitle")}</strong>
+						<span>{t("directoryImport.ancestorDesc", { path: displayPath(props.directory ?? "") })}</span>
+						<Button variant="outline" size="sm" className="mt-2 h-7 gap-1.5 rounded-lg px-2.5 text-xs shadow-none" onClick={props.onClearDirectory}>
+							{t("directoryImport.backToSourceList")}
+						</Button>
+					</div>
+				) : props.hiddenByFilter > 0 ? (
 					<div className="codex-import-empty">
 						<strong>{t("directoryImport.filteredTitle", { count: props.hiddenByFilter })}</strong>
 						<span>{t("directoryImport.filteredDesc")}</span>

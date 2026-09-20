@@ -1,5 +1,5 @@
-import type { DirectoryImportReport, DirectoryImportResult, DirectorySessionSummary, SessionSummary } from "../../shared/types";
-import { DIRECTORY_IMPORT_MAX_SUMMARIES, isDirectoryImportCandidate, isSessionContainerProbe, normalizeSessionPathKey, toDirectorySessionSummary, type DirectoryShapeProbe } from "./directorySessionImport";
+import type { DirectoryImportReport, DirectoryImportResult, DirectorySessionScanResult, DirectorySessionSourceDir, DirectorySessionSummary, SessionSummary } from "../../shared/types";
+import { DIRECTORY_IMPORT_MAX_SUMMARIES, classifyDirectorySource, groupSessionSourceDirectories, isDirectoryImportCandidate, isPathAncestorOf, isSessionContainerProbe, normalizeSessionPathKey, toDirectorySessionSummary, type DirectoryShapeProbe } from "./directorySessionImport";
 
 /**
  * 外置目录会话导入编排：扫描用户选定的目录 → 挂到当前项目（catalog）。
@@ -34,6 +34,8 @@ export type DirectorySessionImporterDeps = {
 	mergeScanned: (projectId: string, summaries: SessionSummary[], options?: { manualAssignment?: boolean }) => Promise<unknown>;
 	/** 路径存在性（原工作目录是否还在磁盘上） */
 	pathExists: (path: string) => Promise<boolean>;
+	/** 当前环境的会话扫描根（默认 ~/.pi/agent/sessions + 配置的 sessionDir），用于识别「选了祖先目录」 */
+	readSessionRoots: () => readonly string[];
 	/** 失败回调（不阻断其余会话） */
 	onError?: (sourcePath: string, error: unknown) => void;
 };
@@ -45,25 +47,21 @@ export class DirectorySessionImporter {
 	 * 扫描选定目录 → 弹窗行（按会话时间倒序，最多 DIRECTORY_IMPORT_MAX_SUMMARIES 条）。
 	 * 标题按需回读（列表摘要不带 name），只对入选的一批读，避免把整棵 sessions 树都解析一遍。
 	 */
-	async scan(dir: string): Promise<DirectorySessionSummary[]> {
-		const { candidates } = await this.collectCandidates(dir);
+	async scan(dir: string): Promise<DirectorySessionScanResult> {
+		const { candidates, matched, pickedIsContainer, probe } = await this.collectCandidates(dir);
+		const kind = classifyDirectorySource({
+			pickedIsContainer,
+			probe,
+			matchedSessions: matched,
+			isAncestorOfSessionRoot: this.deps.readSessionRoots().some((root) => isPathAncestorOf(dir, root)),
+		});
 		const known = this.deps.listKnownFilePaths();
 		// 原目录只探测一次：一次扫描里几十个会话往往来自同一个旧目录。
 		const existsCache = new Map<string, boolean>();
 		const rows: DirectorySessionSummary[] = [];
 		for (const summary of candidates) {
 			const projectPath = summary.projectPath;
-			let projectPathExists = false;
-			if (projectPath) {
-				const key = normalizeSessionPathKey(projectPath);
-				const cached = existsCache.get(key);
-				if (cached === undefined) {
-					projectPathExists = await this.deps.pathExists(projectPath).catch(() => false);
-					existsCache.set(key, projectPathExists);
-				} else {
-					projectPathExists = cached;
-				}
-			}
+			const projectPathExists = projectPath ? await this.resolveProjectPathExists(projectPath, existsCache) : false;
 			const name = await this.deps.readSessionName(summary.filePath).catch(() => undefined);
 			rows.push(
 				toDirectorySessionSummary({
@@ -74,7 +72,25 @@ export class DirectorySessionImporter {
 				}),
 			);
 		}
-		return rows;
+		return { sessions: rows, kind };
+	}
+
+	/**
+	 * 「现有会话目录」列表：按会话文件所在分组目录聚合，供弹窗首屏点选。
+	 * 只列真的有会话的分组目录（选中即必有结果），并标注原工作目录是否还在磁盘上——
+	 * 目录已失效的那批通常就是用户要找的历史。
+	 */
+	async listSourceDirectories(): Promise<DirectorySessionSourceDir[]> {
+		const groups = groupSessionSourceDirectories(await this.deps.listSessions());
+		const existsCache = new Map<string, boolean>();
+		const sources: DirectorySessionSourceDir[] = [];
+		for (const group of groups) {
+			sources.push({
+				...group,
+				projectPathExists: group.projectPath ? await this.resolveProjectPathExists(group.projectPath, existsCache) : false,
+			});
+		}
+		return sources;
 	}
 
 	/**
@@ -138,17 +154,24 @@ export class DirectorySessionImporter {
 	}
 
 	/** 选定目录的候选清单（按 mtime 倒序截断；标题留给 scan 按需回读）。 */
-	private async collectCandidates(dir: string): Promise<{ candidates: SessionSummary[]; pickedIsContainer: boolean }> {
+	private async collectCandidates(dir: string): Promise<{ candidates: SessionSummary[]; matched: number; pickedIsContainer: boolean; probe: DirectoryShapeProbe }> {
 		const probe = await this.deps.readDirectoryShape(dir).catch(() => ({
 			hasJsonl: false,
 			hasEncodedGroups: false,
 		}));
 		const pickedIsContainer = isSessionContainerProbe(probe);
 		const sessions = await this.deps.listSessions();
-		const candidates = sessions
-			.filter((summary) => isDirectoryImportCandidate({ summary, dir, pickedIsContainer }))
-			.sort((left, right) => right.updatedAt - left.updatedAt)
-			.slice(0, DIRECTORY_IMPORT_MAX_SUMMARIES);
-		return { candidates, pickedIsContainer };
+		const matched = sessions.filter((summary) => isDirectoryImportCandidate({ summary, dir, pickedIsContainer })).sort((left, right) => right.updatedAt - left.updatedAt);
+		return { candidates: matched.slice(0, DIRECTORY_IMPORT_MAX_SUMMARIES), matched: matched.length, pickedIsContainer, probe };
+	}
+
+	/** 原工作目录是否存在（同一路径只探测一次；探测失败按不存在处理，只影响提示不影响入册）。 */
+	private async resolveProjectPathExists(projectPath: string, cache: Map<string, boolean>): Promise<boolean> {
+		const key = normalizeSessionPathKey(projectPath);
+		const cached = cache.get(key);
+		if (cached !== undefined) return cached;
+		const exists = await this.deps.pathExists(projectPath).catch(() => false);
+		cache.set(key, exists);
+		return exists;
 	}
 }
