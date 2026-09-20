@@ -126,6 +126,8 @@ import { SessionPaneServicesProvider, type SessionFileOpenContext } from "./comp
 import { ProjectEmptyState } from "./components/session/ProjectEmptyState";
 import { FileLinkBaseProvider } from "./components/session/FileLinkBase";
 import { useSessionWorkspaceChrome } from "./hooks/useSessionWorkspaceChrome";
+import { useQuickTask } from "./hooks/useQuickTask";
+import { QuickTaskSurface } from "./components/app/QuickTaskSurface";
 import { ScratchPadOverlay } from "./components/overlays/ScratchPadOverlay";
 import { AskPanelOverlay } from "./components/overlays/AskPanelOverlay";
 import { TerminalDockPanel } from "./components/terminal/TerminalDockPanel";
@@ -1437,6 +1439,8 @@ export function App() {
 		// 新建会话默认后端：跟随设置项（默认 pi，可切换 dsh），经 DSH runtime 安装态钳制
 		defaultBackend: effectiveAgentBackend,
 	});
+
+	const quickTask = useQuickTask({ ready: settingsLoaded, backend: effectiveAgentBackend, upsertSession, selectSession: selectSessionCommand, registerSession: workspaceChrome.registerOpenSession, refreshProjects, getSessionRecord });
 
 	// 关闭 Tab / 分屏退栏时的焦点切换：只改 currentSession，不碰 Tab 登记
 	useEffect(() => {
@@ -3839,6 +3843,13 @@ export function App() {
 			<>
 				<AppBootstrap {...bootstrapProps} />
 				<AppShell
+					compactContent={
+						quickTask.active ? (
+							<QuickTaskSurface task={quickTask}>
+								<SessionPaneServicesProvider value={sessionPaneServices}>{quickTask.session && <ChatSessionPane sessionId={quickTask.session.id} focused onFocusPane={() => focusSessionPane(quickTask.session!.id)} splitPane={false} />}</SessionPaneServicesProvider>
+							</QuickTaskSurface>
+						) : undefined
+					}
 					listCollapsed={listCollapsed}
 					listWidth={listWidth}
 					drawer={drawer}
@@ -4183,7 +4194,7 @@ export function App() {
 				{/* 命令面板首次引导：它是纯键盘入口，没有任何可点的 affordance，
         不主动提示就等于不存在。看完即写 localStorage，只弹一次。
         空状态（没项目）不弹——那时面板本身也没什么可搜的。 */}
-				<CommandPaletteOnboarding enabled={Boolean(activeProjectId) && !commandPaletteOpen} onTryNow={openCommandPalette} />
+				{!quickTask.active && <CommandPaletteOnboarding enabled={Boolean(activeProjectId) && !commandPaletteOpen} onTryNow={openCommandPalette} />}
 			</>
 		</FileLinkBaseProvider>
 	);

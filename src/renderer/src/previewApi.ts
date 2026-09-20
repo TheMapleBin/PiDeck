@@ -232,7 +232,10 @@ export function createPreviewApi(): PiDesktopApi {
 	return {
 		clipboard: clipboardStub,
 		// 资源管理器右键菜单预览桩：预览环境无注册表操作，一律报不支持
+		quickTask: { getState: async () => ({ active: false, requestId: 0 }), onChanged: () => () => undefined, exit: async () => undefined },
 		shellMenu: {
+			getQuickTaskState: async () => ({ supported: false, registered: false }),
+			setQuickTaskEnabled: async () => ({ supported: false, registered: false }),
 			getState: async () => ({ supported: false, registered: false }),
 			setEnabled: async () => ({ supported: false, registered: false }),
 		},

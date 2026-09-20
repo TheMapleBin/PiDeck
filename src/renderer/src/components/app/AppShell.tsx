@@ -37,6 +37,8 @@ import { shouldCommitPanelPixels } from "../../lib/shellPanelLayout";
  */
 
 export interface AppShellProps {
+	/** Compact mode reuses this window's session store and preserves workbench layout preferences. */
+	compactContent?: ReactNode;
 	listCollapsed: boolean;
 	listWidth: number;
 	drawer: WorkspaceDrawerPanel | null;
@@ -335,6 +337,26 @@ export function AppShell(props: AppShellProps) {
 		}
 	}
 
+	if (props.compactContent)
+		return (
+			<div className={cn("flex h-screen min-h-0 flex-col", !useNativeTitleBar && "custom-titlebar-enabled")}>
+				<AppHeader
+					useNativeTitleBar={useNativeTitleBar}
+					platform={platform}
+					toggleAlwaysOnTop={toggleAlwaysOnTop}
+					isWindowAlwaysOnTop={isWindowAlwaysOnTop}
+					minimizeWindow={minimizeWindow}
+					toggleMaximizeWindow={toggleMaximizeWindow}
+					isWindowMaximized={isWindowMaximized}
+					onWindowMaximizedChange={onWindowMaximizedChange}
+					closeWindow={closeWindow}
+				/>
+				<main ref={chatPaneRef} className={cn("flex min-h-0 flex-1 flex-col", !useNativeTitleBar && "pt-10")}>
+					{props.compactContent}
+				</main>
+				{children}
+			</div>
+		);
 	return (
 		<div
 			ref={shellRef}
