@@ -66,10 +66,7 @@ export const MentionChip = Node.create({
 	renderHTML({ node, HTMLAttributes }) {
 		// 收窄 kind 到合法枚举：attrs 来自编辑器插入/历史解析，防御性回退 file
 		const rawKind = node.attrs.kind;
-		const kind: ComposerChip["kind"] =
-			rawKind === "skill" || rawKind === "session" || rawKind === "quote"
-				? rawKind
-				: "file";
+		const kind: ComposerChip["kind"] = rawKind === "skill" || rawKind === "session" || rawKind === "quote" ? rawKind : "file";
 		const raw = String(node.attrs.raw ?? "");
 		const label = String(node.attrs.label ?? raw);
 		// 目录引用用文件夹图标（Proma `.directory-mention-chip` 同款区分）。

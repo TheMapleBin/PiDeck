@@ -18,36 +18,25 @@ type SpawnOptions = childProcessModule.SpawnOptions;
 /**
  * Windows 控制台窗口治理（win32 only）。
  *
- * 背景（2026-08 实测结论，替代旧的"全量注入 windowsHide"方案）：
- * - DSH host 运行在 Electron utilityProcess 里（GUI 子系统、无控制台）。
- * - child_process.spawn 从无控制台父进程拉起控制台子程序时，libuv 自动带
- *   CREATE_NO_WINDOW——子进程无控制台、不弹窗（spawn 矩阵实测：无控制台父进程
- *   + pipe stdio 的四种 windowsHide 组合，子进程全部 console=False）。因此旧方案
- *   注入 windowsHide 对本地路径毫无作用；且把子进程变成"无控制台"后，若子进程
- *   再拉起控制台程序（cmd 内部再执行等），Windows 会为孙进程新建可见控制台。
- * - 真正的黑窗口来源是沙箱 runner：host 以 GUI 二进制（electron.exe）拉起 runner，
- *   GUI 进程不继承父进程控制台（实测）；runner 用 koffi 直接调
- *   CreateProcessAsUserW(dwCreationFlags=0)（绕过 child_process，补丁够不着），
- *   父进程无控制台时 Windows 为命令进程新建可见控制台窗口。runner 源码注释说明
- *   受限 token 下子进程自行创建控制台会 STATUS_DLL_INIT_FAILED(0xC0000142) 崩溃，
- *   因此不能靠 CREATE_NO_WINDOW——正确做法是让 runner 自身持有隐藏控制台，
- *   子进程继承（继承≠创建，实测受限 token 下继承控制台正常运行）。
+ * 2026-09 链路实测（GUI 父进程 → A(CREATE_NO_WINDOW) → B/C 不带 windowHide，
+ * 亚毫秒监视顶层窗口）：
+ * - CREATE_NO_WINDOW 子进程 GetConsoleWindow()==NULL，但 CreateFile("CONOUT$")
+ *   成功——有控制台、没有窗口，且可被孙进程继承，不会再新建可见 conhost。
+ * - 旧注释「CREATE_NO_WINDOW 会让孙进程弹可见窗口」不成立；host 再 AllocConsole
+ *   + SW_HIDE 才是闪窗来源：conhost 异步建窗（实测 107–215ms），AllocConsole
+ *   返回时句柄常为 NULL，16ms 轮询有一半会露出 5–25ms 黑窗。
+ * - CreateProcessAsUserW 受限 token 上**自己** CREATE_NO_WINDOW 仍会
+ *   STATUS_DLL_INIT_FAILED；那条必须「继承」父进程已有控制台。父进程用
+ *   CREATE_NO_WINDOW 拿到的无窗口控制台可以被继承，不踩这个坑。
  *
- * 治理策略（两级，见 installHostHiddenConsole / installHiddenConsolePatch）：
- * 1) host boot 时用 koffi AllocConsole + SW_HIDE 给 host 分配隐藏控制台。
- *    此后所有 console 子系统子进程（pwsh/git/taskkill/cmd…）与孙进程都继承该
- *    隐藏控制台——整棵树零可见窗口。
- * 2) child_process 补丁仅在分配失败时退回旧的 windowsHide 注入（兜底：直接
- *    子进程至少不弹窗）；并对沙箱 runner 的 spawn 注入
- *    NODE_OPTIONS=--require=<runnerConsolePreload>：runner 不继承 host 控制台，
- *    由 preload 在 runner 进程内自建隐藏控制台。
- *
- * 误判边界（2026-09 实测）：`GetConsoleWindow() == NULL` 并不等于「无控制台”——
- * MSDN 明确 NULL = 没有控制台或**不是窗口式控制台**（ConPTY 终端即属后者）。
- * 此时 `AllocConsole()` 会以 ERROR_ACCESS_DENIED(5) 失败；原实现把它当「分配
- * 失败」退回 windowsHide，反而让子进程失去可继承控制台、孙进程（如 pwsh 里再
- * 跑 git/npm/cmd）新建可见控制台。现按错误码 5 判为 inherited-windowless
- * （继承即可，ConPTY 无窗口），并暴露 getHiddenConsoleMode() 供启动日志诊断。
+ * 现行策略（见 decideDshHostConsolePolicy / installHiddenConsolePatch）：
+ * 1) host（utilityProcess）不 AllocConsole，自身不需要控制台。
+ * 2) host 所有 child_process 注入 windowsHide（CREATE_NO_WINDOW）。
+ * 3) 沙箱 runner 有 CUI node sidecar 时改写成 node.exe + windowsHide：
+ *    runner 自建无窗口可继承控制台；第二级 ACL runner 的 process.execPath
+ *    已是 node.exe，pwsh 经 CreateProcessAsUserW 继承即可。
+ * 4) sidecar 不可用时仍走 electron.exe + runnerConsolePreload AllocConsole
+ *    兜底（可能闪一帧；只覆盖老 runtime）。
  */
 
 /** koffi 运行时 FFI 接口子集（测试注入假实现，避免依赖真实原生模块）。 */
@@ -57,7 +46,10 @@ export interface Win32Ffi {
 	};
 }
 
-/** host 是否已持有隐藏控制台（installHostHiddenConsole 置位；补丁据此决定是否注入 windowsHide）。 */
+/**
+ * 旧语义：host 已 AllocConsole 成功，子进程应继承、不要再 CREATE_NO_WINDOW。
+ * 现行策略不再分配控制台，此标志恒为 false，补丁一律注入 windowsHide。
+ */
 let hostHiddenConsoleActive = false;
 
 /** runner spawn 策略日志只打一次（避免沙箱每次调用都刷日志）。 */
@@ -65,7 +57,7 @@ let runnerPolicyLogged = false;
 
 /**
  * Windows 沙箱 runner 的 CUI node sidecar。配置后，把 `electron.exe runner.js`
- * 改写成 `node.exe runner.js`，让 runner 继承 host 隐藏控制台，不再 AllocConsole 闪窗。
+ * 改写成 `node.exe runner.js`，用 CREATE_NO_WINDOW 自建无窗口控制台，不再 AllocConsole。
  * 未配置时保持 electron.exe + ELECTRON_RUN_AS_NODE + preload 旧路径。
  */
 let dshRunnerNodeSidecarPath: string | undefined;
@@ -81,22 +73,12 @@ export function getDshRunnerNodeSidecar(): string | undefined {
 	return dshRunnerNodeSidecarPath;
 }
 
-/** ERROR_ACCESS_DENIED：AllocConsole 失败码 5 = 进程已附带控制台（见下）。 */
-const ERROR_ACCESS_DENIED = 5;
-
 /**
  * host 控制台治理模式（诊断：hostEntry 启动时打印一次，排查黑窗口用）。
- * - inherited-windowless：AllocConsole 失败且错误码 5——已附带控制台但
- *   GetConsoleWindow 为 NULL（ConPTY / 无窗口控制台）。子进程继承即可，
- *   不存在可见窗口需要隐藏；这是 2026-09 实测出的误判分支（原代码把该
- *   情形当「分配失败」退回 windowsHide，反而切断继承、孙进程弹黑窗口）。
  */
 export type HiddenConsoleMode =
 	| "off" // 非 win32：不治理
-	| "inherited-windowed" // GetConsoleWindow 非空：已有控制台，子进程继承
-	| "inherited-windowless" // 已附带控制台但无窗口（ConPTY）：继承即可，无需隐藏
-	| "allocated" // AllocConsole 成功：host 自建隐藏控制台
-	| "failed"; // 分配失败：退回 windowsHide 注入兜底
+	| "create-no-window"; // win32：不 AllocConsole，子进程走 CREATE_NO_WINDOW
 
 let hiddenConsoleMode: HiddenConsoleMode = "off";
 
@@ -105,84 +87,45 @@ export function getHiddenConsoleMode(): HiddenConsoleMode {
 	return hiddenConsoleMode;
 }
 
+/** host 控制台策略（纯函数，可单测；禁止再靠 AllocConsole 赛跑藏窗）。 */
+export interface DshHostConsolePolicy {
+	/** host 是否 AllocConsole。策略上恒 false。 */
+	allocHostConsole: boolean;
+	/** host 子进程是否注入 CREATE_NO_WINDOW。 */
+	injectWindowsHide: boolean;
+	/** 是否把 electron.exe runner 改写成 CUI node sidecar。 */
+	rewriteRunnerToSidecar: boolean;
+}
+
+export function decideDshHostConsolePolicy(input: { platform: NodeJS.Platform; sidecarPath?: string }): DshHostConsolePolicy {
+	if (input.platform !== "win32") {
+		return { allocHostConsole: false, injectWindowsHide: false, rewriteRunnerToSidecar: false };
+	}
+	return {
+		allocHostConsole: false,
+		injectWindowsHide: true,
+		rewriteRunnerToSidecar: Boolean(input.sidecarPath?.trim()),
+	};
+}
+
 /**
- * 给当前进程分配隐藏控制台（win32 only；platform/ffi 可注入以便测试）。
+ * 安装 host 控制台策略（win32 only；不再 AllocConsole）。
  *
- * utilityProcess 无控制台，分配后所有 console 子系统子进程都会继承它——
- * 这是让整棵进程树（含孙进程）都不弹窗的根本手段。已有控制台（终端拉起等
- * 场景）或分配失败时：已有控制台视为成功（继承即可），分配失败返回 false
- * （调用方退回 windowsHide 注入兜底）。所有异常静默。
+ * ffi 参数保留是为了兼容旧调用/测试签名，现行路径不会加载 koffi。
+ * 返回 false：没有「已分配的可继承隐藏控制台」，补丁应注入 windowsHide。
  */
-export function installHostHiddenConsole(
-	platform: NodeJS.Platform = process.platform,
-	ffi?: Win32Ffi,
-): boolean {
+export function installHostHiddenConsole(platform: NodeJS.Platform = process.platform, _ffi?: Win32Ffi): boolean {
 	hostHiddenConsoleActive = false;
 	if (platform !== "win32") {
 		hiddenConsoleMode = "off";
 		return false;
 	}
-	try {
-		const koffi = ffi ?? (createRequire(__filename)("koffi") as Win32Ffi);
-		const kernel32 = koffi.load("kernel32.dll");
-		const user32 = koffi.load("user32.dll");
-		const getConsoleWindow = kernel32.func("void* GetConsoleWindow(void)") as () => unknown;
-		const allocConsole = kernel32.func("int AllocConsole(void)") as () => number;
-		const showWindow = user32.func("int ShowWindow(void* hWnd, int nCmdShow)") as (
-			hWnd: unknown,
-			nCmdShow: number,
-		) => number;
-		if (getConsoleWindow()) {
-			// 已有控制台：子进程本就继承它，无需再分配（utilityProcess 不应出现，防御）。
-			hostHiddenConsoleActive = true;
-			hiddenConsoleMode = "inherited-windowed";
-			return true;
-		}
-		if (allocConsole() === 0) {
-			// GetConsoleWindow 为 NULL ≠ 无控制台（MSDN：NULL = 没有控制台或不是窗口式控制台）。
-			// AllocConsole 失败且错误码 5（ERROR_ACCESS_DENIED）说明进程已附带控制台
-			//（ConPTY 终端/Windows Terminal/VS Code 起到的进程都这样）。此时按「已持有」处理：
-			// 子进程继承该控制台即可，不存在可见窗口需要隐藏；若误判为失败退回 windowsHide
-			// 注入，反而让子进程失去可继承控制台、孙进程新建可见控制台（黑窗口）。
-			let lastError: number | undefined;
-			try {
-				// GetLastError 必须在紧跟的语句取（期间不能插其它 Win32 调用）。
-				lastError = (kernel32.func("uint32 GetLastError(void)") as () => number)();
-			} catch {
-				lastError = undefined; // ffi 未提供（老测试替身）：按旧行为兜底
-			}
-			if (lastError === ERROR_ACCESS_DENIED) {
-				hostHiddenConsoleActive = true;
-				hiddenConsoleMode = "inherited-windowless";
-				return true;
-			}
-			hiddenConsoleMode = "failed";
-			return false;
-		}
-		// conhost 窗口创建是异步的：AllocConsole 返回时 GetConsoleWindow 经常仍是 0，
-		// 只在已有句柄时 setInterval 会漏掉随后弹出的窗口（DSH 加载「一闪而过」的框）。
-		// 无论首帧有没有句柄都轮询隐藏，覆盖整段创建窗口期。
-		const hideConsole = () => {
-			const hwnd = getConsoleWindow();
-			if (hwnd) showWindow(hwnd, 0); // SW_HIDE = 0
-		};
-		hideConsole();
-		const hideTimer = setInterval(hideConsole, 16);
-		setTimeout(() => clearInterval(hideTimer), 1000);
-		hideTimer.unref?.();
-		hostHiddenConsoleActive = true;
-		hiddenConsoleMode = "allocated";
-		return true;
-	} catch {
-		hiddenConsoleMode = "failed";
-		return false; // koffi 缺失/调用失败：退回 windowsHide 注入兜底
-	}
+	hiddenConsoleMode = "create-no-window";
+	return false;
 }
 
 /** 未显式指定 windowsHide 时注入 true；已指定则尊重原值（Node 默认 false）。 */
-export function hiddenConsoleOptions<T extends { windowsHide?: boolean }>(
-	options: T | undefined,
-): T | undefined {
+export function hiddenConsoleOptions<T extends { windowsHide?: boolean }>(options: T | undefined): T | undefined {
 	if (!options) return undefined;
 	return options.windowsHide === undefined ? { ...options, windowsHide: true } : options;
 }
@@ -259,10 +202,7 @@ function withPwshExitAppend(args: readonly string[]): readonly string[] {
  *
  * @returns 还原函数（测试用；生产调用方不还原）。
  */
-export function installRunnerNodeModeEnv(
-	env: NodeJS.ProcessEnv = process.env,
-	platform: NodeJS.Platform = process.platform,
-): () => void {
+export function installRunnerNodeModeEnv(env: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = process.platform): () => void {
 	if (platform !== "win32") return () => undefined;
 	const previous = env.ELECTRON_RUN_AS_NODE;
 	env.ELECTRON_RUN_AS_NODE = "1";
@@ -299,11 +239,7 @@ export function installRunnerNodeModeEnv(
  *
  * @returns 还原函数（测试用；生产调用方不还原）。
  */
-export function installRunnerPreloadEnv(
-	env: NodeJS.ProcessEnv = process.env,
-	platform: NodeJS.Platform = process.platform,
-	runnerPreloadPath: string = join(__dirname, "runnerConsolePreload.js"),
-): () => void {
+export function installRunnerPreloadEnv(env: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = process.platform, runnerPreloadPath: string = join(__dirname, "runnerConsolePreload.js")): () => void {
 	if (platform !== "win32") return () => undefined;
 	const previous = env.NODE_OPTIONS;
 	if (!includesRunnerPreload(previous, runnerPreloadPath)) {
@@ -324,10 +260,7 @@ export function installRunnerPreloadEnv(
  * 2. `-Command` 命令末尾追加换行 + `exit $LASTEXITCODE`：无论挂起原因，
  *    命令执行完都强制退出。
  */
-function withPwshHangGuard(
-	args: readonly string[],
-	options: childProcessModule.SpawnOptions | undefined,
-): { args: readonly string[]; options: childProcessModule.SpawnOptions | undefined } {
+function withPwshHangGuard(args: readonly string[], options: childProcessModule.SpawnOptions | undefined): { args: readonly string[]; options: childProcessModule.SpawnOptions | undefined } {
 	const nextArgs = withPwshExitAppend(args);
 	let nextOptions = options;
 	if (options !== undefined && Array.isArray(options.stdio) && options.stdio[0] === "pipe") {
@@ -339,10 +272,7 @@ function withPwshHangGuard(
 }
 
 /** 给 pwsh 相关 spawn 注入启动优化环境变量（env 缺失时跳过：真实链路恒带 env）。 */
-function withPwshStartupEnv(
-	options: childProcessModule.SpawnOptions | undefined,
-	isPwsh: boolean,
-): childProcessModule.SpawnOptions | undefined {
+function withPwshStartupEnv(options: childProcessModule.SpawnOptions | undefined, isPwsh: boolean): childProcessModule.SpawnOptions | undefined {
 	if (!isPwsh || options === undefined || options.env === undefined) return options;
 	return { ...options, env: { ...options.env, ...PWSH_STARTUP_ENV } };
 }
@@ -366,10 +296,7 @@ function includesRunnerPreload(existing: string | undefined, runnerPreloadPath: 
  * 幂等：env 里已有同一 preload（如 installRunnerPreloadEnv 写进 host env 后，
  * options.env 由 host env 派生）则不重复 append，避免 Node 加载两遍。
  */
-function withRunnerPreload(
-	options: childProcessModule.SpawnOptions | undefined,
-	runnerPreloadPath: string,
-): childProcessModule.SpawnOptions | undefined {
+function withRunnerPreload(options: childProcessModule.SpawnOptions | undefined, runnerPreloadPath: string): childProcessModule.SpawnOptions | undefined {
 	if (options === undefined || options.env === undefined) return options;
 	const existing = options.env.NODE_OPTIONS;
 	if (includesRunnerPreload(existing, runnerPreloadPath)) return options;
@@ -398,9 +325,7 @@ function withRunnerPreload(
  * 事件循环清空正常退出（复现实验：缺变量 3/3 挂、注入后 2/2 正常）。
  * env 缺失时跳过（真实链路恒带 env）。
  */
-function withRunnerRunAsNode(
-	options: childProcessModule.SpawnOptions | undefined,
-): childProcessModule.SpawnOptions | undefined {
+function withRunnerRunAsNode(options: childProcessModule.SpawnOptions | undefined): childProcessModule.SpawnOptions | undefined {
 	if (options === undefined || options.env === undefined) return options;
 	if (options.env.ELECTRON_RUN_AS_NODE === "1") return options;
 	return { ...options, env: { ...options.env, ELECTRON_RUN_AS_NODE: "1" } };
@@ -422,16 +347,13 @@ function isElectronLikeExec(command: string): boolean {
  * 沙箱 runner 若仍由 electron.exe 拉起，改写成 CUI node sidecar。
  * sidecar 未配置或 command 已经是 node 时原样返回。
  */
-function rewriteRunnerExecutable(
-	command: string,
-	args: readonly string[],
-): { command: string; args: readonly string[] } {
-	if (!dshRunnerNodeSidecarPath) return { command, args };
-	// 没有可继承控制台时，GUI 父进程拉起 CUI node.exe 会新建可见窗口——比闪一帧更糟。
-	if (!hostHiddenConsoleActive) return { command, args };
+function rewriteRunnerExecutable(command: string, args: readonly string[]): { command: string; args: readonly string[] } {
+	if (!decideDshHostConsolePolicy({ platform: "win32", sidecarPath: dshRunnerNodeSidecarPath }).rewriteRunnerToSidecar) {
+		return { command, args };
+	}
 	if (!isRunnerSpawn(command, args)) return { command, args };
 	if (!isElectronLikeExec(command)) return { command, args };
-	return { command: dshRunnerNodeSidecarPath, args };
+	return { command: dshRunnerNodeSidecarPath as string, args };
 }
 
 /**
@@ -440,20 +362,16 @@ function rewriteRunnerExecutable(
  * child_process.spawn 的引用，补丁先于加载才覆盖得到。
  *
  * 行为：
- * - host 隐藏控制台生效（installHostHiddenConsole 成功）：不注入 windowsHide，
- *   让子进程继承隐藏控制台（注入 CREATE_NO_WINDOW 反而切断继承、孙进程可能弹窗）。
- * - 分配失败（兜底）：注入 windowsHide（CREATE_NO_WINDOW，直接子进程无窗口）。
- * - 两种模式下都对沙箱 runner 的 spawn 注入 NODE_OPTIONS preload。
+ * - win32 一律注入 windowsHide（CREATE_NO_WINDOW：无窗口、可继承）。
+ * - sidecar 可用时把 electron.exe runner 改写成 node.exe，同样带 windowsHide。
+ * - 沙箱 runner spawn 注入 NODE_OPTIONS preload（无 sidecar 的 electron 兜底路径）。
  *
  * 注意：Node 24+ 的内置模块 CJS exports 是只读 getter（plain 赋值会抛
  * "Cannot set property ... which has only a getter"），必须用 defineProperty；
  * 该属性 configurable=true，且 ESM 侧 `import { spawn } from "node:child_process"`
  * 是 live binding——defineProperty 替换后，后续动态 import 的 dsh 包读到的就是补丁版。
  */
-export function installHiddenConsolePatch(
-	platform: NodeJS.Platform = process.platform,
-	runnerPreloadPath: string = join(__dirname, "runnerConsolePreload.js"),
-): () => void {
+export function installHiddenConsolePatch(platform: NodeJS.Platform = process.platform, runnerPreloadPath: string = join(__dirname, "runnerConsolePreload.js")): () => void {
 	if (platform !== "win32") return () => undefined;
 	const originals = {
 		spawn: childProcess.spawn,
@@ -465,10 +383,7 @@ export function installHiddenConsolePatch(
 	};
 
 	/** 用 defineProperty 替换导出（兼容 Node 24 只读 getter 语义）。 */
-	function replaceExport<K extends keyof typeof childProcess>(
-		name: K,
-		value: typeof childProcess[K],
-	): void {
+	function replaceExport<K extends keyof typeof childProcess>(name: K, value: (typeof childProcess)[K]): void {
 		Object.defineProperty(childProcess, name, {
 			value,
 			writable: true,
@@ -477,38 +392,22 @@ export function installHiddenConsolePatch(
 	}
 
 	/**
-	 * 一次 spawn 的 options 决策：runner spawn 恒注入 preload + pwsh 启动环境
-	 * （沙箱 pwsh 继承 runner env）；本地 pwsh spawn 注入启动环境；普通 spawn 按
-	 * host 隐藏控制台是否生效决定 windowsHide 注入与否。
+	 * 一次 spawn 的 options 决策：runner spawn 恒注入 preload + pwsh 启动环境；
+	 * 本地 pwsh 注入启动环境；win32 子进程一律 windowsHide。
 	 */
-	function resolveSpawnOptions(
-		command: string,
-		args: readonly string[] | undefined,
-		options: childProcessModule.SpawnOptions | undefined,
-	): childProcessModule.SpawnOptions | undefined {
+	function resolveSpawnOptions(command: string, args: readonly string[] | undefined, options: childProcessModule.SpawnOptions | undefined): childProcessModule.SpawnOptions | undefined {
 		if (isRunnerSpawn(command, args)) {
 			// 诊断（一次性）：确认沙箱 runner spawn 的可执行文件与控制台策略。
 			if (!runnerPolicyLogged) {
 				runnerPolicyLogged = true;
-				console.error(
-					`[dsh-host-entry] runner spawn policy: hostHiddenConsoleActive=${String(hostHiddenConsoleActive)} ` +
-						`sidecar=${dshRunnerNodeSidecarPath ?? "none"} ` +
-						`command=${command} preload=${runnerPreloadPath}`,
-				);
+				console.error(`[dsh-host-entry] runner spawn policy: hostHiddenConsoleActive=${String(hostHiddenConsoleActive)} ` + `sidecar=${dshRunnerNodeSidecarPath ?? "none"} ` + `command=${command} preload=${runnerPreloadPath}`);
 			}
-			// CUI node sidecar：必须继承 host 隐藏控制台。windowsHide/CREATE_NO_WINDOW
-			// 会让 sidecar 自己没控制台，CreateProcessAsUserW 的 pwsh 再弹可见窗口。
-			// 仅在改写真正发生（host 已持有隐藏控制台）时走这条；否则退回 electron.exe 旧路径。
-			if (dshRunnerNodeSidecarPath && hostHiddenConsoleActive) {
-				const inherited = { ...(options ?? {}), windowsHide: false };
-				return withRunnerPreload(withPwshStartupEnv(inherited, true), runnerPreloadPath);
+			// CUI node sidecar：CREATE_NO_WINDOW 自建无窗口可继承控制台，不再依赖 host AllocConsole。
+			if (dshRunnerNodeSidecarPath) {
+				const hidden = { ...(options ?? {}), windowsHide: true };
+				return withRunnerPreload(withPwshStartupEnv(hidden, true), runnerPreloadPath);
 			}
-			return withRunnerPreload(
-				withRunnerRunAsNode(
-					withPwshStartupEnv(hostHiddenConsoleActive ? options : withHiddenOptions(options), true),
-				),
-				runnerPreloadPath,
-			);
+			return withRunnerPreload(withRunnerRunAsNode(withPwshStartupEnv(hostHiddenConsoleActive ? options : withHiddenOptions(options), true)), runnerPreloadPath);
 		}
 		if (isPwshCommand(command)) {
 			return withPwshStartupEnv(hostHiddenConsoleActive ? options : withHiddenOptions(options), true);
@@ -528,15 +427,9 @@ export function installHiddenConsolePatch(
 			// electron.exe 形态运行、事件循环永不退出——见 installRunnerNodeModeEnv。
 			// 注意 stdio 不动：runner 可能用 stdin pipe 向受限命令传数据。
 			const rewritten = rewriteRunnerExecutable(command, argsOrOptions);
-			const guarded = isPwshCommand(rewritten.command)
-				? withPwshHangGuard(rewritten.args, maybeOptions)
-				: isRunnerSpawn(rewritten.command, rewritten.args)
-					? { args: withPwshExitAppend(rewritten.args), options: maybeOptions }
-					: { args: rewritten.args, options: maybeOptions };
+			const guarded = isPwshCommand(rewritten.command) ? withPwshHangGuard(rewritten.args, maybeOptions) : isRunnerSpawn(rewritten.command, rewritten.args) ? { args: withPwshExitAppend(rewritten.args), options: maybeOptions } : { args: rewritten.args, options: maybeOptions };
 			const next = resolveSpawnOptions(rewritten.command, guarded.args, guarded.options);
-			return next === undefined
-				? originals.spawn(rewritten.command, guarded.args)
-				: originals.spawn(rewritten.command, guarded.args, next);
+			return next === undefined ? originals.spawn(rewritten.command, guarded.args) : originals.spawn(rewritten.command, guarded.args, next);
 		}
 		const next = resolveSpawnOptions(command, undefined, argsOrOptions as SpawnOptions | undefined);
 		return next === undefined ? originals.spawn(command) : originals.spawn(command, next);
@@ -546,15 +439,9 @@ export function installHiddenConsolePatch(
 	replaceExport("spawnSync", ((command: string, argsOrOptions?: readonly string[] | SpawnOptions, maybeOptions?: SpawnOptions) => {
 		if (Array.isArray(argsOrOptions)) {
 			const rewritten = rewriteRunnerExecutable(command, argsOrOptions);
-			const guarded = isPwshCommand(rewritten.command)
-				? withPwshHangGuard(rewritten.args, maybeOptions)
-				: isRunnerSpawn(rewritten.command, rewritten.args)
-					? { args: withPwshExitAppend(rewritten.args), options: maybeOptions }
-					: { args: rewritten.args, options: maybeOptions };
+			const guarded = isPwshCommand(rewritten.command) ? withPwshHangGuard(rewritten.args, maybeOptions) : isRunnerSpawn(rewritten.command, rewritten.args) ? { args: withPwshExitAppend(rewritten.args), options: maybeOptions } : { args: rewritten.args, options: maybeOptions };
 			const next = resolveSpawnOptions(rewritten.command, guarded.args, guarded.options);
-			return next === undefined
-				? originals.spawnSync(rewritten.command, guarded.args)
-				: originals.spawnSync(rewritten.command, guarded.args, next);
+			return next === undefined ? originals.spawnSync(rewritten.command, guarded.args) : originals.spawnSync(rewritten.command, guarded.args, next);
 		}
 		const next = resolveSpawnOptions(command, undefined, argsOrOptions as SpawnOptions | undefined);
 		return next === undefined ? originals.spawnSync(command) : originals.spawnSync(command, next);
@@ -596,15 +483,11 @@ export function installHiddenConsolePatch(
 			const args = rest[0] as readonly string[];
 			const options = rest[1] as childProcessModule.ExecFileOptions | undefined;
 			const next = hostHiddenConsoleActive ? options : withHiddenOptions(options);
-			return callback === undefined
-				? execFileLike(file, args, next)
-				: execFileLike(file, args, next, callback);
+			return callback === undefined ? execFileLike(file, args, next) : execFileLike(file, args, next, callback);
 		}
 		const options = rest[0] as childProcessModule.ExecFileOptions | undefined;
 		const next = hostHiddenConsoleActive ? options : withHiddenOptions(options);
-		return callback === undefined
-			? execFileLike(file, next)
-			: execFileLike(file, next, callback);
+		return callback === undefined ? execFileLike(file, next) : execFileLike(file, next, callback);
 	}) as typeof childProcess.execFile);
 
 	// execFileSync(file[, args][, options])：与 execFile 同形态（无 callback）。
@@ -613,7 +496,7 @@ export function installHiddenConsolePatch(
 			const next = hostHiddenConsoleActive ? maybeOptions : withHiddenOptions(maybeOptions);
 			return originals.execFileSync(file, argsOrOptions, next);
 		}
-		const next = hostHiddenConsoleActive ? argsOrOptions as childProcessModule.ExecFileSyncOptions | undefined : withHiddenOptions(argsOrOptions as childProcessModule.ExecFileSyncOptions | undefined);
+		const next = hostHiddenConsoleActive ? (argsOrOptions as childProcessModule.ExecFileSyncOptions | undefined) : withHiddenOptions(argsOrOptions as childProcessModule.ExecFileSyncOptions | undefined);
 		return originals.execFileSync(file, next);
 	}) as typeof childProcess.execFileSync);
 

@@ -63,11 +63,7 @@ export function isSameDirectory(left: string | undefined, right: string | undefi
  *   因为 pi 的会话文件在 sessions 树里按 cwd 分组，不在项目目录里。
  * 两种情况都只认 pi sessions 树里、由扫描器给出的会话摘要。
  */
-export function isDirectoryImportCandidate(input: {
-	summary: SessionSummary;
-	dir: string;
-	pickedIsContainer: boolean;
-}): boolean {
+export function isDirectoryImportCandidate(input: { summary: SessionSummary; dir: string; pickedIsContainer: boolean }): boolean {
 	if (isPathInsideRoots(input.summary.filePath, [input.dir])) return true;
 	if (input.pickedIsContainer) return false;
 	return isSameDirectory(input.summary.projectPath, input.dir);

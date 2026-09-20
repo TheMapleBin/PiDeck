@@ -11,21 +11,7 @@ import { formatTokens } from "./SessionContextMeter";
  * pi：没有 sessionStats 投影，改用「上次回复」性能组（TTFT / 总耗时 / tps）+ 累计 token。
  * 无任何可展示数字时整条卸载（含底距），有数字才占 12px 行高 + pt/pb。
  */
-export function buildComposerStatsGroups(
-	state:
-		| Pick<
-				AgentRuntimeState,
-				| "dshSessionStats"
-				| "inputTokens"
-				| "outputTokens"
-				| "cacheHitPercent"
-				| "ttftMs"
-				| "totalMs"
-				| "tps"
-		  >
-		| undefined,
-	turnCount = 0,
-): string[] {
+export function buildComposerStatsGroups(state: Pick<AgentRuntimeState, "dshSessionStats" | "inputTokens" | "outputTokens" | "cacheHitPercent" | "ttftMs" | "totalMs" | "tps"> | undefined, turnCount = 0): string[] {
 	if (!state) return [];
 	const groups: string[] = [];
 	const sessionStats = state.dshSessionStats;
@@ -37,9 +23,9 @@ export function buildComposerStatsGroups(
 		groups.push(
 			sessionStats.steps > 0
 				? t("composerStats.counts", {
-					turns: sessionStats.turns,
-					steps: sessionStats.steps,
-				})
+						turns: sessionStats.turns,
+						steps: sessionStats.steps,
+					})
 				: t("composerStats.turns", { turns: sessionStats.turns }),
 		);
 		const durations: string[] = [];
@@ -91,10 +77,7 @@ export function buildComposerStatsGroups(
 	return groups;
 }
 
-export const ComposerStatsLine = memo(function ComposerStatsLine(props: {
-	state?: AgentRuntimeState;
-	turnCount?: number;
-}) {
+export const ComposerStatsLine = memo(function ComposerStatsLine(props: { state?: AgentRuntimeState; turnCount?: number }) {
 	const groups = buildComposerStatsGroups(props.state, props.turnCount);
 	const rootRef = useRef<HTMLDivElement | null>(null);
 	const [truncated, setTruncated] = useState(false);
@@ -115,12 +98,7 @@ export const ComposerStatsLine = memo(function ComposerStatsLine(props: {
 
 	if (groups.length === 0) return null;
 	return (
-		<div
-			ref={rootRef}
-			className="w-full min-w-0 truncate px-1 pb-0 pt-1 text-center text-[12px] leading-5 text-text-tertiary"
-			title={truncated ? line : undefined}
-			data-testid="composer-stats-line"
-		>
+		<div ref={rootRef} className="w-full min-w-0 truncate px-1 pb-0 pt-1 text-center text-[12px] leading-5 text-text-tertiary" title={truncated ? line : undefined} data-testid="composer-stats-line">
 			{groups.map((group, i) => (
 				<Fragment key={group}>
 					{i > 0 && (

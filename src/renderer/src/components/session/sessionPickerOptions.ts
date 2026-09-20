@@ -5,43 +5,43 @@ import type { TranslationKey } from "../../i18n";
 
 /** Shared thinking options used by both the composer picker and the first-session setup. */
 export const THINKING_LEVELS = [
-  { value: "off", labelKey: "thinking.levelLabel.off", descriptionKey: "thinking.level.off" },
-  { value: "minimal", labelKey: "thinking.levelLabel.minimal", descriptionKey: "thinking.level.minimal" },
-  { value: "low", labelKey: "thinking.levelLabel.low", descriptionKey: "thinking.level.low" },
-  { value: "medium", labelKey: "thinking.levelLabel.medium", descriptionKey: "thinking.level.medium" },
-  { value: "high", labelKey: "thinking.levelLabel.high", descriptionKey: "thinking.level.high" },
-  { value: "xhigh", labelKey: "thinking.levelLabel.xhigh", descriptionKey: "thinking.level.xhigh" },
-  { value: "max", labelKey: "thinking.levelLabel.max", descriptionKey: "thinking.level.max" },
+	{ value: "off", labelKey: "thinking.levelLabel.off", descriptionKey: "thinking.level.off" },
+	{ value: "minimal", labelKey: "thinking.levelLabel.minimal", descriptionKey: "thinking.level.minimal" },
+	{ value: "low", labelKey: "thinking.levelLabel.low", descriptionKey: "thinking.level.low" },
+	{ value: "medium", labelKey: "thinking.levelLabel.medium", descriptionKey: "thinking.level.medium" },
+	{ value: "high", labelKey: "thinking.levelLabel.high", descriptionKey: "thinking.level.high" },
+	{ value: "xhigh", labelKey: "thinking.levelLabel.xhigh", descriptionKey: "thinking.level.xhigh" },
+	{ value: "max", labelKey: "thinking.levelLabel.max", descriptionKey: "thinking.level.max" },
 ] satisfies Array<{ value: string; labelKey: TranslationKey; descriptionKey: TranslationKey }>;
 
 export type ThinkingPickerLevel = {
-  value: string;
-  labelKey?: TranslationKey;
-  descriptionKey?: TranslationKey;
-  label?: string;
-  description?: string;
+	value: string;
+	labelKey?: TranslationKey;
+	descriptionKey?: TranslationKey;
+	label?: string;
+	description?: string;
 };
 
 /** Map Pi/DSH wire level ids to localized options without dropping future ids. */
 export function toThinkingPickerLevels(levels: readonly string[]): ThinkingPickerLevel[] {
-  const seen = new Set<string>();
-  const options: ThinkingPickerLevel[] = [];
-  for (const value of levels) {
-    const normalized = value.trim();
-    if (!normalized || seen.has(normalized)) continue;
-    seen.add(normalized);
-    const known = THINKING_LEVELS.find((level) => level.value === normalized);
-    if (known) {
-      options.push({
-        value: known.value,
-        labelKey: known.labelKey,
-        descriptionKey: known.descriptionKey,
-      });
-    } else {
-      options.push({ value: normalized, label: normalized });
-    }
-  }
-  return options;
+	const seen = new Set<string>();
+	const options: ThinkingPickerLevel[] = [];
+	for (const value of levels) {
+		const normalized = value.trim();
+		if (!normalized || seen.has(normalized)) continue;
+		seen.add(normalized);
+		const known = THINKING_LEVELS.find((level) => level.value === normalized);
+		if (known) {
+			options.push({
+				value: known.value,
+				labelKey: known.labelKey,
+				descriptionKey: known.descriptionKey,
+			});
+		} else {
+			options.push({ value: normalized, label: normalized });
+		}
+	}
+	return options;
 }
 
 /**
@@ -51,39 +51,32 @@ export function toThinkingPickerLevels(levels: readonly string[]): ThinkingPicke
  * 两者同时存在时（cache 后来才刷新）以 cache 为准。缺失 DSH 元数据与 Pi probe
  * 不可用都属兼容 fallback：后端始终是最终能力裁决者。
  */
-export function resolveThinkingPickerLevels(input: {
-  backend: "pi" | "dsh";
-  runtimePiLevels?: readonly string[];
-  cachedPiLevels?: readonly string[];
-  dshReasoningEfforts?: ReadonlyArray<{ id: string }>;
-}): ThinkingPickerLevel[] {
-  if (input.backend === "dsh") {
-    const declaredLevels = toThinkingPickerLevels(
-      input.dshReasoningEfforts?.map((effort) => effort.id) ?? [],
-    );
-    return declaredLevels.length > 0 ? declaredLevels : [...THINKING_LEVELS];
-  }
-  if (input.cachedPiLevels !== undefined) {
-    return toThinkingPickerLevels(input.cachedPiLevels);
-  }
-  if (input.runtimePiLevels !== undefined) {
-    return toThinkingPickerLevels(input.runtimePiLevels);
-  }
-  return [...THINKING_LEVELS];
+export function resolveThinkingPickerLevels(input: { backend: "pi" | "dsh"; runtimePiLevels?: readonly string[]; cachedPiLevels?: readonly string[]; dshReasoningEfforts?: ReadonlyArray<{ id: string }> }): ThinkingPickerLevel[] {
+	if (input.backend === "dsh") {
+		const declaredLevels = toThinkingPickerLevels(input.dshReasoningEfforts?.map((effort) => effort.id) ?? []);
+		return declaredLevels.length > 0 ? declaredLevels : [...THINKING_LEVELS];
+	}
+	if (input.cachedPiLevels !== undefined) {
+		return toThinkingPickerLevels(input.cachedPiLevels);
+	}
+	if (input.runtimePiLevels !== undefined) {
+		return toThinkingPickerLevels(input.runtimePiLevels);
+	}
+	return [...THINKING_LEVELS];
 }
 
 /** Keep provider grouping deterministic so the same model order appears in both pickers. */
 export function groupModelsByProvider(models: AvailableModel[]) {
-  const groups = models.reduce<Record<string, AvailableModel[]>>((result, model) => {
-    const provider = model.provider || "other";
-    (result[provider] ??= []).push(model);
-    return result;
-  }, {});
+	const groups = models.reduce<Record<string, AvailableModel[]>>((result, model) => {
+		const provider = model.provider || "other";
+		(result[provider] ??= []).push(model);
+		return result;
+	}, {});
 
-  for (const providerModels of Object.values(groups)) {
-    providerModels.sort(compareModelRows);
-  }
-  return groups;
+	for (const providerModels of Object.values(groups)) {
+		providerModels.sort(compareModelRows);
+	}
+	return groups;
 }
 
 /**
@@ -100,31 +93,28 @@ export const PROVIDER_ORDER = ["tokendance", "anthropic", "openai", "google", "d
  * 3) 'other' 兜底组恒最后，避免未知供应商混进常用区。
  * 纯函数便于单测：排序策略离开 React 也能验证。
  */
-export function orderProviderGroups(
-  providers: string[],
-  recentProviders?: string[],
-): string[] {
-  const recent = recentProviders ?? [];
-  const recentIndex = new Map<string, number>();
-  recent.forEach((provider, index) => {
-    if (!recentIndex.has(provider)) recentIndex.set(provider, index);
-  });
-  return [...providers].sort((a, b) => {
-    // other 恒最后：不受最近使用影响（它是白名单外兜底，不是用户选的供应商）。
-    if (a === "other") return 1;
-    if (b === "other") return -1;
-    const aRecent = recentIndex.get(a);
-    const bRecent = recentIndex.get(b);
-    if (aRecent !== undefined && bRecent !== undefined) return aRecent - bRecent;
-    if (aRecent !== undefined) return -1;
-    if (bRecent !== undefined) return 1;
-    const aIndex = PROVIDER_ORDER.indexOf(a);
-    const bIndex = PROVIDER_ORDER.indexOf(b);
-    if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
-    if (aIndex !== -1) return -1;
-    if (bIndex !== -1) return 1;
-    return a.localeCompare(b);
-  });
+export function orderProviderGroups(providers: string[], recentProviders?: string[]): string[] {
+	const recent = recentProviders ?? [];
+	const recentIndex = new Map<string, number>();
+	recent.forEach((provider, index) => {
+		if (!recentIndex.has(provider)) recentIndex.set(provider, index);
+	});
+	return [...providers].sort((a, b) => {
+		// other 恒最后：不受最近使用影响（它是白名单外兜底，不是用户选的供应商）。
+		if (a === "other") return 1;
+		if (b === "other") return -1;
+		const aRecent = recentIndex.get(a);
+		const bRecent = recentIndex.get(b);
+		if (aRecent !== undefined && bRecent !== undefined) return aRecent - bRecent;
+		if (aRecent !== undefined) return -1;
+		if (bRecent !== undefined) return 1;
+		const aIndex = PROVIDER_ORDER.indexOf(a);
+		const bIndex = PROVIDER_ORDER.indexOf(b);
+		if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
+		if (aIndex !== -1) return -1;
+		if (bIndex !== -1) return 1;
+		return a.localeCompare(b);
+	});
 }
 
 /**
@@ -138,11 +128,7 @@ export function orderProviderGroups(
  * - 搜供应商名（如 tokendance）仍命中该供应商全部模型（value=provider/id 参与匹配）。
  * 返回 cmdk filter 约定分数：1 = 命中，0 = 不显示。
  */
-export function modelPickerSearchFilter(
-	value: string,
-	search: string,
-	keywords: string[] | undefined,
-): number {
+export function modelPickerSearchFilter(value: string, search: string, keywords: string[] | undefined): number {
 	const query = search.trim().toLowerCase();
 	if (!query) return 1;
 	// 只保留字母/数字/中文，去掉 - _ . / 空格等分隔符：模型 ID 常见 "gpt-4o"
@@ -163,11 +149,7 @@ export function modelPickerSearchFilter(
  * - 无模型且未接入 report（调用方不传，如设置页视觉模型选择器）→ list，保持旧行为；
  * - 无模型、report 为 null 且正在加载 → loading。
  */
-export function resolveModelPickerBody(input: {
-	modelCount: number;
-	report?: ModelListReport | null;
-	loading?: boolean;
-}): "loading" | "guide" | "list" {
+export function resolveModelPickerBody(input: { modelCount: number; report?: ModelListReport | null; loading?: boolean }): "loading" | "guide" | "list" {
 	if (input.modelCount > 0) return "list";
 	if (input.report) return "guide";
 	// report 为 undefined = 调用方未接入报告通道，不能把永久空态伪装成加载中。
@@ -186,33 +168,29 @@ export function resolveModelPickerBody(input: {
  * 返回需要初始展开的分组 id：收藏栏固定为 "favorites"，提供商分组为 "provider:<provider>"。
  */
 export function computeModelPickerDefaultExpanded(params: {
-  /** 已按收藏栏展示顺序排列的收藏模型（仅目录内存在的） */
-  favorites: Array<{ provider: string; id: string }>;
-  /** 当前选中模型（无选中时省略，如欢迎页草稿期） */
-  current?: { provider?: string; modelId?: string };
-  /** 排序后的提供商 key 列表（与选择器分组顺序一致） */
-  providers: string[];
+	/** 已按收藏栏展示顺序排列的收藏模型（仅目录内存在的） */
+	favorites: Array<{ provider: string; id: string }>;
+	/** 当前选中模型（无选中时省略，如欢迎页草稿期） */
+	current?: { provider?: string; modelId?: string };
+	/** 排序后的提供商 key 列表（与选择器分组顺序一致） */
+	providers: string[];
 }): string[] {
-  const { favorites, current, providers } = params;
-  const expanded: string[] = [];
-  if (favorites.length > 0) expanded.push("favorites");
+	const { favorites, current, providers } = params;
+	const expanded: string[] = [];
+	if (favorites.length > 0) expanded.push("favorites");
 
-  const currentProvider = current?.provider?.trim();
-  const currentModelId = current?.modelId?.trim();
-  const currentKey = currentProvider && currentModelId
-    ? `${currentProvider}/${currentModelId}`
-    : undefined;
-  const currentInFavorites = currentKey
-    ? favorites.some((model) => `${model.provider}/${model.id}` === currentKey)
-    : false;
-  // 当前模型不在收藏栏：展开其所在提供商分组，保证打开时能看到选中项（面板会滚动定位）。
-  if (currentKey && !currentInFavorites && currentProvider && providers.includes(currentProvider)) {
-    expanded.push(`provider:${currentProvider}`);
-  }
-  // 兜底：无任何可见分组时（收藏为 0 且无当前模型 / 当前提供商不在列表），
-  // 展开第一个提供商，避免打开即空列表。
-  if (expanded.length === 0 && providers[0]) {
-    expanded.push(`provider:${providers[0]}`);
-  }
-  return expanded;
+	const currentProvider = current?.provider?.trim();
+	const currentModelId = current?.modelId?.trim();
+	const currentKey = currentProvider && currentModelId ? `${currentProvider}/${currentModelId}` : undefined;
+	const currentInFavorites = currentKey ? favorites.some((model) => `${model.provider}/${model.id}` === currentKey) : false;
+	// 当前模型不在收藏栏：展开其所在提供商分组，保证打开时能看到选中项（面板会滚动定位）。
+	if (currentKey && !currentInFavorites && currentProvider && providers.includes(currentProvider)) {
+		expanded.push(`provider:${currentProvider}`);
+	}
+	// 兜底：无任何可见分组时（收藏为 0 且无当前模型 / 当前提供商不在列表），
+	// 展开第一个提供商，避免打开即空列表。
+	if (expanded.length === 0 && providers[0]) {
+		expanded.push(`provider:${providers[0]}`);
+	}
+	return expanded;
 }

@@ -9,14 +9,8 @@
  * user/assistant/toolResult 一一对应；即使桌面端因空文本跳过渲染，
  * 也必须推进 index，否则后续消息的 entryId 会整体前移错位。
  */
-export function takeActiveEntryId(
-	activeEntryIds: string[] | undefined,
-	entryIndex: number,
-): { entryId?: string; nextIndex: number } {
-	const entryId =
-		activeEntryIds && entryIndex < activeEntryIds.length
-			? activeEntryIds[entryIndex]
-			: undefined;
+export function takeActiveEntryId(activeEntryIds: string[] | undefined, entryIndex: number): { entryId?: string; nextIndex: number } {
+	const entryId = activeEntryIds && entryIndex < activeEntryIds.length ? activeEntryIds[entryIndex] : undefined;
 	return { entryId, nextIndex: entryIndex + 1 };
 }
 
@@ -24,11 +18,7 @@ export function takeActiveEntryId(
  * 模拟 convertAgentMessages 的 entryId 对齐逻辑（仅角色 + 空文本跳过规则）。
  * 用于回归：工具调用回合里「无文本的 assistant」不得打乱后续 entryId。
  */
-export function alignEntryIdsForDisplayMessages(
-	rawMessages: Array<{ role?: string; content?: unknown }>,
-	activeEntryIds: string[],
-	extractText: (content: unknown) => string,
-): Array<{ role: string; entryId?: string; skipped: boolean }> {
+export function alignEntryIdsForDisplayMessages(rawMessages: Array<{ role?: string; content?: unknown }>, activeEntryIds: string[], extractText: (content: unknown) => string): Array<{ role: string; entryId?: string; skipped: boolean }> {
 	let entryIndex = 0;
 	const result: Array<{ role: string; entryId?: string; skipped: boolean }> = [];
 
@@ -67,10 +57,7 @@ export function alignEntryIdsForDisplayMessages(
  * 收集 rootEntryId 及其全部后代 entry（沿 parentId 向下闭包）。
  * 重发时用于截断「该用户消息 + 之后的 assistant/tool」整段分支。
  */
-export function collectDescendantEntryIds(
-	lines: string[],
-	rootEntryId: string,
-): Set<string> {
+export function collectDescendantEntryIds(lines: string[], rootEntryId: string): Set<string> {
 	const removeIds = new Set<string>([rootEntryId]);
 	let grew = true;
 	while (grew) {
@@ -101,11 +88,7 @@ export function collectDescendantEntryIds(
  * 在 JSONL 中按「角色 + 文本」找最后一次匹配的用户消息行。
  * 用于乐观更新消息（无 entryId）的重发定位：优先最后一次，避免重复文案命中更早的历史。
  */
-export function findLastUserMessageLine(
-	lines: string[],
-	text: string,
-	extractText: (content: unknown) => string,
-): { lineIndex: number; entry: Record<string, unknown> } | null {
+export function findLastUserMessageLine(lines: string[], text: string, extractText: (content: unknown) => string): { lineIndex: number; entry: Record<string, unknown> } | null {
 	let found: { lineIndex: number; entry: Record<string, unknown> } | null = null;
 	for (let i = 0; i < lines.length; i++) {
 		const line = lines[i]?.trim();
@@ -130,11 +113,7 @@ export function findLastUserMessageLine(
  * 校验重发根节点必须是 user 消息，且文本与目标一致。
  * 防止 entryId 错位时把 assistant/更早的 user 当成截断根，误删整段历史。
  */
-export function assertResendRootEntry(
-	entry: Record<string, unknown>,
-	expectedText: string,
-	extractText: (content: unknown) => string,
-): void {
+export function assertResendRootEntry(entry: Record<string, unknown>, expectedText: string, extractText: (content: unknown) => string): void {
 	const message = entry.message as { role?: string; content?: unknown } | undefined;
 	if (!message || message.role !== "user") {
 		throw new Error("Resend root must be a user message entry");
@@ -143,8 +122,6 @@ export function assertResendRootEntry(
 	// Image-only messages use a localized UI placeholder that is not present in JSONL.
 	const isImagePlaceholder = expectedText === "[图片]" || expectedText === "[Image]";
 	if (entryText !== expectedText && !isImagePlaceholder) {
-		throw new Error(
-			`Resend root text mismatch: expected ${JSON.stringify(expectedText.slice(0, 80))}, got ${JSON.stringify(entryText.slice(0, 80))}`,
-		);
+		throw new Error(`Resend root text mismatch: expected ${JSON.stringify(expectedText.slice(0, 80))}, got ${JSON.stringify(entryText.slice(0, 80))}`);
 	}
 }

@@ -25,11 +25,7 @@ function compile(filePath) {
 		fileName: filePath,
 	}).outputText;
 	const module = { exports: {} };
-	vm.runInNewContext(
-		output,
-		{ module, exports: module.exports, require: () => ({}), console },
-		{ filename: filePath },
-	);
+	vm.runInNewContext(output, { module, exports: module.exports, require: () => ({}), console }, { filename: filePath });
 	return module.exports;
 }
 
@@ -60,10 +56,7 @@ test("todoBriefNeededAfterCompaction: compaction newer than last visibility mark
 	// 压缩在最后一次快照之后：历史里的计划视图被摘要替换 → 需要补注
 	assert.equal(todoBriefNeededAfterCompaction([snapshotEntry(0), compactionEntry(1)]), true);
 	// 多次压缩，最后一次在标记之后 → 仍需补注
-	assert.equal(
-		todoBriefNeededAfterCompaction([snapshotEntry(0), compactionEntry(1), snapshotEntry(2), compactionEntry(3)]),
-		true,
-	);
+	assert.equal(todoBriefNeededAfterCompaction([snapshotEntry(0), compactionEntry(1), snapshotEntry(2), compactionEntry(3)]), true);
 });
 
 test("todoBriefNeededAfterCompaction: visibility marker newer than compaction is sufficient", () => {
@@ -72,10 +65,7 @@ test("todoBriefNeededAfterCompaction: visibility marker newer than compaction is
 	assert.equal(todoBriefNeededAfterCompaction([compactionEntry(0), snapshotEntry(1)]), false);
 	// 已补注过简报（标记在压缩之后）→ 幂等，不重复追加
 	assert.equal(todoBriefNeededAfterCompaction([compactionEntry(0), briefEntry(1)]), false);
-	assert.equal(
-		todoBriefNeededAfterCompaction([compactionEntry(0), snapshotEntry(1), compactionEntry(2)]),
-		true,
-	);
+	assert.equal(todoBriefNeededAfterCompaction([compactionEntry(0), snapshotEntry(1), compactionEntry(2)]), true);
 });
 
 test("todoBriefNeededAfterCompaction: branch_summary invalidates like compaction", () => {

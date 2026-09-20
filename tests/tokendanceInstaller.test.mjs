@@ -62,10 +62,7 @@ function makeDshHost({ ready = true, home = undefined } = {}) {
 test("一键安装：pi models.json 写入 provider（baseUrl/归因头/模型），DSH 走 host 写入", async () => {
 	const configManager = makeConfigManager();
 	const dshHost = makeDshHost({ ready: true });
-	const result = await installer.installTokendanceProvider(
-		{ configManager, dshHost, tokendanceCatalog: makeCatalog() },
-		{},
-	);
+	const result = await installer.installTokendanceProvider({ configManager, dshHost, tokendanceCatalog: makeCatalog() }, {});
 	assert.equal(result.ok, true);
 	assert.equal(result.modelCount, 2);
 	assert.equal(result.piSaved, true);
@@ -98,10 +95,7 @@ test("一键安装：pi models.json 写入 provider（baseUrl/归因头/模型�
 test("传入 apiKey：写入 pi provider.apiKey（与 ModelsTab 编辑器一致）", async () => {
 	const configManager = makeConfigManager();
 	const dshHost = makeDshHost({ ready: true });
-	const result = await installer.installTokendanceProvider(
-		{ configManager, dshHost, tokendanceCatalog: makeCatalog() },
-		{ apiKey: "sk-test-123" },
-	);
+	const result = await installer.installTokendanceProvider({ configManager, dshHost, tokendanceCatalog: makeCatalog() }, { apiKey: "sk-test-123" });
 	assert.equal(result.ok, true);
 	assert.equal(configManager._dump()["tokendance"].apiKey, "sk-test-123");
 	// Key 同步写入 DSH 凭证
@@ -113,10 +107,7 @@ test("幂等：models.json 已有 tokendance 条目时保留既有 apiKey，仅�
 		tokendance: { apiKey: "sk-old", models: [], baseUrl: "https://old.example/v1" },
 	});
 	const dshHost = makeDshHost({ ready: true });
-	const result = await installer.installTokendanceProvider(
-		{ configManager, dshHost, tokendanceCatalog: makeCatalog() },
-		{},
-	);
+	const result = await installer.installTokendanceProvider({ configManager, dshHost, tokendanceCatalog: makeCatalog() }, {});
 	assert.equal(result.ok, true);
 	const provider = configManager._dump()["tokendance"];
 	assert.equal(provider.apiKey, "sk-old", "用户已有 Key 不应被覆盖");
@@ -127,10 +118,7 @@ test("幂等：models.json 已有 tokendance 条目时保留既有 apiKey，仅�
 test("目录为空：返回 ok=false，不写任何配置", async () => {
 	const configManager = makeConfigManager();
 	const dshHost = makeDshHost({ ready: true });
-	const result = await installer.installTokendanceProvider(
-		{ configManager, dshHost, tokendanceCatalog: makeCatalog([]) },
-		{},
-	);
+	const result = await installer.installTokendanceProvider({ configManager, dshHost, tokendanceCatalog: makeCatalog([]) }, {});
 	assert.equal(result.ok, false);
 	assert.equal(result.piSaved, false);
 	assert.equal(Object.keys(configManager._dump()).length, 0);
@@ -143,10 +131,7 @@ test("DSH 写入失败：pi 侧仍成功（dshSaved=false 且 dshError 带回原
 	dshHost.updateSettings = async () => {
 		throw new Error("settings rejected");
 	};
-	const result = await installer.installTokendanceProvider(
-		{ configManager, dshHost, tokendanceCatalog: makeCatalog() },
-		{},
-	);
+	const result = await installer.installTokendanceProvider({ configManager, dshHost, tokendanceCatalog: makeCatalog() }, {});
 	assert.equal(result.ok, true);
 	assert.equal(result.piSaved, true);
 	assert.equal(result.dshSaved, false);
@@ -183,10 +168,7 @@ test("安装前强制 refresh 目录（旧缓存可能含坏数据；refresh 失
 	const configManager = makeConfigManager();
 	const dshHost = makeDshHost({ ready: true });
 	const catalog = makeCatalog();
-	const result = await installer.installTokendanceProvider(
-		{ configManager, dshHost, tokendanceCatalog: catalog },
-		{},
-	);
+	const result = await installer.installTokendanceProvider({ configManager, dshHost, tokendanceCatalog: catalog }, {});
 	assert.equal(result.ok, true);
 	assert.equal(catalog._refreshCount(), 1);
 });
@@ -198,10 +180,7 @@ test("catalogLookup：目录命中时补 maxTokens/reasoning/input/thinkingLevel
 		{
 			configManager,
 			dshHost,
-			tokendanceCatalog: makeCatalog([
-				{ id: "glm-4.7", name: "Z.ai: GLM 4.7", contextWindow: 200000 },
-				{ id: "qq-custom-model" },
-			]),
+			tokendanceCatalog: makeCatalog([{ id: "glm-4.7", name: "Z.ai: GLM 4.7", contextWindow: 200000 }, { id: "qq-custom-model" }]),
 			catalogLookup: (modelId) => {
 				if (modelId === "glm-4.7") {
 					return {

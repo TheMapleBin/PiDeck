@@ -65,9 +65,7 @@ export function AppUpdateCard(props: AppUpdateCardProps) {
 	const openRelease = () => {
 		const releaseBaseUrl = props.releasesUrl.replace(/\/$/, "");
 		const version = app?.latestVersion?.replace(/^v/i, "");
-		const releaseUrl = version
-			? `${releaseBaseUrl}/tag/v${encodeURIComponent(version)}`
-			: releaseBaseUrl;
+		const releaseUrl = version ? `${releaseBaseUrl}/tag/v${encodeURIComponent(version)}` : releaseBaseUrl;
 		void desktopApi.app.openExternal(releaseUrl, true);
 	};
 
@@ -76,15 +74,8 @@ export function AppUpdateCard(props: AppUpdateCardProps) {
 		<div className="mb-3">
 			{/* 首行固定最小行高 + 垂直居中：与「自动下载更新」等 SettingRow 同行高观感，按钮不致偏上。 */}
 			<div className="flex min-h-10 items-center justify-between gap-2">
-				<span className="text-body">
-					{t("app.updateCardVersion", { version: props.appVersion })}
-				</span>
-				<Button
-					variant="secondary"
-					size="sm"
-					onClick={props.onCheckUpdate}
-					loading={props.checking || phase === "checking"}
-				>
+				<span className="text-body">{t("app.updateCardVersion", { version: props.appVersion })}</span>
+				<Button variant="secondary" size="sm" onClick={props.onCheckUpdate} loading={props.checking || phase === "checking"}>
 					{t("settings.checkUpdate")}
 				</Button>
 			</div>
@@ -104,9 +95,7 @@ export function AppUpdateCard(props: AppUpdateCardProps) {
 			{download && download.phase === "downloading" && (
 				<div className="mt-2 space-y-1">
 					<div className="flex items-center justify-between text-caption text-muted-foreground">
-						<span>
-							{t("settings.updateDownloading", { version: download.version ?? "" })}
-						</span>
+						<span>{t("settings.updateDownloading", { version: download.version ?? "" })}</span>
 						<span>
 							{download.percent != null ? `${download.percent.toFixed(1)}%` : ""}
 							{formatSpeed(download.bytesPerSecond) ? ` · ${formatSpeed(download.bytesPerSecond)}` : ""}
@@ -119,20 +108,14 @@ export function AppUpdateCard(props: AppUpdateCardProps) {
 			{/* installing：已向主进程请求退出，等待 electron-updater 接管安装。 */}
 			{download && download.phase === "installing" && (
 				<div className="mt-2 flex items-center gap-2">
-					<p className="text-caption text-muted-foreground">
-						{t("settings.updateInstalling", { version: download.version ?? app?.latestVersion ?? "" })}
-					</p>
+					<p className="text-caption text-muted-foreground">{t("settings.updateInstalling", { version: download.version ?? app?.latestVersion ?? "" })}</p>
 				</div>
 			)}
 
 			{/* ready：可重启安装；若上一次请求未能启动安装器，保留包和重试入口。 */}
 			{download && download.phase === "ready" && (
 				<div className="mt-2 flex items-center justify-between gap-2">
-					<p className={`text-caption ${download.error ? "text-destructive" : "text-success"}`}>
-						{download.error
-							? t("settings.updateInstallFailed", { error: download.error })
-							: t("settings.updateReadyToInstall", { version: download.version ?? app?.latestVersion ?? "" })}
-					</p>
+					<p className={`text-caption ${download.error ? "text-destructive" : "text-success"}`}>{download.error ? t("settings.updateInstallFailed", { error: download.error }) : t("settings.updateReadyToInstall", { version: download.version ?? app?.latestVersion ?? "" })}</p>
 					<Button variant="default" size="sm" onClick={props.onInstallUpdate}>
 						{t("settings.updateInstallNow")}
 					</Button>
@@ -142,17 +125,8 @@ export function AppUpdateCard(props: AppUpdateCardProps) {
 			{/* error：失败可重试；官方 GitHub 直连失败只提示切镜像，不自动回退。 */}
 			{download && download.phase === "error" && (
 				<div className="mt-2 flex flex-col gap-1">
-					<p className="text-caption text-destructive">
-						{t(
-							download.errorKind === "download"
-								? "update.downloadFailedDetail"
-								: "update.checkFailedDetail",
-							{ error: download.error ?? t("common.unknown") },
-						)}
-					</p>
-					{props.updateSource === "github" && (
-						<p className="text-caption text-muted-foreground">{t("settings.updateGithubFailHint")}</p>
-					)}
+					<p className="text-caption text-destructive">{t(download.errorKind === "download" ? "update.downloadFailedDetail" : "update.checkFailedDetail", { error: download.error ?? t("common.unknown") })}</p>
+					{props.updateSource === "github" && <p className="text-caption text-muted-foreground">{t("settings.updateGithubFailHint")}</p>}
 					<div className="flex gap-2">
 						<Button variant="ghost" size="sm" onClick={props.onCheckUpdate}>
 							{t("settings.checkUpdateRetry")}
@@ -169,9 +143,7 @@ export function AppUpdateCard(props: AppUpdateCardProps) {
 				<div className="mt-2 flex items-center justify-between gap-2">
 					{/* text-accent 在本项目 Tailwind 主题里指向 --color-bg-active（面色），
 					    当正文色用会与底色同值；强调正文统一用 text-primary（= --color-accent）。 */}
-					<p className="text-caption text-primary">
-						{t("settings.updateManualAvailable", { version: download.version ?? "" })}
-					</p>
+					<p className="text-caption text-primary">{t("settings.updateManualAvailable", { version: download.version ?? "" })}</p>
 					<Button variant="secondary" size="sm" onClick={openRelease}>
 						{t("update.openRelease")}
 					</Button>
@@ -181,9 +153,7 @@ export function AppUpdateCard(props: AppUpdateCardProps) {
 			{/* available：自动下载关闭时手动下载 */}
 			{download && download.phase === "available" && !isManualDelivery && !autoDownload && (
 				<div className="mt-2 flex items-center justify-between gap-2">
-					<p className="text-caption text-primary">
-						{t("settings.updateAvailable", { version: download.version ?? "" })}
-					</p>
+					<p className="text-caption text-primary">{t("settings.updateAvailable", { version: download.version ?? "" })}</p>
 					<div className="flex gap-2">
 						<Button variant="secondary" size="sm" onClick={props.onDownloadUpdate}>
 							{t("settings.updateDownloadNow")}
@@ -202,9 +172,7 @@ export function AppUpdateCard(props: AppUpdateCardProps) {
 			{/* idle + hasUpdate（已提示过/已跳过版本时仅展示信息） */}
 			{phase === "idle" && app?.hasUpdate && (
 				<div className="mt-2 flex items-center justify-between gap-2">
-					<p className="text-caption text-primary">
-						{t("settings.updateAvailable", { version: app.latestVersion ?? "" })}
-					</p>
+					<p className="text-caption text-primary">{t("settings.updateAvailable", { version: app.latestVersion ?? "" })}</p>
 					<div className="flex gap-2">
 						<Button variant="ghost" size="sm" onClick={() => setChangelogOpen(true)}>
 							<ScrollText size={12} aria-hidden="true" />
@@ -218,11 +186,7 @@ export function AppUpdateCard(props: AppUpdateCardProps) {
 			)}
 
 			{/* 已是最新（成功检查且无更新） */}
-			{phase === "idle" && app && !app.hasUpdate && updateStatus?.lastCheckAt && (
-				<p className="mt-2 text-caption text-success">
-					{t("settings.updateUpToDate")}
-				</p>
-			)}
+			{phase === "idle" && app && !app.hasUpdate && updateStatus?.lastCheckAt && <p className="mt-2 text-caption text-success">{t("settings.updateUpToDate")}</p>}
 
 			<ChangelogDialog open={changelogOpen} onOpenChange={setChangelogOpen} />
 		</div>

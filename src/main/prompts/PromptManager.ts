@@ -2,27 +2,14 @@ import { shell } from "electron";
 import { existsSync } from "node:fs";
 import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
-import {
-	createProjectFileReadBoundary,
-	resolveProjectFileReadPath,
-	resolveProjectFileWritePath,
-	type ProjectFileReadBoundary,
-} from "../files/projectFileAccess";
+import { createProjectFileReadBoundary, resolveProjectFileReadPath, resolveProjectFileWritePath, type ProjectFileReadBoundary } from "../files/projectFileAccess";
 import { homedir } from "node:os";
 import { trashPath } from "../fs/trash";
-import type {
-	AppSettings,
-	CreatePiPromptTemplateInput,
-	PiPromptTemplateListResult,
-	PiPromptTemplateSummary,
-} from "../../shared/types";
+import type { AppSettings, CreatePiPromptTemplateInput, PiPromptTemplateListResult, PiPromptTemplateSummary } from "../../shared/types";
 import { parseWslUncPath, toWindowsHostPath, type WslEnvironment } from "../wsl/WslPaths";
 import type { MainProcessTranslationKey } from "../../shared/i18n/mainProcessCopy";
 
-type PromptCopy = (
-	key: MainProcessTranslationKey,
-	params?: Record<string, string | number>,
-) => string;
+type PromptCopy = (key: MainProcessTranslationKey, params?: Record<string, string | number>) => string;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -30,9 +17,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function readDisabledPromptNames(settings: Record<string, unknown>): string[] {
 	const value = settings.disabledPrompts;
-	return Array.isArray(value)
-		? value.filter((entry): entry is string => typeof entry === "string")
-		: [];
+	return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : [];
 }
 
 /** 推荐模板：用户刚接触 prompt templates 时可快速上手的实用模板。
@@ -40,7 +25,7 @@ function readDisabledPromptNames(settings: Record<string, unknown>): string[] {
 
 /**
  * 管理 pi 全局 Prompt Templates 目录 (~/.pi/agent/prompts/)。
- * 
+ *
  * Prompt Templates 是 markdown 文件，用户可在 pi 中输入 /<name> 快速展开。
  * frontmatter 支持 description、argument-hint 等元数据。
  */
@@ -59,10 +44,7 @@ export class PromptManager {
 	}
 
 	/** 注入 PiDeck 设置读写：启用后 toggle 同步持久化禁用列表（模板白名单模式的依据）。 */
-	configureSettings(
-		getSettings: () => AppSettings,
-		patchSettings: (patch: Partial<AppSettings>) => Promise<AppSettings>,
-	) {
+	configureSettings(getSettings: () => AppSettings, patchSettings: (patch: Partial<AppSettings>) => Promise<AppSettings>) {
 		this.settingsProvider = getSettings;
 		this.settingsPatcher = patchSettings;
 	}
@@ -71,9 +53,7 @@ export class PromptManager {
 	private isDisabledInSettings(name: string): boolean {
 		if (!this.settingsProvider) return false;
 		const key = name.toLowerCase();
-		return (this.settingsProvider().disabledPrompts ?? []).some(
-			(disabledName) => disabledName.toLowerCase() === key,
-		);
+		return (this.settingsProvider().disabledPrompts ?? []).some((disabledName) => disabledName.toLowerCase() === key);
 	}
 
 	/**
@@ -96,10 +76,7 @@ export class PromptManager {
 	}
 
 	/** Reads project-local prompt disables; global PiDeck settings must not affect equal project names. */
-	private async readProjectDisabledPromptNames(
-		projectRoot: string,
-		boundary: ProjectFileReadBoundary,
-	): Promise<string[]> {
+	private async readProjectDisabledPromptNames(projectRoot: string, boundary: ProjectFileReadBoundary): Promise<string[]> {
 		const settingsFile = join(projectRoot, ".pi", "settings.json");
 		if (!existsSync(settingsFile)) return [];
 		try {
@@ -112,22 +89,12 @@ export class PromptManager {
 	}
 
 	/** Toggles one project-owned template by updating that project's whitelist input. */
-	async toggleInProject(
-		projectPath: string,
-		promptName: string,
-		enabled: boolean,
-	): Promise<PiPromptTemplateSummary> {
+	async toggleInProject(projectPath: string, promptName: string, enabled: boolean): Promise<PiPromptTemplateSummary> {
 		const projectRoot = resolve(this.hostPath(projectPath));
 		const boundary = await this.createProjectBoundary(projectRoot);
 		const name = this.validProjectPromptName(promptName);
-		const target = await this.resolveExistingProjectPath(
-			boundary,
-			join(projectRoot, ".pi", "prompts", `${name}.md`),
-		);
-		const settingsFile = await this.resolveProjectWritePath(
-			boundary,
-			join(projectRoot, ".pi", "settings.json"),
-		);
+		const target = await this.resolveExistingProjectPath(boundary, join(projectRoot, ".pi", "prompts", `${name}.md`));
+		const settingsFile = await this.resolveProjectWritePath(boundary, join(projectRoot, ".pi", "settings.json"));
 		let settings: Record<string, unknown> = {};
 		if (existsSync(settingsFile)) {
 			let parsed: unknown;
@@ -192,11 +159,7 @@ export class PromptManager {
 
 	/** 项目路径来自 renderer 的存储格式，Windows fs 边界统一使用当前 WSL 的主机路径。 */
 	private hostPath(path: string): string {
-		if (
-			!this.wslEnvironment ||
-			process.platform !== "win32" ||
-			(!path.startsWith("/") && !parseWslUncPath(path))
-		) {
+		if (!this.wslEnvironment || process.platform !== "win32" || (!path.startsWith("/") && !parseWslUncPath(path))) {
 			return path;
 		}
 		try {
@@ -214,10 +177,7 @@ export class PromptManager {
 		}
 	}
 
-	private async resolveExistingProjectPath(
-		boundary: ProjectFileReadBoundary,
-		targetPath: string,
-	): Promise<string> {
+	private async resolveExistingProjectPath(boundary: ProjectFileReadBoundary, targetPath: string): Promise<string> {
 		try {
 			return await resolveProjectFileReadPath(boundary, targetPath);
 		} catch {
@@ -225,10 +185,7 @@ export class PromptManager {
 		}
 	}
 
-	private async resolveProjectWritePath(
-		boundary: ProjectFileReadBoundary,
-		targetPath: string,
-	): Promise<string> {
+	private async resolveProjectWritePath(boundary: ProjectFileReadBoundary, targetPath: string): Promise<string> {
 		try {
 			return await resolveProjectFileWritePath(boundary, targetPath);
 		} catch {
@@ -333,9 +290,7 @@ export class PromptManager {
 		}
 		const entries = await readdir(projectPromptsDir, { withFileTypes: true }).catch(() => []);
 		const templates: PiPromptTemplateSummary[] = [];
-		const disabledNames = new Set(
-			(await this.readProjectDisabledPromptNames(projectRoot, boundary)).map((name) => name.toLowerCase()),
-		);
+		const disabledNames = new Set((await this.readProjectDisabledPromptNames(projectRoot, boundary)).map((name) => name.toLowerCase()));
 		for (const entry of entries) {
 			if (!entry.isFile() || !entry.name.endsWith(".md") || entry.name.endsWith(".d.md")) continue;
 			let fullPath: string;
@@ -365,10 +320,7 @@ export class PromptManager {
 	}
 
 	/** 在项目 .pi/prompts/ 下创建模板 */
-	async createInProject(
-		projectPath: string,
-		input: CreatePiPromptTemplateInput,
-	): Promise<PiPromptTemplateSummary> {
+	async createInProject(projectPath: string, input: CreatePiPromptTemplateInput): Promise<PiPromptTemplateSummary> {
 		const projectRoot = resolve(this.hostPath(projectPath));
 		const boundary = await this.createProjectBoundary(projectRoot);
 		const projectPromptsDir = join(projectRoot, ".pi", "prompts");
@@ -376,10 +328,7 @@ export class PromptManager {
 		if (!name) throw new Error(this.translate("mainPrompt.nameRequiredDetailed"));
 		const description = input.description.trim();
 		if (!description) throw new Error(this.translate("mainPrompt.descriptionRequired"));
-		const filePath = await this.resolveProjectWritePath(
-			boundary,
-			join(projectPromptsDir, `${name}.md`),
-		);
+		const filePath = await this.resolveProjectWritePath(boundary, join(projectPromptsDir, `${name}.md`));
 		if (existsSync(filePath)) throw new Error(this.translate("mainPrompt.alreadyExists", { name }));
 		await mkdir(dirname(filePath), { recursive: true });
 		// 内容仅含 frontmatter 中的 description，正文由用户后续编辑
@@ -400,10 +349,7 @@ export class PromptManager {
 		const projectRoot = resolve(this.hostPath(projectPath));
 		const boundary = await this.createProjectBoundary(projectRoot);
 		const name = this.validProjectPromptName(promptName);
-		const filePath = await this.resolveExistingProjectPath(
-			boundary,
-			join(projectRoot, ".pi", "prompts", `${name}.md`),
-		);
+		const filePath = await this.resolveExistingProjectPath(boundary, join(projectRoot, ".pi", "prompts", `${name}.md`));
 		// 项目内模板同样走回收站，避免误删后无法恢复。
 		await trashPath(filePath, { source: "prompts:delete-project" });
 	}
@@ -487,14 +433,8 @@ export class PromptManager {
 		if (!normalizedOld || !normalizedNew) throw new Error(this.translate("mainPrompt.nameRequired"));
 		if (normalizedOld === normalizedNew) throw new Error(this.translate("mainPrompt.sameName"));
 
-		const oldPath = await this.resolveExistingProjectPath(
-			boundary,
-			join(projectRoot, ".pi", "prompts", `${normalizedOld}.md`),
-		);
-		const newPath = await this.resolveProjectWritePath(
-			boundary,
-			join(projectRoot, ".pi", "prompts", `${normalizedNew}.md`),
-		);
+		const oldPath = await this.resolveExistingProjectPath(boundary, join(projectRoot, ".pi", "prompts", `${normalizedOld}.md`));
+		const newPath = await this.resolveProjectWritePath(boundary, join(projectRoot, ".pi", "prompts", `${normalizedNew}.md`));
 		if (existsSync(newPath)) throw new Error(this.translate("mainPrompt.alreadyExists", { name: normalizedNew }));
 
 		await rename(oldPath, newPath);
@@ -513,12 +453,14 @@ export class PromptManager {
 
 	/** 规范化模板名称：保留 Unicode 字母（含中文等非拉丁文字）、数字和连字符，其余替换为连字符 */
 	private normalizeName(value: string): string {
-		return value
-			.trim()
-			// 替换非（Unicode 字母/数字/连字符）的字符为连字符
-			.replace(/[^\p{L}\p{N}-]/gu, "-")
-			.replace(/-+/g, "-")
-			.replace(/^-|-$/g, "")
-			.toLowerCase();
+		return (
+			value
+				.trim()
+				// 替换非（Unicode 字母/数字/连字符）的字符为连字符
+				.replace(/[^\p{L}\p{N}-]/gu, "-")
+				.replace(/-+/g, "-")
+				.replace(/^-|-$/g, "")
+				.toLowerCase()
+		);
 	}
 }

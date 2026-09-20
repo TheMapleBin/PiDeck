@@ -25,27 +25,13 @@ export function SettingsSection(props: {
 }) {
 	return (
 		<section id={props.id} className={props.divided ? "mt-2 border-t border-border-subtle pt-4" : "mt-4 first:mt-0"}>
-			<SectionHeading
-				className="settings-section-header pb-2"
-				titleClassName="text-body font-bold text-foreground"
-				title={props.title}
-				description={props.description}
-			/>
-			{props.children != null ? (
-				props.boxed === false ? (
-					<div className="px-0.5 pb-1">{props.children}</div>
-				) : (
-					<SettingBox>{props.children}</SettingBox>
-				)
-			) : null}
+			<SectionHeading className="settings-section-header pb-2" titleClassName="text-body font-bold text-foreground" title={props.title} description={props.description} />
+			{props.children != null ? props.boxed === false ? <div className="px-0.5 pb-1">{props.children}</div> : <SettingBox>{props.children}</SettingBox> : null}
 		</section>
 	);
 }
 /** 存储管理子标签页 */
-export function StorageTab(props: {
-	settings: AppSettings;
-	onChange: (patch: Partial<AppSettings>) => void;
-}) {
+export function StorageTab(props: { settings: AppSettings; onChange: (patch: Partial<AppSettings>) => void }) {
 	const [logsSize, setLogsSize] = useState<string>("");
 	const [rpcLogsSize, setRpcLogsSize] = useState<string>("");
 	const [pasteFilesSize, setPasteFilesSize] = useState<string>("");
@@ -102,7 +88,10 @@ export function StorageTab(props: {
 		setConfirmDialog({
 			title: t("app.confirm"),
 			message: t("settings.storage.clearConfirm", { label }),
-			onConfirm: () => { doClear(target); setConfirmDialog(null); },
+			onConfirm: () => {
+				doClear(target);
+				setConfirmDialog(null);
+			},
 		});
 	};
 
@@ -114,9 +103,11 @@ export function StorageTab(props: {
 	const doClearLocalStorage = () => {
 		try {
 			// 审计上报：清理 UI 缓存是用户主动操作，留痕便于排查"设置怎么变了"类问题
-			window.piDesktop?.app.rendererLog("info", "renderer", "UI local cache cleared", {
-				keyCount: localStorage.length,
-			}).catch(() => undefined);
+			window.piDesktop?.app
+				.rendererLog("info", "renderer", "UI local cache cleared", {
+					keyCount: localStorage.length,
+				})
+				.catch(() => undefined);
 			localStorage.clear();
 		} catch (e) {
 			setFeedback(`${t("common.error")}: ${e instanceof Error ? e.message : String(e)}`);
@@ -129,7 +120,10 @@ export function StorageTab(props: {
 		setConfirmDialog({
 			title: t("app.confirm"),
 			message: t("settings.storage.clearLocalStorageConfirm"),
-			onConfirm: () => { setConfirmDialog(null); doClearLocalStorage(); },
+			onConfirm: () => {
+				setConfirmDialog(null);
+				doClearLocalStorage();
+			},
 		});
 	};
 
@@ -145,42 +139,19 @@ export function StorageTab(props: {
 		<>
 			{confirmDialog && (
 				// #115：手写确认浮层删除，统一走 shadcn ConfirmDialog（AlertDialog）
-				<ConfirmDialog
-					title={confirmDialog.title}
-					message={confirmDialog.message}
-					danger
-					onConfirm={confirmDialog.onConfirm}
-					onCancel={() => setConfirmDialog(null)}
-				/>
+				<ConfirmDialog title={confirmDialog.title} message={confirmDialog.message} danger onConfirm={confirmDialog.onConfirm} onCancel={() => setConfirmDialog(null)} />
 			)}
 			{/* 操作（清理全部）放最上面，日志相关内容依次下移 */}
 			<SettingsSection title={t("settings.storage.actions")}>
-				<SettingRow
-					level={1}
-					title={<span>{t("settings.storage.clearAll")}</span>}
-					description={t("settings.storage.clearAllDesc")}
-				>
-					<Button
-						variant="destructive"
-						loading={clearing === "all"}
-						disabled={clearing !== null}
-						onClick={() => confirmClear("all", `${t("settings.storage.appLogs")} + ${t("settings.storage.rpcLogs")} + ${t("settings.storage.pasteFiles")}`)}
-					>
+				<SettingRow level={1} title={<span>{t("settings.storage.clearAll")}</span>} description={t("settings.storage.clearAllDesc")}>
+					<Button variant="destructive" loading={clearing === "all"} disabled={clearing !== null} onClick={() => confirmClear("all", `${t("settings.storage.appLogs")} + ${t("settings.storage.rpcLogs")} + ${t("settings.storage.pasteFiles")}`)}>
 						{t("settings.storage.clearAllButton")}
 					</Button>
 				</SettingRow>
 				{/* 界面本地缓存：纯 UI 偏好（布局宽度/折叠/排序等），无敏感数据；
 				   与 settings.json（主进程权威设置）互不影响，清空后刷新页面生效 */}
-				<SettingRow
-					level={1}
-					title={<span>{t("settings.storage.clearLocalStorage")}</span>}
-					description={t("settings.storage.clearLocalStorageDesc")}
-				>
-					<Button
-						variant="destructive"
-						disabled={clearing !== null}
-						onClick={confirmClearLocalStorage}
-					>
+				<SettingRow level={1} title={<span>{t("settings.storage.clearLocalStorage")}</span>} description={t("settings.storage.clearLocalStorageDesc")}>
+					<Button variant="destructive" disabled={clearing !== null} onClick={confirmClearLocalStorage}>
 						{t("settings.storage.clearLocalStorageButton")}
 					</Button>
 				</SettingRow>
@@ -190,11 +161,7 @@ export function StorageTab(props: {
 					<span className="text-caption text-muted-foreground">
 						{t("settings.storage.rpcLogsSize")}：{rpcLogsSize || t("common.loading")}
 					</span>
-					<Button variant="secondary"
-						loading={clearing === "rpc" || clearing === "all"}
-						disabled={clearing !== null}
-						onClick={() => confirmClear("rpc", t("settings.storage.rpcLogs"))}
-					>
+					<Button variant="secondary" loading={clearing === "rpc" || clearing === "all"} disabled={clearing !== null} onClick={() => confirmClear("rpc", t("settings.storage.rpcLogs"))}>
 						{t("common.delete")}
 					</Button>
 				</div>
@@ -205,11 +172,7 @@ export function StorageTab(props: {
 					<span className="text-caption text-muted-foreground">
 						{t("settings.storage.pasteFilesSize")}：{pasteFilesSize || t("common.loading")}
 					</span>
-					<Button variant="secondary"
-						loading={clearing === "paste" || clearing === "all"}
-						disabled={clearing !== null}
-						onClick={() => confirmClear("paste", t("settings.storage.pasteFiles"))}
-					>
+					<Button variant="secondary" loading={clearing === "paste" || clearing === "all"} disabled={clearing !== null} onClick={() => confirmClear("paste", t("settings.storage.pasteFiles"))}>
 						{t("common.delete")}
 					</Button>
 				</div>
@@ -224,11 +187,7 @@ export function StorageTab(props: {
 						<Button variant="secondary" onClick={handleOpenFolder}>
 							{t("common.open")}
 						</Button>
-						<Button variant="secondary"
-							loading={clearing === "app" || clearing === "all"}
-							disabled={clearing !== null}
-							onClick={() => confirmClear("app", t("settings.storage.appLogs"))}
-						>
+						<Button variant="secondary" loading={clearing === "app" || clearing === "all"} disabled={clearing !== null} onClick={() => confirmClear("app", t("settings.storage.appLogs"))}>
 							{t("common.delete")}
 						</Button>
 					</div>
@@ -237,9 +196,7 @@ export function StorageTab(props: {
 			</SettingsSection>
 			{feedback && (
 				<div className="px-0.5 pb-1 pt-2">
-					<small className={`setting-status ${feedback.includes(t("common.error")) ? "error" : "success"}`}>
-						{feedback}
-					</small>
+					<small className={`setting-status ${feedback.includes(t("common.error")) ? "error" : "success"}`}>{feedback}</small>
 				</div>
 			)}
 		</>

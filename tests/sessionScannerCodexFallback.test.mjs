@@ -23,7 +23,7 @@ function loadTranspiledModule(filePath, overrides = new Map()) {
 		// jsonlLineStream（会话 JSONL 流式扫描）运行时需要 Buffer
 		Buffer,
 		process,
-		require: (id) => overrides.has(id) ? overrides.get(id) : require(id),
+		require: (id) => (overrides.has(id) ? overrides.get(id) : require(id)),
 		setTimeout,
 	};
 	vm.runInNewContext(outputText, sandbox, { filename: filePath });
@@ -51,11 +51,7 @@ function loadMessageContentModule() {
 		target: ts.ScriptTarget.ES2022,
 	};
 	const docActions = { exports: {} };
-	vm.runInNewContext(
-		ts.transpileModule(readFileSync("src/main/feishu/docActions.ts", "utf8"), { compilerOptions }).outputText,
-		docActions,
-		{ filename: "docActions.ts" },
-	);
+	vm.runInNewContext(ts.transpileModule(readFileSync("src/main/feishu/docActions.ts", "utf8"), { compilerOptions }).outputText, docActions, { filename: "docActions.ts" });
 	const messageContent = {
 		exports: {},
 		require: (id) => {
@@ -63,11 +59,7 @@ function loadMessageContentModule() {
 			throw new Error(`Unexpected messageContent import: ${id}`);
 		},
 	};
-	vm.runInNewContext(
-		ts.transpileModule(readFileSync("src/main/pi/messageContent.ts", "utf8"), { compilerOptions }).outputText,
-		messageContent,
-		{ filename: "messageContent.ts" },
-	);
+	vm.runInNewContext(ts.transpileModule(readFileSync("src/main/pi/messageContent.ts", "utf8"), { compilerOptions }).outputText, messageContent, { filename: "messageContent.ts" });
 	return messageContent.exports;
 }
 
@@ -125,7 +117,7 @@ function loadSessionSummaryCacheModule(homePath) {
 			if (id === "electron") {
 				return {
 					app: {
-						getPath: (name) => name === "userData" ? join(homePath, "user-data") : homePath,
+						getPath: (name) => (name === "userData" ? join(homePath, "user-data") : homePath),
 					},
 				};
 			}

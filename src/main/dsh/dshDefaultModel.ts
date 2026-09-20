@@ -41,10 +41,7 @@ export function parseAgentDefaultModel(yaml: string): DshDefaultModel | undefine
 			if (comment >= 0) value = value.slice(0, comment).trim();
 		}
 		// 去引号
-		if (value.length >= 2 && (
-			(value.startsWith('"') && value.endsWith('"')) ||
-			(value.startsWith("'") && value.endsWith("'"))
-		)) {
+		if (value.length >= 2 && ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'")))) {
 			value = value.slice(1, -1);
 		}
 		if (key === "provider") (result ??= {}).provider = value;

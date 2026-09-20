@@ -9,8 +9,9 @@ import test from "node:test";
 test("AgentManager keeps per-agent streaming perf timers", () => {
 	const source = readFileSync("src/main/pi/AgentManager.ts", "utf8");
 	// 计时状态：sendPrompt 请求时刻起表（首个 message_start 消费），首 delta 记 firstDeltaAt，正文首 delta 记 firstTextAt
-	assert.match(source, /messagePerfByAgent = new Map<\s*\n\s*string,\s*\n\s*\{ startedAt: number; firstDeltaAt: number; firstTextAt: number \}\s*\n\s*>\(\)/);
-	assert.match(source, /lastPerfByAgent = new Map<\s*\n\s*string,\s*\n\s*\{ ttftMs\?: number; totalMs: number; tps\?: number; at: number \}\s*\n\s*>\(\)/);
+	// 泛型参数可整体内联为一行，断言只锁字段名与类型语义。
+	assert.match(source, /messagePerfByAgent = new Map<[\s\S]{0,20}?string,[\s\S]{0,20}?\{ startedAt: number; firstDeltaAt: number; firstTextAt: number \}[\s\S]{0,20}?>\(\)/);
+	assert.match(source, /lastPerfByAgent = new Map<[\s\S]{0,20}?string,[\s\S]{0,20}?\{ ttftMs\?: number; totalMs: number; tps\?: number; at: number \}[\s\S]{0,20}?>\(\)/);
 });
 
 test("AgentManager starts the perf timer on message_start (idempotent)", () => {
@@ -26,9 +27,9 @@ test("AgentManager starts the perf timer on message_start (idempotent)", () => {
 	assert.match(ensure, /firstDeltaAt: 0,/);
 	assert.match(ensure, /firstTextAt: 0,/);
 	// 顶层 message_start（mock/pi 均走此路径）与 message_update start 都接入计时
-	assert.match(source, /typed\.type === "message_start" && typed\.message\?\.role === "assistant"/);
+	assert.match(source, /typed\.type === "message_start" && startMessage\?\.role === "assistant"/);
 	assert.match(source, /eventType === "start" \|\| eventType === "message_start"/);
-	const startBranch = source.slice(source.indexOf('typed.type === "message_start" && typed.message?.role === "assistant"'), source.indexOf('typed.type === "auto_retry_start"'));
+	const startBranch = source.slice(source.indexOf('typed.type === "message_start" && startMessage?.role === "assistant"'), source.indexOf('typed.type === "auto_retry_start"'));
 	assert.match(startBranch, /this\.ensurePerfTimer\(agentId\);/);
 });
 
@@ -50,7 +51,7 @@ test("message_end/done/error settles perf and pushes a runtime-state patch", () 
 	const source = readFileSync("src/main/pi/AgentManager.ts", "utf8");
 	// 顶层 message_end（pi 实际走此路径，不经 message_update）也结算
 	assert.match(source, /typed\.type === "message_end" &&/);
-	assert.match(source, /this\.settleMessagePerf\(agentId, typed\.message\);/);
+	assert.match(source, /this\.settleMessagePerf\(agentId, messageEnd\);/);
 	// message_update 终态（done/error）结算
 	assert.match(source, /eventType === "message_end" \|\| eventType === "done" \|\| eventType === "error"/);
 	assert.match(source, /this\.settleMessagePerf\(agentId, partialMessage\);/);

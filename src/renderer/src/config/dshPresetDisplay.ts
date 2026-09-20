@@ -27,9 +27,7 @@ const BUILTIN_PRESET_KEYS: Record<string, { name: TranslationKey; description: T
  * 内置预设的 i18n key：仅 system trust 且 id 属于随附 4 个时返回；
  * user 同名预设或未知 id 一律回退文件元数据（防本地预设冒用内置显示名）。
  */
-export function builtinPresetKeys(
-	preset: DshAgentPresetIdentity,
-): { name: TranslationKey; description: TranslationKey } | undefined {
+export function builtinPresetKeys(preset: DshAgentPresetIdentity): { name: TranslationKey; description: TranslationKey } | undefined {
 	return preset.trust === "system" ? BUILTIN_PRESET_KEYS[preset.id] : undefined;
 }
 
@@ -40,10 +38,7 @@ export function presetDisplayName(preset: DshAgentPresetIdentity, t: (key: Trans
 }
 
 /** 预设显示描述：内置 system 预设走 i18n，其余用元数据 description（可缺省）。 */
-export function presetDisplayDescription(
-	preset: DshAgentPresetIdentity,
-	t: (key: TranslationKey) => string,
-): string | undefined {
+export function presetDisplayDescription(preset: DshAgentPresetIdentity, t: (key: TranslationKey) => string): string | undefined {
 	const keys = builtinPresetKeys(preset);
 	return keys ? t(keys.description) : preset.description;
 }

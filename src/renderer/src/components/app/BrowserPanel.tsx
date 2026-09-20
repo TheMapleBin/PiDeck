@@ -1,16 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-	ArrowLeft,
-	ArrowRight,
-	Home,
-	Maximize2,
-	Minus,
-	Plus,
-	RefreshCw,
-	Smartphone,
-	Tablet,
-	X,
-} from "lucide-react";
+import { ArrowLeft, ArrowRight, Home, Maximize2, Minus, Plus, RefreshCw, Smartphone, Tablet, X } from "lucide-react";
 import { t } from "../../i18n";
 import { Button } from "../ui-shadcn/button";
 import { Input } from "../ui-shadcn/input";
@@ -39,14 +28,12 @@ const DEVICE_PRESETS: DevicePreset[] = [
 	{
 		id: "mobile",
 		label: "browser.deviceMobile",
-		userAgent:
-			"Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1",
+		userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1",
 	},
 	{
 		id: "tablet",
 		label: "browser.deviceTablet",
-		userAgent:
-			"Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1",
+		userAgent: "Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1",
 	},
 ];
 
@@ -82,10 +69,7 @@ function ensureInitialTab() {
 
 function getInitialActiveTab(): TabEntry {
 	ensureInitialTab();
-	return (
-		moduleState.tabs.find((tab) => tab.id === moduleState.activeTabId) ??
-		moduleState.tabs[0]
-	);
+	return moduleState.tabs.find((tab) => tab.id === moduleState.activeTabId) ?? moduleState.tabs[0];
 }
 
 /**
@@ -113,16 +97,16 @@ export function navigateTo(url: string) {
 type WebviewEvent<T extends string> = T extends "did-fail-load"
 	? { errorCode: number; errorDescription: string; validatedURL: string; isMainFrame: boolean }
 	: T extends "did-navigate"
-	? { url: string }
-	: T extends "did-navigate-in-page"
-		? { url: string; isMainFrame: boolean }
-		: T extends "page-title-updated"
-			? { title: string }
-			: T extends "new-window"
-				? { url: string; preventDefault: () => void }
-				: T extends "load-progress"
-					? { progress: number }
-					: Event;
+		? { url: string }
+		: T extends "did-navigate-in-page"
+			? { url: string; isMainFrame: boolean }
+			: T extends "page-title-updated"
+				? { title: string }
+				: T extends "new-window"
+					? { url: string; preventDefault: () => void }
+					: T extends "load-progress"
+						? { progress: number }
+						: Event;
 
 export function BrowserPanel(props: {
 	isFullscreen?: boolean;
@@ -135,12 +119,10 @@ export function BrowserPanel(props: {
 }) {
 	const { onClose, onMinimize, onToggleFullscreen } = props;
 	const [initialTab] = useState(() => getInitialActiveTab());
-	const webviewRef = useRef<any>(null);
+	const webviewRef = useRef<WebviewElement | null>(null);
 	const defaultUARef = useRef<string | null>(null);
 	const [tabs, setTabs] = useState<TabEntry[]>(() => [...moduleState.tabs]);
-	const [activeTabId, setActiveTabId] = useState<string | null>(
-		() => moduleState.activeTabId,
-	);
+	const [activeTabId, setActiveTabId] = useState<string | null>(() => moduleState.activeTabId);
 	const [url, setUrl] = useState(initialTab.url);
 	const [inputValue, setInputValue] = useState(initialTab.url);
 	const [canGoBack, setCanGoBack] = useState(false);
@@ -158,7 +140,8 @@ export function BrowserPanel(props: {
 		setActiveTabId(nextActiveId);
 	}, []);
 
-	const applyDeviceUserAgent = useCallback((wv: any, nextDevice: DeviceType) => {
+	const applyDeviceUserAgent = useCallback((wv: WebviewElement | null, nextDevice: DeviceType) => {
+		if (!wv) return;
 		const preset = DEVICE_PRESETS.find((item) => item.id === nextDevice);
 		if (preset?.userAgent) {
 			wv.setUserAgent(preset.userAgent);
@@ -167,17 +150,12 @@ export function BrowserPanel(props: {
 		}
 	}, []);
 
-	const updateActiveTab = useCallback(
-		(patch: Partial<TabEntry>) => {
-			if (!moduleState.activeTabId) return;
-			const nextTabs = moduleState.tabs.map((tab) =>
-				tab.id === moduleState.activeTabId ? { ...tab, ...patch } : tab,
-			);
-			moduleState.tabs = nextTabs;
-			setTabs([...nextTabs]);
-		},
-		[],
-	);
+	const updateActiveTab = useCallback((patch: Partial<TabEntry>) => {
+		if (!moduleState.activeTabId) return;
+		const nextTabs = moduleState.tabs.map((tab) => (tab.id === moduleState.activeTabId ? { ...tab, ...patch } : tab));
+		moduleState.tabs = nextTabs;
+		setTabs([...nextTabs]);
+	}, []);
 
 	const loadUrl = useCallback(
 		(targetUrl: string, nextDevice = moduleState.device) => {
@@ -435,17 +413,17 @@ export function BrowserPanel(props: {
 						</Button>
 					</div>
 				))}
-<Button variant="ghost" size="icon-sm" className="size-[30px] text-text-tertiary hover:text-[color:var(--color-accent)]" onClick={addTab} title={t("browser.newTab")}>
+				<Button variant="ghost" size="icon-sm" className="size-[30px] text-text-tertiary hover:text-[color:var(--color-accent)]" onClick={addTab} title={t("browser.newTab")}>
 					<Plus size={14} />
 				</Button>
 				{!props.isFullscreen && (
 					<div className="ml-auto flex shrink-0 items-center gap-0.5 pr-1">
-<Button variant="ghost" size="icon-sm" className="size-[26px] rounded-sm text-text-tertiary hover:bg-bg-hover hover:text-text-primary" onClick={onToggleFullscreen} title={t("browser.fullscreen")}>
+						<Button variant="ghost" size="icon-sm" className="size-[26px] rounded-sm text-text-tertiary hover:bg-bg-hover hover:text-text-primary" onClick={onToggleFullscreen} title={t("browser.fullscreen")}>
 							<Maximize2 size={13} />
 						</Button>
 						{/* 统一 drawer chrome 已提供关闭；此处仅在独立/旧布局时保留 */}
 						{!props.hideChromeClose && (
-<Button variant="ghost" size="icon-sm" className="size-[26px] rounded-sm text-text-tertiary hover:bg-bg-hover hover:text-text-primary" onClick={onClose} title={t("common.close")}>
+							<Button variant="ghost" size="icon-sm" className="size-[26px] rounded-sm text-text-tertiary hover:bg-bg-hover hover:text-text-primary" onClick={onClose} title={t("common.close")}>
 								<X size={14} />
 							</Button>
 						)}
@@ -454,16 +432,16 @@ export function BrowserPanel(props: {
 			</div>
 
 			<div className="flex shrink-0 items-center gap-1 border-b border-border/40 px-2 py-1.5">
-<Button variant="ghost" size="icon-sm" className="size-[30px] rounded-sm text-text-secondary hover:bg-bg-hover hover:text-text-primary disabled:opacity-30" disabled={!canGoBack} onClick={() => webviewRef.current?.goBack()} title={t("browser.back")}>
+				<Button variant="ghost" size="icon-sm" className="size-[30px] rounded-sm text-text-secondary hover:bg-bg-hover hover:text-text-primary disabled:opacity-30" disabled={!canGoBack} onClick={() => webviewRef.current?.goBack()} title={t("browser.back")}>
 					<ArrowLeft size={15} />
 				</Button>
-<Button variant="ghost" size="icon-sm" className="size-[30px] rounded-sm text-text-secondary hover:bg-bg-hover hover:text-text-primary disabled:opacity-30" disabled={!canGoForward} onClick={() => webviewRef.current?.goForward()} title={t("browser.forward")}>
+				<Button variant="ghost" size="icon-sm" className="size-[30px] rounded-sm text-text-secondary hover:bg-bg-hover hover:text-text-primary disabled:opacity-30" disabled={!canGoForward} onClick={() => webviewRef.current?.goForward()} title={t("browser.forward")}>
 					<ArrowRight size={15} />
 				</Button>
-<Button variant="ghost" size="icon-sm" className="size-[30px] rounded-sm text-text-secondary hover:bg-bg-hover hover:text-text-primary disabled:opacity-30" onClick={() => webviewRef.current?.reload()} title={t("browser.reload")}>
+				<Button variant="ghost" size="icon-sm" className="size-[30px] rounded-sm text-text-secondary hover:bg-bg-hover hover:text-text-primary disabled:opacity-30" onClick={() => webviewRef.current?.reload()} title={t("browser.reload")}>
 					<RefreshCw size={15} />
 				</Button>
-<Button variant="ghost" size="icon-sm" className="size-[30px] rounded-sm text-text-secondary hover:bg-bg-hover hover:text-text-primary disabled:opacity-30" onClick={() => loadUrl(DEFAULT_HOME)} title={t("browser.home")}>
+				<Button variant="ghost" size="icon-sm" className="size-[30px] rounded-sm text-text-secondary hover:bg-bg-hover hover:text-text-primary disabled:opacity-30" onClick={() => loadUrl(DEFAULT_HOME)} title={t("browser.home")}>
 					<Home size={15} />
 				</Button>
 				<div className="min-w-0 flex-1">
@@ -509,10 +487,10 @@ export function BrowserPanel(props: {
 				</div>
 				{props.isFullscreen ? (
 					<>
-<Button variant="ghost" size="icon-sm" className="size-[30px] rounded-sm text-text-secondary hover:bg-bg-hover hover:text-text-primary disabled:opacity-30" onClick={onMinimize} title={t("browser.minimize")}>
+						<Button variant="ghost" size="icon-sm" className="size-[30px] rounded-sm text-text-secondary hover:bg-bg-hover hover:text-text-primary disabled:opacity-30" onClick={onMinimize} title={t("browser.minimize")}>
 							<Minus size={15} />
 						</Button>
-<Button variant="ghost" size="icon-sm" className="size-[30px] rounded-sm text-text-secondary hover:bg-bg-hover hover:text-text-primary disabled:opacity-30" onClick={onClose} title={t("browser.close")}>
+						<Button variant="ghost" size="icon-sm" className="size-[30px] rounded-sm text-text-secondary hover:bg-bg-hover hover:text-text-primary disabled:opacity-30" onClick={onClose} title={t("browser.close")}>
 							<X size={15} />
 						</Button>
 					</>
@@ -526,7 +504,13 @@ export function BrowserPanel(props: {
 			)}
 
 			<div className="flex min-h-0 flex-1 justify-center overflow-hidden bg-bg-subtle">
-				<webview ref={(el) => { (webviewRef as React.MutableRefObject<any>).current = el; if (el) el.setAttribute("allowfileaccess", "true"); }} className="browser-webview" src={initialTab.url} allowpopups={"true" as any} />
+				<webview
+					ref={(el) => {
+						webviewRef.current = el;
+					}}
+					className="browser-webview"
+					src={initialTab.url}
+				/>
 			</div>
 		</div>
 	);

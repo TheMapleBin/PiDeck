@@ -48,9 +48,7 @@ function isQuestionItem(value: unknown): value is DshQuestionItem {
 }
 
 /** 校验并收窄 approval/requested 帧；形状不符返回 undefined（泵侧静默跳过）。 */
-export function parseDshApprovalFrame(
-	frame: { rpcId?: unknown; payload?: unknown } | undefined,
-): DshApprovalFrame | undefined {
+export function parseDshApprovalFrame(frame: { rpcId?: unknown; payload?: unknown } | undefined): DshApprovalFrame | undefined {
 	const payload = frame?.payload;
 	if (!isRecord(payload)) return undefined;
 	const requestId = typeof frame?.rpcId === "string" ? frame.rpcId : "";
@@ -67,9 +65,7 @@ export function parseDshApprovalFrame(
 }
 
 /** 校验并收窄 question/requested 帧；至少一个问题才有效。 */
-export function parseDshQuestionFrame(
-	frame: { rpcId?: unknown; payload?: unknown } | undefined,
-): DshQuestionFrame | undefined {
+export function parseDshQuestionFrame(frame: { rpcId?: unknown; payload?: unknown } | undefined): DshQuestionFrame | undefined {
 	const payload = frame?.payload;
 	if (!isRecord(payload)) return undefined;
 	const requestId = typeof frame?.rpcId === "string" ? frame.rpcId : "";
@@ -85,11 +81,7 @@ export function batchQuestionsFromDsh(items: DshQuestionItem[]): AgentUiBatchQue
 	return items.map((item) => {
 		// DSH 的 select 问题必须带 options 才能渲染选项；无 options 降级 confirm
 		// （用户确认/拒绝），避免渲染成空选项的 select。
-		const type: AgentUiBatchQuestion["type"] = item.options?.length
-			? "select"
-			: item.multiSelect
-				? "select"
-				: "confirm";
+		const type: AgentUiBatchQuestion["type"] = item.options?.length ? "select" : item.multiSelect ? "select" : "confirm";
 		const options = item.options?.length
 			? item.options.map((option) => ({
 					label: option.label,
@@ -133,9 +125,7 @@ export function questionUiRequest(frame: DshQuestionFrame, agentId: string): Rec
  * - question → 空答案数组（用户未作答）
  * 与 buildDshRespondValue 的 allowed-once/answered 分支互补。
  */
-export function buildDshRejectValue(
-	frame: DshApprovalFrame | DshQuestionFrame,
-): Record<string, unknown> {
+export function buildDshRejectValue(frame: DshApprovalFrame | DshQuestionFrame): Record<string, unknown> {
 	if ("approvalId" in frame) {
 		return {
 			sessionId: frame.sessionId,
@@ -152,10 +142,7 @@ export function buildDshRejectValue(
  * - question → { sessionId, answer: { answers: [{ id, selected, custom? }] } }
  * 返回 undefined 表示应答无法解析（调用方按拒绝处理或忽略）。
  */
-export function buildDshRespondValue(
-	frame: DshApprovalFrame | DshQuestionFrame,
-	response: AgentUiResponse,
-): Record<string, unknown> | undefined {
+export function buildDshRespondValue(frame: DshApprovalFrame | DshQuestionFrame, response: AgentUiResponse): Record<string, unknown> | undefined {
 	if ("approvalId" in frame) {
 		const outcome = response.confirmed === true ? "allowed-once" : "rejected";
 		return {

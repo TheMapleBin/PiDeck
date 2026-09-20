@@ -7,14 +7,7 @@ import { sessionRuntimeBySessionIdAtomFamily } from "../../../atoms";
 import { t } from "../../../i18n";
 import { writeClipboard } from "../../../utils/clipboard";
 import { formatDuration, formatTime } from "../TimelineFormat";
-import {
-	buildTrajectory,
-	filterRecordsByRange,
-	type TrajectoryLane,
-	type TrajectoryRecord,
-	type TrajectoryTimeRange,
-	type TrajectoryTurn,
-} from "./buildTrajectory";
+import { buildTrajectory, filterRecordsByRange, type TrajectoryLane, type TrajectoryRecord, type TrajectoryTimeRange, type TrajectoryTurn } from "./buildTrajectory";
 import { countUserTurns } from "../timeline/turnRenderWindow";
 
 const LANE_ORDER: TrajectoryLane[] = ["input", "model", "tools", "process"];
@@ -113,10 +106,7 @@ export function SessionTrajectoryView(props: {
 	// 发言权周期计（countUserTurns，与分页/缓存协议同口径，开口即算一轮）。
 	// 账本分组结构仍按 user 开轮（buildTrajectory），连发 user 时组数可能略多于
 	// 发言权轮数——账本是结构展示，对外计数统一走 countUserTurns。
-	const dialogueTurns =
-		props.isDsh === true && runtime?.state?.dshSessionStats
-			? runtime.state.dshSessionStats.turns
-			: countUserTurns(props.messages);
+	const dialogueTurns = props.isDsh === true && runtime?.state?.dshSessionStats ? runtime.state.dshSessionStats.turns : countUserTurns(props.messages);
 	const [now, setNow] = useState(() => Date.now());
 	const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
 	const [range, setRange] = useState<TrajectoryTimeRange | undefined>(undefined);
@@ -124,10 +114,11 @@ export function SessionTrajectoryView(props: {
 	const ledgerScrollRef = useRef<HTMLDivElement | null>(null);
 	const scrollRestoredForRef = useRef<string | undefined>(undefined);
 	const model = useMemo(
-		() => buildTrajectory(props.messages, now, {
-			processEvents: props.processEvents,
-			systemPrompt: props.systemPrompt,
-		}),
+		() =>
+			buildTrajectory(props.messages, now, {
+				processEvents: props.processEvents,
+				systemPrompt: props.systemPrompt,
+			}),
 		[props.messages, props.processEvents, props.systemPrompt, now],
 	);
 	const visible = useMemo(() => filterRecordsByRange(model.records, range), [model.records, range]);
@@ -171,82 +162,42 @@ export function SessionTrajectoryView(props: {
 					<span aria-hidden="true">·</span>
 					<span>{t("session.trajectory.records", { count: visible.length })}</span>
 					{range ? (
-						<button
-							type="button"
-							className="rounded-sm px-1.5 text-caption text-primary hover:underline"
-							onClick={() => setRange(undefined)}
-						>
+						<button type="button" className="rounded-sm px-1.5 text-caption text-primary hover:underline" onClick={() => setRange(undefined)}>
 							{t("session.trajectory.clearRange")}
 						</button>
 					) : null}
 				</div>
 				{props.hasMoreMessages ? (
-					<button
-						type="button"
-						className="shrink-0 rounded-sm px-1.5 text-caption text-muted-foreground hover:text-foreground"
-						disabled={props.isLoadingMoreMessages}
-						onClick={props.onLoadMore}
-					>
-						{props.isLoadingMoreMessages
-							? t("session.trajectory.loadingOlder")
-							: t("session.trajectory.loadOlder")}
+					<button type="button" className="shrink-0 rounded-sm px-1.5 text-caption text-muted-foreground hover:text-foreground" disabled={props.isLoadingMoreMessages} onClick={props.onLoadMore}>
+						{props.isLoadingMoreMessages ? t("session.trajectory.loadingOlder") : t("session.trajectory.loadOlder")}
 					</button>
 				) : null}
 			</div>
-			<TrajectoryOverview
-				records={model.records}
-				domainStart={model.domainStart}
-				domainEnd={model.domainEnd}
-				range={range}
-				selectedId={selected?.id}
-				onSelect={setSelectedId}
-				onRangeChange={setRange}
-				onHoverTick={refreshNow}
-			/>
-			<div
-				className={
-					drawer
-						? "grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_minmax(140px,38%)]"
-						: "grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(220px,32%)]"
-				}
-			>
-				<TrajectoryLedger
-					records={visible}
-					turns={model.turns}
-					now={now}
-					selectedId={selected?.id}
-					onSelect={setSelectedId}
-					borderBottom={drawer}
-					scrollRef={ledgerScrollRef}
-				/>
+			<TrajectoryOverview records={model.records} domainStart={model.domainStart} domainEnd={model.domainEnd} range={range} selectedId={selected?.id} onSelect={setSelectedId} onRangeChange={setRange} onHoverTick={refreshNow} />
+			<div className={drawer ? "grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_minmax(140px,38%)]" : "grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(220px,32%)]"}>
+				<TrajectoryLedger records={visible} turns={model.turns} now={now} selectedId={selected?.id} onSelect={setSelectedId} borderBottom={drawer} scrollRef={ledgerScrollRef} />
 				<TrajectoryInspector record={selected} runtimeState={runtime?.state} isDsh={props.isDsh} />
 			</div>
 		</div>
 	);
 }
 
-function TrajectoryOverview(props: {
-	records: TrajectoryRecord[];
-	domainStart: number;
-	domainEnd: number;
-	range?: TrajectoryTimeRange;
-	selectedId?: string;
-	onSelect: (id: string) => void;
-	onRangeChange: (range: TrajectoryTimeRange | undefined) => void;
-	onHoverTick: () => void;
-}) {
+function TrajectoryOverview(props: { records: TrajectoryRecord[]; domainStart: number; domainEnd: number; range?: TrajectoryTimeRange; selectedId?: string; onSelect: (id: string) => void; onRangeChange: (range: TrajectoryTimeRange | undefined) => void; onHoverTick: () => void }) {
 	const trackRef = useRef<HTMLDivElement | null>(null);
 	const dragRef = useRef<{ x: number; start: number } | undefined>(undefined);
 	const [draft, setDraft] = useState<TrajectoryTimeRange | undefined>(undefined);
 	const span = Math.max(props.domainEnd - props.domainStart, 1);
 
-	const timeAt = useCallback((clientX: number): number => {
-		const el = trackRef.current;
-		if (!el) return props.domainStart;
-		const rect = el.getBoundingClientRect();
-		const ratio = rect.width <= 0 ? 0 : Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
-		return props.domainStart + ratio * span;
-	}, [props.domainStart, span]);
+	const timeAt = useCallback(
+		(clientX: number): number => {
+			const el = trackRef.current;
+			if (!el) return props.domainStart;
+			const rect = el.getBoundingClientRect();
+			const ratio = rect.width <= 0 ? 0 : Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+			return props.domainStart + ratio * span;
+		},
+		[props.domainStart, span],
+	);
 
 	const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
 		if (event.button !== 0) return;
@@ -332,11 +283,7 @@ function TrajectoryOverview(props: {
 						/>
 					) : null}
 					{LANE_ORDER.map((lane, laneIndex) => (
-						<div
-							key={lane}
-							className="pointer-events-none absolute right-0 left-0"
-							style={{ top: `${(laneIndex / LANE_ORDER.length) * 100}%`, height: `${100 / LANE_ORDER.length}%` }}
-						>
+						<div key={lane} className="pointer-events-none absolute right-0 left-0" style={{ top: `${(laneIndex / LANE_ORDER.length) * 100}%`, height: `${100 / LANE_ORDER.length}%` }}>
 							{props.records
 								.filter((record) => record.lane === lane)
 								.map((record) => {
@@ -367,10 +314,7 @@ function TrajectoryOverview(props: {
 	);
 }
 
-function turnDurationLabel(
-	turn: { inFlight: boolean; durationMs?: number; startedAt: number } | undefined,
-	now: number,
-): string | undefined {
+function turnDurationLabel(turn: { inFlight: boolean; durationMs?: number; startedAt: number } | undefined, now: number): string | undefined {
 	if (!turn) return undefined;
 	if (turn.inFlight) {
 		const elapsed = Math.max(0, now - turn.startedAt);
@@ -394,18 +338,14 @@ function TrajectoryLedger(props: {
 	return (
 		<div ref={props.scrollRef} className={`min-h-0 overflow-auto ${props.borderBottom ? "border-b border-border/60" : "border-r border-border/60"}`}>
 			{props.records.length === 0 ? (
-				<div className="px-3 py-6 text-center text-caption text-muted-foreground">
-					{t("session.trajectory.empty")}
-				</div>
+				<div className="px-3 py-6 text-center text-caption text-muted-foreground">{t("session.trajectory.empty")}</div>
 			) : (
 				<ul className="divide-y divide-border/50">
 					{props.records.map((record) => {
 						const showTurn = record.turnIndex !== lastTurn;
 						lastTurn = record.turnIndex;
 						const selected = record.id === props.selectedId;
-						const turnLabel = showTurn
-							? turnDurationLabel(props.turns[record.turnIndex], props.now)
-							: undefined;
+						const turnLabel = showTurn ? turnDurationLabel(props.turns[record.turnIndex], props.now) : undefined;
 						return (
 							<li key={record.id}>
 								{showTurn ? (
@@ -414,17 +354,11 @@ function TrajectoryLedger(props: {
 										{turnLabel ? <span className="tabular-nums">{turnLabel}</span> : null}
 									</div>
 								) : null}
-								<button
-									type="button"
-									className={`flex w-full items-start gap-2 px-3 py-1.5 text-left text-caption hover:bg-muted/50 ${selected ? "bg-muted" : ""}`}
-									onClick={() => props.onSelect(record.id)}
-								>
+								<button type="button" className={`flex w-full items-start gap-2 px-3 py-1.5 text-left text-caption hover:bg-muted/50 ${selected ? "bg-muted" : ""}`} onClick={() => props.onSelect(record.id)}>
 									<span className={`mt-1 size-1.5 shrink-0 rounded-full ${laneTone(record.lane)}`} />
 									<span className="w-20 shrink-0 font-medium text-foreground">{kindLabel(record)}</span>
 									<span className="min-w-0 flex-1 truncate text-muted-foreground">{record.summary || "—"}</span>
-									<span className="shrink-0 tabular-nums text-muted-foreground">
-										{durationLabel(record)}
-									</span>
+									<span className="shrink-0 tabular-nums text-muted-foreground">{durationLabel(record)}</span>
 								</button>
 							</li>
 						);
@@ -450,24 +384,20 @@ function CopyableBlock(props: { label?: string; text: string }) {
 	return (
 		<div className="mt-3">
 			<div className="mb-1 flex items-center justify-between gap-2">
-				{props.label ? (
-					<span className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
-						{props.label}
-					</span>
-				) : <span />}
+				{props.label ? <span className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">{props.label}</span> : <span />}
 				<button
 					type="button"
 					className="inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground"
-					onClick={() => { void onCopy(); }}
+					onClick={() => {
+						void onCopy();
+					}}
 					title={t("common.copy")}
 				>
 					{copied ? <Check size={11} /> : <Copy size={11} />}
 					{copied ? t("common.copied") : t("common.copy")}
 				</button>
 			</div>
-			<pre className="max-h-72 overflow-auto rounded-md bg-muted/50 p-2 text-[11px] leading-relaxed wrap-break-word whitespace-pre-wrap">
-				{props.text}
-			</pre>
+			<pre className="max-h-72 overflow-auto rounded-md bg-muted/50 p-2 text-[11px] leading-relaxed wrap-break-word whitespace-pre-wrap">{props.text}</pre>
 		</div>
 	);
 }
@@ -481,11 +411,7 @@ function TrajectoryInspector(props: {
 	const record = props.record;
 	const state = props.runtimeState;
 	if (!record) {
-		return (
-			<div className="min-h-0 overflow-auto px-3 py-4 text-caption text-muted-foreground">
-				{t("session.trajectory.inspectHint")}
-			</div>
-		);
+		return <div className="min-h-0 overflow-auto px-3 py-4 text-caption text-muted-foreground">{t("session.trajectory.inspectHint")}</div>;
 	}
 	return (
 		<div className="min-h-0 overflow-auto px-3 py-3">
@@ -493,18 +419,14 @@ function TrajectoryInspector(props: {
 				{record.kind === "tool" ? <Wrench size={14} /> : <Hash size={14} />}
 				{record.kind === "tool" ? record.toolName : kindLabel(record)}
 			</div>
-			{record.kind === "systemPrompt" ? (
-				<p className="mb-2 text-caption text-muted-foreground">
-					{props.isDsh
-						? t("session.trajectory.systemPromptHintDsh")
-						: t("session.trajectory.systemPromptHint")}
-				</p>
-			) : null}
+			{record.kind === "systemPrompt" ? <p className="mb-2 text-caption text-muted-foreground">{props.isDsh ? t("session.trajectory.systemPromptHintDsh") : t("session.trajectory.systemPromptHint")}</p> : null}
 			<dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-caption">
 				{record.startedAt > 0 ? (
 					<>
 						<dt className="text-muted-foreground">{t("session.trajectory.field.time")}</dt>
-						<dd className="tabular-nums">{formatTime(record.startedAt)} · {formatClock(record.startedAt)}</dd>
+						<dd className="tabular-nums">
+							{formatTime(record.startedAt)} · {formatClock(record.startedAt)}
+						</dd>
 					</>
 				) : null}
 				<dt className="text-muted-foreground">{t("session.trajectory.field.duration")}</dt>
@@ -568,11 +490,7 @@ function TrajectoryInspector(props: {
 				{record.retry !== undefined ? (
 					<>
 						<dt className="text-muted-foreground">{t("session.trajectory.field.retry")}</dt>
-						<dd className="tabular-nums">
-							{record.maxRetries !== undefined
-								? `${record.retry}/${record.maxRetries}`
-								: record.retry}
-						</dd>
+						<dd className="tabular-nums">{record.maxRetries !== undefined ? `${record.retry}/${record.maxRetries}` : record.retry}</dd>
 					</>
 				) : null}
 				{record.retryDelayMs !== undefined ? (
@@ -582,15 +500,9 @@ function TrajectoryInspector(props: {
 					</>
 				) : null}
 			</dl>
-			{record.inputDetail ? (
-				<CopyableBlock label={t("session.trajectory.field.payload")} text={record.inputDetail} />
-			) : null}
-			{record.outputDetail ? (
-				<CopyableBlock label={t("session.trajectory.field.result")} text={record.outputDetail} />
-			) : null}
-			{!record.inputDetail && !record.outputDetail && (record.detail || record.text) ? (
-				<CopyableBlock text={record.detail || record.text || ""} />
-			) : null}
+			{record.inputDetail ? <CopyableBlock label={t("session.trajectory.field.payload")} text={record.inputDetail} /> : null}
+			{record.outputDetail ? <CopyableBlock label={t("session.trajectory.field.result")} text={record.outputDetail} /> : null}
+			{!record.inputDetail && !record.outputDetail && (record.detail || record.text) ? <CopyableBlock text={record.detail || record.text || ""} /> : null}
 			{state && (state.ttftMs !== undefined || state.inputTokens !== undefined) ? (
 				<div className="mt-4 border-t border-border/60 pt-3">
 					<div className="mb-1 flex items-center gap-1 text-caption font-medium">

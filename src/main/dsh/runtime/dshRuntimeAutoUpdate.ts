@@ -15,10 +15,7 @@
  * - 回收失败不回滚：旧目录删不掉只影响磁盘占用，不影响新 runtime 启用；
  *   逐个 best-effort 删除，失败记录后继续。
  */
-import {
-	collectRecyclableRuntimes,
-	type InstalledDshRuntime,
-} from "../../../shared/types/dshRuntimeManifest";
+import { collectRecyclableRuntimes, type InstalledDshRuntime } from "../../../shared/types/dshRuntimeManifest";
 import type { DshRuntimeStatus } from "../../../shared/types/dshRuntime";
 
 export type DshRuntimeAutoUpdateDeps = {
@@ -43,10 +40,7 @@ export type DshRuntimeAutoUpdateDeps = {
 	log: (scope: string, message: string, detail?: unknown) => void;
 };
 
-export type DshRuntimeAutoUpdateResult =
-	| { action: "skipped"; reason: "state-not-outdated" }
-	| { action: "install-failed"; error: string }
-	| { action: "updated"; runtimeVersion?: string; pruned: string[]; pruneErrors: Array<{ dirName: string; error: string }> };
+export type DshRuntimeAutoUpdateResult = { action: "skipped"; reason: "state-not-outdated" } | { action: "install-failed"; error: string } | { action: "updated"; runtimeVersion?: string; pruned: string[]; pruneErrors: Array<{ dirName: string; error: string }> };
 
 /** 提取错误文案（与 DshRuntimeManager 同款实现：跨 realm 下 instanceof 不可靠）。 */
 function errorMessage(error: unknown): string {
@@ -61,9 +55,7 @@ function errorMessage(error: unknown): string {
  * 检测并自动更新不配套的 DSH runtime。幂等：state 不是 outdated 时直接跳过，
  * 装配层可以放心在每次启动调用（fire-and-forget）。
  */
-export async function autoUpdateDshRuntimeIfOutdated(
-	deps: DshRuntimeAutoUpdateDeps,
-): Promise<DshRuntimeAutoUpdateResult> {
+export async function autoUpdateDshRuntimeIfOutdated(deps: DshRuntimeAutoUpdateDeps): Promise<DshRuntimeAutoUpdateResult> {
 	// dev 与打包版都允许手动安装 runtime；这里只处理「已装但版本不配套」的
 	// 自动修复，避免启动时替用户静默下载几十 MB。手动安装仍走同一 install 链路。
 	const status = deps.getStatus();

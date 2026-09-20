@@ -20,20 +20,10 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
 import { installHiddenConsolePatch, installHostHiddenConsole, installRunnerNodeModeEnv, installRunnerPreloadEnv, getHiddenConsoleMode, configureDshRunnerNodeSidecar, getDshRunnerNodeSidecar } from "./hideChildConsoles";
 import { DSH_RUNNER_NODE_ENV } from "./dshRunnerNodeSidecar";
-import type { Win32Ffi } from "./hideChildConsoles";
 import { agentPresetsRow, dshSubagentModelSelectionSettingsRow, dshWebAgentPlaneDisableRows, hostCompositionPath } from "./dshPresetComposition";
-import {
-	PIDECK_PLUGIN_BRIDGE_PATH,
-	handlePluginBridgeFetch,
-} from "./pideckPluginBridge";
-import {
-	PIDECK_COMMANDS_BRIDGE_PATH,
-	handleCommandsBridgeFetch,
-} from "./pideckCommandsBridge";
-import {
-	PIDECK_SESSION_BRIDGE_PATH,
-	handleSessionBridgeFetch,
-} from "./pideckSessionBridge";
+import { PIDECK_PLUGIN_BRIDGE_PATH, handlePluginBridgeFetch } from "./pideckPluginBridge";
+import { PIDECK_COMMANDS_BRIDGE_PATH, handleCommandsBridgeFetch } from "./pideckCommandsBridge";
+import { PIDECK_SESSION_BRIDGE_PATH, handleSessionBridgeFetch } from "./pideckSessionBridge";
 
 // utilityProcess 的 parentPort：electron 包类型里有（Electron.ParentPort）。
 import type { ParentPort } from "electron";
@@ -98,12 +88,11 @@ async function main(): Promise<void> {
 	//       并把解析结果写进 PIDECK_KOFFI_MODULE 供 runner preload 兜底；
 	//    c) preload 侧按 PIDECK_KOFFI_MODULE → __dirname 解析链兜底（见
 	//       runnerConsolePreload.ts）。
-	// 1) installHostHiddenConsole：给 host 分配隐藏控制台。utilityProcess 无控制台，
-	//    child_process.spawn 拉起控制台子程序时 libuv 自动 CREATE_NO_WINDOW（本地
-	//    路径本就不弹窗）；分配隐藏控制台后所有子进程/孙进程继承它，整棵树零弹窗。
-	// 2) installHiddenConsolePatch：隐藏控制台分配失败时退回 windowsHide 注入兜底；
-	//    并对沙箱 runner 的 spawn 注入 NODE_OPTIONS preload（runner 是 GUI 进程、
-	//    不继承 host 控制台，需在 runner 进程内自建隐藏控制台——见 runnerConsolePreload.ts）。
+	// 1) installHostHiddenConsole：不再 AllocConsole（conhost 异步建窗会闪黑窗）。
+	//    host 自身不需要控制台；mode=create-no-window。
+	// 2) installHiddenConsolePatch：win32 子进程一律 windowsHide（CREATE_NO_WINDOW
+	//    无窗口可继承控制台）。sidecar 把 runner 改成 node.exe；无 sidecar 时
+	//    注入 NODE_OPTIONS preload；无 sidecar 时 runner 在私有窗口站上 AllocConsole。
 	// 3) installRunnerNodeModeEnv：把 ELECTRON_RUN_AS_NODE=1 写进 host 自己的
 	//    process.env。沙箱链路是 host → subprocess-local runner → windows-acl runner
 	//    的两级 electron.exe，第二级（ACL runner）的 env 由 dsh-subprocess-local 从
@@ -114,25 +103,22 @@ async function main(): Promise<void> {
 	//    process.env（与 3) 同一缺口）：第二级 ACL runner 拿不到 preload 就没有
 	//    可继承的控制台，它用 CreateProcessAsUserW（无 CREATE_NO_WINDOW）拉起 pwsh
 	//    时 Windows 会新建【可见】控制台——命令秒回但每条弹黑窗口（2026-09-12 实测）。
-	let koffiFfi: Win32Ffi | undefined;
 	try {
 		const runtimeRequire = createRequire(join(fileURLToPath(nodeModulesUrl), "package.json"));
 		const koffiEntry = runtimeRequire.resolve("koffi") as string;
 		process.env.PIDECK_KOFFI_MODULE = koffiEntry;
-		koffiFfi = runtimeRequire(koffiEntry) as Win32Ffi;
 	} catch {
 		// runtime 里没有 koffi（异常形态）：退回 app 内解析——koffi 已进应用依赖，
 		// 打包版从 asar 内 createRequire(__dirname) 可解析（native 落 asar.unpacked）。
 	}
 	configureDshRunnerNodeSidecar(process.env[DSH_RUNNER_NODE_ENV]);
-	installHostHiddenConsole(undefined, koffiFfi);
+	installHostHiddenConsole();
 	installHiddenConsolePatch();
 	installRunnerNodeModeEnv();
 	installRunnerPreloadEnv();
 	// 诊断（黑窗口排查入口）：host 的 stdout 不被 DshHostProcess 转发（只接 stderr），
-	// 因此这条也用 console.error 落主进程日志。mode 见 hideChildConsoles 的
-	// HiddenConsoleMode——inherited-windowless 是 ConPTY 场景（正常）；failed 表示
-	// 退回 windowsHide 兜底，若此时仍弹窗，下一步看 runner spawn policy 日志。
+	// 因此这条也用 console.error 落主进程日志。mode=create-no-window 是现行策略；
+	// 若仍弹窗，下一步看 runner spawn policy 与 sidecar 是否解析到。
 	console.error(
 		`[dsh-host-entry] windows console policy: mode=${getHiddenConsoleMode()} ` +
 			`runnerNodeMode=${process.env.ELECTRON_RUN_AS_NODE === "1"} ` +
@@ -151,12 +137,8 @@ async function main(): Promise<void> {
 	// （Typert Remote 架构），fetch handler 改由 dsh-client-connection 的
 	// HostConnectionHandle.createSharedFetchHandler('/api') 提供（见下方 apiHandler）。
 	const require = createRequire(join(fileURLToPath(nodeModulesUrl), "package.json"));
-	const importFromApp = (specifier: string) =>
-		import(pathToFileURL(require.resolve(specifier)).href);
-	const [{ boot, loadOverlayPatches, loadOptionalPatches, PROFILE_PATCH_FILENAME }, { provideCmdline }] = await Promise.all([
-		importFromApp("@deepseek-ai/dsh-app-boot"),
-		importFromApp("@deepseek-ai/dsh-cmdline"),
-	]);
+	const importFromApp = (specifier: string) => import(pathToFileURL(require.resolve(specifier)).href);
+	const [{ boot, loadOverlayPatches, loadOptionalPatches, PROFILE_PATCH_FILENAME }, { provideCmdline }] = await Promise.all([importFromApp("@deepseek-ai/dsh-app-boot"), importFromApp("@deepseek-ai/dsh-cmdline")]);
 
 	const basePatchPath = require.resolve("@deepseek-ai/dsh-base/cordis.patch.yml");
 	const patches = loadOverlayPatches("pideck-dsh", basePatchPath);
@@ -254,17 +236,13 @@ async function main(): Promise<void> {
 	// 其自身目录的包在 PiDeck runtime 里可能解析不到，boot 会 fail-loud 并把原因
 	// 透到配置页错误 banner（可从补丁文件移除该行后重启 host 恢复）。
 	try {
-		const homeUserPatches =
-			loadOptionalPatches("pideck-dsh", join(dshHome, PROFILE_PATCH_FILENAME)) ?? [];
+		const homeUserPatches = loadOptionalPatches("pideck-dsh", join(dshHome, PROFILE_PATCH_FILENAME)) ?? [];
 		if (homeUserPatches.length > 0) {
 			patches.push(...homeUserPatches);
 			console.log(`[dsh-host-entry] home user patch layer loaded: ${homeUserPatches.length} patch(es)`);
 		}
 	} catch (error) {
-		console.warn(
-			"[dsh-host-entry] home user patch layer ignored:",
-			error instanceof Error ? error.message : String(error),
-		);
+		console.warn("[dsh-host-entry] home user patch layer ignored:", error instanceof Error ? error.message : String(error));
 	}
 
 	// 组合文件的落盘位置有硬约束，见 hostCompositionPath 的说明：必须落在 appRoot
@@ -276,19 +254,7 @@ async function main(): Promise<void> {
 	if (!existsSync(configPath)) writeFileSync(configPath, "[]\n");
 	const pickerPath = join(configDir, "pideck-directory-picker.js");
 	if (!existsSync(pickerPath)) {
-		writeFileSync(
-			pickerPath,
-			[
-				"export default {",
-				"  apply(ctx) {",
-				"    ctx.provide('directoryPicker', {",
-				"      capability() { return { kind: 'none' }; },",
-				"    });",
-				"  },",
-				"};",
-				"",
-			].join("\n"),
-		);
+		writeFileSync(pickerPath, ["export default {", "  apply(ctx) {", "    ctx.provide('directoryPicker', {", "      capability() { return { kind: 'none' }; },", "    });", "  },", "};", ""].join("\n"));
 	}
 	// Slash 命令桥：dsh-web 的命令执行（/permission /plan /compact 等）走浏览器
 	// 客户端通道（commands.execute Remote），PiDeck 只有 api-proxy RPC 通道，拿不到
@@ -304,40 +270,40 @@ async function main(): Promise<void> {
 		[
 			"export default {",
 			"  apply(ctx) {",
-				"    ctx.inject(['commands'], (commandCtx) => {",
-				"      commandCtx.on('agent/pre-step', async ({ agent, messages, signal }, next) => {",
-				"        try {",
-				"          // 只认 source.kind === 'user' 的输入：回合注入的运行时上下文等",
-				"          // 系统消息也作为 user/message 进 claimed 批次，必须排除。",
-				"          const userMessages = Array.isArray(messages)",
-				"            ? messages.filter((m) => m && m.source && m.source.kind === 'user')",
-				"            : [];",
-				"          if (userMessages.length !== 1) return next();",
-				"          const content = userMessages[0] && userMessages[0].content;",
-				"          const block = Array.isArray(content) && content.length === 1 ? content[0] : undefined;",
-				"          const line = block && block.type === 'text' && typeof block.text === 'string'",
-				"            ? block.text.trim()",
-				"            : '';",
-				"          if (!line.startsWith('/')) return next();",
-				"          // execute 的第三个参数是图片数组，第四个才是取消信号；参数错位会",
-				"          // 让命令执行器把 AbortSignal 当数组处理，权限命令随后退化成普通消息。",
-				"          const result = await commandCtx.commands.execute(agent, line, [], signal);",
-				"          // 未知命令 execute 返回 undefined，只有这种情况才允许模型接管文本。",
-				"          // 已知命令无论成功还是失败都必须 reject，避免 slash 行进入时间线/模型。",
-				"          if (result === undefined) return next();",
-				"          return { kind: 'reject' };",
-				"        } catch (error) {",
-				"          // 已解析的命令执行失败也不能作为普通用户问题重试一次；命令执行器",
-				"          // 会记录 command/done error，reject 可以保持 DSH 的命令语义闭环。",
-				"          return { kind: 'reject' };",
-				"        }",
-				"      });",
-				"    });",
-				"  }",
-				"};",
-				"",
-			].join("\n"),
-		);
+			"    ctx.inject(['commands'], (commandCtx) => {",
+			"      commandCtx.on('agent/pre-step', async ({ agent, messages, signal }, next) => {",
+			"        try {",
+			"          // 只认 source.kind === 'user' 的输入：回合注入的运行时上下文等",
+			"          // 系统消息也作为 user/message 进 claimed 批次，必须排除。",
+			"          const userMessages = Array.isArray(messages)",
+			"            ? messages.filter((m) => m && m.source && m.source.kind === 'user')",
+			"            : [];",
+			"          if (userMessages.length !== 1) return next();",
+			"          const content = userMessages[0] && userMessages[0].content;",
+			"          const block = Array.isArray(content) && content.length === 1 ? content[0] : undefined;",
+			"          const line = block && block.type === 'text' && typeof block.text === 'string'",
+			"            ? block.text.trim()",
+			"            : '';",
+			"          if (!line.startsWith('/')) return next();",
+			"          // execute 的第三个参数是图片数组，第四个才是取消信号；参数错位会",
+			"          // 让命令执行器把 AbortSignal 当数组处理，权限命令随后退化成普通消息。",
+			"          const result = await commandCtx.commands.execute(agent, line, [], signal);",
+			"          // 未知命令 execute 返回 undefined，只有这种情况才允许模型接管文本。",
+			"          // 已知命令无论成功还是失败都必须 reject，避免 slash 行进入时间线/模型。",
+			"          if (result === undefined) return next();",
+			"          return { kind: 'reject' };",
+			"        } catch (error) {",
+			"          // 已解析的命令执行失败也不能作为普通用户问题重试一次；命令执行器",
+			"          // 会记录 command/done error，reject 可以保持 DSH 的命令语义闭环。",
+			"          return { kind: 'reject' };",
+			"        }",
+			"      });",
+			"    });",
+			"  }",
+			"};",
+			"",
+		].join("\n"),
+	);
 
 	// 极简工具过滤插件：挂在 host 组合里，minimal agent 创建时把 PiDeck 全局
 	// 扩展（bill_stats / pwsh_persistent）从继承工具目录中剔除；非 minimal 预设
@@ -525,14 +491,7 @@ main().catch((error) => {
  * 帧形状与官方 RemoteStreamMuxServer 的 WebSocket 协议一致，主进程侧
  * DshApiClient.openStream 按同一协议消费。
  */
-function openGatewayStream(
-	port: ParentPort,
-	wireStream: import("@deepseek-ai/dsh-api-gateway/types").TypertGatewayWireStream,
-	openStreams: Map<string, AbortController>,
-	id: string,
-	endpoint: string,
-	payload: unknown,
-): void {
+function openGatewayStream(port: ParentPort, wireStream: import("@deepseek-ai/dsh-api-gateway/types").TypertGatewayWireStream, openStreams: Map<string, AbortController>, id: string, endpoint: string, payload: unknown): void {
 	if (!id || !endpoint) return;
 	const controller = new AbortController();
 	openStreams.set(id, controller);

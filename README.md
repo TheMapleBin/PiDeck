@@ -2,7 +2,9 @@
 
 [English](README.en.md) · [LinuxDO 友链](https://linux.do)
 
-**一个用于管理多个 [Pi](https://pi.dev)和[DSH](https://github.com/deepseek-ai/deepseek-harness)编码 Agent 会话的开源桌面工作台。**
+**一个用于管理多个 [Pi](https://pi.dev)和[DSH](https://github.com/deepseek-ai/deepseek-harness)编码 Agent 会话的开源桌面工作台（pi desktop workbench）。**
+
+> PiDeck = **pi desktop**：把 pi 编码 Agent 装进桌面应用。如果你在 GitHub 搜索「pi desktop」「pi 客户端」「pi GUI」，找的正是它。
 
 ![Status](https://img.shields.io/badge/status-experimental-orange)
 ![License](https://img.shields.io/badge/license-MIT-blue)

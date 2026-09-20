@@ -49,10 +49,7 @@ test("real paths still linkify (relative, absolute, unicode)", () => {
 
 test("full-width punctuation is not swallowed into the path", () => {
 	// 修复前：src/a.ts， 会匹配 src/a.ts， （全角逗号被吞）→ 点击打开不存在的文件
-	assert.deepEqual(linkify("改了 src/a.ts，src/b.ts"), [
-		"file://src/a.ts",
-		"file://src/b.ts",
-	]);
+	assert.deepEqual(linkify("改了 src/a.ts，src/b.ts"), ["file://src/a.ts", "file://src/b.ts"]);
 	assert.deepEqual(linkify("见 foo/bar.md：说明"), ["file://foo/bar.md"]);
 	assert.deepEqual(linkify("a.ts）说明"), []);
 	assert.deepEqual(linkify("完成（src/ok.ts）了"), ["file://src/ok.ts"]);
@@ -60,20 +57,24 @@ test("full-width punctuation is not swallowed into the path", () => {
 });
 
 test("special symbols are excluded (arrows, multiplication, ellipsis)", () => {
-	assert.deepEqual(linkify("升级 src/a.ts → src/b.ts"), [
-		"file://src/a.ts",
-		"file://src/b.ts",
-	]);
+	assert.deepEqual(linkify("升级 src/a.ts → src/b.ts"), ["file://src/a.ts", "file://src/b.ts"]);
 	assert.deepEqual(linkify("对比 a.ts × b.ts"), []);
 	assert.deepEqual(linkify("见 src/x.ts…"), ["file://src/x.ts"]);
 });
 
-test("code blocks and inline code are not linkified", () => {
+test("code blocks stay inert while inline-code file references become links", () => {
 	const tree = {
 		type: "root",
 		children: [
 			{ type: "code", value: "const p = 'src/a.ts';" },
-			{ type: "paragraph", children: [{ type: "inlineCode", value: "src/b.ts" }] },
+			{
+				type: "paragraph",
+				children: [
+					{ type: "inlineCode", value: "src/b.ts:12" },
+					{ type: "text", value: " and " },
+					{ type: "inlineCode", value: "foo()" },
+				],
+			},
 		],
 	};
 	const plugin = remarkLinkifyPaths();
@@ -81,11 +82,26 @@ test("code blocks and inline code are not linkified", () => {
 	const links = [];
 	const walk = (node) => {
 		if (!node || typeof node !== "object") return;
-		if (node.type === "link") links.push(node.url);
+		if (node.type === "link") links.push(node);
 		if (Array.isArray(node.children)) node.children.forEach(walk);
 	};
 	walk(tree);
-	assert.deepEqual(links, []);
+	assert.equal(links.length, 1);
+	assert.equal(decodeURIComponent(links[0].url.slice(7)), "src/b.ts:12");
+	assert.deepEqual(links[0].children, [{ type: "inlineCode", value: "src/b.ts:12" }]);
+});
+
+test("inline-code file references reject URI schemes and tolerate standalone filenames", () => {
+	const { isStandaloneFileReference } = markdownCore;
+	assert.equal(isStandaloneFileReference("src/main/index.ts:42"), true);
+	assert.equal(isStandaloneFileReference("package.json:1"), true);
+	assert.equal(isStandaloneFileReference("C:\\\\project\\\\main.ts:20"), true);
+	assert.equal(isStandaloneFileReference("https://example.com/src/main.ts"), false);
+	assert.equal(isStandaloneFileReference("file://src/main.ts"), false);
+	assert.equal(isStandaloneFileReference("vscode://file/src/main.ts"), false);
+	assert.equal(isStandaloneFileReference("main.ts"), true);
+	assert.equal(isStandaloneFileReference("not a file.ts"), false);
+	assert.equal(isStandaloneFileReference("src/main/index.ts extra"), false);
 });
 
 test("markdown links (link nodes) are not double-processed", () => {
@@ -140,19 +156,10 @@ test("isLocalPathRef: protocol-less hrefs are local paths, real URLs are not", (
 test("defaultUrlTransform keeps local file hrefs on win/mac/linux and clears unsafe protocols", () => {
 	const { defaultUrlTransform } = markdownCore;
 	// Windows：裸盘符（F:/、F:\\）+ 行号不能当协议清空（回归：href 被清 → 点击无反应）
-	assert.equal(
-		defaultUrlTransform("F:/PiDeck/packages/dsh-tool-pwsh-persistent/src/index.ts:309"),
-		"F:/PiDeck/packages/dsh-tool-pwsh-persistent/src/index.ts:309",
-	);
-	assert.equal(
-		defaultUrlTransform("C:\\Users\\x\\a.ts:12"),
-		"C:\\Users\\x\\a.ts:12",
-	);
+	assert.equal(defaultUrlTransform("F:/PiDeck/packages/dsh-tool-pwsh-persistent/src/index.ts:309"), "F:/PiDeck/packages/dsh-tool-pwsh-persistent/src/index.ts:309");
+	assert.equal(defaultUrlTransform("C:\\Users\\x\\a.ts:12"), "C:\\Users\\x\\a.ts:12");
 	// mac/linux：POSIX 绝对路径（/ 开头 + 行号）本就被「首个冒号在斜杠后」规则放行
-	assert.equal(
-		defaultUrlTransform("/Users/x/proj/src/app.py:12:4"),
-		"/Users/x/proj/src/app.py:12:4",
-	);
+	assert.equal(defaultUrlTransform("/Users/x/proj/src/app.py:12:4"), "/Users/x/proj/src/app.py:12:4");
 	assert.equal(defaultUrlTransform("/home/u/proj/a.md"), "/home/u/proj/a.md");
 	// 相对路径与行号
 	assert.equal(defaultUrlTransform("src/main/index.ts"), "src/main/index.ts");

@@ -47,7 +47,7 @@ export function registerScratchPadIpc({ appLogger }: ScratchPadIpcDeps): void {
 	ipcMain.handle(ipcChannels.scratchPadList, async (): Promise<DraftMeta[]> => {
 		await ensureDraftsDir();
 		const files = await readdir(draftsDir);
-		const mdFiles = files.filter(f => f.endsWith(".md"));
+		const mdFiles = files.filter((f) => f.endsWith(".md"));
 		const drafts = await Promise.all(
 			mdFiles.map(async (f) => {
 				const fullPath = join(draftsDir, f);
@@ -65,9 +65,7 @@ export function registerScratchPadIpc({ appLogger }: ScratchPadIpcDeps): void {
 				}
 			}),
 		);
-		return drafts
-			.filter((d): d is NonNullable<typeof d> => d !== null)
-			.sort((a, b) => b.updatedAt - a.updatedAt);
+		return drafts.filter((d): d is NonNullable<typeof d> => d !== null).sort((a, b) => b.updatedAt - a.updatedAt);
 	});
 
 	/** 创建新草稿，默认文件名为当前时间 */

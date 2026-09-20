@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, symlinkSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -13,10 +13,7 @@ const { mainProcessT } = loadTsCommonJs("src/shared/i18n/mainProcessCopy.ts");
 const en = (key, params) => mainProcessT("en-US", key, params);
 
 function managerFor(project) {
-	return new ProjectResourceManager(
-		(projectId) => (project && project.id === projectId ? project : undefined),
-		en,
-	);
+	return new ProjectResourceManager((projectId) => (project && project.id === projectId ? project : undefined), en);
 }
 
 const chatProject = {
@@ -166,10 +163,7 @@ test("损坏的项目 settings 会拒绝覆盖写入且不先修改 skill", asyn
 		writeFileSync(settingsPath, "{broken");
 		const manager = managerFor({ id: "p1", name: "P1", path: root, lastOpenedAt: 1 });
 
-		await assert.rejects(
-			manager.toggleInheritedResource({ projectId: "p1", kind: "prompt", key: "shared", enabled: false }),
-			/JSON is invalid/i,
-		);
+		await assert.rejects(manager.toggleInheritedResource({ projectId: "p1", kind: "prompt", key: "shared", enabled: false }), /JSON is invalid/i);
 		await assert.rejects(manager.toggleSkill("p1", skillPath, false), /JSON is invalid/i);
 		assert.equal(readFileSync(settingsPath, "utf8"), "{broken");
 		assert.equal(readFileSync(skillPath, "utf8"), originalSkill);
@@ -212,10 +206,7 @@ test("项目扩展列表对齐 pi 的 js、index.js 与 package manifest 发现�
 		mkdirSync(join(extensionDir, "ignored-directory"), { recursive: true });
 		writeFileSync(join(extensionDir, "plain.js"), "module.exports = {};\n");
 		writeFileSync(join(extensionDir, "index-package", "index.js"), "module.exports = {};\n");
-		writeFileSync(
-			join(extensionDir, "manifest-package", "package.json"),
-			JSON.stringify({ pi: { extensions: ["dist/first.js", "dist/second.ts"] } }),
-		);
+		writeFileSync(join(extensionDir, "manifest-package", "package.json"), JSON.stringify({ pi: { extensions: ["dist/first.js", "dist/second.ts"] } }));
 		writeFileSync(join(extensionDir, "manifest-package", "dist", "first.js"), "module.exports = {};\n");
 		writeFileSync(join(extensionDir, "manifest-package", "dist", "second.ts"), "export default {};\n");
 		writeFileSync(join(extensionDir, "ignored-directory", "README.md"), "not an extension\n");
@@ -266,16 +257,9 @@ test("项目资源目录 junction 指向项目外时列表与写操作都拒绝�
 	try {
 		mkdirSync(join(root, ".pi"), { recursive: true });
 		mkdirSync(join(outsideSkills, "secret"), { recursive: true });
-		writeFileSync(
-			join(outsideSkills, "secret", "SKILL.md"),
-			"---\nname: secret\ndescription: outside\n---\n",
-		);
+		writeFileSync(join(outsideSkills, "secret", "SKILL.md"), "---\nname: secret\ndescription: outside\n---\n");
 		try {
-			symlinkSync(
-				outsideSkills,
-				join(root, ".pi", "skills"),
-				process.platform === "win32" ? "junction" : "dir",
-			);
+			symlinkSync(outsideSkills, join(root, ".pi", "skills"), process.platform === "win32" ? "junction" : "dir");
 		} catch (error) {
 			if (error instanceof Error && "code" in error && error.code === "EPERM") {
 				t.skip("The current filesystem does not permit junction creation");
@@ -306,14 +290,8 @@ test("外部技能完整目录可写入两个项目级目标", async () => {
 		await manager.importSkillDirectory("p1", "project-pi", source, "external-pi");
 		await manager.importSkillDirectory("p1", "project-agents", source, "external-agents");
 
-		assert.equal(
-			readFileSync(join(root, ".pi", "skills", "external-pi", "SKILL.md"), "utf8"),
-			readFileSync(join(source, "SKILL.md"), "utf8"),
-		);
-		assert.equal(
-			readFileSync(join(root, ".agents", "skills", "external-agents", "templates", "prompt.md"), "utf8"),
-			"template attachment\n",
-		);
+		assert.equal(readFileSync(join(root, ".pi", "skills", "external-pi", "SKILL.md"), "utf8"), readFileSync(join(source, "SKILL.md"), "utf8"));
+		assert.equal(readFileSync(join(root, ".agents", "skills", "external-agents", "templates", "prompt.md"), "utf8"), "template attachment\n");
 	} finally {
 		rmSync(fixture, { recursive: true, force: true });
 	}
@@ -342,33 +320,24 @@ test("项目 MCP 写入在临时文件完成后重新校验最终目标边界", 
 	const root = mkdtempSync(join(tmpdir(), "pideck-prm-mcp-reresolve-"));
 	try {
 		let writePathResolutions = 0;
-		const { ProjectResourceManager: BoundaryCheckingManager } = loadTsCommonJs(
-			"src/main/projects/ProjectResourceManager.ts",
-			{
-				stubs: {
-					"../files/projectFileAccess": {
-						...projectFileAccess,
-						resolveProjectFileWritePath: async (...args) => {
-							writePathResolutions += 1;
-							const resolved = await projectFileAccess.resolveProjectFileWritePath(...args);
-							// Model a junction/symlink swap after the staging path was accepted.
-							// The third resolution must be the final target immediately before rename.
-							return writePathResolutions === 3 ? join(root, "outside", "mcp.json") : resolved;
-						},
+		const { ProjectResourceManager: BoundaryCheckingManager } = loadTsCommonJs("src/main/projects/ProjectResourceManager.ts", {
+			stubs: {
+				"../files/projectFileAccess": {
+					...projectFileAccess,
+					resolveProjectFileWritePath: async (...args) => {
+						writePathResolutions += 1;
+						const resolved = await projectFileAccess.resolveProjectFileWritePath(...args);
+						// Model a junction/symlink swap after the staging path was accepted.
+						// The third resolution must be the final target immediately before rename.
+						return writePathResolutions === 3 ? join(root, "outside", "mcp.json") : resolved;
 					},
 				},
 			},
-		);
+		});
 		const project = { id: "p1", name: "P1", path: root, lastOpenedAt: 1 };
-		const manager = new BoundaryCheckingManager(
-			(projectId) => (projectId === project.id ? project : undefined),
-			en,
-		);
+		const manager = new BoundaryCheckingManager((projectId) => (projectId === project.id ? project : undefined), en);
 
-		await assert.rejects(
-			manager.saveProjectMcpConfig("p1", { mcpServers: { imported: { command: "node" } } }),
-			/outside the project/i,
-		);
+		await assert.rejects(manager.saveProjectMcpConfig("p1", { mcpServers: { imported: { command: "node" } } }), /outside the project/i);
 		assert.equal(writePathResolutions, 3);
 		assert.equal(existsSync(join(root, ".pi", "mcp.json")), false);
 	} finally {
@@ -398,5 +367,78 @@ test("缺失项目 MCP 文件仍会拒绝指向项目外的 .pi junction", async
 		assert.equal(existsSync(join(outside, "mcp.json")), false);
 	} finally {
 		rmSync(fixture, { recursive: true, force: true });
+	}
+});
+
+// ── 重命名回归：markdown 技能绝不能把 .pi/skills 根目录搬走（数据丢失事故） ──
+
+test("项目级 markdown 技能重命名只改文件名，不搬走 .pi/skills 根目录", async () => {
+	const rawRoot = mkdtempSync(join(tmpdir(), "pideck-prm-md-rename-"));
+	const root = realpathSync.native ? realpathSync.native(rawRoot) : realpathSync(rawRoot);
+	try {
+		const skillDir = join(root, ".pi", "skills");
+		mkdirSync(join(skillDir, "bar"), { recursive: true });
+		writeFileSync(join(skillDir, "foo.md"), "---\nname: foo\ndescription: md skill\n---\n\nbody\n", "utf8");
+		writeFileSync(join(skillDir, "bar", "SKILL.md"), "---\nname: bar\ndescription: dir skill\n---\n\nbody\n", "utf8");
+		const manager = managerFor({ id: "p1", name: "P1", path: root, lastOpenedAt: 1 });
+
+		const renamed = await manager.renameSkill("p1", join(skillDir, "foo.md"), "foo-renamed");
+
+		// 根目录原地不动，其他技能不受影响
+		assert.equal(existsSync(join(skillDir, "bar", "SKILL.md")), true);
+		assert.equal(existsSync(join(skillDir, "foo.md")), false);
+		assert.equal(existsSync(join(skillDir, "foo-renamed.md")), true);
+		// 旧实现会把整个 .pi/skills 改名搬走，此处必须不存在
+		assert.equal(existsSync(join(root, ".pi", "foo-renamed")), false);
+		assert.equal(renamed.name, "foo-renamed");
+		assert.equal(renamed.path, join(skillDir, "foo-renamed.md"));
+		// 回归：旧实现按不存在的 SKILL.md 回读，正文/描述为空
+		assert.match(readFileSync(renamed.path, "utf8"), /name: foo-renamed/);
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("项目级禁用技能重命名后同步 .pi/settings.json 的 disabledSkills", async () => {
+	const root = mkdtempSync(join(tmpdir(), "pideck-prm-rename-disabled-"));
+	try {
+		const skillDir = join(root, ".pi", "skills");
+		mkdirSync(join(skillDir, "mykit"), { recursive: true });
+		writeFileSync(join(skillDir, "mykit", "SKILL.md"), "---\nname: MyKit\ndescription: kit\n---\n\n# MyKit\n", "utf8");
+		const manager = managerFor({ id: "p1", name: "P1", path: root, lastOpenedAt: 1 });
+		const skillPath = join(skillDir, "mykit", "SKILL.md");
+
+		await manager.toggleSkill("p1", skillPath, false);
+		assert.deepEqual(JSON.parse(readFileSync(join(root, ".pi", "settings.json"), "utf8")).disabledSkills, ["MyKit"]);
+
+		const renamed = await manager.renameSkill("p1", skillPath, "renamed-kit");
+		// 旧名条目被新名替换，不残留孤儿数据；禁用状态保持
+		assert.deepEqual(JSON.parse(readFileSync(join(root, ".pi", "settings.json"), "utf8")).disabledSkills, ["renamed-kit"]);
+		assert.equal(renamed.enabled, false);
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("项目级 markdown 技能无 name 时回退为文件名且重命名时自动补全 name", async () => {
+	const rawRoot = mkdtempSync(join(tmpdir(), "pideck-prm-bare-md-"));
+	const root = realpathSync.native ? realpathSync.native(rawRoot) : realpathSync(rawRoot);
+	try {
+		const skillDir = join(root, ".pi", "skills");
+		mkdirSync(skillDir, { recursive: true });
+		writeFileSync(join(skillDir, "tool.md"), "---\ndescription: bare tool\n---\n\nbody\n", "utf8");
+		const manager = managerFor({ id: "p1", name: "P1", path: root, lastOpenedAt: 1 });
+
+		const list = await manager.list("p1");
+		const tool = list.skills.find((s) => s.path === join(skillDir, "tool.md"));
+		assert.ok(tool);
+		// 回退名取文件名而非「skills」
+		assert.equal(tool.name, "tool");
+
+		const renamed = await manager.renameSkill("p1", tool.path, "tool-v2");
+		assert.equal(renamed.name, "tool-v2");
+		assert.match(readFileSync(renamed.path, "utf8"), /name: tool-v2/);
+	} finally {
+		rmSync(root, { recursive: true, force: true });
 	}
 });

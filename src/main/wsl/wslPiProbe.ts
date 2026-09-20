@@ -101,13 +101,13 @@ export function buildWslPiProbeScript(extraCandidateDirs: readonly string[] = []
 		'  [ -x "$1" ] || return 1',
 		'  _bin="$2"',
 		'  [ -n "$_bin" ] || _bin=$(dirname "$1")',
-		'  printf \'PIDECK_PI=%s\\n\' "$1"',
-		'  printf \'PIDECK_NODE_BIN=%s\\n\' "$_bin"',
+		"  printf 'PIDECK_PI=%s\\n' \"$1\"",
+		"  printf 'PIDECK_NODE_BIN=%s\\n' \"$_bin\"",
 		"  exit 0",
 		"}",
 		// L1：交互登录 shell 已 source nvm/fnm 初始化，覆盖用户自定义安装位置
-		'_p=$(command -v pi 2>/dev/null)',
-		'_n=$(command -v node 2>/dev/null)',
+		"_p=$(command -v pi 2>/dev/null)",
+		"_n=$(command -v node 2>/dev/null)",
 		'_nb=""',
 		'if [ -n "$_n" ]; then _rn=$(readlink -f "$_n" 2>/dev/null); [ -n "$_rn" ] && _nb=$(dirname "$_rn"); fi',
 		// fnm/nvm 的 /run/user/.../fnm_multishells 目录随 shell 退出失效，改用稳定的 installation/bin
@@ -187,10 +187,7 @@ export function buildWslPiExecArgs(input: WslPiExecArgsInput): string[] {
 	}
 
 	const candidate = input.nodeBinDir ?? "";
-	const nodeBinDir =
-		isAbsoluteLinuxPath(candidate) && !isWslInteropPath(candidate)
-			? candidate
-			: input.piCommand.slice(0, input.piCommand.lastIndexOf("/")) || "/";
+	const nodeBinDir = isAbsoluteLinuxPath(candidate) && !isWslInteropPath(candidate) ? candidate : input.piCommand.slice(0, input.piCommand.lastIndexOf("/")) || "/";
 	const pathValue = nodeBinDir === "/" ? WSL_PI_BASE_PATH : `${nodeBinDir}:${WSL_PI_BASE_PATH}`;
 	return [...args, "-e", "/usr/bin/env", `PATH=${pathValue}`, input.piCommand, ...input.args];
 }

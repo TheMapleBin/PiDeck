@@ -30,21 +30,9 @@ const nodeRequire = createRequire(import.meta.url);
 
 /** 解析本地模块候选路径（带 .ts/.tsx/.js 与 index 兜底）。 */
 function resolveLocalFrom(fromFile, specifier) {
-  const base = resolve(dirname(fromFile), specifier);
-  const candidates = /\.(?:[cm]?[jt]sx?)$/i.test(base)
-    ? [base]
-    : [
-        base,
-        `${base}.ts`,
-        `${base}.tsx`,
-        `${base}.js`,
-        resolve(base, "index.ts"),
-        resolve(base, "index.tsx"),
-        resolve(base, "index.js"),
-      ];
-  return candidates.find(
-    (candidate) => existsSync(candidate) && statSync(candidate).isFile(),
-  );
+	const base = resolve(dirname(fromFile), specifier);
+	const candidates = /\.(?:[cm]?[jt]sx?)$/i.test(base) ? [base] : [base, `${base}.ts`, `${base}.tsx`, `${base}.js`, resolve(base, "index.ts"), resolve(base, "index.tsx"), resolve(base, "index.js")];
+	return candidates.find((candidate) => existsSync(candidate) && statSync(candidate).isFile());
 }
 
 /**
@@ -68,69 +56,73 @@ function resolveLocalFrom(fromFile, specifier) {
  * @returns {(filePath: string) => any}
  */
 export function createTsSandbox(options = {}) {
-  const cache = new Map();
-  const stubs = options.stubs ?? {};
-  const globals = options.globals ?? {};
-  const compilerOptions = {
-    module: ts.ModuleKind.CommonJS,
-    target: ts.ScriptTarget.ES2022,
-    esModuleInterop: true,
-    jsx: ts.JsxEmit.ReactJSX,
-    ...options.compilerOptions,
-  };
+	const cache = new Map();
+	const stubs = options.stubs ?? {};
+	const globals = options.globals ?? {};
+	const compilerOptions = {
+		module: ts.ModuleKind.CommonJS,
+		target: ts.ScriptTarget.ES2022,
+		esModuleInterop: true,
+		jsx: ts.JsxEmit.ReactJSX,
+		...options.compilerOptions,
+	};
 
-  function load(filePath) {
-    const absolutePath = resolve(filePath);
-    if (cache.has(absolutePath)) return cache.get(absolutePath).exports;
+	function load(filePath) {
+		const absolutePath = resolve(filePath);
+		if (cache.has(absolutePath)) return cache.get(absolutePath).exports;
 
-    const { outputText } = ts.transpileModule(readFileSync(absolutePath, "utf8"), {
-      compilerOptions,
-      fileName: absolutePath,
-    });
-    const module = { exports: {} };
-    // 先入缓存再求值：循环依赖下拿到的是同一份（未完成）exports，与 Node 行为一致
-    cache.set(absolutePath, module);
+		const { outputText } = ts.transpileModule(readFileSync(absolutePath, "utf8"), {
+			compilerOptions,
+			fileName: absolutePath,
+		});
+		const module = { exports: {} };
+		// 先入缓存再求值：循环依赖下拿到的是同一份（未完成）exports，与 Node 行为一致
+		cache.set(absolutePath, module);
 
-    const localRequire = (specifier) => {
-      if (Object.hasOwn(stubs, specifier)) return stubs[specifier];
-      if (specifier.startsWith(".") || specifier.startsWith("/")) {
-        // 关键：以**被加载文件所在目录**为基准（这是手写沙箱最容易写错的地方）
-        const resolved = resolveLocalFrom(absolutePath, specifier);
-        if (resolved) return load(resolved);
-        throw new Error(`Cannot resolve local module ${specifier} from ${absolutePath}`);
-      }
-      // 项目根相对导入（"src/shared/..."，bundler root 语义）：node 解析不到也不是包名
-      const rootResolved = resolveLocalFrom(process.cwd(), specifier);
-      if (rootResolved) return load(rootResolved);
-      return nodeRequire(specifier);
-    };
+		const localRequire = (specifier) => {
+			if (Object.hasOwn(stubs, specifier)) return stubs[specifier];
+			if (specifier.startsWith(".") || specifier.startsWith("/")) {
+				// 关键：以**被加载文件所在目录**为基准（这是手写沙箱最容易写错的地方）
+				const resolved = resolveLocalFrom(absolutePath, specifier);
+				if (resolved) return load(resolved);
+				throw new Error(`Cannot resolve local module ${specifier} from ${absolutePath}`);
+			}
+			// 项目根相对导入（"src/shared/..."，bundler root 语义）：node 解析不到也不是包名
+			const rootResolved = resolveLocalFrom(process.cwd(), specifier);
+			if (rootResolved) return load(rootResolved);
+			return nodeRequire(specifier);
+		};
 
-    vm.runInNewContext(outputText, {
-      module,
-      exports: module.exports,
-      require: localRequire,
-      __filename: absolutePath,
-      __dirname: dirname(absolutePath),
-      console,
-      process,
-      Buffer,
-      URL,
-      URLSearchParams,
-      TextDecoder,
-      TextEncoder,
-      AbortController,
-      setTimeout,
-      clearTimeout,
-      setInterval,
-      clearInterval,
-      setImmediate,
-      clearImmediate,
-      queueMicrotask,
-      crypto: globalThis.crypto,
-      ...globals,
-    }, { filename: absolutePath });
-    return module.exports;
-  }
+		vm.runInNewContext(
+			outputText,
+			{
+				module,
+				exports: module.exports,
+				require: localRequire,
+				__filename: absolutePath,
+				__dirname: dirname(absolutePath),
+				console,
+				process,
+				Buffer,
+				URL,
+				URLSearchParams,
+				TextDecoder,
+				TextEncoder,
+				AbortController,
+				setTimeout,
+				clearTimeout,
+				setInterval,
+				clearInterval,
+				setImmediate,
+				clearImmediate,
+				queueMicrotask,
+				crypto: globalThis.crypto,
+				...globals,
+			},
+			{ filename: absolutePath },
+		);
+		return module.exports;
+	}
 
-  return load;
+	return load;
 }

@@ -32,8 +32,7 @@ function loadUpdateService() {
 				module,
 				exports: module.exports,
 				require: (name) => {
-					const resolved =
-						name === "../../shared/updateSources" ? "src/shared/updateSources.ts" : null;
+					const resolved = name === "../../shared/updateSources" ? "src/shared/updateSources.ts" : null;
 					const next = cache[resolved];
 					if (!next) {
 						if (!resolved || !existsSync(resolved)) {
@@ -535,10 +534,7 @@ test("switching update source rebuilds the generic feed URL immediately", async 
 	// 设置页切换到 atomgit 更新源：保存即生效（无需重启）
 	await settings.update({ updateSource: "atomgit" });
 	service.applyUpdateSource();
-	assert.equal(
-		updater.feedUrl,
-		"https://atomgit.com/ayuayue/PiDeck/releases/download/latest",
-	);
+	assert.equal(updater.feedUrl, "https://atomgit.com/ayuayue/PiDeck/releases/download/latest");
 
 	// 回到官方源：重置 feed，恢复原生 GitHub provider
 	await settings.update({ updateSource: "github" });
@@ -552,10 +548,7 @@ test("atomgit source is applied as generic feed URL on start", async (t) => {
 	});
 	stopAfter(t, service);
 	service.start({ startDelayMs: 0, intervalMs: 60_000 });
-	assert.equal(
-		updater.feedUrl,
-		"https://atomgit.com/ayuayue/PiDeck/releases/download/latest",
-	);
+	assert.equal(updater.feedUrl, "https://atomgit.com/ayuayue/PiDeck/releases/download/latest");
 });
 
 test("manual delivery uses latestReleaseUrl from the configured atomgit source per check", async (t) => {
@@ -596,4 +589,3 @@ test("download rejection is a download error", async (t) => {
 	assert.equal(snapshot.app.download.errorKind, "download");
 	assert.match(snapshot.app.download.error, /disk full/);
 });
-

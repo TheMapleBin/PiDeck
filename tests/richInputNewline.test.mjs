@@ -3,10 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const source = readFileSync("src/renderer/src/components/app/RichInput.tsx", "utf8");
-const controllerSource = readFileSync(
-	"src/renderer/src/hooks/useSessionComposerController.ts",
-	"utf8",
-);
+const controllerSource = readFileSync("src/renderer/src/hooks/useSessionComposerController.ts", "utf8");
 
 test("RichInput keeps native Enter handling without execCommand normalization", () => {
 	assert.match(source, /function insertPlainTextAtSelection\(root: HTMLElement, text: string\): void/);

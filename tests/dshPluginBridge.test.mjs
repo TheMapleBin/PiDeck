@@ -2,17 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
-const {
-	validatePluginInstallInput,
-	validatePluginLifecycleInput,
-	toDynamicPluginView,
-	toStaticPluginView,
-	mergeStaticPluginViews,
-	resolveBridgeAgent,
-	pluginBridgeRpc,
-	handlePluginBridgeFetch,
-	apply,
-} = loadTsCommonJs("src/main/dsh/pideckPluginBridge.ts", { globals: { Response } });
+const { validatePluginInstallInput, validatePluginLifecycleInput, toDynamicPluginView, toStaticPluginView, mergeStaticPluginViews, resolveBridgeAgent, pluginBridgeRpc, handlePluginBridgeFetch, apply } = loadTsCommonJs("src/main/dsh/pideckPluginBridge.ts", { globals: { Response } });
 
 test("validatePluginInstallInput：host-only 源码包合法", () => {
 	const result = validatePluginInstallInput({
@@ -181,9 +171,7 @@ test("pluginBridgeRpc：分发到服务方法，未知方法/缺服务返回结�
 
 test("handlePluginBridgeFetch：POST JSON 协议、非 POST/坏 JSON/缺服务都返回结构化 4xx", async () => {
 	const ctx = {
-		get: (key) => key === "pideckPluginBridge"
-			? { inventory: () => ({ ok: true, value: [] }) }
-			: undefined,
+		get: (key) => (key === "pideckPluginBridge" ? { inventory: () => ({ ok: true, value: [] }) } : undefined),
 	};
 	const ok = await handlePluginBridgeFetch(ctx, {
 		method: "POST",
@@ -200,10 +188,13 @@ test("handlePluginBridgeFetch：POST JSON 协议、非 POST/坏 JSON/缺服务�
 	assert.equal(badJson.status, 400);
 	assert.equal(JSON.parse(await badJson.text()).ok, false);
 
-	const missingService = await handlePluginBridgeFetch({ get: () => undefined }, {
-		method: "POST",
-		body: JSON.stringify({ method: "inventory" }),
-	});
+	const missingService = await handlePluginBridgeFetch(
+		{ get: () => undefined },
+		{
+			method: "POST",
+			body: JSON.stringify({ method: "inventory" }),
+		},
+	);
 	assert.equal(missingService.status, 400);
 	assert.equal(JSON.parse(await missingService.text()).ok, false);
 });

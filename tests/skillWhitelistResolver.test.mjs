@@ -44,11 +44,7 @@ function same(actual, expected) {
 
 function skillMd(dir, name, extraFrontmatter = "") {
 	mkdirSync(dir, { recursive: true });
-	writeFileSync(
-		join(dir, "SKILL.md"),
-		`---\nname: ${name}\ndescription: ${name} description\n${extraFrontmatter}---\n\n# ${name}\n`,
-		"utf8",
-	);
+	writeFileSync(join(dir, "SKILL.md"), `---\nname: ${name}\ndescription: ${name} description\n${extraFrontmatter}---\n\n# ${name}\n`, "utf8");
 }
 
 test("无禁用项时关闭白名单（返回 null）", () => {
@@ -70,18 +66,10 @@ test("有禁用项时枚举全局/项目技能并剔除禁用项", () => {
 		skillMd(join(agentDir, "skills", "usage-probe"), "usage-probe");
 		skillMd(join(agentDir, "skills", "keep-me"), "keep-me");
 		skillMd(join(agentDir, "skills", "disabled-one"), "disabled-one");
-		writeFileSync(
-			join(agentDir, "skills", "root-skill.md"),
-			"---\nname: root-skill\ndescription: root skill\n---\n\n# root\n",
-			"utf8",
-		);
+		writeFileSync(join(agentDir, "skills", "root-skill.md"), "---\nname: root-skill\ndescription: root skill\n---\n\n# root\n", "utf8");
 		// ~/.agents/skills：嵌套目录技能算，顶层 md 忽略
 		skillMd(join(home, ".agents", "skills", "agents-skill"), "agents-skill");
-		writeFileSync(
-			join(home, ".agents", "skills", "agents-root.md"),
-			"---\nname: agents-root\ndescription: ignored\n---\n",
-			"utf8",
-		);
+		writeFileSync(join(home, ".agents", "skills", "agents-root.md"), "---\nname: agents-root\ndescription: ignored\n---\n", "utf8");
 		// 项目 .pi/skills（pi 模式）
 		skillMd(join(cwd, ".pi", "skills", "project-skill"), "project-skill");
 
@@ -91,13 +79,7 @@ test("有禁用项时枚举全局/项目技能并剔除禁用项", () => {
 			disabledNames: ["disabled-one"],
 		});
 		assert.ok(result, "有禁用项时必须启用白名单");
-		same(result, [
-			join(agentDir, "skills", "usage-probe", "SKILL.md"),
-			join(agentDir, "skills", "keep-me", "SKILL.md"),
-			join(agentDir, "skills", "root-skill.md"),
-			join(home, ".agents", "skills", "agents-skill", "SKILL.md"),
-			join(cwd, ".pi", "skills", "project-skill", "SKILL.md"),
-		]);
+		same(result, [join(agentDir, "skills", "usage-probe", "SKILL.md"), join(agentDir, "skills", "keep-me", "SKILL.md"), join(agentDir, "skills", "root-skill.md"), join(home, ".agents", "skills", "agents-skill", "SKILL.md"), join(cwd, ".pi", "skills", "project-skill", "SKILL.md")]);
 	} finally {
 		rmSync(root, { recursive: true, force: true });
 	}
@@ -125,10 +107,7 @@ test("项目 .pi/settings.json 的 disabledSkills 生效且名称大小写不敏
 	try {
 		skillMd(join(agentDir, "skills", "global-a"), "global-a");
 		skillMd(join(cwd, ".pi", "skills", "project-disabled"), "Project-Disabled");
-		put(
-			"project/.pi/settings.json",
-			JSON.stringify({ disabledSkills: ["project-disabled"] }),
-		);
+		put("project/.pi/settings.json", JSON.stringify({ disabledSkills: ["project-disabled"] }));
 
 		const result = resolveEnabledSkillPaths({ agentHomeDir: home, cwd, disabledNames: [] });
 		assert.ok(result);
@@ -144,11 +123,7 @@ test("settings.json 的 skills 数组显式路径参与白名单枚举", () => {
 	try {
 		skillMd(join(agentDir, "skills", "global-a"), "global-a");
 		// 显式声明的独立技能文件 + 显式声明的目录
-		writeFileSync(
-			join(cwd, ".pi", "explicit-skill.md"),
-			"---\nname: project-explicit\ndescription: explicit skill\n---\n",
-			"utf8",
-		);
+		writeFileSync(join(cwd, ".pi", "explicit-skill.md"), "---\nname: project-explicit\ndescription: explicit skill\n---\n", "utf8");
 		const explicitDir = mkdir("explicit-dir");
 		skillMd(explicitDir, "explicit-dir-skill");
 		put("project/.pi/settings.json", JSON.stringify({ skills: ["explicit-skill.md"] }));
@@ -157,11 +132,7 @@ test("settings.json 的 skills 数组显式路径参与白名单枚举", () => {
 		const result = resolveEnabledSkillPaths({ agentHomeDir: home, cwd, disabledNames: ["missing"] });
 		assert.ok(result);
 		// Project-relative paths resolve from <cwd>/.pi; the explicit global directory is also retained.
-		same(result, [
-			join(agentDir, "skills", "global-a", "SKILL.md"),
-			join(explicitDir, "SKILL.md"),
-			join(cwd, ".pi", "explicit-skill.md"),
-		]);
+		same(result, [join(agentDir, "skills", "global-a", "SKILL.md"), join(explicitDir, "SKILL.md"), join(cwd, ".pi", "explicit-skill.md")]);
 	} finally {
 		rmSync(root, { recursive: true, force: true });
 	}
@@ -179,27 +150,14 @@ test("npm 包内的 skills/ 目录与 pi.skills 声明参与枚举（不存在�
 		// 项目级包声明 pi.skills 字段
 		const projPkg = mkdir("project/.pi/npm/node_modules/proj-pack");
 		skillMd(join(projPkg, "custom", "nested"), "proj-pack-skill");
-		writeFileSync(
-			join(projPkg, "package.json"),
-			JSON.stringify({ name: "proj-pack", pi: { skills: ["custom/nested"] } }),
-			"utf8",
-		);
-		put(
-			".pi/agent/settings.json",
-			JSON.stringify({ packages: ["npm:skill-pack"] }),
-		);
-		put(
-			"project/.pi/settings.json",
-			JSON.stringify({ packages: ["npm:proj-pack"], disabledSkills: ["proj-pack-skill"] }),
-		);
+		writeFileSync(join(projPkg, "package.json"), JSON.stringify({ name: "proj-pack", pi: { skills: ["custom/nested"] } }), "utf8");
+		put(".pi/agent/settings.json", JSON.stringify({ packages: ["npm:skill-pack"] }));
+		put("project/.pi/settings.json", JSON.stringify({ packages: ["npm:proj-pack"], disabledSkills: ["proj-pack-skill"] }));
 
 		const result = resolveEnabledSkillPaths({ agentHomeDir: home, cwd, disabledNames: ["proj-pack-skill"] });
 		assert.ok(result);
 		// proj-pack-skill 被禁用剔除，pack-skill 保留
-		same(result, [
-			join(agentDir, "skills", "global-a", "SKILL.md"),
-			join(pkgDir, "skills", "pack-skill", "SKILL.md"),
-		]);
+		same(result, [join(agentDir, "skills", "global-a", "SKILL.md"), join(pkgDir, "skills", "pack-skill", "SKILL.md")]);
 	} finally {
 		rmSync(root, { recursive: true, force: true });
 	}
@@ -247,10 +205,7 @@ test("settings.skills 的 override patterns：! 排除、+ 强制包含、- 强�
 	try {
 		skillMd(join(agentDir, "skills", "beta-tool"), "beta-tool");
 		skillMd(join(agentDir, "skills", "kept-skill"), "kept-skill");
-		put(
-			".pi/agent/settings.json",
-			JSON.stringify({ skills: ["!beta-tool", "+skills/kept-skill", "-skills/kept-skill"] }),
-		);
+		put(".pi/agent/settings.json", JSON.stringify({ skills: ["!beta-tool", "+skills/kept-skill", "-skills/kept-skill"] }));
 		// 触发白名单：禁用任一技能（frontmatter 禁用也可）
 		skillMd(join(agentDir, "skills", "trigger"), "trigger", "disable-model-invocation: true\n");
 
@@ -305,10 +260,7 @@ test("packages 对象条目 skills patterns 只注入匹配的技能", () => {
 		skillMd(join(pkgDir, "skills", "alpha-skill"), "alpha-skill");
 		skillMd(join(pkgDir, "skills", "beta-skill"), "beta-skill");
 		writeFileSync(join(pkgDir, "package.json"), JSON.stringify({ name: "skill-pack" }), "utf8");
-		put(
-			".pi/agent/settings.json",
-			JSON.stringify({ packages: [{ source: "npm:skill-pack", skills: ["alpha-*"] }] }),
-		);
+		put(".pi/agent/settings.json", JSON.stringify({ packages: [{ source: "npm:skill-pack", skills: ["alpha-*"] }] }));
 		skillMd(join(agentDir, "skills", "trigger"), "trigger", "disable-model-invocation: true\n");
 
 		const result = resolveEnabledSkillPaths({ agentHomeDir: home, cwd, disabledNames: [] });
@@ -325,21 +277,16 @@ test("package object without a skill filter falls back only when the manifest om
 	try {
 		const fallbackPkg = mkdir(".pi/agent/npm/node_modules/fallback-pack");
 		skillMd(join(fallbackPkg, "skills", "fallback-skill"), "fallback-skill");
-		writeFileSync(
-			join(fallbackPkg, "package.json"),
-			JSON.stringify({ pi: { prompts: ["prompts/sample.md"] } }),
-			"utf8",
-		);
+		writeFileSync(join(fallbackPkg, "package.json"), JSON.stringify({ pi: { prompts: ["prompts/sample.md"] } }), "utf8");
 		const emptyPkg = mkdir(".pi/agent/npm/node_modules/empty-pack");
 		skillMd(join(emptyPkg, "skills", "must-not-load"), "must-not-load");
-		writeFileSync(
-			join(emptyPkg, "package.json"),
-			JSON.stringify({ pi: { skills: [] } }),
-			"utf8",
+		writeFileSync(join(emptyPkg, "package.json"), JSON.stringify({ pi: { skills: [] } }), "utf8");
+		put(
+			".pi/agent/settings.json",
+			JSON.stringify({
+				packages: [{ source: "npm:fallback-pack" }, { source: "npm:empty-pack" }],
+			}),
 		);
-		put(".pi/agent/settings.json", JSON.stringify({
-			packages: [{ source: "npm:fallback-pack" }, { source: "npm:empty-pack" }],
-		}));
 		skillMd(join(agentDir, "skills", "trigger"), "trigger", "disable-model-invocation: true\n");
 
 		const result = resolveEnabledSkillPaths({ agentHomeDir: home, cwd, disabledNames: [] });
@@ -358,10 +305,7 @@ test("项目 autoload:false package 作为全局包的 delta 覆盖", () => {
 		skillMd(join(pkgDir, "skills", "alpha-skill"), "alpha-skill");
 		skillMd(join(pkgDir, "skills", "beta-skill"), "beta-skill");
 		writeFileSync(join(pkgDir, "package.json"), JSON.stringify({ name: "skill-pack" }), "utf8");
-		put(
-			".pi/agent/settings.json",
-			JSON.stringify({ packages: ["npm:skill-pack"] }),
-		);
+		put(".pi/agent/settings.json", JSON.stringify({ packages: ["npm:skill-pack"] }));
 		put(
 			"project/.pi/settings.json",
 			JSON.stringify({
@@ -385,11 +329,7 @@ test("manifest pi.skills 声明的 patterns 过滤生效（! 排除）", () => {
 		const pkgDir = mkdir(".pi/agent/npm/node_modules/skill-pack");
 		skillMd(join(pkgDir, "custom", "alpha-skill"), "alpha-skill");
 		skillMd(join(pkgDir, "custom", "beta-skill"), "beta-skill");
-		writeFileSync(
-			join(pkgDir, "package.json"),
-			JSON.stringify({ name: "skill-pack", pi: { skills: ["custom/alpha-skill", "!custom/beta-skill"] } }),
-			"utf8",
-		);
+		writeFileSync(join(pkgDir, "package.json"), JSON.stringify({ name: "skill-pack", pi: { skills: ["custom/alpha-skill", "!custom/beta-skill"] } }), "utf8");
 		put(".pi/agent/settings.json", JSON.stringify({ packages: ["npm:skill-pack"] }));
 		skillMd(join(agentDir, "skills", "trigger"), "trigger", "disable-model-invocation: true\n");
 
@@ -425,9 +365,12 @@ test("项目继承覆盖按 global sourceId 匹配且不误伤项目同名技能
 		skillMd(agentsDir, "shared");
 		const projectDir = join(cwd, ".pi", "skills", "shared");
 		skillMd(projectDir, "shared");
-		put("project/.pi/settings.json", JSON.stringify({
-			pideckDisabledGlobalSkills: ["pi-global:shared"],
-		}));
+		put(
+			"project/.pi/settings.json",
+			JSON.stringify({
+				pideckDisabledGlobalSkills: ["pi-global:shared"],
+			}),
+		);
 		const result = resolveEnabledSkillPaths({ agentHomeDir: home, cwd, disabledNames: [] });
 		assert.ok(result);
 		same(result, [join(agentsDir, "SKILL.md"), join(projectDir, "SKILL.md")]);
@@ -463,18 +406,11 @@ test("package manifest glob expands skill directories", () => {
 		const pkgDir = mkdir(".pi/agent/npm/node_modules/glob-pack");
 		skillMd(join(pkgDir, "catalog", "alpha"), "alpha");
 		skillMd(join(pkgDir, "catalog", "beta"), "beta");
-		writeFileSync(
-			join(pkgDir, "package.json"),
-			JSON.stringify({ pi: { skills: ["catalog/*"] } }),
-			"utf8",
-		);
+		writeFileSync(join(pkgDir, "package.json"), JSON.stringify({ pi: { skills: ["catalog/*"] } }), "utf8");
 		put(".pi/agent/settings.json", JSON.stringify({ packages: ["npm:glob-pack"] }));
 		const result = resolveEnabledSkillPaths({ agentHomeDir: home, cwd, disabledNames: ["missing"] });
 		assert.ok(result);
-		same(result, [
-			join(pkgDir, "catalog", "alpha", "SKILL.md"),
-			join(pkgDir, "catalog", "beta", "SKILL.md"),
-		]);
+		same(result, [join(pkgDir, "catalog", "alpha", "SKILL.md"), join(pkgDir, "catalog", "beta", "SKILL.md")]);
 	} finally {
 		rmSync(root, { recursive: true, force: true });
 	}
@@ -535,17 +471,9 @@ test("additionalAgentHomeDirs：WSL 家目录的 ~/.pi/agent/skills 与 ~/.agent
 		skillMd(join(agentDir, "skills", "win-skill"), "win-skill");
 		// WSL 家目录技能：pi 模式顶层 md 算、agents 模式嵌套算
 		skillMd(join(wsl.agentDir, "skills", "wsl-pi-skill"), "wsl-pi-skill");
-		writeFileSync(
-			join(wsl.agentDir, "skills", "wsl-root.md"),
-			"---\nname: wsl-root\ndescription: pi mode root\n---\n",
-			"utf8",
-		);
+		writeFileSync(join(wsl.agentDir, "skills", "wsl-root.md"), "---\nname: wsl-root\ndescription: pi mode root\n---\n", "utf8");
 		skillMd(join(wsl.home, ".agents", "skills", "wsl-agents-skill"), "wsl-agents-skill");
-		writeFileSync(
-			join(wsl.home, ".agents", "skills", "wsl-agents-root.md"),
-			"---\nname: wsl-agents-root\ndescription: agents mode root ignored\n---\n",
-			"utf8",
-		);
+		writeFileSync(join(wsl.home, ".agents", "skills", "wsl-agents-root.md"), "---\nname: wsl-agents-root\ndescription: agents mode root ignored\n---\n", "utf8");
 
 		const result = resolveEnabledSkillPaths({
 			agentHomeDir: home,
@@ -572,11 +500,7 @@ test("additionalAgentHomeDirs：PiDeck 禁用名与 frontmatter 禁用对 WSL �
 	const wsl = setupWslHome(root, "wsl-home");
 	try {
 		skillMd(join(wsl.home, ".agents", "skills", "wsl-disabled"), "wsl-disabled");
-		skillMd(
-			join(wsl.home, ".agents", "skills", "wsl-frontmatter-off"),
-			"wsl-frontmatter-off",
-			"disable-model-invocation: true\n",
-		);
+		skillMd(join(wsl.home, ".agents", "skills", "wsl-frontmatter-off"), "wsl-frontmatter-off", "disable-model-invocation: true\n");
 		skillMd(join(wsl.home, ".agents", "skills", "wsl-kept"), "wsl-kept");
 
 		const result = resolveEnabledSkillPaths({
@@ -599,11 +523,7 @@ test("additionalAgentHomeDirs：WSL 家目录 settings.json 的 skills 显式路
 	try {
 		const explicitDir = join(wsl.home, "custom-skills");
 		skillMd(explicitDir, "wsl-explicit");
-		writeFileSync(
-			join(wsl.agentDir, "settings.json"),
-			JSON.stringify({ skills: [explicitDir] }),
-			"utf8",
-		);
+		writeFileSync(join(wsl.agentDir, "settings.json"), JSON.stringify({ skills: [explicitDir] }), "utf8");
 
 		const result = resolveEnabledSkillPaths({
 			agentHomeDir: home,
@@ -635,10 +555,7 @@ test("additionalAgentHomeDirs：拒绝项目 trust 时 WSL 家目录全局技能
 			includeProjectResources: false,
 		});
 		assert.ok(result);
-		same(result, [
-			join(agentDir, "skills", "win-global", "SKILL.md"),
-			join(wsl.agentDir, "skills", "wsl-global", "SKILL.md"),
-		]);
+		same(result, [join(agentDir, "skills", "win-global", "SKILL.md"), join(wsl.agentDir, "skills", "wsl-global", "SKILL.md")]);
 	} finally {
 		rmSync(root, { recursive: true, force: true });
 	}

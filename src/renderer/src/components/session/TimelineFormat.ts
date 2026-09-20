@@ -1,13 +1,7 @@
 import type { ChatMessage } from "../../../../shared/types";
 // 文件修改/工具名解析已迁往 shared/fileChanges（main 的 AgentManager 与渲染层共用同一份聚合口径）；
 // 此处 import 供本文件保留函数使用，并 re-export 保持既有 import 路径兼容。
-import {
-	collectSessionFileChanges,
-	getToolDiffTarget,
-	getToolFilePath,
-	getToolName,
-	stripAnsi,
-} from "../../../../shared/fileChanges.ts";
+import { collectSessionFileChanges, getToolDiffTarget, getToolFilePath, getToolName, stripAnsi } from "../../../../shared/fileChanges.ts";
 export { collectSessionFileChanges, getToolDiffTarget, getToolName, stripAnsi };
 import type { AgentRunItem } from "../app/AppUtils";
 
@@ -16,13 +10,11 @@ export function stripThinkingTags(text: string): string {
 	return text.replace(/<thinking>[\s\S]*?<\/thinking>/gi, "").trim();
 }
 
-export function getToolStatus(
-  message: ChatMessage,
-): "running" | "done" | "error" {
-  const status = String(message.meta?.status ?? "");
-  if (status === "running") return "running";
-  if (status === "error" || message.role === "error") return "error";
-  return "done";
+export function getToolStatus(message: ChatMessage): "running" | "done" | "error" {
+	const status = String(message.meta?.status ?? "");
+	if (status === "running") return "running";
+	if (status === "error" || message.role === "error") return "error";
+	return "done";
 }
 
 /**
@@ -37,10 +29,8 @@ export function getToolStatus(
  * （其 timestamp 本身随事件固定，不会中途刷新）。
  */
 export function getToolLiveStartTimestamp(message: ChatMessage): number {
-  const startedAt = message.meta?.startedAt;
-  return typeof startedAt === "number" && startedAt > 0
-    ? startedAt
-    : message.timestamp;
+	const startedAt = message.meta?.startedAt;
+	return typeof startedAt === "number" && startedAt > 0 ? startedAt : message.timestamp;
 }
 
 /** 从工具参数中提取文件路径（write/edit/create/patch 等文件工具） */
@@ -63,9 +53,7 @@ export type TurnFileDiffLine = {
  * collectSessionFileChanges。run 完成后其内容不再变化，因此每轮底部展示天然固定，
  * 不会被后续消息清掉。
  */
-export function collectRunFileChanges(
-	run: AgentRunItem,
-): Array<{ path: string; count: number; originalContent: string; content: string }> {
+export function collectRunFileChanges(run: AgentRunItem): Array<{ path: string; count: number; originalContent: string; content: string }> {
 	const msgs: ChatMessage[] = [];
 	for (const item of run.items) {
 		if (item.kind === "message") {
@@ -82,10 +70,7 @@ export function collectRunFileChanges(
  * edit/patch 展示变动区域（removed 旧行 + added 新行）；
  * write/create 无旧内容，整文件视为新增（全 added）。
  */
-export function fileChangeToDiffLines(entry: {
-	originalContent: string;
-	content: string;
-}): TurnFileDiffLine[] {
+export function fileChangeToDiffLines(entry: { originalContent: string; content: string }): TurnFileDiffLine[] {
 	const hasOld = entry.originalContent.length > 0;
 	const lines: TurnFileDiffLine[] = [];
 	entry.originalContent.split("\n").forEach((content, index) => {
@@ -98,40 +83,53 @@ export function fileChangeToDiffLines(entry: {
 }
 
 export function getToolDetailText(message: ChatMessage): string {
-  if (typeof message.meta?.detailText === "string") {
-    return stripAnsi(message.meta.detailText);
-  }
-  return stripAnsi(JSON.stringify(message.meta ?? {}, null, 2));
+	if (typeof message.meta?.detailText === "string") {
+		return stripAnsi(message.meta.detailText);
+	}
+	return stripAnsi(JSON.stringify(message.meta ?? {}, null, 2));
 }
 
 export function getToolExitCode(message: ChatMessage): number | undefined {
-  const result = message.meta?.result;
-  if (!result || typeof result !== "object") return undefined;
-  const value = (result as { exitCode?: unknown }).exitCode;
-  if (typeof value === "number") return value;
-  if (typeof value === "string" && value.trim()) {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : undefined;
-  }
-  return undefined;
+	const result = message.meta?.result;
+	if (!result || typeof result !== "object") return undefined;
+	const value = (result as { exitCode?: unknown }).exitCode;
+	if (typeof value === "number") return value;
+	if (typeof value === "string" && value.trim()) {
+		const parsed = Number(value);
+		return Number.isFinite(parsed) ? parsed : undefined;
+	}
+	return undefined;
 }
 
+/**
+ * 时长格式化（时间线实时秒表 / 工具卡片 / 思考卡片 / 统计口径共用）。
+ *
+ * 档位：<1s 毫秒、<1m 秒（带十分位）、≥1m 分秒、≥1h 小时档。
+ * 各档位值为 0 时省略，既有写法保持不变（「2m」「1m4s」）。
+ * 必须有小时档：挂机跑长任务时只到分钟档会显示成「3120m」这种读不出来的数字。
+ */
 export function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  const seconds = Math.floor(ms / 1000);
-  if (seconds < 60) return `${seconds}.${Math.floor((ms % 1000) / 100)}s`;
-  const minutes = Math.floor(seconds / 60);
-  const remaining = seconds % 60;
-  return remaining > 0 ? `${minutes}m${remaining}s` : `${minutes}m`;
+	if (ms < 1000) return `${ms}ms`;
+	const totalSeconds = Math.floor(ms / 1000);
+	if (totalSeconds < 60) return `${totalSeconds}.${Math.floor((ms % 1000) / 100)}s`;
+	const hours = Math.floor(totalSeconds / 3600);
+	const minutes = Math.floor((totalSeconds % 3600) / 60);
+	const seconds = totalSeconds % 60;
+	// 实时秒表保留秒档：长任务里秒在跳才说明「还在跑」，否则看着像卡死。
+	let text = "";
+	if (hours > 0) text += `${hours}h`;
+	if (minutes > 0) text += `${minutes}m`;
+	if (seconds > 0) text += `${seconds}s`;
+	return text;
 }
 
 export function formatTime(timestamp: number): string {
-  return new Date(timestamp).toLocaleString(undefined, {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+	return new Date(timestamp).toLocaleString(undefined, {
+		month: "2-digit",
+		day: "2-digit",
+		hour: "2-digit",
+		minute: "2-digit",
+	});
 }
 
 /**
@@ -140,7 +138,7 @@ export function formatTime(timestamp: number): string {
  * 与「~408 / 1M」并列时看起来像算错了——低占用必须保留有效数字。
  */
 export function formatPercent(value: number): string {
-  if (value >= 10) return String(Math.round(value));
-  if (value >= 1) return String(Math.round(value * 10) / 10);
-  return String(Math.round(value * 100) / 100);
+	if (value >= 10) return String(Math.round(value));
+	if (value >= 1) return String(Math.round(value * 10) / 10);
+	return String(Math.round(value * 100) / 100);
 }

@@ -19,23 +19,17 @@ const configModalSource = readFileSync("src/renderer/src/ConfigModal.tsx", "utf8
 const draftSource = readFileSync("src/renderer/src/config/addProviderDraft.ts", "utf8");
 
 test("编辑页保存以原 provider 为基底合并，不再重建（保留 oauth/自定义 headers 等）", () => {
-  assert.match(
-    configModalSource,
-    /const provider = mergeProviderDraft\(modelsData\.providers\[oldName\], draft\);/,
-  );
-  assert.doesNotMatch(configModalSource, /buildProviderConfigFromDraft/);
+	assert.match(configModalSource, /const provider = mergeProviderDraft\(modelsData\.providers\[oldName\], draft\);/);
+	assert.doesNotMatch(configModalSource, /buildProviderConfigFromDraft/);
 });
 
 test("新增供应商走 mergeProviderDraft(undefined, draft)（与编辑同一入口）", () => {
-  assert.match(configModalSource, /const provider = mergeProviderDraft\(undefined, draft\);/);
+	assert.match(configModalSource, /const provider = mergeProviderDraft\(undefined, draft\);/);
 });
 
 test("mergeProviderDraft 契约：新增回落重建；编辑以原对象为基底并逐键合并 headers", () => {
-  assert.match(draftSource, /export function mergeProviderDraft\(/);
-  assert.match(draftSource, /if \(!original\) return buildProviderConfigFromDraft\(draft\);/);
-  assert.match(draftSource, /const next: ProviderConfig = \{ \.\.\.original \};/);
-  assert.match(
-    draftSource,
-    /setHeaderValue\(original\.headers, "User-Agent", draft\.userAgent\)/,
-  );
+	assert.match(draftSource, /export function mergeProviderDraft\(/);
+	assert.match(draftSource, /if \(!original\) return buildProviderConfigFromDraft\(draft\);/);
+	assert.match(draftSource, /const next: ProviderConfig = \{ \.\.\.original \};/);
+	assert.match(draftSource, /setHeaderValue\(original\.headers, "User-Agent", draft\.userAgent\)/);
 });

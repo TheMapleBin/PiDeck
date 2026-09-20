@@ -5,10 +5,7 @@ import test from "node:test";
 // ===== beui AnimatedBadge 组件拷贝 =====
 
 test("animated-badge component copied with official markers", () => {
-	const source = readFileSync(
-		"src/renderer/src/components/motion/animated-badge.tsx",
-		"utf8",
-	);
+	const source = readFileSync("src/renderer/src/components/motion/animated-badge.tsx", "utf8");
 	assert.match(source, /beui\.dev[\s\S]*animated-badge/);
 	assert.match(source, /export type AnimatedBadgeStatus =[\s\S]*?\| "loading";/);
 	assert.match(source, /export type AnimatedBadgeSize = "sm" \| "md"/);
@@ -39,14 +36,8 @@ test("motion dependency and ease helpers available", () => {
 // ===== 会话 Tab 栏接入 =====
 
 test("session tab uses AnimatedBadge instead of raw pulse dot", () => {
-	const source = readFileSync(
-		"src/renderer/src/components/session/SessionTabsBar.tsx",
-		"utf8",
-	);
-	const statusSource = readFileSync(
-		"src/renderer/src/utils/sessionStatusBadge.ts",
-		"utf8",
-	);
+	const source = readFileSync("src/renderer/src/components/session/SessionTabsBar.tsx", "utf8");
+	const statusSource = readFileSync("src/renderer/src/utils/sessionStatusBadge.ts", "utf8");
 	assert.match(source, /import \{ AnimatedBadge \} from "\.\.\/motion\/animated-badge";/);
 	assert.match(source, /import \{ sessionStatusBadge \} from "\.\.\/\.\.\/utils\/sessionStatusBadge";/);
 	// 旧的裸圆点渲染已移除
@@ -80,10 +71,7 @@ test("sidebar SessionTree still uses its own status dot (unchanged)", () => {
 });
 
 test("tab dropdown menu: no switch-to item, state-based disable with visible gray", () => {
-	const source = readFileSync(
-		"src/renderer/src/components/session/SessionTabsBar.tsx",
-		"utf8",
-	);
+	const source = readFileSync("src/renderer/src/components/session/SessionTabsBar.tsx", "utf8");
 	// “切换到此会话”已移除（点击 Tab 本体即切换，菜单项冗余）
 	assert.doesNotMatch(source, /tabs\.switchTo/);
 	assert.doesNotMatch(source, /MousePointerClick/);
@@ -92,7 +80,8 @@ test("tab dropdown menu: no switch-to item, state-based disable with visible gra
 	// 置灰用内联 style（特异性最高，置灰可见）。
 	assert.match(source, /function RunControlItems\(/);
 	assert.match(source, /canRunSessionAction\(capabilities, "start"\)/);
-	assert.match(source, /canRunSessionAction\(capabilities, "stop"\)/);
+	// 「停止回答」= abort（只中断当前回合，进程保留）；杀进程的入口是「关闭 Agent」菜单项
+	assert.match(source, /canRunSessionAction\(capabilities, "abort"\)/);
 	assert.match(source, /canRunSessionAction\(capabilities, "reload"\)/);
 	assert.match(source, /\? \{ opacity: 0\.4 \} : undefined/);
 	// 主控项按状态切换文案：未启动/失败/已关闭 → 启动 Agent；live → 重启

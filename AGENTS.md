@@ -139,6 +139,14 @@ src/
 - 文案：所有用户可见文本走 `i18n`（`i18n/rendererCopy.zh-CN.ts` + `en-US.ts` 同步加 key），JSX 中禁止硬编码中英文。
 - 日志/调试输出/内部标识符可硬编码，但日志用主进程 logging 模块，不散落 `console.log`（调试残留需删除）。
 
+### 格式化（biome，硬性）
+
+- 全量格式基线已建立（2026-09，`chore/formatter-baseline`）：配置在根目录 `biome.jsonc`，覆盖 `src/`、`tests/`、`scripts/`、`e2e/`；`docs-site/`、`resources/extensions/`、CSS 不参与（后者有精确匹配的契约测试与双轨迁移纪律）。
+- 规则：tab 缩进、双引号、分号、尾逗号、LF。`lineWidth` 取 biome 上限 320 —— **刻意不做折行**：仓库 >80 字符的行占 54%，激进折行会合并/拆散多行结构，打破大量「源码正则扫描」契约测试。改配置前先确认不会因此破坏测试。
+- 提交前跑 `npm run format`（或用编辑器 Biome 插件保存即格式化）；CI 会在 `npm ci` 之后、Build 之前跑 `npm run check:format`，未格式化直接红灯。
+- **新增源码正则扫描契约测试时，正则必须空白容忍**（`\s*` 而非字面空格、`[\s\S]{0,80}?` 而非字面 `\n`），定位代码块用 `^[\t ]*` 锚点而非 `indexOf("  function …")` 这类硬编码缩进；否则改一次格式就会整组断言失败。
+- `biome.jsonc` 里 `linter` 仍为 `enabled: false`（本次只建格式基线）；lint 规则按触达面增量启用，不一次性引入存量告警。
+
 ## 注释要求
 
 - 对核心逻辑、复杂判断、业务规则、状态流转、权限校验、数据转换、异常处理添加必要注释。

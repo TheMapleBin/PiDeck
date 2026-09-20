@@ -16,14 +16,7 @@ const fakeApp = {
 	},
 };
 
-const {
-	DEFAULT_UPDATER_CACHE_DIR_NAME,
-	FALLBACK_APP_UPDATE_CONFIG_FILENAME,
-	generateFallbackAppUpdateConfigYaml,
-	resolveDefaultAppUpdateConfigPath,
-	ensureAppUpdateConfig,
-	shouldDisableDifferentialDownload,
-} = loadTsCommonJs("src/main/update/createAutoUpdater.ts", {
+const { DEFAULT_UPDATER_CACHE_DIR_NAME, FALLBACK_APP_UPDATE_CONFIG_FILENAME, generateFallbackAppUpdateConfigYaml, resolveDefaultAppUpdateConfigPath, ensureAppUpdateConfig, shouldDisableDifferentialDownload } = loadTsCommonJs("src/main/update/createAutoUpdater.ts", {
 	stubs: {
 		electron: { app: fakeApp },
 	},
@@ -47,18 +40,10 @@ test("generateFallbackAppUpdateConfigYaml 生成合法的 GitHub provider 配置
 });
 
 test("resolveDefaultAppUpdateConfigPath 区分打包态与开发态路径", () => {
-	const packagedPath = resolveDefaultAppUpdateConfigPath(
-		true,
-		"C:\\mock\\resources",
-		"C:\\mock\\app",
-	);
+	const packagedPath = resolveDefaultAppUpdateConfigPath(true, "C:\\mock\\resources", "C:\\mock\\app");
 	assert.equal(packagedPath, join("C:\\mock\\resources", "app-update.yml"));
 
-	const devPath = resolveDefaultAppUpdateConfigPath(
-		false,
-		"C:\\mock\\resources",
-		"C:\\mock\\app",
-	);
+	const devPath = resolveDefaultAppUpdateConfigPath(false, "C:\\mock\\resources", "C:\\mock\\app");
 	assert.equal(devPath, join("C:\\mock\\app", "dev-app-update.yml"));
 });
 
@@ -103,23 +88,11 @@ test("ensureAppUpdateConfig: 当默认配置缺失（如便携版）时在 userD
 
 test("shouldDisableDifferentialDownload: 便携版、缺失默认配置或 E2E 环境下必须禁用差量下载", () => {
 	// 便携版
-	assert.equal(
-		shouldDisableDifferentialDownload({ isPortable: true, hasDefaultConfig: true }),
-		true,
-	);
+	assert.equal(shouldDisableDifferentialDownload({ isPortable: true, hasDefaultConfig: true }), true);
 	// 缺失默认配置
-	assert.equal(
-		shouldDisableDifferentialDownload({ isPortable: false, hasDefaultConfig: false }),
-		true,
-	);
+	assert.equal(shouldDisableDifferentialDownload({ isPortable: false, hasDefaultConfig: false }), true);
 	// E2E
-	assert.equal(
-		shouldDisableDifferentialDownload({ isE2E: true }),
-		true,
-	);
+	assert.equal(shouldDisableDifferentialDownload({ isE2E: true }), true);
 	// 普通完整安装版
-	assert.equal(
-		shouldDisableDifferentialDownload({ isPortable: false, hasDefaultConfig: true, isE2E: false }),
-		false,
-	);
+	assert.equal(shouldDisableDifferentialDownload({ isPortable: false, hasDefaultConfig: true, isE2E: false }), false);
 });

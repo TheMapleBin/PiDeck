@@ -8,18 +8,9 @@ import test from "node:test";
  * 2. 思考耗时人性化——ThinkingBlock 展示「思考了 Xs / Thought for Xs」，不再裸显工程化数字。
  */
 
-const shimmerSource = readFileSync(
-	"src/renderer/src/components/session/ShimmerText.tsx",
-	"utf8",
-);
-const cardsSource = readFileSync(
-	"src/renderer/src/components/session/TimelineEventCards.tsx",
-	"utf8",
-);
-const webTimeline = readFileSync(
-	"src/renderer/src/web/WebTimeline.tsx",
-	"utf8",
-);
+const shimmerSource = readFileSync("src/renderer/src/components/session/ShimmerText.tsx", "utf8");
+const cardsSource = readFileSync("src/renderer/src/components/session/TimelineEventCards.tsx", "utf8");
+const webTimeline = readFileSync("src/renderer/src/web/WebTimeline.tsx", "utf8");
 const timelineCss = readFileSync("src/renderer/src/styles/timeline.css", "utf8");
 const zhCN = readFileSync("src/renderer/src/i18n/rendererCopy.zh-CN.ts", "utf8");
 const enUS = readFileSync("src/renderer/src/i18n/rendererCopy.en-US.ts", "utf8");
@@ -44,15 +35,9 @@ test("shimmer-sweep keyframes 定义在 timeline.css（规则允许 keyframes）
 test("RespondingIndicator 使用 beUI ReasoningText（swap）轮播状态短语", () => {
 	// 短语组常量与函数体分开截取（中间隔着 export type）
 	const phrasesStart = cardsSource.indexOf("const RESPONDING_PHRASES");
-	const phrases = cardsSource.slice(
-		phrasesStart,
-		cardsSource.indexOf("\n};", phrasesStart) + 3,
-	);
+	const phrases = cardsSource.slice(phrasesStart, cardsSource.indexOf("\n};", phrasesStart) + 3);
 	const fnStart = cardsSource.indexOf("export function RespondingIndicator");
-	const fn = cardsSource.slice(
-		fnStart,
-		cardsSource.indexOf("\nexport ", fnStart + 10) || undefined,
-	);
+	const fn = cardsSource.slice(fnStart, cardsSource.indexOf("\nexport ", fnStart + 10) || undefined);
 	assert.ok(fn, "RespondingIndicator must exist");
 	// 五种状态各有 i18n 短语组（compacting/waiting 单条 = 不轮播）
 	assert.match(phrases, /agent\.loading\.starting1/);
@@ -79,9 +64,7 @@ test("RespondingIndicator 轮播短语文案中英同步", () => {
 });
 
 test("ThinkingBlock 耗时改人性化 i18n 文案，不再裸显数字", () => {
-	const block = cardsSource.match(
-		/function ThinkingBlock[\s\S]*?\n\t\},\n/,
-	)?.[0] ?? "";
+	const block = cardsSource.match(/function ThinkingBlock[\s\S]*?\n\t\},\n/)?.[0] ?? "";
 	assert.ok(block, "ThinkingBlock must exist");
 	assert.match(block, /thinking\.duration/);
 	// 耗时仍由 startedAt/endedAt 计算（c73f05c7 重构后变量名 durationMs → durationText）
@@ -94,9 +77,7 @@ test("thinking.duration 文案中英同步", () => {
 });
 
 test("ThinkingBlock 折叠态把耗时和预览放在同一行，流式默认单行打字机", () => {
-	const block = cardsSource.match(
-		/function ThinkingBlock[\s\S]*?\n\t\},\n/,
-	)?.[0] ?? "";
+	const block = cardsSource.match(/function ThinkingBlock[\s\S]*?\n\t\},\n/)?.[0] ?? "";
 	assert.ok(block, "ThinkingBlock must exist");
 	// 对齐 dsh-web：默认永远收起；流式不 setExpanded(true)，点开才展开正文
 	assert.match(block, /useState\(props\.defaultExpanded \?\? false\)/);
@@ -107,7 +88,7 @@ test("ThinkingBlock 折叠态把耗时和预览放在同一行，流式默认单
 	assert.match(block, /disabled: !props\.isStreaming,/);
 	assert.match(block, /<SingleLinePreview[\s\S]*text=\{displayedContent\}/);
 	assert.match(block, /<MarkdownStream[\s\S]*text=\{props\.text\}/);
-	assert.match(block, /!expanded && \(/);
+	assert.match(block, /!expanded && \(?/);
 	assert.match(block, /<SingleLinePreview/);
 	assert.match(block, /showSweep=\{false\}/);
 	assert.match(block, /<ChevronRight/);
@@ -115,9 +96,7 @@ test("ThinkingBlock 折叠态把耗时和预览放在同一行，流式默认单
 });
 
 test("WebThinkingBlock stays collapsed by default and does not auto-expand while streaming", () => {
-	const block = webTimeline.match(
-		/function WebThinkingBlock[\s\S]*?^\}\);/m,
-	)?.[0] ?? "";
+	const block = webTimeline.match(/function WebThinkingBlock[\s\S]*?^\}\);/m)?.[0] ?? "";
 	assert.ok(block, "WebThinkingBlock must exist");
 	assert.match(block, /useState\(false\)/);
 	assert.doesNotMatch(block, /Boolean\(props\.running\)/);
@@ -126,38 +105,21 @@ test("WebThinkingBlock stays collapsed by default and does not auto-expand while
 });
 
 test("thinking Brain logo uses thinking-row-icon instead of gray text utilities", () => {
-	const block = cardsSource.match(
-		/function ThinkingBlock[\s\S]*?\n\t\},\n/,
-	)?.[0] ?? "";
+	const block = cardsSource.match(/function ThinkingBlock[\s\S]*?\n\t\},\n/)?.[0] ?? "";
 	assert.ok(block, "ThinkingBlock must exist");
 	assert.match(block, /<Brain size=\{16\} className="thinking-row-icon shrink-0"/);
 	assert.doesNotMatch(block, /<Brain[^>]*text-text-secondary/);
 });
 
 test("thinking markdown is one size smaller than chat body", () => {
-	assert.match(
-		timelineCss,
-		/\[data-marker-kind="thinking"\] \.markdown-body[\s\S]*?font-size:\s*var\(--font-size-control\)/,
-	);
-	assert.doesNotMatch(
-		timelineCss,
-		/\[data-marker-kind="thinking"\] \.markdown-body[\s\S]*?font-size:\s*var\(--font-size-chat\)/,
-	);
+	assert.match(timelineCss, /\[data-marker-kind="thinking"\] \.markdown-body[\s\S]*?font-size:\s*var\(--font-size-control\)/);
+	assert.doesNotMatch(timelineCss, /\[data-marker-kind="thinking"\] \.markdown-body[\s\S]*?font-size:\s*var\(--font-size-chat\)/);
 });
 
 test("interim answers share chat body size; process variant only adds gap from tool/thinking rows", () => {
-	assert.match(
-		timelineCss,
-		/\.execution-interim \{[\s\S]*?font-size:\s*var\(--font-size-chat\)/,
-	);
-	assert.doesNotMatch(
-		timelineCss,
-		/\.execution-interim\[data-variant="process"\]/,
-	);
-	const answer = readFileSync(
-		"src/renderer/src/components/session/AnswerOutput.tsx",
-		"utf8",
-	);
+	assert.match(timelineCss, /\.execution-interim \{[\s\S]*?font-size:\s*var\(--font-size-chat\)/);
+	assert.doesNotMatch(timelineCss, /\.execution-interim\[data-variant="process"\]/);
+	const answer = readFileSync("src/renderer/src/components/session/AnswerOutput.tsx", "utf8");
 	assert.match(answer, /execution-interim markdown-body my-3 text-chat/);
 	assert.match(answer, /execution-interim markdown-body text-chat text-text-primary/);
 	assert.doesNotMatch(answer, /mt-3 text-chat/);

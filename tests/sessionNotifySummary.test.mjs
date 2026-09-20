@@ -10,14 +10,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
-const { parseNotifySummary, isNotifiableCustomType, NOTIFY_CUSTOM_TYPES } = loadTsCommonJs(
-	"src/renderer/src/components/session/notifySummary.ts",
-);
+const { parseNotifySummary, isNotifiableCustomType, NOTIFY_CUSTOM_TYPES } = loadTsCommonJs("src/renderer/src/components/session/notifySummary.ts");
 
 test("单个后台任务完成：解析出状态与子代理名，正文分段", () => {
-	const summary = parseNotifySummary(
-		"Background task completed: **delegate** (task 3)\n\ndelegate: implemented\nfiles: 2",
-	);
+	const summary = parseNotifySummary("Background task completed: **delegate** (task 3)\n\ndelegate: implemented\nfiles: 2");
 	assert.equal(summary.status, "completed");
 	assert.deepEqual([...summary.agents], ["delegate"]);
 	assert.equal(summary.headline, "Background task completed: **delegate** (task 3)");
@@ -44,9 +40,7 @@ test("中文文案同样可识别（插件可能本地化）", () => {
 });
 
 test("状态只取首行冒号前的段，正文里的 completed/failed 不干扰", () => {
-	const summary = parseNotifySummary(
-		"Background task completed: **x**\n\nx: this task failed earlier",
-	);
+	const summary = parseNotifySummary("Background task completed: **x**\n\nx: this task failed earlier");
 	assert.equal(summary.status, "completed");
 });
 

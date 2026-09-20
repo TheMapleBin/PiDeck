@@ -13,9 +13,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
-const { generatePiAiCatalogFromFiles, compareSemver } = loadTsCommonJs(
-	"src/main/pi/piAiCatalogGenerate.ts",
-);
+const { generatePiAiCatalogFromFiles, compareSemver } = loadTsCommonJs("src/main/pi/piAiCatalogGenerate.ts");
 
 const PI_AI_SOURCE_DIR = join(process.cwd(), "node_modules", "@earendil-works", "pi-ai");
 const DATA_DIR = join(PI_AI_SOURCE_DIR, "dist", "providers", "data");

@@ -2,18 +2,9 @@ import { useEffect, useState } from "react";
 import { t } from "../../../i18n";
 import { Button } from "../../ui-shadcn/button";
 import { Checkbox } from "../../ui-shadcn/checkbox";
-import {
-	Dialog,
-	DialogContent,
-	DialogDescription,
-	DialogHeader,
-	DialogTitle,
-} from "../../ui-shadcn/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../ui-shadcn/dialog";
 import { ScrollArea } from "../../ui-shadcn/scroll-area";
-import type {
-	ConfigBackupDetail,
-	ConfigBackupReason,
-} from "../../../../../shared/types/backup";
+import type { ConfigBackupDetail, ConfigBackupReason } from "../../../../../shared/types/backup";
 
 /**
  * 配置备份的弹窗组件集：恢复选择（RestoreDialog）与脱敏查看（BackupDetailDialog）。
@@ -67,32 +58,18 @@ export function RestoreDialog(props: {
 				{props.detail && (
 					<div className="flex flex-col gap-1 py-1">
 						{props.detail.files.map((file) => (
-							<label
-								key={file.name}
-								className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 hover:bg-foreground/5"
-							>
-								<Checkbox
-									checked={selected.has(file.name)}
-									onCheckedChange={() => toggle(file.name)}
-								/>
+							<label key={file.name} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 hover:bg-foreground/5">
+								<Checkbox checked={selected.has(file.name)} onCheckedChange={() => toggle(file.name)} />
 								<span className="font-mono text-xs">{file.name}</span>
 							</label>
 						))}
 					</div>
 				)}
 				<div className="flex justify-end gap-2 pt-2">
-					<Button
-						variant="ghost"
-						disabled={props.restoring}
-						onClick={() => props.onOpenChange(false)}
-					>
+					<Button variant="ghost" disabled={props.restoring} onClick={() => props.onOpenChange(false)}>
 						{t("common.cancel")}
 					</Button>
-					<Button
-						disabled={count === 0 || props.restoring}
-						loading={props.restoring}
-						onClick={() => props.onRestore([...selected])}
-					>
+					<Button disabled={count === 0 || props.restoring} loading={props.restoring} onClick={() => props.onRestore([...selected])}>
 						{t("settings.backup.restoreSelected", { count })}
 					</Button>
 				</div>
@@ -102,11 +79,7 @@ export function RestoreDialog(props: {
 }
 
 /** 备份详情弹窗：展示脱敏后的文件内容，可按文件切换。 */
-export function BackupDetailDialog(props: {
-	detail: ConfigBackupDetail | null;
-	open: boolean;
-	onOpenChange: (open: boolean) => void;
-}) {
+export function BackupDetailDialog(props: { detail: ConfigBackupDetail | null; open: boolean; onOpenChange: (open: boolean) => void }) {
 	const { detail } = props;
 	const [activeFile, setActiveFile] = useState<string | null>(null);
 
@@ -136,31 +109,17 @@ export function BackupDetailDialog(props: {
 					<>
 						<div className="flex flex-wrap gap-1.5 pb-2">
 							{detail.files.map((entry) => (
-								<button
-									key={entry.name}
-									className={`rounded-md px-2 py-1 text-xs transition-colors ${
-										entry.name === activeFile
-											? "bg-foreground/10 font-medium"
-											: "text-muted-foreground hover:bg-foreground/5"
-									}`}
-									onClick={() => setActiveFile(entry.name)}
-								>
+								<button key={entry.name} className={`rounded-md px-2 py-1 text-xs transition-colors ${entry.name === activeFile ? "bg-foreground/10 font-medium" : "text-muted-foreground hover:bg-foreground/5"}`} onClick={() => setActiveFile(entry.name)}>
 									{entry.name}
 								</button>
 							))}
 						</div>
 						{file && (
 							<ScrollArea className="h-[50vh] rounded-md border border-border-subtle">
-								<pre className="whitespace-pre-wrap break-all p-3 font-mono text-xs leading-relaxed">
-									{file.raw}
-								</pre>
+								<pre className="whitespace-pre-wrap break-all p-3 font-mono text-xs leading-relaxed">{file.raw}</pre>
 							</ScrollArea>
 						)}
-						{file?.redacted && (
-							<p className="pt-2 text-caption text-muted-foreground">
-								{t("settings.backup.redactedNotice")}
-							</p>
-						)}
+						{file?.redacted && <p className="pt-2 text-caption text-muted-foreground">{t("settings.backup.redactedNotice")}</p>}
 					</>
 				)}
 			</DialogContent>

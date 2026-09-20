@@ -66,12 +66,7 @@ function loadExtensionManager({ homeDir, runPiOutput = "", fsOverrides = {} } = 
 			if (id === "./builtInExtensions") {
 				// ExtensionManager 只需要内置名列表；避免 vm 沙箱解析相对 TS 路径失败。
 				return {
-					BUILT_IN_EXTENSIONS: [
-						"pi-deck-ask-question.ts",
-						"pi-deck-nul-redirect-fix.ts",
-						"pi-deck-plan-mode.ts",
-						"pi-deck-todo.ts",
-					],
+					BUILT_IN_EXTENSIONS: ["pi-deck-ask-question.ts", "pi-deck-nul-redirect-fix.ts", "pi-deck-plan-mode.ts", "pi-deck-todo.ts"],
 				};
 			}
 			// ExtensionManager 依赖 ../utils/versionCompare 的 compareVersions；.ts 经 node 类型剥离可 require。
@@ -134,12 +129,7 @@ test("list auto-disables built-in todo and deletes file when third-party rpiv-to
 	writeFileSync(builtinPath, "// builtin\n", "utf8");
 
 	let settings = { removedBuiltInExtensions: [] };
-	const piListOutput = [
-		"User packages:",
-		"npm:@juicesharp/rpiv-todo",
-		join(fixtureHome, ".pi", "agent", "npm", "node_modules", "@juicesharp", "rpiv-todo"),
-		"",
-	].join("\n");
+	const piListOutput = ["User packages:", "npm:@juicesharp/rpiv-todo", join(fixtureHome, ".pi", "agent", "npm", "node_modules", "@juicesharp", "rpiv-todo"), ""].join("\n");
 
 	const { ExtensionManager } = loadExtensionManager({
 		homeDir: fixtureHome,

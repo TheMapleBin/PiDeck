@@ -17,18 +17,10 @@ const build = require("../scripts/build-announcements.js");
 
 /** 构造一份合法 md 源（可按需覆盖字段与正文）。 */
 function makeMd(overrides = {}, body = "正文内容") {
-	const lines = [
-		"---",
-		`id: ${overrides.id ?? "2026-09-07-sample"}`,
-		`title: ${overrides.title ?? "示例公告"}`,
-		`level: ${overrides.level ?? "info"}`,
-		`publishedAt: ${overrides.publishedAt ?? "2026-09-07T00:00:00+08:00"}`,
-		`effectiveUntil: ${overrides.effectiveUntil ?? "2026-10-07T00:00:00+08:00"}`,
-	];
+	const lines = ["---", `id: ${overrides.id ?? "2026-09-07-sample"}`, `title: ${overrides.title ?? "示例公告"}`, `level: ${overrides.level ?? "info"}`, `publishedAt: ${overrides.publishedAt ?? "2026-09-07T00:00:00+08:00"}`, `effectiveUntil: ${overrides.effectiveUntil ?? "2026-10-07T00:00:00+08:00"}`];
 	if (overrides.minVersion !== undefined) lines.push(`minVersion: ${overrides.minVersion}`);
 	if (overrides.category !== undefined) lines.push(`category: ${overrides.category}`);
-	if (overrides.extraField !== undefined)
-		lines.push(`${overrides.extraField}: ${overrides.extraValue ?? "x"}`);
+	if (overrides.extraField !== undefined) lines.push(`${overrides.extraField}: ${overrides.extraValue ?? "x"}`);
 	lines.push("---", "", body);
 	return lines.join("\n");
 }
@@ -94,9 +86,7 @@ test("parseFrontMatter：无法解析的行报错（key: value 格式）", () =>
 });
 
 test("parseAnnouncementMarkdown：合法文件 → 完整条目（minVersion 透传）", () => {
-	const { item, errors } = build.parseAnnouncementMarkdown(
-		join(track(tmpDirWith({ "a.md": makeMd({ minVersion: "0.7.4-beta" }) })), "a.md"),
-	);
+	const { item, errors } = build.parseAnnouncementMarkdown(join(track(tmpDirWith({ "a.md": makeMd({ minVersion: "0.7.4-beta" }) })), "a.md"));
 	assert.deepEqual(errors, []);
 	assert.equal(item.id, "2026-09-07-sample");
 	assert.equal(item.title, "示例公告");
@@ -112,20 +102,14 @@ test("parseAnnouncementMarkdown：合法文件 → 完整条目（minVersion 透
 test("parseAnnouncementMarkdown：category=flash/guide 透传 / 非法 category 拒绝", () => {
 	// 合法类别透传（flash 临时通知 / guide 指南常驻）
 	for (const category of ["flash", "guide"]) {
-		const file = join(
-			track(tmpDirWith({ "a.md": makeMd({ category }) })),
-			"a.md",
-		);
+		const file = join(track(tmpDirWith({ "a.md": makeMd({ category }) })), "a.md");
 		const parsed = build.parseAnnouncementMarkdown(file);
 		assert.deepEqual(parsed.errors, []);
 		assert.equal(parsed.item.category, category);
 	}
 
 	// 类别必须在 flash/notice/guide 内，否则整条拒绝（防笔误类别混进 feed）
-	const badFile = join(
-		track(tmpDirWith({ "a.md": makeMd({ category: "spam" }) })),
-		"a.md",
-	);
+	const badFile = join(track(tmpDirWith({ "a.md": makeMd({ category: "spam" }) })), "a.md");
 	const bad = build.parseAnnouncementMarkdown(badFile);
 	assert.equal(bad.item, null);
 	assert.match(bad.errors.join("\n"), /category/);
@@ -158,19 +142,15 @@ test("parseAnnouncementMarkdown：缺必填字段逐一报错", () => {
 		);
 		const { item, errors } = build.parseAnnouncementMarkdown(file);
 		assert.equal(item, null, `${field} 缺失时应拒绝`);
-		assert.ok(errors.some((e) => pattern.test(e)), `${field} 缺失时报错应提到字段名：${errors}`);
+		assert.ok(
+			errors.some((e) => pattern.test(e)),
+			`${field} 缺失时报错应提到字段名：${errors}`,
+		);
 	}
 });
 
 test("parseAnnouncementMarkdown：非法 level / 非法日期 / 空正文 / id 含空白均拒绝", () => {
-	const badSources = [
-		makeMd({ level: "loud" }),
-		makeMd({ category: "spam" }),
-		makeMd({ publishedAt: "不是日期" }),
-		makeMd({ effectiveUntil: "2026-13-45" }),
-		makeMd({ id: "2026-09-07 bad id" }),
-		makeMd({}, ""),
-	];
+	const badSources = [makeMd({ level: "loud" }), makeMd({ category: "spam" }), makeMd({ publishedAt: "不是日期" }), makeMd({ effectiveUntil: "2026-13-45" }), makeMd({ id: "2026-09-07 bad id" }), makeMd({}, "")];
 	for (const md of badSources) {
 		const file = join(track(tmpDirWith({ "a.md": md })), "a.md");
 		const { item, errors } = build.parseAnnouncementMarkdown(file);
@@ -180,10 +160,7 @@ test("parseAnnouncementMarkdown：非法 level / 非法日期 / 空正文 / id �
 });
 
 test("parseAnnouncementMarkdown：minVersion 空值拒绝", () => {
-	const file = join(
-		track(tmpDirWith({ "a.md": makeMd({ minVersion: "  " }) })),
-		"a.md",
-	);
+	const file = join(track(tmpDirWith({ "a.md": makeMd({ minVersion: "  " }) })), "a.md");
 	const { item, errors } = build.parseAnnouncementMarkdown(file);
 	assert.equal(item, null);
 	assert.match(errors.join("\n"), /minVersion/);
@@ -202,7 +179,10 @@ test("loadAnnouncementDir：多文件汇总 + README.md/.txt 忽略 + 排序由 
 	assert.deepEqual(errors, []);
 	assert.equal(items.length, 2);
 	// 目录扫描按文件名排序读入，但排序不出现在这里（buildFeed 统一处理）
-	assert.deepEqual(items.map((i) => i.id), ["b", "a"]);
+	assert.deepEqual(
+		items.map((i) => i.id),
+		["b", "a"],
+	);
 });
 
 test("loadAnnouncementDir：id 重复报错", () => {
@@ -287,14 +267,5 @@ test("生成的 feed 保持 AnnouncementItem 精确字段（服务端 schema 只
 	const { ok, errors, feed } = build.buildFeedJson(dir);
 	assert.equal(ok, true, String(errors));
 	const item = feed.announcements[0];
-	assert.deepEqual(Object.keys(item).sort(), [
-		"body",
-		"category",
-		"effectiveUntil",
-		"id",
-		"level",
-		"minVersion",
-		"publishedAt",
-		"title",
-	]);
+	assert.deepEqual(Object.keys(item).sort(), ["body", "category", "effectiveUntil", "id", "level", "minVersion", "publishedAt", "title"]);
 });

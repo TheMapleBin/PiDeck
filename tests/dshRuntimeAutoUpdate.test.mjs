@@ -2,9 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
-const { autoUpdateDshRuntimeIfOutdated } = loadTsCommonJs(
-	"src/main/dsh/runtime/dshRuntimeAutoUpdate.ts",
-);
+const { autoUpdateDshRuntimeIfOutdated } = loadTsCommonJs("src/main/dsh/runtime/dshRuntimeAutoUpdate.ts");
 
 /** 构造一组可注入替身：状态/安装/扫描/删除全部可控，默认配置为 outdated 场景。 */
 function makeDeps(overrides = {}) {

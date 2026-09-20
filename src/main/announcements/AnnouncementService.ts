@@ -21,12 +21,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { ANNOUNCEMENT_SOURCES, unwrapAtomgitContents } from "../../shared/announcementSources";
-import type {
-	AnnouncementItem,
-	AnnouncementLevel,
-	AnnouncementSnapshot,
-	AnnouncementState,
-} from "../../shared/types/announcement";
+import type { AnnouncementItem, AnnouncementLevel, AnnouncementSnapshot, AnnouncementState } from "../../shared/types/announcement";
 import { compareSemver } from "../../shared/types/dshRuntimeManifest";
 
 /** 定时拉取间隔：2 小时（用户指定）。 */
@@ -105,11 +100,7 @@ export function parseAnnouncementItem(value: unknown): AnnouncementItem | null {
 	// minVersion 可选；给了就必须是字符串（比较交给 compareSemver 的容错解析）
 	if (value.minVersion !== undefined && typeof value.minVersion !== "string") return null;
 	// category 可选；合法值透传，未知/缺失按 notice 兜底（旧版本 feed 与缓存没有该字段）
-	const category =
-		typeof value.category === "string" &&
-		(ANNOUNCEMENT_CATEGORIES as readonly string[]).includes(value.category)
-			? (value.category as AnnouncementItem["category"])
-			: "notice";
+	const category = typeof value.category === "string" && (ANNOUNCEMENT_CATEGORIES as readonly string[]).includes(value.category) ? (value.category as AnnouncementItem["category"]) : "notice";
 	return {
 		id,
 		title,
@@ -161,11 +152,7 @@ export function shouldShowForVersion(item: AnnouncementItem, appVersion: string)
  * TTL + 版本门控过滤：过期（effectiveUntil <= now）条目丢弃——拉取模式必须可过期，
  * 否则旧公告永久滞留客户端；过期时间解析失败按立即过期（坏数据宁可少展示）。
  */
-export function filterEffectiveItems(
-	items: AnnouncementItem[],
-	now: number,
-	appVersion: string,
-): AnnouncementItem[] {
+export function filterEffectiveItems(items: AnnouncementItem[], now: number, appVersion: string): AnnouncementItem[] {
 	return items.filter((item) => {
 		const until = Date.parse(item.effectiveUntil);
 		if (Number.isNaN(until) || until <= now) return false;
@@ -215,8 +202,7 @@ export class AnnouncementService {
 	 */
 	start(): void {
 		this.loadCache();
-		const startupDelay =
-			ANNOUNCEMENT_STARTUP_DELAY_MS + Math.floor(this.random() * ANNOUNCEMENT_STARTUP_JITTER_MS);
+		const startupDelay = ANNOUNCEMENT_STARTUP_DELAY_MS + Math.floor(this.random() * ANNOUNCEMENT_STARTUP_JITTER_MS);
 		const scheduleNext = (): void => {
 			// 用链式 setTimeout 而非 setInterval：拉取耗时超过 interval 时不会堆叠并发请求
 			this.refreshTimer = setTimeout(() => {
@@ -341,12 +327,8 @@ export class AnnouncementService {
 			if (!isRecord(parsed) || parsed.cacheVersion !== 1) return;
 			const rawList = Array.isArray(parsed.items) ? parsed.items : [];
 			// 缓存虽出自本服务，仍逐条重校验（防手改/旧版本格式差异把脏数据带进内存）
-			const raw = rawList
-				.map((entry) => parseAnnouncementItem(entry))
-				.filter((item): item is AnnouncementItem => item !== null);
-			const readIds = Array.isArray(parsed.readIds)
-				? parsed.readIds.filter((v): v is string => typeof v === "string")
-				: [];
+			const raw = rawList.map((entry) => parseAnnouncementItem(entry)).filter((item): item is AnnouncementItem => item !== null);
+			const readIds = Array.isArray(parsed.readIds) ? parsed.readIds.filter((v): v is string => typeof v === "string") : [];
 			this.rawItems = raw;
 			this.state = {
 				// 缓存读取时重新做 TTL/版本过滤：时间推移后过期条目自动消失，无需等下一次拉取
@@ -355,11 +337,7 @@ export class AnnouncementService {
 				source: "cache",
 				readIds,
 				// 旧版本缓存没有 notifiedIds 字段：缺省空集（代价是最多再弹一次，随后即写回）
-				notifiedIds: this.pruneNotifiedIds(
-					Array.isArray(parsed.notifiedIds)
-						? parsed.notifiedIds.filter((v): v is string => typeof v === "string")
-						: [],
-				),
+				notifiedIds: this.pruneNotifiedIds(Array.isArray(parsed.notifiedIds) ? parsed.notifiedIds.filter((v): v is string => typeof v === "string") : []),
 			};
 			this.emit();
 		} catch {
@@ -424,9 +402,7 @@ export class AnnouncementService {
 		// 边界校验：渲染层数据不可信，非法元素静默丢弃；全非法则不动状态（不空写缓存）。
 		// 非数组也要拦（IPC 已筛一层，但 service 可被直接调用，不能假设调用方守约）。
 		if (!Array.isArray(ids)) return;
-		const valid = ids.filter(
-			(id): id is string => typeof id === "string" && id.length > 0 && id.length <= 128,
-		);
+		const valid = ids.filter((id): id is string => typeof id === "string" && id.length > 0 && id.length <= 128);
 		if (valid.length === 0) return;
 		const merged = new Set(this.state.notifiedIds);
 		let changed = false;

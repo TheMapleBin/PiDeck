@@ -1,4 +1,4 @@
-import { matchPlainFilePaths } from "../../utils/filePathLinks.ts";
+import { extractFileLinkLocation, matchPlainFilePaths } from "../../utils/filePathLinks.ts";
 
 /**
  * 本地复刻 react-markdown 的 defaultUrlTransform（迁移 streamdown 后不再依赖 react-markdown 包）：
@@ -41,17 +41,48 @@ export function markdownUrlTransform(url: string): string {
 }
 
 /**
- * mdast 插件：把裸文件路径转成 file:// 链接。
- * 只处理 type === "text" 的叶子节点，天然跳过 code / inlineCode / link 内的文本。
+ * mdast 插件：把裸文件路径和完整的 inline-code 文件引用转成 file:// 链接。
+ * 普通文本只处理叶子节点，天然跳过 code / link 内的文本；inlineCode 仅在完整内容
+ * 符合文件路径时转换，因此模型遵循 `path:line` 规则后，行内代码也能直接点击。
  * 匹配规则与存在性校验共用 utils/filePathLinks 的 matchPlainFilePaths（含 URL 尾巴排除），
  * 保证「渲染出的链接」与「后续 stat 校验的对象」永远同一份字符串。
  */
+function encodeFileLinkTarget(path: string): string {
+	return `file://${encodeURIComponent(path).replace(/%2F/g, "/").replace(/%3A/g, ":")}`;
+}
+
+/**
+ * 判断 inline code 是否是一个完整的文件引用，而不是任意代码片段。
+ * 带目录的路径复用裸文本识别规则；只有 inline code 才额外允许 `package.json`
+ * 这类单段文件名。这样不会把普通句子里的 `main.ts` 误判成链接，但模型按规则
+ * 输出的 `` `package.json:1` `` 仍然可以点击打开。
+ */
+export function isStandaloneFileReference(value: string): boolean {
+	const raw = value.trim();
+	if (!raw || raw !== value) return false;
+	const location = extractFileLinkLocation(raw);
+	if (!isLocalPathRef(location.path)) return false;
+	const matches = matchPlainFilePaths(location.path);
+	if (matches.length === 1 && matches[0]?.path === location.path) return true;
+	return /^[^\\/\s<>"'`|?*\[\](){}，。；：！？、（）【】《》「」『』“”‘’·…—～￥×÷→←↑↓⇒／]+\.[\p{L}\p{N}]+$/u.test(location.path);
+}
+
 export const remarkLinkifyPaths = () => {
 	return (tree: any) => {
 		const visit = (node: any) => {
 			if (!node || typeof node !== "object") return;
 			const type: string = node.type;
-			if (type === "code" || type === "inlineCode" || type === "link") return;
+			if (type === "code" || type === "link") return;
+			if (type === "inlineCode") {
+				if (typeof node.value === "string" && isStandaloneFileReference(node.value)) {
+					node.__fileLink = {
+						type: "link",
+						url: encodeFileLinkTarget(node.value),
+						children: [{ type: "inlineCode", value: node.value }],
+					};
+				}
+				return;
+			}
 			if (type === "text" && typeof node.value === "string") {
 				const text: string = node.value;
 				const matches = matchPlainFilePaths(text);
@@ -62,7 +93,7 @@ export const remarkLinkifyPaths = () => {
 					if (match.start > last) segs.push({ type: "text", value: text.slice(last, match.start) });
 					segs.push({
 						type: "link",
-						url: `file://${encodeURIComponent(match.path).replace(/%2F/g, "/").replace(/%3A/g, ":")}`,
+						url: encodeFileLinkTarget(match.path),
 						children: [{ type: "text", value: match.path }],
 					});
 					last = match.end;
@@ -79,6 +110,10 @@ export const remarkLinkifyPaths = () => {
 						const segs = (child as any).__segs;
 						delete (child as any).__segs;
 						next.push(...segs);
+					} else if (child && (child as any).__fileLink) {
+						const fileLink = (child as any).__fileLink;
+						delete (child as any).__fileLink;
+						next.push(fileLink);
 					} else {
 						next.push(child);
 					}

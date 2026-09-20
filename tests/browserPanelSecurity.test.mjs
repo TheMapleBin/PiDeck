@@ -25,10 +25,14 @@ test("BrowserPanel uses a fixed persistent partition without popup or file acces
 	assert.match(browserSecurity, /export function isAllowedBrowserPanelUrl/);
 	assert.match(main, /from "\.\/browser\/browserSecurity"/);
 	assert.match(main, /session\.fromPartition\(BROWSER_PANEL_PARTITION\)/);
-	// The renderer-driven webview sets allowfileaccess and allowpopups via attributes.
-	assert.match(browserPanel, /setAttribute\("allowfileaccess", "true"\)/);
-	assert.match(browserPanel, /allowpopups=\{"true" as any\}/);
-	assert.match(rendererTypes, /partition\?: string/);
+	// 2026-09 第五批 M8：渲染层不再设置 allowfileaccess/allowpopups——主进程
+	// will-attach-webview 兜底本来就会剥离这两个属性（index.ts configureBrowserPanelWebviewHost），
+	// 渲染层设置只会制造第二事实来源与虚假的安全感。
+	assert.doesNotMatch(browserPanel, /allowfileaccess/);
+	assert.doesNotMatch(browserPanel, /allowpopups/);
+	assert.doesNotMatch(browserPanel, /webviewRef = useRef<any>/);
+	assert.doesNotMatch(browserPanel, /MutableRefObject<any>/);
+	assert.doesNotMatch(rendererTypes, /WebviewElement[\s\S]*allowpopups/);
 	assert.doesNotMatch(rendererTypes, /allowpopups/i);
 });
 
@@ -81,7 +85,7 @@ test("webview hardening is installed before the main window loads renderer conte
 });
 
 test("external browser IPC shares the HTTP(S) protocol gate and Chromium sandbox stays enabled", () => {
-	const browserOpenExternal = functionBlock(filesIpc, 'ipcMain.handle(ipcChannels.browserOpenExternal', "\n\n\tipcMain.handle(");
+	const browserOpenExternal = functionBlock(filesIpc, "ipcMain.handle(ipcChannels.browserOpenExternal", "\n\n\tipcMain.handle(");
 	assert.match(browserOpenExternal, /await openExternalUrl\(url, true\)/);
 	assert.doesNotMatch(browserOpenExternal, /shell\.openExternal\(url\)/);
 	// Chromium 沙箱默认关闭是刻意的（Windows 安全软件/旧 GPU 驱动会在沙箱初始化触发原生断点），

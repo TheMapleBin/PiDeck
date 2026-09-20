@@ -35,8 +35,7 @@ import { IMAGE_BLOB_REF_RE, ImageBlobStore, imageBlobMimeType } from "./ImageBlo
  * - sessionId 白名单（UUID）防路径注入；
  * - 写失败静默（best-effort：生图结果已在响应里，历史记录尽力而为）。
  */
-const SESSION_ID_RE =
-	/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+const SESSION_ID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 /** 单会话生图历史行数上限（每轮 2 行：user + assistant）。 */
 const MAX_MESSAGES = 2000;
 /**
@@ -54,10 +53,7 @@ const LEGACY_PROBE_BYTES = 256 * 1024;
  * 2. 长 base64 字面量——兜住键序不同的写法，也是「体积异常」的直接证据。
  * 引用格式永远写 `"type":"image","ref":`，两条都不会误命中。
  */
-const LEGACY_INLINE_IMAGE_MARKERS: readonly RegExp[] = [
-	/"type":"image","data":/,
-	/"data":"[A-Za-z0-9+/]{256,}/,
-];
+const LEGACY_INLINE_IMAGE_MARKERS: readonly RegExp[] = [/"type":"image","data":/, /"data":"[A-Za-z0-9+/]{256,}/];
 
 function looksLikeLegacyInlineImages(head: string): boolean {
 	return LEGACY_INLINE_IMAGE_MARKERS.some((marker) => marker.test(head));
@@ -66,12 +62,7 @@ function looksLikeLegacyInlineImages(head: string): boolean {
 const BLOB_REF_RE_G = /"ref":"([0-9a-f]{64}\.[a-z]+)"/g;
 
 function isMessageShape(value: unknown): value is ChatMessage {
-	return (
-		value !== null &&
-		typeof value === "object" &&
-		typeof Reflect.get(value, "id") === "string" &&
-		typeof Reflect.get(value, "role") === "string"
-	);
+	return value !== null && typeof value === "object" && typeof Reflect.get(value, "id") === "string" && typeof Reflect.get(value, "role") === "string";
 }
 
 /** 读文件头部窗口（不存在/不可读返回 null）。 */
@@ -164,10 +155,35 @@ async function collectBlobRefs(file: string, out: Set<string>): Promise<void> {
 }
 
 export class ImageSessionStore {
-	constructor(private readonly deps: {
-		getStorePath: () => string;
-		blobs: ImageBlobStore;
-	}) {}
+	constructor(
+		private readonly deps: {
+			getStorePath: () => string;
+			blobs: ImageBlobStore;
+		},
+	) {}
+
+	/**
+	 * 每会话文件的串行锁（M6）：迁移是「全量流式读 → 快照重写」，必须与
+	 * append/其他迁移互斥，否则迁移窗口内落盘的新行会被不含它的快照覆盖，
+	 * 且孤儿回收在 1 小时宽限期后把新行引用的 blob 一并删掉。
+	 */
+	private readonly fileLocks = new Map<string, Promise<unknown>>();
+
+	/**
+	 * 按文件串行执行临界段；返回值/异常原样透传给调用方。
+	 * 链条吞掉前一段的错误（上一段失败不应卡死后续写入），锁条目在结束后清理，
+	 * Map 不随会话数无界增长。
+	 */
+	private withFileLock<T>(file: string, action: () => Promise<T>): Promise<T> {
+		const run = (this.fileLocks.get(file) ?? Promise.resolve()).catch(() => undefined).then(action);
+		this.fileLocks.set(file, run);
+		void run
+			.finally(() => {
+				if (this.fileLocks.get(file) === run) this.fileLocks.delete(file);
+			})
+			.catch(() => undefined);
+		return run;
+	}
 
 	/** sessionId 白名单校验后映射到存储文件；非法 id 返回 null（防路径注入）。 */
 	private fileFor(sessionId: string): string | null {
@@ -182,7 +198,11 @@ export class ImageSessionStore {
 		const stored: ImageContent[] = [];
 		for (const image of images) {
 			if (image.ref && IMAGE_BLOB_REF_RE.test(image.ref)) {
-				stored.push({ type: "image", ref: image.ref, mimeType: imageBlobMimeType(image.ref) });
+				stored.push({
+					type: "image",
+					ref: image.ref,
+					mimeType: imageBlobMimeType(image.ref),
+				});
 				continue;
 			}
 			if (typeof image.data !== "string" || image.data.length === 0) continue;
@@ -197,34 +217,39 @@ export class ImageSessionStore {
 	async append(sessionId: string, messages: ChatMessage[]): Promise<void> {
 		const file = this.fileFor(sessionId);
 		if (!file || messages.length === 0) return;
-		try {
-			await mkdir(dirname(file), { recursive: true });
-			// 旧格式先自愈，避免新行与内联 base64 混在同一个文件里；
-			// 迁移失败不阻断新记录落盘（读取侧按行判断格式，混存也能正确处理）
+		// 迁移是全量流式重写：必须与追加互相串行（M6），
+		// 否则迁移窗口内 append 的行会被不含它的快照覆盖，孤儿回收再把图删掉。
+		await this.withFileLock(file, async () => {
 			try {
-				await this.migrateLegacyFile(file);
+				await mkdir(dirname(file), { recursive: true });
+				// 旧格式先自愈，避免新行与内联 base64 混在同一个文件里；
+				// 迁移失败不阻断新记录落盘（读取侧按行判断格式，混存也能正确处理）
+				try {
+					await this.migrateLegacyFile(file);
+				} catch {
+					// best-effort
+				}
+				const lines: string[] = [];
+				for (const message of messages) {
+					lines.push(JSON.stringify(await this.toStoredMessage(message)));
+				}
+				// 只追加，不重写：文件大小靠 compactIfOversized 单点收敛
+				await appendFile(file, `${lines.join("\n")}\n`, "utf8");
+				await this.compactIfOversized(file);
 			} catch {
-				// best-effort
+				// best-effort：落盘失败不阻断生图返回（响应已在，历史记录尽力而为）
 			}
-			const lines: string[] = [];
-			for (const message of messages) {
-				lines.push(JSON.stringify(await this.toStoredMessage(message)));
-			}
-			// 只追加，不重写：文件大小靠 compactIfOversized 单点收敛
-			await appendFile(file, `${lines.join("\n")}\n`, "utf8");
-			await this.compactIfOversized(file);
-		} catch {
-			// best-effort：落盘失败不阻断生图返回（响应已在，历史记录尽力而为）
-		}
+		});
 	}
 
 	/** 读回该会话生图记录（损坏行跳过）；文件缺失/非法 id 返回空数组。 */
 	async readMessages(sessionId: string): Promise<ChatMessage[]> {
 		const file = this.fileFor(sessionId);
 		if (!file) return [];
-		// 首读即自愈：旧版巨型内联 base64 文件在这里被改写为引用格式
+		// 首读即自愈：旧版巨型内联 base64 文件在这里被改写为引用格式；
+		// 与 append 共用文件锁（M6）：读触发的迁移同样会覆盖并发 append 的新行
 		try {
-			await this.migrateLegacyFile(file);
+			await this.withFileLock(file, () => this.migrateLegacyFile(file));
 		} catch {
 			// 迁移失败不阻断读取：下面的尾部有界读取仍成立
 		}
@@ -239,9 +264,7 @@ export class ImageSessionStore {
 					// 单行损坏不应阻断整段历史
 				}
 			}
-			return messages.length > MAX_MESSAGES
-				? messages.slice(messages.length - MAX_MESSAGES)
-				: messages;
+			return messages.length > MAX_MESSAGES ? messages.slice(messages.length - MAX_MESSAGES) : messages;
 		} catch {
 			// 文件缺失 = 无 ImageSession 记录
 			return [];
@@ -298,11 +321,19 @@ export class ImageSessionStore {
 		}
 		if (!isMessageShape(parsed)) return trimmed;
 		const images = parsed.images;
-		const hasInline = images?.some(
-			(image) => typeof image?.data === "string" && image.data.length > 0,
-		);
+		const hasInline = images?.some((image) => typeof image?.data === "string" && image.data.length > 0);
 		if (!hasInline) return trimmed;
-		return JSON.stringify(await this.toStoredMessage(parsed));
+		const stored = await this.toStoredMessage(parsed);
+		// 迁移不丢图（M5）：原图数 ≠ 落库后图数说明有图片没能换成 ref
+		//（base64 非法 / 超 IMAGE_BLOB_MAX_BYTES / blob 写盘失败），该行原样保留——
+		// 与损坏行同策略。迁移的 writeFileAtomic 会覆盖原文件，旧 base64 一旦被
+		// 无图行替换就永久丢失；宁可保留旧行也不静默删掉用户唯一的图片副本。
+		// 注意计数口径是「原始 images 总数（含已带合法 ref 的图）」：toStoredMessage
+		// 对既无 ref 又无 data 的畸形图同样丢弃，按总数比较可一并兜住。
+		const before = images?.length ?? 0;
+		const after = stored.images?.length ?? 0;
+		if (before !== after) return trimmed;
+		return JSON.stringify(stored);
 	}
 
 	/** 超过字节水位时压缩：保留尾部预算内的行，重写一次文件并回收孤儿图片。 */

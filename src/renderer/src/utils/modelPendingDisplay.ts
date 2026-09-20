@@ -27,10 +27,7 @@ export type ModelDisplayResult = {
 	pending: boolean;
 };
 
-export function computeModelDisplay(
-	current: ModelPendingRef | undefined,
-	pending: ModelPending | undefined,
-): ModelDisplayResult {
+export function computeModelDisplay(current: ModelPendingRef | undefined, pending: ModelPending | undefined): ModelDisplayResult {
 	if (pending) {
 		return { from: pending.from, to: pending.to, pending: true };
 	}
@@ -48,12 +45,7 @@ export type ComposerLiveModelSource = {
  * 已关闭/解绑残留的 state.model 不能盖住用户刚写入 catalog 的 record.model，
  * 否则「Agent 没启动时改模型」看起来像没改、发送后又跳回去。
  */
-export function resolveComposerLiveModel(input: {
-	state?: ComposerLiveModelSource;
-	record?: { provider?: string; modelId?: string };
-	fallback?: ComposerLiveModelSource;
-	isLive: boolean;
-}): ModelPendingRef {
+export function resolveComposerLiveModel(input: { state?: ComposerLiveModelSource; record?: { provider?: string; modelId?: string }; fallback?: ComposerLiveModelSource; isLive: boolean }): ModelPendingRef {
 	const liveState = input.isLive ? input.state : undefined;
 	return {
 		provider: liveState?.provider ?? input.record?.provider ?? input.fallback?.provider ?? "",

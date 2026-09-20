@@ -1,33 +1,11 @@
 import { randomUUID } from "node:crypto";
-import {
-	copyFile,
-	mkdir,
-	open,
-	readFile,
-	unlink,
-} from "node:fs/promises";
+import { copyFile, mkdir, open, readFile, unlink } from "node:fs/promises";
 import { dirname } from "node:path";
-import type {
-	AgentBackend,
-	AgentTab,
-	SessionEnvironment,
-	SessionRecord,
-	SessionSource,
-	SessionSummary,
-} from "../../shared/types";
+import type { AgentBackend, AgentTab, SessionEnvironment, SessionRecord, SessionSource, SessionSummary } from "../../shared/types";
 import type { SessionProxyOverride } from "../../shared/types/session";
 import { getAppLogger } from "../logging/sharedLogger";
 import { renameWithRetry } from "../utils/fsRetry";
-import {
-	buildSessionOriginKey,
-	buildSummaryOriginKey,
-	canonicalizeSessionPath,
-	collectSessionSubtreeIds,
-	getImportedSessionSourceId,
-	getSessionEnvironment,
-	isInSubagentArtifactsDir,
-	looksLikePiSessionFileStem,
-} from "../../shared/sessionIdentity";
+import { buildSessionOriginKey, buildSummaryOriginKey, canonicalizeSessionPath, collectSessionSubtreeIds, getImportedSessionSourceId, getSessionEnvironment, isInSubagentArtifactsDir, looksLikePiSessionFileStem } from "../../shared/sessionIdentity";
 
 export type SessionCatalogEntry = {
 	id: string;
@@ -93,11 +71,7 @@ type SessionCatalogContext = {
  * 与扫描器发现的绝对路径 originKey 不同，会造成同文件双记录（侧栏重复显示）。
  * 注入后 catalog 在加载与写入边界统一修正；实现见 main/index.ts。
  */
-export type SessionFilePathResolver = (
-	projectId: string,
-	filePath: string,
-	environment: SessionEnvironment,
-) => string;
+export type SessionFilePathResolver = (projectId: string, filePath: string, environment: SessionEnvironment) => string;
 
 /** 会话标题读取与有效性校验的合并结果：name 缺省时保留 catalog 标题；valid:false 表示
  *  文件非有效 Pi 会话（如 pi-subagents transcript 转储，首条记录用 recordType 而无 type 头），
@@ -146,26 +120,15 @@ function cloneEntry(entry: SessionCatalogEntry): SessionCatalogEntry {
 	};
 }
 
-function equalModel(
-	left?: { provider: string; modelId: string },
-	right?: { provider: string; modelId: string },
-): boolean {
+function equalModel(left?: { provider: string; modelId: string }, right?: { provider: string; modelId: string }): boolean {
 	return left?.provider === right?.provider && left?.modelId === right?.modelId;
 }
 
 function isMissingFileError(error: unknown): boolean {
-	return Boolean(
-		error &&
-		typeof error === "object" &&
-		"code" in error &&
-		(error as { code?: unknown }).code === "ENOENT",
-	);
+	return Boolean(error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "ENOENT");
 }
 
-export function canAttachRuntimeMetadata(
-	entry: SessionCatalogEntry | undefined,
-	tab: Partial<AgentTab>,
-): boolean {
+export function canAttachRuntimeMetadata(entry: SessionCatalogEntry | undefined, tab: Partial<AgentTab>): boolean {
 	if (!entry || !tab.sessionPath) return false;
 	// DSH 的 sessionPath 是 host zstd 日志，不是 pi JSONL。走文件配对会把 zstd
 	// 写进 filePath，渲染层当成有历史去读，空会话输入时整页抽成「正在加载历史」。
@@ -173,21 +136,24 @@ export function canAttachRuntimeMetadata(
 	if (entry.status === "draft" && !entry.filePath) return true;
 	if (!entry.filePath) return false;
 	const environment = tab.sessionEnvironment ?? entry.environment;
-	return buildSessionOriginKey({
-		source: entry.source,
-		environment: entry.environment,
-		filePath: entry.filePath,
-		wslDistro: entry.wslDistro,
-		wslUser: entry.wslUser,
-		importedSourceId: entry.importedSourceId,
-	}) === buildSessionOriginKey({
-		source: tab.sessionSource ?? entry.source,
-		environment,
-		filePath: tab.sessionPath,
-		wslDistro: tab.wslDistro ?? entry.wslDistro,
-		wslUser: tab.wslUser ?? entry.wslUser,
-		importedSourceId: tab.importedSourceId ?? entry.importedSourceId,
-	});
+	return (
+		buildSessionOriginKey({
+			source: entry.source,
+			environment: entry.environment,
+			filePath: entry.filePath,
+			wslDistro: entry.wslDistro,
+			wslUser: entry.wslUser,
+			importedSourceId: entry.importedSourceId,
+		}) ===
+		buildSessionOriginKey({
+			source: tab.sessionSource ?? entry.source,
+			environment,
+			filePath: tab.sessionPath,
+			wslDistro: tab.wslDistro ?? entry.wslDistro,
+			wslUser: tab.wslUser ?? entry.wslUser,
+			importedSourceId: tab.importedSourceId ?? entry.importedSourceId,
+		})
+	);
 }
 
 export class SessionCatalog {
@@ -252,13 +218,9 @@ export class SessionCatalog {
 		// catalog 只是 id 映射；即使“创建后激活链路未走完”（attachRuntime 未把
 		// status 置 active），重启后用户仍应在侧栏看到并重新激活它。若在此清掉，
 		// host 侧会话会变成孤儿且无法从侧栏访问。带 dshSessionId 的异常中间态同样保留。
-		const staleDrafts = this.entries.filter(
-			(entry) => entry.status === "draft" && entry.backend !== "dsh",
-		);
+		const staleDrafts = this.entries.filter((entry) => entry.status === "draft" && entry.backend !== "dsh");
 		if (staleDrafts.length > 0) {
-			this.entries = this.entries.filter(
-				(entry) => entry.status !== "draft" || entry.backend === "dsh",
-			);
+			this.entries = this.entries.filter((entry) => entry.status !== "draft" || entry.backend === "dsh");
 			try {
 				await this.writeSnapshot(this.entries);
 			} catch {
@@ -296,9 +258,7 @@ export class SessionCatalog {
 		// dshSessionId 缺失）——标题同步（findByDshSessionId）与重启后 attach 恢复
 		// 旧会话都依赖 dshSessionId。加载时把 backend=dsh 且缺 dshSessionId 的
 		// 记录用 piSessionId（当时存的就是 host 会话 id）补齐。
-		const migratedDsh = this.entries.some((entry) => (
-			entry.backend === "dsh" && !entry.dshSessionId && entry.piSessionId
-		));
+		const migratedDsh = this.entries.some((entry) => entry.backend === "dsh" && !entry.dshSessionId && entry.piSessionId);
 		if (migratedDsh) {
 			for (const entry of this.entries) {
 				if (entry.backend === "dsh" && !entry.dshSessionId && entry.piSessionId) {
@@ -316,9 +276,7 @@ export class SessionCatalog {
 		// piSessionId=host 会话 id 落盘）。pi 侧逻辑会把 zstd 文件当 pi 会话文件
 		// 处理（启动 pi exited code=1、导出/删除误判等）。dsh 条目只保留 dshSessionId，
 		// filePath/piSessionId 一律清除（dshSessionId 已在上方迁移补齐）。
-		const pollutedDsh = this.entries.some((entry) => (
-			entry.backend === "dsh" && (Boolean(entry.filePath) || Boolean(entry.piSessionId))
-		));
+		const pollutedDsh = this.entries.some((entry) => entry.backend === "dsh" && (Boolean(entry.filePath) || Boolean(entry.piSessionId)));
 		if (pollutedDsh) {
 			for (const entry of this.entries) {
 				if (entry.backend !== "dsh") continue;
@@ -340,10 +298,7 @@ export class SessionCatalog {
 
 	listEntries(): SessionCatalogEntry[] {
 		this.assertLoaded();
-		return [
-			...this.entries.map(cloneEntry),
-			...Array.from(this.transientEntries.values(), cloneEntry),
-		];
+		return [...this.entries.map(cloneEntry), ...Array.from(this.transientEntries.values(), cloneEntry)];
 	}
 
 	get(id: string): SessionCatalogEntry | undefined {
@@ -380,13 +335,7 @@ export class SessionCatalog {
 		});
 	}
 
-	createAnonymous(input: {
-		projectId: string;
-		title: string;
-		environment: SessionEnvironment;
-		model?: { provider: string; modelId: string };
-		thinkingLevel?: string;
-	}): SessionRecord {
+	createAnonymous(input: { projectId: string; title: string; environment: SessionEnvironment; model?: { provider: string; modelId: string }; thinkingLevel?: string }): SessionRecord {
 		this.assertLoaded();
 		const now = Date.now();
 		const entry: SessionCatalogEntry = {
@@ -418,17 +367,10 @@ export class SessionCatalog {
 		return entry ? this.recordFromEntry(entry) : undefined;
 	}
 
-	findByFilePath(
-		filePath: string,
-		environment: SessionEnvironment,
-	): SessionCatalogEntry | undefined {
+	findByFilePath(filePath: string, environment: SessionEnvironment): SessionCatalogEntry | undefined {
 		this.assertLoaded();
 		const target = canonicalizeSessionPath(filePath, environment);
-		const entry = this.entries.find((candidate) => (
-			candidate.filePath &&
-			candidate.environment === environment &&
-			canonicalizeSessionPath(candidate.filePath, environment) === target
-		));
+		const entry = this.entries.find((candidate) => candidate.filePath && candidate.environment === environment && canonicalizeSessionPath(candidate.filePath, environment) === target);
 		return entry ? cloneEntry(entry) : undefined;
 	}
 
@@ -447,9 +389,7 @@ export class SessionCatalog {
 	}): Promise<SessionCatalogEntry> {
 		this.assertLoaded();
 		// 与 attachRuntime 同口径：进入 catalog 前归一化为绝对路径，保证 originKey 去重一致。
-		const filePath = this.resolveFilePath
-			? this.resolveFilePath(input.projectId, input.filePath, input.environment)
-			: input.filePath;
+		const filePath = this.resolveFilePath ? this.resolveFilePath(input.projectId, input.filePath, input.environment) : input.filePath;
 		return this.enqueueMutation((entries) => {
 			const originKey = buildSessionOriginKey({
 				source: input.source,
@@ -462,14 +402,16 @@ export class SessionCatalog {
 			let entry = entries.find((candidate) => {
 				if (candidate.originKey === originKey) return true;
 				if (!candidate.filePath) return false;
-				return buildSessionOriginKey({
-					source: candidate.source,
-					environment: candidate.environment,
-					filePath: candidate.filePath,
-					wslDistro: candidate.wslDistro,
-					wslUser: candidate.wslUser,
-					importedSourceId: candidate.importedSourceId,
-				}) === originKey;
+				return (
+					buildSessionOriginKey({
+						source: candidate.source,
+						environment: candidate.environment,
+						filePath: candidate.filePath,
+						wslDistro: candidate.wslDistro,
+						wslUser: candidate.wslUser,
+						importedSourceId: candidate.importedSourceId,
+					}) === originKey
+				);
 			});
 			const now = Date.now();
 			if (!entry) {
@@ -547,28 +489,24 @@ export class SessionCatalog {
 			// 且删除其一后另一条仍可加载同一 host 数据（「重复导入」用户问题）。
 			if (input.dshSessionId) {
 				const dismissed = this.dismissedDshSessionIds.has(input.dshSessionId);
-				const existing = entries.find((candidate) => (
-					candidate.dshSessionId === input.dshSessionId
-				));
+				const existing = entries.find((candidate) => candidate.dshSessionId === input.dshSessionId);
 				// 用户已删映射、host 目录还在：自动同步不得再建条目。手动找回才允许。
 				if (dismissed && !input.restoreDismissed && !existing) {
 					throw new Error("DISMISSED_DSH_SESSION");
 				}
-				const forgotten = input.restoreDismissed
-					? this.dismissedDshSessionIds.delete(input.dshSessionId)
-					: false;
+				const forgotten = input.restoreDismissed ? this.dismissedDshSessionIds.delete(input.dshSessionId) : false;
 				if (existing) {
 					const nextTitle = input.keepExistingTitle ? existing.title : input.title;
 					const agentPresetChanged = input.agentPreset !== undefined && existing.agentPreset !== input.agentPreset;
-					const changed = forgotten || (
+					const changed =
+						forgotten ||
 						existing.projectId !== input.projectId ||
 						existing.title !== nextTitle ||
 						existing.backend !== input.backend ||
 						agentPresetChanged ||
 						existing.status !== "active" ||
 						// mtime 变化也落盘：修正历史被顶高的 updatedAt，否则排序永远错
-						existing.updatedAt !== (input.updatedAt ?? now)
-					);
+						existing.updatedAt !== (input.updatedAt ?? now);
 					existing.projectId = input.projectId;
 					existing.title = nextTitle;
 					existing.backend = input.backend;
@@ -587,12 +525,8 @@ export class SessionCatalog {
 				source: input.source ?? "pi",
 				environment: input.environment,
 				backend: input.backend,
-				wslDistro: input.environment === "wsl"
-					? this.identityContext.wslDistro
-					: undefined,
-				wslUser: input.environment === "wsl"
-					? this.identityContext.wslUser
-					: undefined,
+				wslDistro: input.environment === "wsl" ? this.identityContext.wslDistro : undefined,
+				wslUser: input.environment === "wsl" ? this.identityContext.wslUser : undefined,
 				// 带 dshSessionId = 导入已有 host 会话（数据在 $DSH_HOME），
 				// 不是「尚未发送」的草稿：置 active，重启清理/重新打开都按真实会话处理。
 				status: input.dshSessionId ? "active" : "draft",
@@ -613,10 +547,7 @@ export class SessionCatalog {
 
 	async update(
 		id: string,
-		patch: Partial<Pick<
-			SessionCatalogEntry,
-			"title" | "backend" | "updatedAt"
-		>> & {
+		patch: Partial<Pick<SessionCatalogEntry, "title" | "backend" | "updatedAt">> & {
 			model?: { provider: string; modelId: string } | null;
 			thinkingLevel?: string | null;
 			permissionPreset?: string | null;
@@ -684,14 +615,7 @@ export class SessionCatalog {
 			const entry = this.requireEntry(entries, input.sessionId);
 			// pi 可能上报相对 cwd 的 sessionFile：写入 catalog 前归一化为绝对路径，
 			// 否则与扫描器绝对路径 originKey 不一致，同一文件会出现两条记录。
-			const filePath =
-				input.filePath && this.resolveFilePath
-					? this.resolveFilePath(
-							entry.projectId,
-							input.filePath,
-							entry.environment,
-						)
-					: input.filePath;
+			const filePath = input.filePath && this.resolveFilePath ? this.resolveFilePath(entry.projectId, input.filePath, entry.environment) : input.filePath;
 			const previousFilePath = entry.filePath;
 			// DSH 的 sessionPath 是 host zstd，不是 pi JSONL；写进 filePath 会让渲染层
 			// 把空会话当成有磁盘历史（起始页 / 骨架来回抽）。
@@ -711,31 +635,16 @@ export class SessionCatalog {
 			// 不能把草稿抬成 active：渲染层会把「active + dshSessionId」当成有历史，
 			// 输入一半整页换成「正在加载历史」骨架。导入路径 createDraft({dshSessionId})
 			// 已经是 active；真正开聊后由 prompt dispatch 再 promoteToActive。
-			if (
-				input.promoteToActive &&
-				input.dshSessionId &&
-				!entry.filePath &&
-				entry.status === "draft"
-			) {
+			if (input.promoteToActive && input.dshSessionId && !entry.filePath && entry.status === "draft") {
 				entry.status = "active";
 			}
 			if (entry.filePath) {
-				const pathUnchanged = Boolean(
-					previousFilePath &&
-					canonicalizeSessionPath(previousFilePath, entry.environment) ===
-						canonicalizeSessionPath(entry.filePath, entry.environment),
-				);
-				const nextOriginKey = pathUnchanged && entry.originKey
-					? entry.originKey
-					: this.originKeyForEntry(entry);
+				const pathUnchanged = Boolean(previousFilePath && canonicalizeSessionPath(previousFilePath, entry.environment) === canonicalizeSessionPath(entry.filePath, entry.environment));
+				const nextOriginKey = pathUnchanged && entry.originKey ? entry.originKey : this.originKeyForEntry(entry);
 				entry.originKey = nextOriginKey;
 				entry.status = "active";
 
-				const duplicateIndex = nextOriginKey
-					? entries.findIndex((candidate) => (
-						candidate.id !== entry.id && candidate.originKey === nextOriginKey
-					))
-					: -1;
+				const duplicateIndex = nextOriginKey ? entries.findIndex((candidate) => candidate.id !== entry.id && candidate.originKey === nextOriginKey) : -1;
 				if (duplicateIndex >= 0) {
 					const duplicate = entries[duplicateIndex];
 					entry.model ??= duplicate.model;
@@ -834,18 +743,11 @@ export class SessionCatalog {
 		});
 	}
 
-	async removeByFilePath(
-		filePath: string,
-		environment: SessionEnvironment,
-	): Promise<boolean> {
+	async removeByFilePath(filePath: string, environment: SessionEnvironment): Promise<boolean> {
 		this.assertLoaded();
 		const target = canonicalizeSessionPath(filePath, environment);
 		return this.enqueueMutation((entries) => {
-			const index = entries.findIndex((entry) => (
-				entry.filePath &&
-				entry.environment === environment &&
-				canonicalizeSessionPath(entry.filePath, environment) === target
-			));
+			const index = entries.findIndex((entry) => entry.filePath && entry.environment === environment && canonicalizeSessionPath(entry.filePath, environment) === target);
 			if (index < 0) return { value: false, changed: false };
 			entries.splice(index, 1);
 			return { value: true, changed: true };
@@ -870,8 +772,7 @@ export class SessionCatalog {
 		// 会在 JSONL 末尾追加 session_info，否则项目刷新和重启 Session 都只会继续使用旧 catalog 标题。
 		// 同一次读头部顺带校验会话头有效性：invalidOrigins 收集被判定为非有效会话
 		// 的 originKey（transcript 等无 type 头的产物，#168），下面据此清洗与拒绝。
-		const { names: fetchedNames, authoritative: fetchedAuthoritativeByOrigin, invalid: invalidOrigins, parents: fetchedParents, forked: fetchedForked } =
-			await this.collectScannedTitles(summaries, context);
+		const { names: fetchedNames, authoritative: fetchedAuthoritativeByOrigin, invalid: invalidOrigins, parents: fetchedParents, forked: fetchedForked } = await this.collectScannedTitles(summaries, context);
 		return this.enqueueMutation((entries) => {
 			let changed = false;
 
@@ -907,11 +808,7 @@ export class SessionCatalog {
 				return true;
 			});
 
-			const byOrigin = new Map(
-				entries
-					.filter((entry) => entry.originKey)
-					.map((entry) => [entry.originKey!, entry]),
-			);
+			const byOrigin = new Map(entries.filter((entry) => entry.originKey).map((entry) => [entry.originKey!, entry]));
 			const summaryById = new Map<string, SessionSummary>();
 
 			// Restore model/thinking from the session file when the catalog lacks them.
@@ -951,9 +848,7 @@ export class SessionCatalog {
 						originKey,
 						// listPathSummary 没有 name；readSummary 若仍带回时间戳文件名，也不能当标题。
 						// summary.name（全量解析）优先，头部补名次之，最后才回退文件名 stem。
-						title: catalogDisplayTitle(summary.name)
-							|| catalogDisplayTitle(fetchedTitle)
-							|| scannedFileStemTitle(summary.filePath),
+						title: catalogDisplayTitle(summary.name) || catalogDisplayTitle(fetchedTitle) || scannedFileStemTitle(summary.filePath),
 						source: summary.source ?? "pi",
 						environment: getSessionEnvironment(summary),
 						filePath: summary.filePath,
@@ -976,23 +871,14 @@ export class SessionCatalog {
 					// 已存在真实标题时，弱回退（首条消息文本）不得覆盖（2026-09 现场：
 					// 自动命名 session_info 被第二轮消息挤出窗口盲区后被消息文本冲掉）；
 					// 权威回读（session_info 命中）与占位标题升级不受此限。
-					const nextTitle = catalogDisplayTitle(summary.name)
-						|| (fetchedAuthoritative || isPlaceholderCatalogTitle(entry.title)
-							? catalogDisplayTitle(fetchedTitle)
-							: undefined)
-						|| catalogDisplayTitle(entry.title)
-						|| scannedFileStemTitle(summary.filePath);
+					const nextTitle = catalogDisplayTitle(summary.name) || (fetchedAuthoritative || isPlaceholderCatalogTitle(entry.title) ? catalogDisplayTitle(fetchedTitle) : undefined) || catalogDisplayTitle(entry.title) || scannedFileStemTitle(summary.filePath);
 					// 父关系最终值：新探测值优先，缺失时保留旧值（轻量扫描恒缺省，不能清掉已持久化的父）。
 					const nextParent = summary.parentSessionPath ?? fetchedParent ?? entry.parentSessionPath;
 					// fork 标记同样只增补、不清空：未探测到（轻量扫描/普通会话）保留持久化值。
-					const nextForked = nextParent ? entry.forked : (fetchedForkedFlag || entry.forked);
+					const nextForked = nextParent ? entry.forked : fetchedForkedFlag || entry.forked;
 					// 手动导入钉住的归属：别的项目扫描不得改回去（见 SessionCatalogEntry 注释）；
 					// 用户再一次手动导入（manualAssignment）表示明确改主意，允许迁移到新项目。
-					const nextProjectId = entry.manualProjectAssignment
-						&& !options?.manualAssignment
-						&& entry.projectId !== projectId
-						? entry.projectId
-						: projectId;
+					const nextProjectId = entry.manualProjectAssignment && !options?.manualAssignment && entry.projectId !== projectId ? entry.projectId : projectId;
 					if (
 						entry.projectId !== nextProjectId ||
 						entry.filePath !== summary.filePath ||
@@ -1037,33 +923,28 @@ export class SessionCatalog {
 				inheritSessionMeta(entry, summary);
 			}
 
-			const records = entries
-				.filter((entry) => entry.projectId === projectId)
-				.map((entry) => this.recordFromEntry(entry, summaryById.get(entry.id)));
+			const records = entries.filter((entry) => entry.projectId === projectId).map((entry) => this.recordFromEntry(entry, summaryById.get(entry.id)));
 			const idByPath = new Map<string, string>();
 			for (const record of records) {
 				if (!record.filePath) continue;
-				idByPath.set(
-					canonicalizeSessionPath(record.filePath, record.environment),
-					record.id,
-				);
+				idByPath.set(canonicalizeSessionPath(record.filePath, record.environment), record.id);
 			}
 			for (const record of records) {
 				if (!record.parentSessionPath) continue;
-				record.parentSessionId = idByPath.get(
-					canonicalizeSessionPath(record.parentSessionPath, record.environment),
-				);
+				record.parentSessionId = idByPath.get(canonicalizeSessionPath(record.parentSessionPath, record.environment));
 			}
 			return {
 				value: records.sort((left, right) => right.updatedAt - left.updatedAt),
 				changed,
 			};
-		}).then((records) => [
-			...Array.from(this.transientEntries.values())
-				.filter((entry) => entry.projectId === projectId)
-				.map((entry) => this.recordFromEntry(entry)),
-			...records,
-		].sort((left, right) => right.updatedAt - left.updatedAt));
+		}).then((records) =>
+			[
+				...Array.from(this.transientEntries.values())
+					.filter((entry) => entry.projectId === projectId)
+					.map((entry) => this.recordFromEntry(entry)),
+				...records,
+			].sort((left, right) => right.updatedAt - left.updatedAt),
+		);
 	}
 
 	/** 对新文件/占位标题，或文件版本相对 catalog 发生变化的条目读取标题。
@@ -1074,19 +955,14 @@ export class SessionCatalog {
 	 *  一旦标题回填该形态而条目仍无父关系，说明它是历史扫描遗留的孤儿（旧版 catalog
 	 *  不含 parentSessionPath），需要重新读头部回补（见 fetchTitle 返回的 parentSessionPath）。
 	 *  用户 fork 的名字由用户命名、通常不匹配该模式，不会被额外唤醒读盘。 */
-	private async collectScannedTitles(
-		summaries: SessionSummary[],
-		context: SessionCatalogContext,
-	): Promise<{ names: Map<string, string>; authoritative: Map<string, boolean>; invalid: Set<string>; parents: Map<string, string>; forked: Map<string, boolean> }> {
+	private async collectScannedTitles(summaries: SessionSummary[], context: SessionCatalogContext): Promise<{ names: Map<string, string>; authoritative: Map<string, boolean>; invalid: Set<string>; parents: Map<string, string>; forked: Map<string, boolean> }> {
 		const names = new Map<string, string>();
 		const authoritative = new Map<string, boolean>();
 		const invalid = new Set<string>();
 		const parents = new Map<string, string>();
 		const forked = new Map<string, boolean>();
 		if (!this.fetchTitle) return { names, authoritative, invalid, parents, forked };
-		const byOrigin = new Map(
-			this.entries.filter((entry) => entry.originKey).map((entry) => [entry.originKey!, entry]),
-		);
+		const byOrigin = new Map(this.entries.filter((entry) => entry.originKey).map((entry) => [entry.originKey!, entry]));
 		const wanted: Array<{ originKey: string; filePath: string }> = [];
 		for (const summary of summaries) {
 			const originKey = buildSummaryOriginKey(summary, context);
@@ -1094,9 +970,7 @@ export class SessionCatalog {
 			if (catalogDisplayTitle(summary.name)) continue;
 			const existing = byOrigin.get(originKey);
 			if (existing) {
-				const tintinwebOrphan = existing.source === "pi"
-					&& !existing.parentSessionPath
-					&& /^[^#]+#[0-9a-f]{8}$/i.test(existing.title);
+				const tintinwebOrphan = existing.source === "pi" && !existing.parentSessionPath && /^[^#]+#[0-9a-f]{8}$/i.test(existing.title);
 				const fileVersionChanged = existing.updatedAt !== summary.updatedAt;
 				// 已有真实标题且文件版本未变时跳过；变化通常意味着 pi 追加消息/改名，
 				// 头尾窗口读取会用最后一条 session_info 更新标题，成本仍受 128KB 上限约束。
@@ -1132,10 +1006,7 @@ export class SessionCatalog {
 		return { names, authoritative, invalid, parents, forked };
 	}
 
-	private recordFromEntry(
-		entry: SessionCatalogEntry,
-		summary?: SessionSummary,
-	): SessionRecord {
+	private recordFromEntry(entry: SessionCatalogEntry, summary?: SessionSummary): SessionRecord {
 		return {
 			id: entry.id,
 			projectId: entry.projectId,
@@ -1147,9 +1018,7 @@ export class SessionCatalog {
 			filePath: summary?.filePath ?? entry.filePath,
 			wslDistro: entry.wslDistro,
 			wslUser: entry.wslUser,
-			importedSourceId: summary
-				? getImportedSessionSourceId(summary)
-				: entry.importedSourceId,
+			importedSourceId: summary ? getImportedSessionSourceId(summary) : entry.importedSourceId,
 			parentSessionPath: summary?.parentSessionPath ?? entry.parentSessionPath,
 			forked: entry.forked,
 			projectPath: summary?.projectPath,
@@ -1189,19 +1058,13 @@ export class SessionCatalog {
 	 * 把条目中的相对 filePath 修正为绝对路径（通过注入的 resolver）。
 	 * 返回新数组表示有变更；未注入 resolver 或无需修正时返回 undefined。
 	 */
-	private repairRelativeFilePaths(
-		entries: SessionCatalogEntry[],
-	): SessionCatalogEntry[] | undefined {
+	private repairRelativeFilePaths(entries: SessionCatalogEntry[]): SessionCatalogEntry[] | undefined {
 		const resolve = this.resolveFilePath;
 		if (!resolve) return undefined;
 		let changed = false;
 		const next = entries.map((entry) => {
 			if (!entry.filePath) return entry;
-			const resolved = resolve(
-				entry.projectId,
-				entry.filePath,
-				entry.environment,
-			);
+			const resolved = resolve(entry.projectId, entry.filePath, entry.environment);
 			if (!resolved || resolved === entry.filePath) return entry;
 			changed = true;
 			const repaired = { ...entry, filePath: resolved };
@@ -1212,10 +1075,7 @@ export class SessionCatalog {
 		return changed ? next : undefined;
 	}
 
-	private requireEntry(
-		entries: SessionCatalogEntry[],
-		id: string,
-	): SessionCatalogEntry {
+	private requireEntry(entries: SessionCatalogEntry[], id: string): SessionCatalogEntry {
 		const entry = entries.find((candidate) => candidate.id === id);
 		if (!entry) throw new Error(`Session not found: ${id}`);
 		return entry;
@@ -1225,9 +1085,7 @@ export class SessionCatalog {
 		if (!this.loaded) throw new Error("SessionCatalog.load() must complete before use");
 	}
 
-	private enqueueMutation<T>(
-		mutate: (entries: SessionCatalogEntry[]) => { value: T; changed: boolean },
-	): Promise<T> {
+	private enqueueMutation<T>(mutate: (entries: SessionCatalogEntry[]) => { value: T; changed: boolean }): Promise<T> {
 		const operation = this.writeQueue
 			.catch(() => undefined)
 			.then(async () => {
@@ -1258,21 +1116,11 @@ export class SessionCatalog {
 		if (!Array.isArray(parsed.sessions)) {
 			throw new Error(`Invalid Session catalog: ${filePath}`);
 		}
-		const entries = parsed.sessions.filter((entry): entry is SessionCatalogEntry => (
-			typeof entry?.id === "string" &&
-			typeof entry.projectId === "string" &&
-			typeof entry.title === "string" &&
-			(entry.environment === "native" || entry.environment === "wsl") &&
-			(entry.status === "draft" || entry.status === "active")
-		));
+		const entries = parsed.sessions.filter((entry): entry is SessionCatalogEntry => typeof entry?.id === "string" && typeof entry.projectId === "string" && typeof entry.title === "string" && (entry.environment === "native" || entry.environment === "wsl") && (entry.status === "draft" || entry.status === "active"));
 		if (entries.length !== parsed.sessions.length) {
 			throw new Error(`Session catalog contains invalid records: ${filePath}`);
 		}
-		const dismissed = Array.isArray(parsed.dismissedDshSessionIds)
-			? parsed.dismissedDshSessionIds.filter((id): id is string => (
-				typeof id === "string" && id.trim().length > 0
-			))
-			: [];
+		const dismissed = Array.isArray(parsed.dismissedDshSessionIds) ? parsed.dismissedDshSessionIds.filter((id): id is string => typeof id === "string" && id.trim().length > 0) : [];
 		return {
 			entries: entries.map(cloneEntry),
 			dismissedDshSessionIds: new Set(dismissed),
@@ -1326,9 +1174,6 @@ export class SessionCatalog {
 	}
 }
 
-export function didSessionPreferencesChange(
-	entry: SessionCatalogEntry,
-	patch: Pick<SessionCatalogEntry, "model" | "thinkingLevel">,
-): boolean {
+export function didSessionPreferencesChange(entry: SessionCatalogEntry, patch: Pick<SessionCatalogEntry, "model" | "thinkingLevel">): boolean {
 	return !equalModel(entry.model, patch.model) || entry.thinkingLevel !== patch.thinkingLevel;
 }

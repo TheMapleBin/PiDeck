@@ -5,10 +5,7 @@ import type { FileTreeNode } from "../../../shared/types";
  * 供 composer @ 引用懒加载使用：查询前缀命中的目录才按需拉取子项；
  * 只沿已加载的 children 下钻——父目录未展开时深层目录本就不在树里。
  */
-export function findDirectoryNodeByRelativePath(
-	nodes: FileTreeNode[],
-	relativePath: string,
-): FileTreeNode | undefined {
+export function findDirectoryNodeByRelativePath(nodes: FileTreeNode[], relativePath: string): FileTreeNode | undefined {
 	for (const node of nodes) {
 		if (node.type === "directory" && node.relativePath === relativePath) {
 			return node;
@@ -31,10 +28,7 @@ export function findDirectoryNodeByRelativePath(
  *   后 files 变化驱动 effect 重评，链条自动向前推进，直到命中最终目录。
  * 找不到可下钻目录返回 undefined（不发起请求，等用户继续输入）。
  */
-export function resolveAtDrillDirectory(
-	query: string,
-	files: FileTreeNode[],
-): FileTreeNode | undefined {
+export function resolveAtDrillDirectory(query: string, files: FileTreeNode[]): FileTreeNode | undefined {
 	const slash = query.lastIndexOf("/");
 	const dirRel = slash > 0 ? query.slice(0, slash) : query;
 	if (!dirRel) return undefined;
@@ -70,10 +64,7 @@ export function shouldLoadFullTreeForAtSearch(query: string): boolean {
 }
 
 /** 目录是否已经拉过子项（有 children 数组即视为已加载，含空目录）。 */
-export function findLoadedDirectory(
-	nodes: FileTreeNode[],
-	directoryPath: string,
-): FileTreeNode | undefined {
+export function findLoadedDirectory(nodes: FileTreeNode[], directoryPath: string): FileTreeNode | undefined {
 	for (const node of nodes) {
 		if (node.type === "directory" && node.path === directoryPath) {
 			return Array.isArray(node.children) ? node : undefined;
@@ -96,10 +87,7 @@ export function findLoadedDirectory(
  * 用户重新点开目录时 toggleDirectory 走 findLoadedDirectory 未命中，会再次
  * 发起拉取——相当于一次自然的重试入口，不会永久卡死。
  */
-export function markFileTreeLoadFailed(
-	nodes: FileTreeNode[],
-	directoryPath: string,
-): FileTreeNode[] {
+export function markFileTreeLoadFailed(nodes: FileTreeNode[], directoryPath: string): FileTreeNode[] {
 	// 快速路径：本层不含目标时返回原数组引用，避免无谓重建导致
 	// FilesPanel 的 useMemo / FileNode 全量重渲染（与 compactMiddlePackages 同约定）。
 	let touched = false;
@@ -120,11 +108,7 @@ export function markFileTreeLoadFailed(
 	return touched ? marked : nodes;
 }
 
-export function mergeFileTreeChildren(
-	nodes: FileTreeNode[],
-	directoryPath: string,
-	children: FileTreeNode[],
-): FileTreeNode[] {
+export function mergeFileTreeChildren(nodes: FileTreeNode[], directoryPath: string, children: FileTreeNode[]): FileTreeNode[] {
 	return nodes.map((node) => {
 		if (node.type === "directory" && node.path === directoryPath) {
 			return {
@@ -147,11 +131,7 @@ export function mergeFileTreeChildren(
  * 按路径从短到长补齐已展开目录，保证父目录先于子目录写入。
  * 单个目录失败（已删/无权限）跳过，不阻断整棵树。
  */
-export async function hydrateExpandedFileTree(
-	listDirectory: (directory: string) => Promise<FileTreeNode[]>,
-	tree: FileTreeNode[],
-	expandedDirs: Iterable<string>,
-): Promise<FileTreeNode[]> {
+export async function hydrateExpandedFileTree(listDirectory: (directory: string) => Promise<FileTreeNode[]>, tree: FileTreeNode[], expandedDirs: Iterable<string>): Promise<FileTreeNode[]> {
 	const dirs = [...expandedDirs].sort((left, right) => left.length - right.length);
 	let next = tree;
 	for (const directory of dirs) {
@@ -166,12 +146,7 @@ export async function hydrateExpandedFileTree(
 }
 
 /** 切项目或新请求发出后，旧 files:list 不得再写入当前抽屉（#159）。 */
-export function shouldApplyFileTreeResult(
-	requestedProjectId: string,
-	currentProjectId: string | undefined,
-	requestGeneration: number,
-	currentGeneration: number,
-): boolean {
+export function shouldApplyFileTreeResult(requestedProjectId: string, currentProjectId: string | undefined, requestGeneration: number, currentGeneration: number): boolean {
 	return requestedProjectId === currentProjectId && requestGeneration === currentGeneration;
 }
 
@@ -179,12 +154,7 @@ export function shouldApplyFileTreeResult(
  * 拉浅层根再补齐已展开目录；中途项目切走或请求被取代时返回 null，
  * 避免慢扫描结果盖住当前项目的文件树。
  */
-export async function loadProjectFileTree(
-	listRoot: () => Promise<FileTreeNode[]>,
-	expandedDirs: Iterable<string>,
-	isCurrent: () => boolean,
-	listDirectory: (directory: string) => Promise<FileTreeNode[]> = listRoot,
-): Promise<FileTreeNode[] | null> {
+export async function loadProjectFileTree(listRoot: () => Promise<FileTreeNode[]>, expandedDirs: Iterable<string>, isCurrent: () => boolean, listDirectory: (directory: string) => Promise<FileTreeNode[]> = listRoot): Promise<FileTreeNode[] | null> {
 	const tree = await listRoot();
 	if (!isCurrent()) return null;
 	const next = await hydrateExpandedFileTree(listDirectory, tree, expandedDirs);

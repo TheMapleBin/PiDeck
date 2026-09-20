@@ -1,8 +1,4 @@
-import type {
-	SessionCommandError,
-	SessionCommandResult,
-	SessionRuntimeTarget,
-} from "../../../shared/types";
+import type { SessionCommandError, SessionCommandResult, SessionRuntimeTarget } from "../../../shared/types";
 import { t, type TranslationKey } from "../i18n";
 
 /**
@@ -52,19 +48,12 @@ const DEBUG_DETAILS_TOAST_MAX = 140;
  * 会话命令失败 toast：稳定 i18n 文案不够定位时（如「会话操作失败，请重试」），
  * 附带 debugDetails 原文，避免用户只能看到泛化失败、开发者也看不到日志。
  */
-export function sessionCommandFailureToast(
-	error: unknown,
-	translateRaw?: (message: string) => string,
-): string {
+export function sessionCommandFailureToast(error: unknown, translateRaw?: (message: string) => string): string {
 	const raw = error instanceof Error ? error.message : String(error);
 	const message = translateRaw ? translateRaw(raw) : raw;
-	const details = error instanceof SessionCommandFailure
-		? error.debugDetails?.trim()
-		: undefined;
+	const details = error instanceof SessionCommandFailure ? error.debugDetails?.trim() : undefined;
 	if (!details || details === raw || details === message) return message;
-	const clipped = details.length > DEBUG_DETAILS_TOAST_MAX
-		? `${details.slice(0, DEBUG_DETAILS_TOAST_MAX)}…`
-		: details;
+	const clipped = details.length > DEBUG_DETAILS_TOAST_MAX ? `${details.slice(0, DEBUG_DETAILS_TOAST_MAX)}…` : details;
 	return `${message}（${clipped}）`;
 }
 
@@ -78,10 +67,7 @@ export function isLiveRuntimeStatus(status?: string | null): boolean {
 	return status === "starting" || status === "idle" || status === "running";
 }
 
-export function toSessionRuntimeTarget(
-	sessionId: string,
-	runtime: { agentId?: string; runtimeGeneration?: number; status?: string | null } | undefined,
-): SessionRuntimeTarget | undefined {
+export function toSessionRuntimeTarget(sessionId: string, runtime: { agentId?: string; runtimeGeneration?: number; status?: string | null } | undefined): SessionRuntimeTarget | undefined {
 	// target 只表达「会话 → 当前绑定运行实例」的句柄，不做 live 判定：
 	// stop/restart 对 error/closed 终态 Agent 仍有效（主进程幂等 stop + 重启重建），
 	// 而「重发是否需要先停」这类 live 判定由各调用点用 isLiveRuntimeStatus 单独判断。
@@ -108,16 +94,19 @@ export function toSessionRuntimeTarget(
  *
  * `detached` 与 `unstarted` 对外行为一致（都走 activate），分开命名只为日志可读。
  */
-export type SessionRunState =
-	| "starting"
-	| "idle"
-	| "running"
-	| "error"
-	| "closed"
-	| "detached"
-	| "unstarted";
+export type SessionRunState = "starting" | "idle" | "running" | "error" | "closed" | "detached" | "unstarted";
 
-export type SessionRunAction = "start" | "stop" | "restart" | "reload";
+/**
+ * 会话运行控制动作（语义边界，别混用）：
+ * - `start` / `restart`：启动或重建进程（live 时即「杀掉重启」，会中断当前回答）；
+ * - `abort`：只中断当前正在执行的回合，进程与绑定保留、可立即继续对话
+ *   （与输入框的「停止」按钮同义）；
+ * - `reload`：无进程时从磁盘刷新消息文件。
+ *
+ * 「关闭 Agent」（杀进程 + 解绑，会话记录与历史消息保留）不是运行控制动作：
+ * 它走独立的 closeAgent 链路，见 App 的 closeAgent / requestCloseAgent。
+ */
+export type SessionRunAction = "start" | "restart" | "reload" | "abort";
 
 export interface SessionRunCapabilities {
 	/** 归一化后的运行状态（UI 可直接用于文案/徽章） */
@@ -127,7 +116,8 @@ export interface SessionRunCapabilities {
 	/** 「主控按钮」语义：unstarted/detached/error/closed → start；live → restart */
 	primaryAction: "start" | "restart";
 	canStart: boolean;
-	canStop: boolean;
+	/** 中断当前回合（abort）：仅回合正在执行且无互斥操作时可用 */
+	canAbort: boolean;
 	canRestart: boolean;
 	canReload: boolean;
 	/** 主控动作会杀掉正在执行的对话，UI 必须先确认 */
@@ -137,10 +127,7 @@ export interface SessionRunCapabilities {
 }
 
 /** 归一化运行状态：把 undefined / detached / 未知值统一成 `unstarted`/`detached`。 */
-export function resolveSessionRunState(
-	runtime: { status?: string | null } | undefined,
-	hasBinding: boolean,
-): SessionRunState {
+export function resolveSessionRunState(runtime: { status?: string | null } | undefined, hasBinding: boolean): SessionRunState {
 	switch (runtime?.status) {
 		case "starting":
 		case "idle":
@@ -176,12 +163,12 @@ export function sessionRunCapabilities(input: {
 	const isTerminal = state === "error" || state === "closed";
 	const needsStart = state === "unstarted" || state === "detached" || isTerminal;
 
-	// starting 期间进程已 fork 但尚未握手完成：启动/重启会造成竞争，必须挡住；
-	// 但「停止」保留可用——进程卡在启动阶段时用户需要一个手动中断的出口。
+	// starting 期间进程已 fork 但尚未握手完成：启动/重启会造成竞争，必须挡住。
 	const canStart = state !== "starting" && !busy && (needsStart || isLive);
-	// 停止对 live（含 starting）生效，用于中断卡在启动阶段的进程；
-	// 终态没有可停的进程，改由「启动」重建（见 canStart 分支）。
-	const canStop = isLive && !busy;
+	// 「停止回答」只中断正在跑的那个回合（abort）：starting 阶段 RPC 尚未握手、
+	// 没有可中断的回合，卡启动/卡回答的出口是「关闭 Agent」（杀进程 + 解绑，
+	// 不属于本策略）；idle/终态没有在跑的回合，同样不该给出「停止回答」。
+	const canAbort = state === "running" && !busy;
 	// 重载是从磁盘刷新消息文件：live 时内存里有流式消息，强刷会覆盖，
 	// 因此只对「无进程」状态开放（终态/未启动/已解绑）。
 	const canReload = !isLive && !busy;
@@ -191,7 +178,7 @@ export function sessionRunCapabilities(input: {
 		hasBinding,
 		primaryAction: needsStart ? "start" : "restart",
 		canStart,
-		canStop,
+		canAbort,
 		canRestart: canStart && !input.hasInFlightQueuedPrompt,
 		canReload,
 		// 主控按钮在 live 态是「重启进程」：会中断当前回答，必须先确认。
@@ -201,16 +188,13 @@ export function sessionRunCapabilities(input: {
 }
 
 /** 单条动作在该状态下是否可用（供菜单逐项置灰）。 */
-export function canRunSessionAction(
-	capabilities: SessionRunCapabilities,
-	action: SessionRunAction,
-): boolean {
+export function canRunSessionAction(capabilities: SessionRunCapabilities, action: SessionRunAction): boolean {
 	switch (action) {
 		case "start":
 		case "restart":
 			return capabilities.canRestart;
-		case "stop":
-			return capabilities.canStop;
+		case "abort":
+			return capabilities.canAbort;
 		case "reload":
 			return capabilities.canReload;
 	}
@@ -236,11 +220,7 @@ export type ProxyApplyStrategy =
  * - DSH 优先判定：其会话共享单一 host，按会话重启会杀掉全部 DSH 会话，永远不自动重启。
  * - 只有 live（starting/idle/running）才值得重启：终态进程已死，下次启动自然读新配置。
  */
-export function resolveProxyApplyStrategy(input: {
-	backend?: string;
-	hasBinding: boolean;
-	isLive: boolean;
-}): ProxyApplyStrategy {
+export function resolveProxyApplyStrategy(input: { backend?: string; hasBinding: boolean; isLive: boolean }): ProxyApplyStrategy {
 	if (input.backend === "dsh") return "dsh-host-restart";
 	if (input.hasBinding && input.isLive) return "restart-now";
 	return "next-start";

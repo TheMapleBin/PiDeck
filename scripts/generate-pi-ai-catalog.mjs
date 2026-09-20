@@ -30,12 +30,7 @@ export const PI_AI_CATALOG_SCHEMA_VERSION = 1;
 export const PI_AI_CATALOG_FILE_NAME = "pi-ai-catalog.json";
 export const PI_AI_CATALOG_MANIFEST_FILE_NAME = "pi-ai-catalog.manifest.json";
 
-export const DEFAULT_PI_AI_SOURCE_DIR = join(
-	PROJECT_ROOT,
-	"node_modules",
-	"@earendil-works",
-	"pi-ai",
-);
+export const DEFAULT_PI_AI_SOURCE_DIR = join(PROJECT_ROOT, "node_modules", "@earendil-works", "pi-ai");
 export const DEFAULT_OUTPUT_DIR = join(PROJECT_ROOT, "resources");
 
 function isRecord(value) {
@@ -170,11 +165,7 @@ function writeIfChanged(path, content) {
 /**
  * 生成或校验 catalog artifact。check 模式不写文件，适合 CI 验证提交资源没有过期。
  */
-export function generatePiAiCatalog({
-	sourceDir = DEFAULT_PI_AI_SOURCE_DIR,
-	outDir = DEFAULT_OUTPUT_DIR,
-	check = false,
-} = {}) {
+export function generatePiAiCatalog({ sourceDir = DEFAULT_PI_AI_SOURCE_DIR, outDir = DEFAULT_OUTPUT_DIR, check = false } = {}) {
 	const resolvedSourceDir = resolve(sourceDir);
 	const resolvedOutDir = resolve(outDir);
 	const sourcePackage = readSourcePackage(resolvedSourceDir);
@@ -195,9 +186,7 @@ export function generatePiAiCatalog({
 	const manifestText = serializeJson(manifest);
 	const catalogPath = join(resolvedOutDir, PI_AI_CATALOG_FILE_NAME);
 	const manifestPath = join(resolvedOutDir, PI_AI_CATALOG_MANIFEST_FILE_NAME);
-	const current = existsSync(catalogPath) && existsSync(manifestPath)
-		&& readFileSync(catalogPath, "utf8") === catalogText
-		&& readFileSync(manifestPath, "utf8") === manifestText;
+	const current = existsSync(catalogPath) && existsSync(manifestPath) && readFileSync(catalogPath, "utf8") === catalogText && readFileSync(manifestPath, "utf8") === manifestText;
 
 	if (check) {
 		return {
@@ -257,9 +246,7 @@ if (isMainModule()) {
 			console.error(`[pi-ai-catalog] artifact is stale; run npm run generate:pi-ai-catalog (${result.catalogPath})`);
 			process.exitCode = 1;
 		} else {
-			console.log(
-				`[pi-ai-catalog] ${result.changed ? "generated" : "up to date"}: ${result.entryCount} entries from ${PI_AI_PACKAGE_NAME}@${result.sourceVersion}`,
-			);
+			console.log(`[pi-ai-catalog] ${result.changed ? "generated" : "up to date"}: ${result.entryCount} entries from ${PI_AI_PACKAGE_NAME}@${result.sourceVersion}`);
 		}
 	} catch (error) {
 		console.error("[pi-ai-catalog] generation failed", error);

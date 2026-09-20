@@ -23,7 +23,7 @@ function loadTranspiledModule(filePath, overrides = new Map()) {
 		// jsonlLineStream（会话 JSONL 流式扫描）运行时需要 Buffer
 		Buffer,
 		process,
-		require: (id) => overrides.has(id) ? overrides.get(id) : require(id),
+		require: (id) => (overrides.has(id) ? overrides.get(id) : require(id)),
 		setTimeout,
 	};
 	vm.runInNewContext(outputText, sandbox, { filename: filePath });
@@ -69,10 +69,7 @@ function loadSessionScanner(homePath) {
 		},
 	});
 	const codexMeta = loadCodexMetaModule();
-	const messageContent = loadTranspiledModule(
-		"src/main/pi/messageContent.ts",
-		new Map([["../feishu/docActions", { stripFeishuDocActionHint: (text) => text }]]),
-	);
+	const messageContent = loadTranspiledModule("src/main/pi/messageContent.ts", new Map([["../feishu/docActions", { stripFeishuDocActionHint: (text) => text }]]));
 	const fsRetry = loadTranspiledModule("src/main/utils/fsRetry.ts");
 	const sessionSummaryCache = loadTranspiledModule(
 		"src/main/sessions/sessionSummaryCache.ts",
@@ -173,11 +170,7 @@ test("deleteArchived 拒绝归档目录外的文件（防路径穿越）", async
 		await scanner.list();
 
 		// 未归档的普通会话路径不在 .pideck-archive 内，deleteArchived 必须拒绝。
-		await assert.rejects(
-			() => scanner.deleteArchived(sessionPath),
-			/拒绝删除/,
-			"归档目录外的路径应被拒绝",
-		);
+		await assert.rejects(() => scanner.deleteArchived(sessionPath), /拒绝删除/, "归档目录外的路径应被拒绝");
 		assert.ok(existsSync(sessionPath), "拒绝后原文件应仍在磁盘");
 	} finally {
 		rmSync(home, { recursive: true, force: true });

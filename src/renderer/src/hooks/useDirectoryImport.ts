@@ -1,9 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import type {
-	DirectoryImportReport,
-	DirectorySessionSummary,
-	Project,
-} from "../../../shared/types";
+import type { DirectoryImportReport, DirectorySessionSummary, Project } from "../../../shared/types";
 import { t } from "../i18n";
 import { desktopApi } from "../desktopApi";
 
@@ -102,24 +98,15 @@ export function useDirectoryImport(input: UseDirectoryImportInput): UseDirectory
 	}, [project, directory, scan]);
 
 	// 过滤只影响展示与「全选」范围：隐藏的行不参与导入。
-	const visible = useMemo(
-		() => (onlyMissingCwd ? sessions.filter((session) => !session.projectPathExists) : sessions),
-		[sessions, onlyMissingCwd],
-	);
+	const visible = useMemo(() => (onlyMissingCwd ? sessions.filter((session) => !session.projectPathExists) : sessions), [sessions, onlyMissingCwd]);
 
 	const toggle = useCallback((sourcePath: string) => {
-		setSelected((current) =>
-			current.includes(sourcePath)
-				? current.filter((item) => item !== sourcePath)
-				: [...current, sourcePath],
-		);
+		setSelected((current) => (current.includes(sourcePath) ? current.filter((item) => item !== sourcePath) : [...current, sourcePath]));
 	}, []);
 
 	const toggleAll = useCallback(() => {
 		const all = visible.map((session) => session.sourcePath);
-		setSelected((current) =>
-			all.length > 0 && all.every((path) => current.includes(path)) ? [] : all,
-		);
+		setSelected((current) => (all.length > 0 && all.every((path) => current.includes(path)) ? [] : all));
 	}, [visible]);
 
 	const importSelected = useCallback(async () => {
@@ -182,21 +169,7 @@ export function useDirectoryImport(input: UseDirectoryImportInput): UseDirectory
 			toggleAll,
 			importSelected,
 		}),
-		[
-			visible,
-			sessions.length,
-			selected,
-			loading,
-			importing,
-			report,
-			directory,
-			onlyMissingCwd,
-			chooseDirectory,
-			refresh,
-			toggle,
-			toggleAll,
-			importSelected,
-		],
+		[visible, sessions.length, selected, loading, importing, report, directory, onlyMissingCwd, chooseDirectory, refresh, toggle, toggleAll, importSelected],
 	);
 
 	return { project, setProject, controller, open };

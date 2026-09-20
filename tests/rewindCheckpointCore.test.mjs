@@ -13,37 +13,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import {
-	mkdirSync,
-	mkdtempSync,
-	rmSync,
-	writeFileSync,
-	readFileSync,
-	existsSync,
-} from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import {
-	createCheckpoint,
-	addPathsToIndex,
-	restoreCheckpoint,
-	loadCheckpointFromRef,
-	loadAllCheckpoints,
-	listCheckpointRefs,
-	deleteCheckpoint,
-	deleteCheckpoints,
-	pruneCheckpoints,
-	pruneOldSessions,
-	diffCheckpoints,
-} from "../src/main/rewind/checkpointCore.ts";
-import {
-	shouldIgnoreForSnapshot,
-	normalizeGitPath,
-	isSafeId,
-	sanitizeForRef,
-	findClosestCheckpoint,
-} from "../src/main/rewind/checkpointFilter.ts";
+import { createCheckpoint, addPathsToIndex, restoreCheckpoint, loadCheckpointFromRef, loadAllCheckpoints, listCheckpointRefs, deleteCheckpoint, deleteCheckpoints, pruneCheckpoints, pruneOldSessions, diffCheckpoints } from "../src/main/rewind/checkpointCore.ts";
+import { shouldIgnoreForSnapshot, normalizeGitPath, isSafeId, sanitizeForRef, findClosestCheckpoint } from "../src/main/rewind/checkpointFilter.ts";
 import { MAX_UNTRACKED_TOTAL_BYTES } from "../src/main/rewind/checkpointConstants.ts";
 
 const LARGE_BYTES = 10 * 1024 * 1024 + 1;
@@ -54,8 +29,7 @@ const UUID_C = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 /** 建一个干净的临时 git 仓库并返回 { dir, git }；git 为同步执行封装。 */
 function makeRepo() {
 	const dir = mkdtempSync(join(tmpdir(), "rewind-test-"));
-	const git = (args) =>
-		execFileSync("git", args, { cwd: dir, stdio: "pipe" });
+	const git = (args) => execFileSync("git", args, { cwd: dir, stdio: "pipe" });
 	git(["init", "-q"]);
 	git(["config", "user.name", "test"]);
 	git(["config", "user.email", "test@example.com"]);
@@ -104,14 +78,8 @@ test("快照捕获：tracked 修改 + 未跟踪文件 + node_modules 忽略 + �
 	assert.equal(cp.headSha.length, 40);
 	assert.match(cp.branch, /^(master|main)$/);
 	assert.ok(cp.indexTreeSha && cp.worktreeTreeSha, "两种树都要有");
-	assert.ok(
-		cp.skippedLargeFiles.includes("big.bin"),
-		`大文件应进跳过名单，实际: ${cp.skippedLargeFiles}`,
-	);
-	assert.ok(
-		!cp.preexistingUntrackedFiles.includes("node_modules/dep.txt"),
-		"忽略目录不进保护名单",
-	);
+	assert.ok(cp.skippedLargeFiles.includes("big.bin"), `大文件应进跳过名单，实际: ${cp.skippedLargeFiles}`);
+	assert.ok(!cp.preexistingUntrackedFiles.includes("node_modules/dep.txt"), "忽略目录不进保护名单");
 	assert.ok(cp.preexistingUntrackedFiles.includes("b.txt"), "未跟踪文件进保护名单");
 
 	const refs = await listCheckpointRefs(dir);
@@ -177,16 +145,8 @@ test("分支守卫：不在创建分支上恢复抛错，不破坏工作区", as
 	git(["checkout", "-b", "feature"]);
 	writeFileSync(join(dir, "a.txt"), "feature-work\n");
 
-	await assert.rejects(
-		restoreCheckpoint(dir, cp),
-		/Branch mismatch/,
-		"不同分支上恢复必须抛分支不匹配",
-	);
-	assert.equal(
-		readFileSync(join(dir, "a.txt"), "utf8"),
-		"feature-work\n",
-		"守卫失败时工作区不得被动",
-	);
+	await assert.rejects(restoreCheckpoint(dir, cp), /Branch mismatch/, "不同分支上恢复必须抛分支不匹配");
+	assert.equal(readFileSync(join(dir, "a.txt"), "utf8"), "feature-work\n", "守卫失败时工作区不得被动");
 });
 
 test("恢复暂存区态：checkpoint 时已暂存的内容恢复后仍在 index", async (t) => {
@@ -280,7 +240,10 @@ test("按会话过滤 + deleteCheckpoint", async (t) => {
 
 	await deleteCheckpoint(dir, cpB.id);
 	const all = await loadAllCheckpoints(dir);
-	assert.deepEqual(all.map((c) => c.id), [cpA.id]);
+	assert.deepEqual(
+		all.map((c) => c.id),
+		[cpA.id],
+	);
 });
 
 test("800+ refs（远超 Windows 命令行上限）时 loadAllCheckpoints 仍全量读取（回归）", async (t) => {
@@ -392,7 +355,10 @@ test("pruneOldSessions：清理其他会话的 checkpoint", async (t) => {
 	assert.equal(deleted, 2, "会话 B 的 2 个点应被清掉");
 
 	const remaining = await loadAllCheckpoints(dir);
-	assert.deepEqual(remaining.map((c) => c.id), [cpA.id]);
+	assert.deepEqual(
+		remaining.map((c) => c.id),
+		[cpA.id],
+	);
 });
 
 test("pruneOldSessions：keep 集合为数组时保留全部活跃会话", async (t) => {
@@ -428,11 +394,7 @@ test("pruneOldSessions：keep 集合为数组时保留全部活跃会话", async
 	assert.equal(deleted, 1, "只清非活跃会话 C");
 
 	const remaining = await loadAllCheckpoints(dir);
-	assert.deepEqual(
-		remaining.map((c) => c.id).sort(),
-		[cpA.id, cpB.id].sort(),
-		"活跃会话 A/B 的点全部保留",
-	);
+	assert.deepEqual(remaining.map((c) => c.id).sort(), [cpA.id, cpB.id].sort(), "活跃会话 A/B 的点全部保留");
 });
 
 test("deleteCheckpoints：批量删除 ref，缺失 id 容忍", async (t) => {
@@ -464,7 +426,9 @@ test("deleteCheckpoints：批量删除 ref，缺失 id 容忍", async (t) => {
 		"仅中间那个点保留",
 	);
 	assert.equal(
-		String(git(["for-each-ref", "refs/pi-checkpoints", "--format=%(refname)"])).trim().split("\n").length,
+		String(git(["for-each-ref", "refs/pi-checkpoints", "--format=%(refname)"]))
+			.trim()
+			.split("\n").length,
 		1,
 	);
 });
@@ -543,11 +507,7 @@ test("纯过滤函数", () => {
 
 	assert.equal(sanitizeForRef("my prompt / 2"), "my_prompt___2");
 
-	const cps = [
-		{ timestamp: 100 },
-		{ timestamp: 200 },
-		{ timestamp: 300 },
-	];
+	const cps = [{ timestamp: 100 }, { timestamp: 200 }, { timestamp: 300 }];
 	assert.equal(findClosestCheckpoint(cps, 250).timestamp, 200);
 	assert.equal(findClosestCheckpoint(cps, 100).timestamp, 100);
 	assert.equal(findClosestCheckpoint([], 100), undefined);
@@ -562,17 +522,8 @@ test("addPathsToIndex：批次内坏路径被剔除，好路径不受牵连（�
 	writeFileSync(join(dir, ".gitignore"), "ignore-me.txt\n");
 	// ghost.txt 不存在（枚举后被删除的场景）
 
-	const dropped = await addPathsToIndex(dir, {}, [
-		"good.txt",
-		"good2.txt",
-		"ignore-me.txt",
-		"ghost.txt",
-	]);
-	assert.deepEqual(
-		[...dropped].sort(),
-		["ghost.txt", "ignore-me.txt"],
-		"被 .gitignore 命中与不存在的路径应被剔除，其余保留",
-	);
+	const dropped = await addPathsToIndex(dir, {}, ["good.txt", "good2.txt", "ignore-me.txt", "ghost.txt"]);
+	assert.deepEqual([...dropped].sort(), ["ghost.txt", "ignore-me.txt"], "被 .gitignore 命中与不存在的路径应被剔除，其余保留");
 	const staged = git(["diff", "--cached", "--name-only"]).toString().trim();
 	assert.ok(staged.includes("good.txt"), "好路径 1 应被暂存");
 	assert.ok(staged.includes("good2.txt"), "好路径 2 应被暂存");
@@ -611,10 +562,7 @@ test("未跟踪总字节预算：超预算文件跳过快照、受恢复保护�
 	const indexedInTree = treeOut.split("\n").filter((p) => /^f\d+\.bin$/.test(p)).length;
 	assert.equal(indexedInTree + skipped.length, FILE_COUNT);
 	// 实际纳入 index 的字节量不超预算：跳过名单之外每个文件都是 1MiB
-	assert.ok(
-		indexedInTree * 1024 * 1024 <= MAX_UNTRACKED_TOTAL_BYTES + 1024 * 1024,
-		"纳入总量应贴近且不超过预算",
-	);
+	assert.ok(indexedInTree * 1024 * 1024 <= MAX_UNTRACKED_TOTAL_BYTES + 1024 * 1024, "纳入总量应贴近且不超过预算");
 	// 但保护名单必须覆盖全部 70 个（恢复时不许删任何一个）
 	const protectedCount = cp.preexistingUntrackedFiles.filter((p) => /^f\d+\.bin$/.test(p)).length;
 	assert.equal(protectedCount, FILE_COUNT);

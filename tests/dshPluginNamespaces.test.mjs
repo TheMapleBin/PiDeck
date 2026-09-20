@@ -2,11 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
-const {
-	isDshPluginNamespace,
-	dshPluginNamespaceTitleKey,
-	KNOWN_PLUGIN_NAMESPACE_TITLES,
-} = loadTsCommonJs("src/renderer/src/config/dshPluginNamespaces.ts");
+const { isDshPluginNamespace, dshPluginNamespaceTitleKey, KNOWN_PLUGIN_NAMESPACE_TITLES } = loadTsCommonJs("src/renderer/src/config/dshPluginNamespaces.ts");
 
 test("isDshPluginNamespace：已知插件命名空间属于插件区", () => {
 	assert.equal(isDshPluginNamespace("agent-loop"), true);

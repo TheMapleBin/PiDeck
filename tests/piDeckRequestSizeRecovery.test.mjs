@@ -13,15 +13,8 @@ const extensionSource = readFileSync("resources/extensions/pi-deck-request-size-
 const compiledExtension = ts.transpileModule(extensionSource, {
 	compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
 }).outputText;
-const extensionModule = await import(
-	`data:text/javascript;base64,${Buffer.from(compiledExtension).toString("base64")}`
-);
-const {
-	isRequestSizeLimitError,
-	buildRecoveryModelOptions,
-	modelKey,
-	attemptModelRestore,
-} = extensionModule;
+const extensionModule = await import(`data:text/javascript;base64,${Buffer.from(compiledExtension).toString("base64")}`);
+const { isRequestSizeLimitError, buildRecoveryModelOptions, modelKey, attemptModelRestore } = extensionModule;
 
 // =========================================================================
 // 纯函数：请求体大小超限识别
@@ -85,7 +78,10 @@ test("候选列表排除未认证与当前模型，label 为 provider/modelId �
 		],
 		{ provider: "qwen-x1", modelId: "qwen3-max" },
 	);
-	assert.deepEqual(options.map((o) => o.label), ["deepseek/deepseek-v3", "openai/gpt-5"]);
+	assert.deepEqual(
+		options.map((o) => o.label),
+		["deepseek/deepseek-v3", "openai/gpt-5"],
+	);
 	assert.deepEqual(options[0], { provider: "deepseek", modelId: "deepseek-v3", label: "deepseek/deepseek-v3" });
 });
 
@@ -97,7 +93,10 @@ test("current 为 undefined 时不排除任何模型", () => {
 		],
 		undefined,
 	);
-	assert.deepEqual(options.map((o) => o.label), ["a/m1", "a/m2"]);
+	assert.deepEqual(
+		options.map((o) => o.label),
+		["a/m1", "a/m2"],
+	);
 });
 
 test("全部候选被排除时返回空数组", () => {
@@ -120,7 +119,10 @@ test("选项按 label 字典序稳定排序", () => {
 		],
 		undefined,
 	);
-	assert.deepEqual(options.map((o) => o.label), ["alpha/a1", "mid/m1", "zeta/z1"]);
+	assert.deepEqual(
+		options.map((o) => o.label),
+		["alpha/a1", "mid/m1", "zeta/z1"],
+	);
 });
 
 test("modelKey 为 provider/modelId 拼接", () => {
@@ -134,8 +136,7 @@ test("切回原模型抛错时返回失败而不是产生未处理拒绝", async
 		currentModel: temporary,
 		temporaryModelKey: modelKey(temporary.provider, temporary.id),
 		originalModelKey: modelKey(original.provider, original.id),
-		findModel: (provider, modelId) =>
-			provider === original.provider && modelId === original.id ? original : undefined,
+		findModel: (provider, modelId) => (provider === original.provider && modelId === original.id ? original : undefined),
 		setModel: async () => {
 			throw new Error("restore failed");
 		},

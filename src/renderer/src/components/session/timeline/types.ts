@@ -15,12 +15,7 @@ import type { ChatMessage } from "../../../../../shared/types";
 export type { AgentRunItem, MessageItem, ThinkingGroupItem, ToolGroupItem };
 
 /** 单个执行过程条目：思考步骤或工具步骤。 */
-export type TurnProcessEntry =
-	| { kind: "thinking-entry"; id: string; group: ThinkingGroupItem }
-	| { kind: "tool-entry"; id: string; group: ToolGroupItem };
+export type TurnProcessEntry = { kind: "thinking-entry"; id: string; group: ThinkingGroupItem } | { kind: "tool-entry"; id: string; group: ToolGroupItem };
 
 /** 扁平展示序列中的一个节点。 */
-export type TurnDisplayItem =
-	| { kind: "process-entry"; entry: TurnProcessEntry }
-	| { kind: "interim-answer"; id: string; message: ChatMessage }
-	| { kind: "final-answer"; id: string; message: ChatMessage };
+export type TurnDisplayItem = { kind: "process-entry"; entry: TurnProcessEntry } | { kind: "interim-answer"; id: string; message: ChatMessage } | { kind: "final-answer"; id: string; message: ChatMessage };

@@ -18,12 +18,7 @@
  * 见 parseAccelerator。纯函数实现，node --test 可直接单测，不依赖 electron 运行时。
  */
 
-export type ShortcutId =
-	| "openSettings"
-	| "toggleDevTools"
-	| "openNewSession"
-	| "openSearch"
-	| "openCommandPalette";
+export type ShortcutId = "openSettings" | "toggleDevTools" | "openNewSession" | "openSearch" | "openCommandPalette" | "cycleModel" | "cycleThinking";
 
 /** 设置页分组：general=通用（普通用户常用），dev=开发调试 */
 export type ShortcutGroupId = "general" | "dev";
@@ -75,6 +70,26 @@ export const SHORTCUT_DEFS: readonly ShortcutDef[] = [
 		// 与 VSCode 惯例一致：Cmd/Ctrl+P 打开命令面板（模糊搜索设置项并跳转 + 执行操作），
 		// 与会话搜索（openSearch）分开入口：前者搜「配置与操作」，后者搜「项目/会话」。
 		defaultAccelerator: { darwin: "Cmd+P", other: "Ctrl+P" },
+	},
+	{
+		id: "cycleModel",
+		group: "general",
+		labelKey: "settings.shortcuts.cycleModelLabel",
+		descriptionKey: "settings.shortcuts.cycleModelDesc",
+		// 语义对齐 pi TUI 的模型循环（Ctrl+P / Shift+Ctrl+P），但 Ctrl+P 在 PiDeck 是命令面板，
+		// 加 Alt 让位；macOS 侧进一步避开 Cmd+M（系统惯例 = 最小化窗口）。
+		// 循环范围 = 模型选择器里的「收藏」，见 renderer/utils/preferenceCycle.ts。
+		defaultAccelerator: { darwin: "Cmd+Alt+M", other: "Ctrl+M" },
+	},
+	{
+		id: "cycleThinking",
+		group: "general",
+		labelKey: "settings.shortcuts.cycleThinkingLabel",
+		descriptionKey: "settings.shortcuts.cycleThinkingDesc",
+		// 语义对齐 pi TUI 的思考档位循环（Shift+Tab），但 PiDeck 里 Shift+Tab 承担焦点导航
+		// （全局拦截会让对话框/设置页失去反向 Tab），因此默认走 Ctrl+T；macOS 避开 Cmd+T
+		// （新标签页惯例）改用 Cmd+Alt+T。
+		defaultAccelerator: { darwin: "Cmd+Alt+T", other: "Ctrl+T" },
 	},
 	{
 		id: "toggleDevTools",
@@ -163,7 +178,10 @@ export function normalizeKeyToken(token: string): string | null {
  * 返回 null = 语法不支持（未知修饰键/主键/空串/多余主键）。
  */
 export function parseAccelerator(acc: string, platform: string): ParsedAccelerator | null {
-	const tokens = acc.split("+").map((token) => token.trim()).filter(Boolean);
+	const tokens = acc
+		.split("+")
+		.map((token) => token.trim())
+		.filter(Boolean);
 	if (tokens.length === 0) return null;
 	const parsed: ParsedAccelerator = { ctrl: false, meta: false, alt: false, shift: false, key: "" };
 	let keyToken: string | null = null;
@@ -240,11 +258,7 @@ export function normalizeInputKey(key: string): string {
  * 语义：必须是 keyDown；修饰键精确相等（不允许叠加额外修饰键，避免误触）；
  * 主键大小写不敏感（Shift+A 与 "Shift+A"、"A" 都命中 "Shift+A"）。
  */
-export function matchesAccelerator(
-	acc: string,
-	input: ShortcutInput,
-	platform: string,
-): boolean {
+export function matchesAccelerator(acc: string, input: ShortcutInput, platform: string): boolean {
 	if (input.type !== "keyDown") return false;
 	if (input.isComposing) return false;
 	const parsed = parseAccelerator(acc, platform);
@@ -299,12 +313,7 @@ export function acceleratorKeyName(key: string): string | null {
  */
 export function buildAcceleratorFromKeyEvent(event: KeyEventLike, platform: string): string | null {
 	// 纯修饰键按下（Control/Alt/Shift/Meta）不作为快捷键的主键
-	if (
-		event.key === "Control" ||
-		event.key === "Alt" ||
-		event.key === "Shift" ||
-		event.key === "Meta"
-	) {
+	if (event.key === "Control" || event.key === "Alt" || event.key === "Shift" || event.key === "Meta") {
 		return null;
 	}
 	const keyName = acceleratorKeyName(event.key);
@@ -367,16 +376,12 @@ export function formatAccelerator(acc: string, platform: string): string {
  * 合并用户覆盖：已知 id 且 accelerator 合法才保留，其余回落到平台默认。
  * 主进程匹配与设置页展示共用，保证两处看到的键一致。
  */
-export function resolveShortcutBindings(
-	overrides: Record<string, unknown> | undefined,
-	platform: string,
-): Record<ShortcutId, string> {
+export function resolveShortcutBindings(overrides: Record<string, unknown> | undefined, platform: string): Record<ShortcutId, string> {
 	const result = {} as Record<ShortcutId, string>;
 	for (const def of SHORTCUT_DEFS) {
 		const candidate = overrides?.[def.id];
 		const acc = typeof candidate === "string" ? candidate.trim() : "";
-		result[def.id] =
-			acc && isValidAccelerator(acc, platform) ? acc : resolveDefaultAccelerator(def, platform);
+		result[def.id] = acc && isValidAccelerator(acc, platform) ? acc : resolveDefaultAccelerator(def, platform);
 	}
 	return result;
 }
@@ -387,10 +392,7 @@ export function resolveShortcutBindings(
  * 非对象入参返回空对象。与 resolveShortcutBindings 共用同一套校验，避免
  * 「设置页能保存、主进程却不认」的取值漂移。
  */
-export function sanitizeShortcutOverrides(
-	raw: unknown,
-	platform: string,
-): Record<string, string> {
+export function sanitizeShortcutOverrides(raw: unknown, platform: string): Record<string, string> {
 	if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
 	const out: Record<string, string> = {};
 	for (const def of SHORTCUT_DEFS) {

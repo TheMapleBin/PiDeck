@@ -16,17 +16,13 @@
 
 /** XML 属性转义（label / name / messageId 可能含引号、尖括号）。 */
 export function escapeXmlAttribute(value: string): string {
-	return value
-		.replace(/&/g, "&amp;")
-		.replace(/</g, "&lt;")
-		.replace(/>/g, "&gt;")
-		.replace(/"/g, "&quot;");
+	return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 /** XML 属性反转义（仅处理本模块生成的四种实体）。 */
 export function decodeXmlAttribute(value: string): string {
 	return value
-		.replace(/&quot;/g, "\"")
+		.replace(/&quot;/g, '"')
 		.replace(/&gt;/g, ">")
 		.replace(/&lt;/g, "<")
 		.replace(/&amp;/g, "&");
@@ -59,10 +55,7 @@ export type ExpandedNamedReferenceBlock = {
 	end: number;
 };
 
-function parseNamedReferenceBlocks(
-	text: string,
-	tagName: "skill" | "prompt_template",
-): ExpandedNamedReferenceBlock[] {
+function parseNamedReferenceBlocks(text: string, tagName: "skill" | "prompt_template"): ExpandedNamedReferenceBlock[] {
 	if (!text.includes(`<${tagName}`)) return [];
 	const re = new RegExp(`<${tagName}\\b([^>]*)>([\\s\\S]*?)<\\/${tagName}>`, "gi");
 	const blocks: ExpandedNamedReferenceBlock[] = [];
@@ -87,9 +80,7 @@ export function parseExpandedSkillBlocks(text: string): ExpandedNamedReferenceBl
 }
 
 /** 从 PiDeck 展开的 `<prompt_template name="…">…</prompt_template>` 块恢复模板名。 */
-export function parseExpandedPromptTemplateBlocks(
-	text: string,
-): ExpandedNamedReferenceBlock[] {
+export function parseExpandedPromptTemplateBlocks(text: string): ExpandedNamedReferenceBlock[] {
 	return parseNamedReferenceBlocks(text, "prompt_template");
 }
 
@@ -159,10 +150,7 @@ export function parseExpandedSessionBlocks(text: string): ExpandedSessionBlock[]
 }
 
 /** 统一后的引用块（quote / session / skill）。 */
-export type ExpandedRefBlock =
-	| { kind: "quote"; label: string; messageId: string; text: string; start: number; end: number }
-	| { kind: "session"; name: string; text: string; start: number; end: number }
-	| { kind: "skill"; label: string; text: string; start: number; end: number };
+export type ExpandedRefBlock = { kind: "quote"; label: string; messageId: string; text: string; start: number; end: number } | { kind: "session"; name: string; text: string; start: number; end: number } | { kind: "skill"; label: string; text: string; start: number; end: number };
 
 /**
  * 统一解析消息文本中所有需要折叠展示的自包含块。
@@ -222,12 +210,7 @@ export function parseExpandedRefBlocks(text: string): ExpandedRefBlock[] {
  * 避免这些 UI 暴露模型需要的 XML 上下文。顺序按原位置保留。
  */
 export function replaceExpandedRefBlocksWithLabels(text: string): string {
-	if (
-		!text.includes("<quoted_context") &&
-		!text.includes("<referenced_session") &&
-		!text.includes("<skill") &&
-		!text.includes("<prompt_template")
-	) {
+	if (!text.includes("<quoted_context") && !text.includes("<referenced_session") && !text.includes("<skill") && !text.includes("<prompt_template")) {
 		return text;
 	}
 	const blocks = parseExpandedRefBlocks(text);
@@ -236,13 +219,7 @@ export function replaceExpandedRefBlocksWithLabels(text: string): string {
 	let cursor = 0;
 	for (const block of blocks) {
 		if (block.start > cursor) parts.push(text.slice(cursor, block.start));
-		parts.push(
-			block.kind === "quote"
-				? `❝${block.label}`
-				: block.kind === "session"
-					? `&${block.name}`
-					: `/${block.label}`,
-		);
+		parts.push(block.kind === "quote" ? `❝${block.label}` : block.kind === "session" ? `&${block.name}` : `/${block.label}`);
 		cursor = block.end;
 	}
 	if (cursor < text.length) parts.push(text.slice(cursor));

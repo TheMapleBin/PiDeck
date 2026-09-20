@@ -15,14 +15,7 @@ import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
 const catalog = loadTsCommonJs("src/main/pi/piAiBuiltinCatalog.ts");
 const { parseProviderModelsResponse } = loadTsCommonJs("src/main/config/parseProviderModels.ts");
-const {
-	buildPiAiCatalogIndex,
-	lookupPiAiCatalogEntry,
-	getPiAiCatalogIndex,
-	parsePiAiCatalogArtifact,
-	positiveInt,
-	readBuiltinPiAiCatalogVersion,
-} = catalog;
+const { buildPiAiCatalogIndex, lookupPiAiCatalogEntry, getPiAiCatalogIndex, parsePiAiCatalogArtifact, positiveInt, readBuiltinPiAiCatalogVersion } = catalog;
 
 function sampleIndex() {
 	return buildPiAiCatalogIndex([
@@ -191,18 +184,22 @@ test("parseProviderModelsResponse: Gemini models/ 前缀与 inputTokenLimit", ()
 });
 
 test("artifact manifest 校验失败时拒绝使用模型目录", () => {
-	const catalogRaw = `${JSON.stringify({
-		schemaVersion: 1,
-		entries: [
-			{
-				id: "artifact-model",
-				provider: "demo",
-				contextWindow: 128000,
-				input: ["text", "image", "video"],
-				thinkingLevelMap: { off: null, high: "high", future: "drop" },
-			},
-		],
-	}, null, 2)}\n`;
+	const catalogRaw = `${JSON.stringify(
+		{
+			schemaVersion: 1,
+			entries: [
+				{
+					id: "artifact-model",
+					provider: "demo",
+					contextWindow: 128000,
+					input: ["text", "image", "video"],
+					thinkingLevelMap: { off: null, high: "high", future: "drop" },
+				},
+			],
+		},
+		null,
+		2,
+	)}\n`;
 	const manifest = {
 		schemaVersion: 1,
 		source: {
@@ -232,10 +229,7 @@ test("真实生成 catalog：gpt-4o 有 contextWindow", () => {
 	const entry = lookupPiAiCatalogEntry(getPiAiCatalogIndex(), "openai", "gpt-4o");
 	assert.ok(entry, "gpt-4o 应命中 pi-ai 目录");
 	assert.ok(entry.contextWindow != null && entry.contextWindow > 0, "gpt-4o 应有 contextWindow");
-	assert.equal(
-		lookupPiAiCatalogEntry(getPiAiCatalogIndex(), "myrelay", "definitely-not-a-model-xyz"),
-		undefined,
-	);
+	assert.equal(lookupPiAiCatalogEntry(getPiAiCatalogIndex(), "myrelay", "definitely-not-a-model-xyz"), undefined);
 });
 
 test("真实生成 catalog：0.85.0 的 qwen3.8-max 可供主进程读取", () => {

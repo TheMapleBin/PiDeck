@@ -22,17 +22,5 @@ export const InterimAnswer = memo(function InterimAnswer(props: {
 	onOpenFile?: (path: string) => void;
 }) {
 	const mode = props.mode ?? "settled";
-	return (
-		<AnswerOutput
-			mode={mode}
-			sessionId={props.sessionId}
-			text={props.text}
-			hidden={props.hidden}
-			isStreaming={props.isStreaming}
-			settle={props.settle}
-			variant={props.variant}
-			onOpenExternal={props.onOpenExternal}
-			onOpenFile={props.onOpenFile}
-		/>
-	);
+	return <AnswerOutput mode={mode} sessionId={props.sessionId} text={props.text} hidden={props.hidden} isStreaming={props.isStreaming} settle={props.settle} variant={props.variant} onOpenExternal={props.onOpenExternal} onOpenFile={props.onOpenFile} />;
 });

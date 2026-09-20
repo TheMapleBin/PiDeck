@@ -16,22 +16,13 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-const center = readFileSync(
-	"src/renderer/src/components/sidebar/AnnouncementCenter.tsx",
-	"utf8",
-);
-const drawer = readFileSync(
-	"src/renderer/src/components/motion/drawer.tsx",
-	"utf8",
-);
+const center = readFileSync("src/renderer/src/components/sidebar/AnnouncementCenter.tsx", "utf8");
+const drawer = readFileSync("src/renderer/src/components/motion/drawer.tsx", "utf8");
 
 test("抽屉交互用 DOM 标记识别，而非基于打开状态的 ref", () => {
 	// 标记常量 + 基于 closest() 的判定函数必须存在
 	assert.match(center, /const DETAIL_DRAWER_ATTR = "data-announcement-detail-drawer"/);
-	assert.match(
-		center,
-		/function isOutsideInteractionFromDetailDrawer\([\s\S]*?closest\(`\[\$\{DETAIL_DRAWER_ATTR\}\]`\)/,
-	);
+	assert.match(center, /function isOutsideInteractionFromDetailDrawer\([\s\S]*?closest\(`\[\$\{DETAIL_DRAWER_ATTR\}\]`\)/);
 	// 标记必须传给 Drawer 的两个固定兄弟层（背板 + 面板），否则 closest() 命中不到
 	assert.match(center, /rootAttributes=\{\{ \[DETAIL_DRAWER_ATTR\]: "" \}\}/);
 	assert.match(drawer, /\{\.\.\.rootAttributes\}/);
@@ -41,10 +32,7 @@ test("抽屉交互用 DOM 标记识别，而非基于打开状态的 ref", () =>
 
 test("Dialog 的两条 outside 路径都拦截抽屉交互", () => {
 	// Radix 的指针路径：延迟到 click 派发，必须在源头 preventDefault 取消这次 dismiss
-	assert.match(
-		center,
-		/onPointerDownOutside=\{\(event\) => \{[\s\S]*?isOutsideInteractionFromDetailDrawer\(event\)[\s\S]*?event\.preventDefault\(\)/,
-	);
+	assert.match(center, /onPointerDownOutside=\{\(event\) => \{[\s\S]*?isOutsideInteractionFromDetailDrawer\(event\)[\s\S]*?event\.preventDefault\(\)/);
 	// 非指针路径（焦点移出等）走同一判定
 	assert.match(center, /onInteractOutside=\{\(event\) => \{[\s\S]*?isOutsideInteractionFromDetailDrawer\(event\)/);
 	// Escape 由抽屉自己的 window keydown 监听处理，弹窗侧不得再叠一层主动关闭逻辑

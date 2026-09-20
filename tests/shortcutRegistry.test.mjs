@@ -181,25 +181,21 @@ test("注册表：默认键随平台（mac ⌘, / win Ctrl+Alt+S），DevTools �
 
 test("resolveShortcutBindings：覆盖 ∪ 默认；非法覆盖回退默认；未知 id 丢弃", () => {
 	const s = loadShortcuts({ platform: "win32" });
-	const bindings = s.resolveShortcutBindings(
-		{ openSettings: "Ctrl+K", toggleDevTools: "S", unknown: "Ctrl+L" },
-		"win32",
-	);
+	const bindings = s.resolveShortcutBindings({ openSettings: "Ctrl+K", toggleDevTools: "S", unknown: "Ctrl+L" }, "win32");
 	assert.deepEqual(plain(bindings), {
 		openSettings: "Ctrl+K",
 		openNewSession: "Ctrl+N",
 		openSearch: "Ctrl+F",
 		openCommandPalette: "Ctrl+P",
+		cycleModel: "Ctrl+M",
+		cycleThinking: "Ctrl+T",
 		toggleDevTools: "F12", // 非法裸键回退默认
 	});
 });
 
 test("sanitizeShortcutOverrides：写盘前清洗，只留已知 id 的合法组合", () => {
 	const s = loadShortcuts({ platform: "win32" });
-	assert.deepEqual(
-		plain(s.sanitizeShortcutOverrides({ openSettings: " Ctrl+K ", toggleDevTools: "S", unknown: "Ctrl+L" }, "win32")),
-		{ openSettings: "Ctrl+K" },
-	);
+	assert.deepEqual(plain(s.sanitizeShortcutOverrides({ openSettings: " Ctrl+K ", toggleDevTools: "S", unknown: "Ctrl+L" }, "win32")), { openSettings: "Ctrl+K" });
 	// 非对象入参 → 空对象
 	assert.deepEqual(plain(s.sanitizeShortcutOverrides(null, "win32")), {});
 	assert.deepEqual(plain(s.sanitizeShortcutOverrides(["Ctrl+K"], "win32")), {});
@@ -226,6 +222,8 @@ test("平台默认键列表完整（覆盖表之外不丢键）", () => {
 		openNewSession: "Ctrl+N",
 		openSearch: "Ctrl+F",
 		openCommandPalette: "Ctrl+P",
+		cycleModel: "Ctrl+M",
+		cycleThinking: "Ctrl+T",
 		toggleDevTools: "F12",
 	});
 	const mac = loadShortcuts({ platform: "darwin" });
@@ -234,6 +232,9 @@ test("平台默认键列表完整（覆盖表之外不丢键）", () => {
 		openNewSession: "Cmd+N",
 		openSearch: "Cmd+F",
 		openCommandPalette: "Cmd+P",
+		// macOS 避开 Cmd+M（最小化窗口）与 Cmd+T（新标签页惯例）
+		cycleModel: "Cmd+Alt+M",
+		cycleThinking: "Cmd+Alt+T",
 		toggleDevTools: "F12",
 	});
 });

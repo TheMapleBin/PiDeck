@@ -9,20 +9,10 @@ import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
 // runtimeNodeInstall 依赖 DshRuntimeManager（sha256OfFile / IO 类型），后者 import electron
 // 仅用于常量与类型；测试里给最小替身即可加载。
-const { installPiRuntimeNode, detectPiRuntimeNode, piRuntimeNodeExePath, piRuntimeRootDir, probeNodeVersion } =
-	loadTsCommonJs("src/main/pi/runtimeNodeInstall.ts", {
-		stubs: { electron: { app: {} } },
-	});
-const {
-	PI_RUNTIME_NODE_VERSION,
-	PI_RUNTIME_NODE_SHA256,
-	piRuntimeNodeArchiveName,
-	piRuntimeNodeDownloadUrls,
-	piRuntimeNodeInnerDir,
-	officialPiRuntimeNodeUrl,
-	toPiRuntimePlatform,
-	toPiRuntimeArch,
-} = loadTsCommonJs("src/shared/types/piRuntimeNode.ts");
+const { installPiRuntimeNode, detectPiRuntimeNode, piRuntimeNodeExePath, piRuntimeRootDir, probeNodeVersion } = loadTsCommonJs("src/main/pi/runtimeNodeInstall.ts", {
+	stubs: { electron: { app: {} } },
+});
+const { PI_RUNTIME_NODE_VERSION, PI_RUNTIME_NODE_SHA256, piRuntimeNodeArchiveName, piRuntimeNodeDownloadUrls, piRuntimeNodeInnerDir, officialPiRuntimeNodeUrl, toPiRuntimePlatform, toPiRuntimeArch } = loadTsCommonJs("src/shared/types/piRuntimeNode.ts");
 
 const EXPECTED_VERSION = `v${PI_RUNTIME_NODE_VERSION}`;
 

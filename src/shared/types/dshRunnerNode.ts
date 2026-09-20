@@ -1,11 +1,5 @@
 /** DSH 沙箱 runner 的 CUI node 探测来源。 */
-export type DshRunnerNodeSource =
-	| "configured"
-	| "path"
-	| "known-location"
-	| "env"
-	| "sidecar"
-	| "not-found";
+export type DshRunnerNodeSource = "configured" | "path" | "known-location" | "env" | "sidecar" | "not-found";
 
 /** 一次成功探测：绝对路径 + 版本号（如 24.13.0）。 */
 export type DshRunnerNodeProbe = {

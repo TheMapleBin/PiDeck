@@ -44,17 +44,7 @@ const REQUIRED = [
 	"dsh-workflow",
 ].map((name) => `@deepseek-ai/${name}`);
 
-const ENTRY_PACKAGES = [
-	"@deepseek-ai/dsh-base",
-	"@deepseek-ai/dsh-app-boot",
-	"@deepseek-ai/dsh-cmdline",
-	"@deepseek-ai/dsh-client-connection",
-	"@deepseek-ai/dsh-api-gateway",
-	"@deepseek-ai/dsh-api-remotes",
-	"@deepseek-ai/dsh-api-session-controller",
-	"dsh-bill",
-	"dsh-tool-pwsh-persistent",
-];
+const ENTRY_PACKAGES = ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-app-boot", "@deepseek-ai/dsh-cmdline", "@deepseek-ai/dsh-client-connection", "@deepseek-ai/dsh-api-gateway", "@deepseek-ai/dsh-api-remotes", "@deepseek-ai/dsh-api-session-controller", "dsh-bill", "dsh-tool-pwsh-persistent"];
 
 /** 造一个「除目标包外全部合规」的最小 runtime 归档；withLib 控制事故复现与否。 */
 async function buildFixture({ withLib }) {
@@ -65,12 +55,22 @@ async function buildFixture({ withLib }) {
 		writeFileSync(join(dir, "package.json"), JSON.stringify({ name, version: "1.0.0", ...extra }));
 	};
 	for (const name of [...REQUIRED, ...ENTRY_PACKAGES]) writePkg(name);
+	// 交叉打包引入的原生资产门禁（406e78de）：目标平台的 sharp/koffi/rg 平台包与
+	// node-pty 的 prebuilds/<platform>-<arch>/ 必须在位，最小归档也跟着摆齐。
+	const target = `${process.platform}-${process.arch}`;
+	for (const name of [`@img/sharp-${target}`, `@koromix/koffi-${target}`, `@vscode/ripgrep-${target}`]) {
+		writePkg(name);
+	}
 	// 闸门钉死的关键文件（koffi 的 src 入口 + node-pty 存在性）
 	const koffiDir = join(src, "node_modules", "koffi", "src", "koffi");
 	mkdirSync(koffiDir, { recursive: true });
 	writeFileSync(join(koffiDir, "index.cjs"), "module.exports = {};");
 	mkdirSync(join(src, "node_modules", "node-pty"), { recursive: true });
 	writeFileSync(join(src, "node_modules", "node-pty", "package.json"), JSON.stringify({ name: "node-pty" }));
+	// node-pty 的平台 prebuild 目录（win32 上 conpty.dll 是硬运行时依赖）
+	const ptyPrebuildDir = join(src, "node_modules", "node-pty", "prebuilds", target);
+	mkdirSync(ptyPrebuildDir, { recursive: true });
+	writeFileSync(join(ptyPrebuildDir, "pty.node"), "");
 
 	// 事故包：exports 同时声明 "." → lib/index.js 与 "./package.json"（元数据导出）
 	const culprit = join(src, "node_modules", "dsh-tool-pwsh-persistent");
@@ -90,10 +90,7 @@ async function buildFixture({ withLib }) {
 		writeFileSync(join(culprit, "lib", "index.js"), "export const x = 1;");
 	}
 
-	writeFileSync(
-		join(src, "manifest.json"),
-		JSON.stringify({ schemaVersion: 1, runtimeVersion: "0.1.5-rc.1", archiveSha256: "" }),
-	);
+	writeFileSync(join(src, "manifest.json"), JSON.stringify({ schemaVersion: 1, runtimeVersion: "0.1.5-rc.1", archiveSha256: "" }));
 
 	const archivePath = join(mkdtempSync(join(tmpdir(), "dsh-gate-out-")), "dsh-runtime-fixture.tgz");
 	await tar.c(

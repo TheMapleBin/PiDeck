@@ -6,11 +6,7 @@ import { ipcChannels } from "../../shared/ipc";
 import type { FileManagerInfo, ProjectFileAccessScope } from "../../shared/types/project";
 import type { FileSearchResult } from "../../shared/types";
 import { detectFileManager, openFileManagerAt } from "../files/FileManager";
-import {
-	createProjectFileReadBoundary,
-	resolveProjectFileReadPath,
-	type ProjectFileReadBoundary,
-} from "../files/projectFileAccess";
+import { createProjectFileReadBoundary, resolveProjectFileReadPath, type ProjectFileReadBoundary } from "../files/projectFileAccess";
 import type { FileSystemService } from "../fs/FileSystemService";
 import type { ProjectStore } from "../projects/ProjectStore";
 import type { SettingsStore } from "../settings/SettingsStore";
@@ -26,14 +22,7 @@ export type FilesIpcDeps = {
 	openExternalUrl: (url: string, forceSystem?: boolean) => Promise<void>;
 };
 
-export function registerFilesIpc({
-	fileSystemService,
-	projectStore,
-	settingsStore,
-	appLogger,
-	getMainWindow,
-	openExternalUrl,
-}: FilesIpcDeps): void {
+export function registerFilesIpc({ fileSystemService, projectStore, settingsStore, appLogger, getMainWindow, openExternalUrl }: FilesIpcDeps): void {
 	// Windows Node / Electron 边界不能直接消费 WSL Linux 路径：统一走 WslPaths 转成当前发行版的主机 UNC。
 	// 已经是普通 Windows/非 WSL 网络盘的输入保持不变，避免误伤非 WSL 路径。
 	const toWindowsPath = (path: string): string => {
@@ -53,9 +42,7 @@ export function registerFilesIpc({
 	 * renderer 可选携带 projectId 收窄读取权限；根路径只从 ProjectStore 获取，
 	 * 再经 realpath 校验 symlink，不能由 renderer 自报一个任意“可信根”。
 	 */
-	const resolveProjectReadBoundary = async (
-		rawScope?: unknown,
-	): Promise<ProjectFileReadBoundary | undefined> => {
+	const resolveProjectReadBoundary = async (rawScope?: unknown): Promise<ProjectFileReadBoundary | undefined> => {
 		if (rawScope === undefined) return undefined;
 		if (!isProjectFileAccessScope(rawScope)) {
 			throw new Error("INVALID_PROJECT_FILE_ACCESS_SCOPE");
@@ -65,10 +52,7 @@ export function registerFilesIpc({
 		return createProjectFileReadBoundary(toWindowsPath(project.path));
 	};
 
-	const resolveReadablePath = async (
-		rawPath: unknown,
-		boundary?: ProjectFileReadBoundary,
-	): Promise<string> => {
+	const resolveReadablePath = async (rawPath: unknown, boundary?: ProjectFileReadBoundary): Promise<string> => {
 		if (typeof rawPath !== "string" || !rawPath.trim() || rawPath.length > 32_768) {
 			throw new Error("Invalid file path");
 		}
@@ -82,28 +66,16 @@ export function registerFilesIpc({
 			title: options?.title,
 			// Windows 上 openFile 与 openDirectory 并存会退化为「只选文件夹」（FOS_PICKFOLDERS），
 			// 附件引用场景以选文件为主，默认只开文件；目录选择由调用方显式开启。
-			properties: options?.includeDirectories
-				? ["openFile", "openDirectory", "multiSelections"]
-				: ["openFile", "multiSelections"],
+			properties: options?.includeDirectories ? ["openFile", "openDirectory", "multiSelections"] : ["openFile", "multiSelections"],
 		});
 		return result.canceled ? [] : result.filePaths;
 	});
 
-	ipcMain.handle(
-		ipcChannels.filesList,
-		async (
-			_event,
-			projectId: string,
-			options?: { maxDepth?: number; directory?: string },
-		) => {
+	ipcMain.handle(ipcChannels.filesList, async (_event, projectId: string, options?: { maxDepth?: number; directory?: string }) => {
 		const project = projectStore.get(projectId);
 		if (!project) throw new Error(`Project not found: ${projectId}`);
-		const maxDepth = typeof options?.maxDepth === "number" && Number.isFinite(options.maxDepth)
-			? options.maxDepth
-			: undefined;
-		const directory = typeof options?.directory === "string" && options.directory.trim()
-			? options.directory.trim()
-			: undefined;
+		const maxDepth = typeof options?.maxDepth === "number" && Number.isFinite(options.maxDepth) ? options.maxDepth : undefined;
+		const directory = typeof options?.directory === "string" && options.directory.trim() ? options.directory.trim() : undefined;
 		// directory 必须落在项目内；越界由 FileSystemService.listTree 拒绝。
 		const projectPath = toWindowsPath(project.path);
 		try {
@@ -126,15 +98,12 @@ export function registerFilesIpc({
 		return query;
 	};
 
-	ipcMain.handle(
-		ipcChannels.filesSearch,
-		async (_event, projectId: string, query: string): Promise<FileSearchResult[]> => {
-			const project = projectStore.get(projectId);
-			if (!project) throw new Error(`Project not found: ${projectId}`);
-			const normalizedQuery = parseFileSearchQuery(query);
-			return fileSystemService.searchNames(toWindowsPath(project.path), normalizedQuery);
-		},
-	);
+	ipcMain.handle(ipcChannels.filesSearch, async (_event, projectId: string, query: string): Promise<FileSearchResult[]> => {
+		const project = projectStore.get(projectId);
+		if (!project) throw new Error(`Project not found: ${projectId}`);
+		const normalizedQuery = parseFileSearchQuery(query);
+		return fileSystemService.searchNames(toWindowsPath(project.path), normalizedQuery);
+	});
 
 	ipcMain.handle(ipcChannels.filesOpen, async (_event, path: unknown, scope?: unknown) => {
 		const boundary = await resolveProjectReadBoundary(scope);
@@ -186,50 +155,46 @@ export function registerFilesIpc({
 		await openExternalUrl(url, true);
 	});
 
-	ipcMain.handle(
-		ipcChannels.filesReadContent,
-		async (_event, path: unknown, maxBytes?: number, scope?: unknown) => {
-			try {
-				const boundary = await resolveProjectReadBoundary(scope);
-				const readablePath = await resolveReadablePath(path, boundary);
-				// 编辑器场景传入 maxBytes（maxEditorFileSizeMB 设置项）：读取前先 stat 拦截，
-				// 避免大文件全量读入主进程再经 IPC 传输（几百 MB 字符串会同时压垮两侧内存）。
-				// 其他调用方（技能/提示词小文件）不传参，行为不变。
-				if (typeof maxBytes === "number" && Number.isFinite(maxBytes) && maxBytes > 0) {
-					const fileStat = await stat(readablePath);
-					if (fileStat.size > maxBytes) {
-						// 结构化前缀供渲染层识别后走 i18n 文案；message 不直接展示给用户
-						throw new Error(`FILE_TOO_LARGE:${fileStat.size}:${Math.floor(maxBytes)}`);
-					}
-				}
-				return await readFile(readablePath, "utf8");
-			} catch (error) {
-				if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-					return "";
-				}
-				throw error;
-			}
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.filesPathsExist,
-		async (_event, paths: unknown, scope?: unknown): Promise<boolean[]> => {
-			// 渲染层输入不可信：仅接受字符串数组且限量限长，防大包/超长路径滥用 stat。
-			// 上限与渲染层 verdict store 的 BATCH_MAX(96) 对齐并留余量。
-			if (!Array.isArray(paths) || paths.length === 0 || paths.length > 128) {
-				throw new Error("paths must be a non-empty array (max 128)");
-			}
-			const normalized: string[] = [];
-			for (const raw of paths) {
-				if (typeof raw !== "string" || !raw.trim() || raw.length > 1024) {
-					throw new Error("each path must be a non-empty string (max 1024 chars)");
-				}
-				normalized.push(raw);
-			}
-			// 项目根 realpath 每批只解析一次；每个目标仍独立 realpath，逐项越界按 false 计。
+	ipcMain.handle(ipcChannels.filesReadContent, async (_event, path: unknown, maxBytes?: number, scope?: unknown) => {
+		try {
 			const boundary = await resolveProjectReadBoundary(scope);
-			return Promise.all(normalized.map(async (path) => {
+			const readablePath = await resolveReadablePath(path, boundary);
+			// 编辑器场景传入 maxBytes（maxEditorFileSizeMB 设置项）：读取前先 stat 拦截，
+			// 避免大文件全量读入主进程再经 IPC 传输（几百 MB 字符串会同时压垮两侧内存）。
+			// 其他调用方（技能/提示词小文件）不传参，行为不变。
+			if (typeof maxBytes === "number" && Number.isFinite(maxBytes) && maxBytes > 0) {
+				const fileStat = await stat(readablePath);
+				if (fileStat.size > maxBytes) {
+					// 结构化前缀供渲染层识别后走 i18n 文案；message 不直接展示给用户
+					throw new Error(`FILE_TOO_LARGE:${fileStat.size}:${Math.floor(maxBytes)}`);
+				}
+			}
+			return await readFile(readablePath, "utf8");
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+				return "";
+			}
+			throw error;
+		}
+	});
+
+	ipcMain.handle(ipcChannels.filesPathsExist, async (_event, paths: unknown, scope?: unknown): Promise<boolean[]> => {
+		// 渲染层输入不可信：仅接受字符串数组且限量限长，防大包/超长路径滥用 stat。
+		// 上限与渲染层 verdict store 的 BATCH_MAX(96) 对齐并留余量。
+		if (!Array.isArray(paths) || paths.length === 0 || paths.length > 128) {
+			throw new Error("paths must be a non-empty array (max 128)");
+		}
+		const normalized: string[] = [];
+		for (const raw of paths) {
+			if (typeof raw !== "string" || !raw.trim() || raw.length > 1024) {
+				throw new Error("each path must be a non-empty string (max 1024 chars)");
+			}
+			normalized.push(raw);
+		}
+		// 项目根 realpath 每批只解析一次；每个目标仍独立 realpath，逐项越界按 false 计。
+		const boundary = await resolveProjectReadBoundary(scope);
+		return Promise.all(
+			normalized.map(async (path) => {
 				try {
 					const readablePath = await resolveReadablePath(path, boundary);
 					const fileStat = await stat(readablePath);
@@ -237,82 +202,66 @@ export function registerFilesIpc({
 				} catch {
 					return false;
 				}
-			}));
-		},
-	);
+			}),
+		);
+	});
 
-	ipcMain.handle(
-		ipcChannels.filesStat,
-		async (
-			_event,
-			path: unknown,
-			scope?: unknown,
-		): Promise<{ exists: boolean; isDirectory: boolean }> => {
-			// 会话内文件链接点击路由用：verdict store 只回答「存在与否」，区分不了目录，
-			// 而编辑器 readContent 对目录会抛 EISDIR（用户看到的 "illegal operation on a
-			// directory" 就是目录链接被当文件读）。这里补一次带边界的 stat 给渲染层分流。
+	ipcMain.handle(ipcChannels.filesStat, async (_event, path: unknown, scope?: unknown): Promise<{ exists: boolean; isDirectory: boolean }> => {
+		// 会话内文件链接点击路由用：verdict store 只回答「存在与否」，区分不了目录，
+		// 而编辑器 readContent 对目录会抛 EISDIR（用户看到的 "illegal operation on a
+		// directory" 就是目录链接被当文件读）。这里补一次带边界的 stat 给渲染层分流。
+		const boundary = await resolveProjectReadBoundary(scope);
+		const readablePath = await resolveReadablePath(path, boundary);
+		try {
+			const fileStat = await stat(readablePath);
+			return { exists: true, isDirectory: fileStat.isDirectory() };
+		} catch {
+			return { exists: false, isDirectory: false };
+		}
+	});
+
+	ipcMain.handle(ipcChannels.filesWriteContent, async (_event, path: unknown, content: unknown, scope?: unknown) => {
+		if (typeof content !== "string") throw new Error("Invalid file content");
+		const boundary = await resolveProjectReadBoundary(scope);
+		// 已存在的项目文件沿用读取边界的 realpath 校验，阻止 tab 打开后替换 symlink 再保存越界。
+		const writablePath = await resolveReadablePath(path, boundary);
+		await writeFile(writablePath, content, "utf8");
+		void appLogger.info("file", "File written", {
+			path: writablePath,
+			bytes: Buffer.byteLength(content, "utf8"),
+		});
+	});
+
+	ipcMain.handle(ipcChannels.filesReadBase64, async (_event, path: unknown, maxBytes?: number, scope?: unknown) => {
+		try {
 			const boundary = await resolveProjectReadBoundary(scope);
 			const readablePath = await resolveReadablePath(path, boundary);
-			try {
+			// 粘贴图片等场景传入 maxBytes 预检：超大文件在 stat 层拦截，
+			// 避免全量读入主进程再经 IPC 传输压垮两侧内存（与 filesReadContent 同一策略）。
+			if (typeof maxBytes === "number" && Number.isFinite(maxBytes) && maxBytes > 0) {
 				const fileStat = await stat(readablePath);
-				return { exists: true, isDirectory: fileStat.isDirectory() };
-			} catch {
-				return { exists: false, isDirectory: false };
-			}
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.filesWriteContent,
-		async (_event, path: unknown, content: unknown, scope?: unknown) => {
-			if (typeof content !== "string") throw new Error("Invalid file content");
-			const boundary = await resolveProjectReadBoundary(scope);
-			// 已存在的项目文件沿用读取边界的 realpath 校验，阻止 tab 打开后替换 symlink 再保存越界。
-			const writablePath = await resolveReadablePath(path, boundary);
-			await writeFile(writablePath, content, "utf8");
-			void appLogger.info("file", "File written", {
-				path: writablePath,
-				bytes: Buffer.byteLength(content, "utf8"),
-			});
-		},
-	);
-
-	ipcMain.handle(
-		ipcChannels.filesReadBase64,
-		async (_event, path: unknown, maxBytes?: number, scope?: unknown) => {
-			try {
-				const boundary = await resolveProjectReadBoundary(scope);
-				const readablePath = await resolveReadablePath(path, boundary);
-				// 粘贴图片等场景传入 maxBytes 预检：超大文件在 stat 层拦截，
-				// 避免全量读入主进程再经 IPC 传输压垮两侧内存（与 filesReadContent 同一策略）。
-				if (typeof maxBytes === "number" && Number.isFinite(maxBytes) && maxBytes > 0) {
-					const fileStat = await stat(readablePath);
-					if (fileStat.size > maxBytes) {
-						// 结构化前缀供渲染层识别后走回退逻辑；message 不直接展示给用户
-						throw new Error(`FILE_TOO_LARGE:${fileStat.size}:${Math.floor(maxBytes)}`);
-					}
+				if (fileStat.size > maxBytes) {
+					// 结构化前缀供渲染层识别后走回退逻辑；message 不直接展示给用户
+					throw new Error(`FILE_TOO_LARGE:${fileStat.size}:${Math.floor(maxBytes)}`);
 				}
-				// 二进制预览（图片/PDF 等）：读为 base64 由渲染层转 Blob URL 显示。
-				// 渲染层对空串（ENOENT）走「不支持」提示。
-				const buffer = await readFile(readablePath);
-				return buffer.toString("base64");
-			} catch (error) {
-				if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-					return "";
-				}
-				throw error;
 			}
-		},
-	);
+			// 二进制预览（图片/PDF 等）：读为 base64 由渲染层转 Blob URL 显示。
+			// 渲染层对空串（ENOENT）走「不支持」提示。
+			const buffer = await readFile(readablePath);
+			return buffer.toString("base64");
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+				return "";
+			}
+			throw error;
+		}
+	});
 
-	ipcMain.handle(
-		ipcChannels.filesCreate,
-		async (_event, parentDir: string, name: string, type: "file" | "directory") => {
-			const result = await fileSystemService.create(toWindowsPath(parentDir), name, type);
-			void appLogger.info("file", "File/folder created", { parentDir, name, type, result });
-			return result;
-		},
-	);
+	ipcMain.handle(ipcChannels.filesCreate, async (_event, parentDir: string, name: string, type: "file" | "directory") => {
+		const result = await fileSystemService.create(toWindowsPath(parentDir), name, type);
+		void appLogger.info("file", "File/folder created", { parentDir, name, type, result });
+		return result;
+	});
 
 	ipcMain.handle(ipcChannels.filesDelete, async (_event, path: string, recursive?: boolean) => {
 		try {
@@ -336,56 +285,49 @@ export function registerFilesIpc({
 		return result;
 	});
 
-	ipcMain.handle(
-		ipcChannels.filesCopy,
-		async (_event, sourcePaths: string[], targetDir: string) => {
-			const hostTargetDir = toWindowsPath(targetDir);
-			const results: string[] = [];
-			for (const src of sourcePaths) {
-				try {
-					const hostSrc = toWindowsPath(src);
-					const name = basename(hostSrc);
-					const dest = join(hostTargetDir, name);
-					// 递归复制目录/文件；同名已存在时跳过覆盖（errorOnExist: false 反而报错，
-					// 这里语义为「已存在则不重复复制」——与资源管理器粘贴行为一致）
-					await cp(hostSrc, dest, { recursive: true, errorOnExist: false });
-					results.push(dest);
-					void appLogger.info("file", "File/folder copied", { src, dest });
-				} catch (error) {
-					void appLogger.info("file", "File copy failed", { src, targetDir, error: error instanceof Error ? error.message : String(error) });
-					throw error;
-				}
+	ipcMain.handle(ipcChannels.filesCopy, async (_event, sourcePaths: string[], targetDir: string) => {
+		const hostTargetDir = toWindowsPath(targetDir);
+		const results: string[] = [];
+		for (const src of sourcePaths) {
+			try {
+				const hostSrc = toWindowsPath(src);
+				const name = basename(hostSrc);
+				const dest = join(hostTargetDir, name);
+				// 递归复制目录/文件；同名已存在时跳过覆盖（errorOnExist: false 反而报错，
+				// 这里语义为「已存在则不重复复制」——与资源管理器粘贴行为一致）
+				await cp(hostSrc, dest, { recursive: true, errorOnExist: false });
+				results.push(dest);
+				void appLogger.info("file", "File/folder copied", { src, dest });
+			} catch (error) {
+				void appLogger.info("file", "File copy failed", { src, targetDir, error: error instanceof Error ? error.message : String(error) });
+				throw error;
 			}
-			return results;
-		},
-	);
+		}
+		return results;
+	});
 
-	ipcMain.handle(
-		ipcChannels.filesMove,
-		async (_event, sourcePaths: string[], targetDir: string) => {
-			const hostTargetDir = toWindowsPath(targetDir);
-			const results: string[] = [];
-			for (const src of sourcePaths) {
+	ipcMain.handle(ipcChannels.filesMove, async (_event, sourcePaths: string[], targetDir: string) => {
+		const hostTargetDir = toWindowsPath(targetDir);
+		const results: string[] = [];
+		for (const src of sourcePaths) {
+			try {
+				const hostSrc = toWindowsPath(src);
+				const name = basename(hostSrc);
+				const dest = join(hostTargetDir, name);
+				// 同设备优先 rename（瞬时）；跨设备/跨盘 rename 会报 EXDEV，回退 cp + rm
 				try {
-					const hostSrc = toWindowsPath(src);
-					const name = basename(hostSrc);
-					const dest = join(hostTargetDir, name);
-					// 同设备优先 rename（瞬时）；跨设备/跨盘 rename 会报 EXDEV，回退 cp + rm
-					try {
-						await fsRename(hostSrc, dest);
-					} catch {
-						await cp(hostSrc, dest, { recursive: true });
-						await rm(hostSrc, { recursive: true, force: true });
-					}
-					results.push(dest);
-					void appLogger.info("file", "File/folder moved", { src, dest });
-				} catch (error) {
-					void appLogger.info("file", "File move failed", { src, targetDir, error: error instanceof Error ? error.message : String(error) });
-					throw error;
+					await fsRename(hostSrc, dest);
+				} catch {
+					await cp(hostSrc, dest, { recursive: true });
+					await rm(hostSrc, { recursive: true, force: true });
 				}
+				results.push(dest);
+				void appLogger.info("file", "File/folder moved", { src, dest });
+			} catch (error) {
+				void appLogger.info("file", "File move failed", { src, targetDir, error: error instanceof Error ? error.message : String(error) });
+				throw error;
 			}
-			return results;
-		},
-	);
-
+		}
+		return results;
+	});
 }

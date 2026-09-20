@@ -62,11 +62,7 @@ test("first custom add while inheriting catalog keeps catalog then appends blank
 			{ id: "deepseek-reasoner", name: "DeepSeek Reasoner" },
 		],
 	});
-	assert.deepEqual(asJson(next), [
-		{ id: "deepseek-chat", name: "DeepSeek Chat" },
-		{ id: "deepseek-reasoner", name: "DeepSeek Reasoner" },
-		{ id: "" },
-	]);
+	assert.deepEqual(asJson(next), [{ id: "deepseek-chat", name: "DeepSeek Chat" }, { id: "deepseek-reasoner", name: "DeepSeek Reasoner" }, { id: "" }]);
 });
 
 test("adding onto saved custom models does not wipe them", () => {
@@ -83,22 +79,23 @@ test("adding onto saved custom models does not wipe them", () => {
 test("empty draft falls back to saved or catalog instead of wiping them", () => {
 	const { seedDshModelsForCustomEdit, appendBlankDshModel } = loadDshModelsModule();
 	assert.deepEqual(
-		asJson(seedDshModelsForCustomEdit({
-			draftModels: [],
-			savedModels: [{ id: "saved", name: "Saved" }],
-			catalog: [{ id: "catalog" }],
-		})),
+		asJson(
+			seedDshModelsForCustomEdit({
+				draftModels: [],
+				savedModels: [{ id: "saved", name: "Saved" }],
+				catalog: [{ id: "catalog" }],
+			}),
+		),
 		[{ id: "saved", name: "Saved" }],
 	);
 	assert.deepEqual(
-		asJson(appendBlankDshModel({
-			draftModels: [],
-			catalog: [{ id: "catalog", name: "Catalog" }],
-		})),
-		[
-			{ id: "catalog", name: "Catalog" },
-			{ id: "" },
-		],
+		asJson(
+			appendBlankDshModel({
+				draftModels: [],
+				catalog: [{ id: "catalog", name: "Catalog" }],
+			}),
+		),
+		[{ id: "catalog", name: "Catalog" }, { id: "" }],
 	);
 });
 
@@ -190,10 +187,7 @@ test("DSH cards seed custom models instead of starting from an empty draft array
 	assert.match(editor, /appendBlankDshModel/);
 	assert.match(editor, /appendFetchedDshModels/);
 	assert.match(editor, /desktopApi\.sessions\.discoverDshModels/);
-	assert.doesNotMatch(
-		cards,
-		/const models = Array.isArray\((?:provider|next)\.models\) \? \[\.\.\.(?:provider|next)\.models\] : \[\];\s*models\.push\(\{ id: ""/,
-	);
+	assert.doesNotMatch(cards, /const models = Array.isArray\((?:provider|next)\.models\) \? \[\.\.\.(?:provider|next)\.models\] : \[\];\s*models\.push\(\{ id: ""/);
 });
 
 test("official DeepSeek lets inherited catalog rows materialize a model override", () => {

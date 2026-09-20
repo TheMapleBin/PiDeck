@@ -27,10 +27,7 @@ const packagesRoot = join(root, "packages");
  * 「不是内部或外部命令」。前置 .bin 后，无论外部环境如何垫片都可达。
  */
 function buildEnv(pkgDir) {
-	const binDirs = [
-		join(pkgDir, "node_modules", ".bin"),
-		join(root, "node_modules", ".bin"),
-	];
+	const binDirs = [join(pkgDir, "node_modules", ".bin"), join(root, "node_modules", ".bin")];
 	const existingPath = process.env.PATH || process.env.Path || "";
 	return {
 		...process.env,

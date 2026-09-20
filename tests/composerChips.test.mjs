@@ -12,16 +12,7 @@ function loadChips() {
 	return loadTsCommonJs("src/renderer/src/components/session/composer/chips.ts");
 }
 
-const {
-	parseRichInputChips,
-	formatFilePathRef,
-	unwrapFileChipPath,
-	formatFileChipLabel,
-	isDirectoryFileChip,
-	formatChipDisplayLabel,
-	stripChipDisplayPrefix,
-	extractPastedPath,
-} = loadChips();
+const { parseRichInputChips, formatFilePathRef, unwrapFileChipPath, formatFileChipLabel, isDirectoryFileChip, formatChipDisplayLabel, stripChipDisplayPrefix, extractPastedPath } = loadChips();
 
 test("formatChipDisplayLabel keeps only the @ prefix and strips the pi skill wire prefix", () => {
 	assert.equal(formatChipDisplayLabel("file", "a.ts"), "@a.ts");
@@ -51,7 +42,7 @@ test("formatFileChipLabel shows the file name only, full path stays in raw/title
 	assert.equal(formatFileChipLabel("C:/Program Files/"), "Program Files");
 });
 
-test("isDirectoryFileChip distinguishes @dir/ and @\"dir with space/\"", () => {
+test('isDirectoryFileChip distinguishes @dir/ and @"dir with space/"', () => {
 	assert.equal(isDirectoryFileChip("@src/"), true);
 	assert.equal(isDirectoryFileChip('@"my docs/"'), true);
 	assert.equal(isDirectoryFileChip("@src/a.ts"), false);
@@ -72,11 +63,7 @@ test("unwrapFileChipPath strips @ quotes and trailing separators", () => {
 test("parseRichInputChips respects file and command whitelists", () => {
 	const files = new Set(["src/a.ts"]);
 	const cmds = new Set(["compact"]);
-	const chips = parseRichInputChips(
-		"看 @src/a.ts 和 @src/b.ts 再 /compact /unknown",
-		cmds,
-		files,
-	);
+	const chips = parseRichInputChips("看 @src/a.ts 和 @src/b.ts 再 /compact /unknown", cmds, files);
 	assertJsonEqual(
 		chips.map((c) => ({ kind: c.kind, raw: c.raw })),
 		[
@@ -87,10 +74,7 @@ test("parseRichInputChips respects file and command whitelists", () => {
 });
 
 test("pi skill invocations stay chips even when runtime only exposes generic commands", () => {
-	const chips = parseRichInputChips(
-		"执行 /skill:cv-project-writer 后再 /unknown",
-		new Set(["compact"]),
-	);
+	const chips = parseRichInputChips("执行 /skill:cv-project-writer 后再 /unknown", new Set(["compact"]));
 	assertJsonEqual(
 		chips.map((chip) => ({ kind: chip.kind, raw: chip.raw, label: chip.label })),
 		[{ kind: "skill", raw: "/skill:cv-project-writer", label: "skill:cv-project-writer" }],
@@ -99,12 +83,7 @@ test("pi skill invocations stay chips even when runtime only exposes generic com
 
 test("session chip with whitelist Set only matches known names", () => {
 	const sessions = new Set(["alpha", "beta long"]);
-	const chips = parseRichInputChips(
-		"参考 &alpha 和 &beta long 还有 &ghost 以及 && cmd&x",
-		undefined,
-		undefined,
-		sessions,
-	);
+	const chips = parseRichInputChips("参考 &alpha 和 &beta long 还有 &ghost 以及 && cmd&x", undefined, undefined, sessions);
 	assertJsonEqual(
 		chips.map((c) => c.raw),
 		["&alpha", "&beta long"],
@@ -124,12 +103,17 @@ test("session chip without whitelist falls back to first word for timeline displ
 	);
 });
 
-test("URL path segments are not parsed as chips", () => {
-	const chips = parseRichInputChips(
-		"https://example.com/foo @src/a.ts",
-		undefined,
-		new Set(["src/a.ts"]),
+test("timeline fallback keeps shell control operators as plain text", () => {
+	const command = 'cd F:/PiDeck && echo "--- app.stopping usage ---" && grep -rn \'t("app.stopping")\' src/renderer/src/ &> command.log';
+	const chips = parseRichInputChips(command);
+	assertJsonEqual(
+		chips.filter((chip) => chip.kind === "session").map((chip) => chip.raw),
+		[],
 	);
+});
+
+test("URL path segments are not parsed as chips", () => {
+	const chips = parseRichInputChips("https://example.com/foo @src/a.ts", undefined, new Set(["src/a.ts"]));
 	assertJsonEqual(
 		chips.map((c) => c.raw),
 		["@src/a.ts"],
@@ -202,10 +186,7 @@ test("space-free absolute path keeps raw unquoted", () => {
 });
 
 test("extractPastedPath recognizes single absolute path pastes", () => {
-	assert.equal(
-		extractPastedPath("C:/Users/528/Documents/Tencent Files/455f949b57b937a5491cbb0a6f7bd07a.png"),
-		"C:/Users/528/Documents/Tencent Files/455f949b57b937a5491cbb0a6f7bd07a.png",
-	);
+	assert.equal(extractPastedPath("C:/Users/528/Documents/Tencent Files/455f949b57b937a5491cbb0a6f7bd07a.png"), "C:/Users/528/Documents/Tencent Files/455f949b57b937a5491cbb0a6f7bd07a.png");
 	assert.equal(extractPastedPath("@C:/Users/x.png"), "C:/Users/x.png");
 	assert.equal(extractPastedPath('"C:\\Users\\Tencent Files\\x.png"'), "C:\\Users\\Tencent Files\\x.png");
 	assert.equal(extractPastedPath('@"C:/a b.txt"'), "C:/a b.txt");
@@ -250,12 +231,6 @@ test("quote token becomes a chip only when whitelisted, with snapshot label", ()
 	assertJsonEqual(parseRichInputChips(text), []);
 
 	// 白名单未命中（手工敲出的同形 token）：不成 chip
-	const miss = parseRichInputChips(
-		text,
-		undefined,
-		undefined,
-		undefined,
-		new Map([["qffffffff", "别的引用"]]),
-	);
+	const miss = parseRichInputChips(text, undefined, undefined, undefined, new Map([["qffffffff", "别的引用"]]));
 	assertJsonEqual(miss, []);
 });

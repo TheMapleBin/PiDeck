@@ -110,10 +110,7 @@ export function summarizeMessage(text: string) {
 /* ── 路径与匹配 ── */
 
 export function matches(value: string, keyword: string) {
-	return (
-		!keyword.trim() ||
-		value.toLowerCase().includes(keyword.trim().toLowerCase())
-	);
+	return !keyword.trim() || value.toLowerCase().includes(keyword.trim().toLowerCase());
 }
 
 function getHomePathPrefix() {
@@ -125,10 +122,7 @@ export function displayPath(path?: string) {
 	if (!path) return "";
 	const home = getHomePathPrefix();
 	const normalized = path.replace(/\\/g, "/");
-	const friendly =
-		home && normalized.toLowerCase().startsWith(home.toLowerCase())
-			? `~${normalized.slice(home.length)}`
-			: normalized;
+	const friendly = home && normalized.toLowerCase().startsWith(home.toLowerCase()) ? `~${normalized.slice(home.length)}` : normalized;
 	return friendly.length > 36 ? `...${friendly.slice(-35)}` : friendly;
 }
 
@@ -137,11 +131,7 @@ export function displayPath(path?: string) {
  * 目录节点一并保留，供 @ 引用搜索与 chip 白名单使用（空目录也能被引用）。
  */
 export function flattenFiles(nodes: FileTreeNode[]): FileTreeNode[] {
-	return nodes.flatMap((node) =>
-		node.type === "file"
-			? [node]
-			: [node, ...flattenFiles(node.children ?? [])],
-	);
+	return nodes.flatMap((node) => (node.type === "file" ? [node] : [node, ...flattenFiles(node.children ?? [])]));
 }
 
 /* ── 消息分组类型 ── */
@@ -191,12 +181,7 @@ function sameImageGenMetaForRender(previous: unknown, next: unknown): boolean {
 	const nxt = readImageGenRenderFields(next);
 	if (!prev && !nxt) return true;
 	if (!prev || !nxt) return false;
-	return (
-		prev.status === nxt.status &&
-		prev.prompt === nxt.prompt &&
-		prev.size === nxt.size &&
-		prev.errorDetail === nxt.errorDetail
-	);
+	return prev.status === nxt.status && prev.prompt === nxt.prompt && prev.size === nxt.size && prev.errorDetail === nxt.errorDetail;
 }
 
 function readImageGenRenderFields(value: unknown): {
@@ -211,8 +196,7 @@ function readImageGenRenderFields(value: unknown): {
 	const prompt = value.prompt;
 	if (typeof status !== "string" || typeof prompt !== "string") return null;
 	const size = "size" in value && typeof value.size === "string" ? value.size : "";
-	const errorDetail =
-		"errorDetail" in value && typeof value.errorDetail === "string" ? value.errorDetail : "";
+	const errorDetail = "errorDetail" in value && typeof value.errorDetail === "string" ? value.errorDetail : "";
 	return { status, prompt, size, errorDetail };
 }
 
@@ -248,15 +232,7 @@ export function sameChatMessageForRender(previous: ChatMessage, next: ChatMessag
 export function sameAgentRunForRender(previous: AgentRunItem, next: AgentRunItem): boolean {
 	// 引用相同即内容相同（阶段0补强：历史 run 复用旧对象引用后，此处 O(1) 快速路径）
 	if (previous === next) return true;
-	if (
-		previous.id !== next.id ||
-		previous.startedAt !== next.startedAt ||
-		previous.endedAt !== next.endedAt ||
-		previous.askWaitMs !== next.askWaitMs ||
-		previous.askPending !== next.askPending ||
-		previous.askPendingAt !== next.askPendingAt ||
-		previous.items.length !== next.items.length
-	) {
+	if (previous.id !== next.id || previous.startedAt !== next.startedAt || previous.endedAt !== next.endedAt || previous.askWaitMs !== next.askWaitMs || previous.askPending !== next.askPending || previous.askPendingAt !== next.askPendingAt || previous.items.length !== next.items.length) {
 		return false;
 	}
 	return previous.items.every((item, index) => {
@@ -266,30 +242,16 @@ export function sameAgentRunForRender(previous: AgentRunItem, next: AgentRunItem
 			return sameChatMessageForRender(item.message, other.message);
 		}
 		if (item.kind === "thinking-group" && other.kind === "thinking-group") {
-			return (
-				item.id === other.id &&
-				item.text === other.text &&
-				item.startedAt === other.startedAt &&
-				item.endedAt === other.endedAt
-			);
+			return item.id === other.id && item.text === other.text && item.startedAt === other.startedAt && item.endedAt === other.endedAt;
 		}
 		if (item.kind === "tool-group" && other.kind === "tool-group") {
-			return (
-				item.id === other.id &&
-				item.messages.length === other.messages.length &&
-				item.messages.every((message, messageIndex) =>
-					sameChatMessageForRender(message, other.messages[messageIndex]),
-				)
-			);
+			return item.id === other.id && item.messages.length === other.messages.length && item.messages.every((message, messageIndex) => sameChatMessageForRender(message, other.messages[messageIndex]));
 		}
 		return false;
 	});
 }
 
-export function getMultiSelectImageCaptureIds(
-	items: RenderMessage[],
-	selectedIds: Set<string>,
-): Set<string> {
+export function getMultiSelectImageCaptureIds(items: RenderMessage[], selectedIds: Set<string>): Set<string> {
 	const ids = new Set<string>();
 	for (const item of items) {
 		if (item.kind === "message") {
@@ -297,12 +259,7 @@ export function getMultiSelectImageCaptureIds(
 			continue;
 		}
 		if (item.kind === "agent-run") {
-			const hasSelectedAssistant = item.items.some(
-				(sub) =>
-					sub.kind === "message" &&
-					sub.message.role === "assistant" &&
-					selectedIds.has(sub.message.id),
-			);
+			const hasSelectedAssistant = item.items.some((sub) => sub.kind === "message" && sub.message.role === "assistant" && selectedIds.has(sub.message.id));
 			if (hasSelectedAssistant) ids.add(item.id);
 		}
 	}
@@ -311,10 +268,7 @@ export function getMultiSelectImageCaptureIds(
 
 /* ── 消息分组 ── */
 
-export function groupToolMessages(
-	messages: ChatMessage[],
-	options: { agentBusy?: boolean } = {},
-): RenderMessage[] {
+export function groupToolMessages(messages: ChatMessage[], options: { agentBusy?: boolean } = {}): RenderMessage[] {
 	// agentBusy 决定 error 诊断卡是否打断当前 run（见下方 error 分支）
 	const { agentBusy = false } = options;
 	const result: RenderMessage[] = [];
@@ -327,11 +281,7 @@ export function groupToolMessages(
 	let lastUserTimestamp = 0;
 
 	function isThinkingOnly(message: ChatMessage) {
-		return (
-			message.role === "assistant" &&
-			Boolean(message.thinking?.trim()) &&
-			!stripThinkingTags(stripAnsi(message.text)).trim()
-		);
+		return message.role === "assistant" && Boolean(message.thinking?.trim()) && !stripThinkingTags(stripAnsi(message.text)).trim();
 	}
 
 	function flushThinking() {
@@ -375,9 +325,7 @@ export function groupToolMessages(
 
 		// 不再合并连续 assistant 消息：issue #130 要求多段回答原位平铺，
 		// 合并会把后段的 thinking 串接到前段消息上，导致思考被上移到两段文本之前。
-		const runStableId = currentRun[0]
-			? (currentRun[0].kind === "message" ? currentRun[0].message.id : currentRun[0].id)
-			: "";
+		const runStableId = currentRun[0] ? (currentRun[0].kind === "message" ? currentRun[0].message.id : currentRun[0].id) : "";
 		// 汇总本轮 ask_question 的用户等待时长：等待段不计入「回复耗时」。
 		// ask_question 工具结束时主进程已把等待从 durationMs 中扣除（见 AgentManager
 		// settleAskWait / upsertToolMessage），因此每笔等待量可反推：
@@ -537,15 +485,11 @@ export function groupToolMessages(
 			// 仅在「回答 ask_question」场景下暂存合并：上一条 result 是 system 消息。
 			// 普通新提问（上一轮未完成回答就发下一条）必须 flush 成独立 agent-run，
 			// 否则上一轮的工具/思考会混进下一轮回答块。
-			const hasToolsWithoutAssistant =
-				currentRun.length > 0 &&
-				currentRun.every((i) => i.kind !== "message" || i.message.role !== "assistant");
+			const hasToolsWithoutAssistant = currentRun.length > 0 && currentRun.every((i) => i.kind !== "message" || i.message.role !== "assistant");
 			const lastResult = result[result.length - 1];
 			// error 诊断卡也可能插在 ask 卡片之后（非 busy 路径），
 			// 用户回复时同样视为回答 ask，避免工具/思考串轮。
-			const isAnsweringAskQuestion =
-				lastResult?.kind === "message" &&
-				(lastResult.message.role === "system" || lastResult.message.role === "error");
+			const isAnsweringAskQuestion = lastResult?.kind === "message" && (lastResult.message.role === "system" || lastResult.message.role === "error");
 			if (hasToolsWithoutAssistant && isAnsweringAskQuestion) {
 				flushTools();
 				flushThinking();
@@ -582,10 +526,7 @@ export function groupToolMessages(
  * 规则：按 run.id 配对，内容相同（sameAgentRunForRender）则取旧引用；
  * 新增/删除/内容变化的 run 用新对象。列表结构（顺序、条目数）以 next 为准。
  */
-export function reconcileRuns(
-	previous: RenderMessage[] | undefined,
-	next: RenderMessage[],
-): RenderMessage[] {
+export function reconcileRuns(previous: RenderMessage[] | undefined, next: RenderMessage[]): RenderMessage[] {
 	if (!previous) return next;
 	// 只对 agent-run 做引用复用；message/tool-group/thinking-group 顶层条目按需更新
 	const prevRuns = new Map<string, AgentRunItem>();
@@ -665,11 +606,7 @@ function isSessionTriggerQuery(query: string, validSessionRefs: Set<string>): bo
 	return false;
 }
 
-export function detectTrigger(
-	text: string,
-	cursor: number,
-	validSessionRefs?: Set<string>,
-): ComposerTrigger | null {
+export function detectTrigger(text: string, cursor: number, validSessionRefs?: Set<string>): ComposerTrigger | null {
 	if (cursor < 0 || cursor > text.length) cursor = text.length;
 	const before = text.slice(0, cursor);
 	const atIdx = before.lastIndexOf("@");
@@ -711,13 +648,7 @@ export function detectTrigger(
 	return { start, char, query: segment };
 }
 
-export function applySuggestion(
-	current: string,
-	cursor: number,
-	value: string,
-	validSessionRefs?: Set<string>,
-	options?: { noTrailingSpace?: boolean },
-): ComposerSuggestionResult {
+export function applySuggestion(current: string, cursor: number, value: string, validSessionRefs?: Set<string>, options?: { noTrailingSpace?: boolean }): ComposerSuggestionResult {
 	const trigger = detectTrigger(current, cursor, validSessionRefs);
 	// 目录引用（@dir/）不带尾随空格：插入后用户继续输入路径段时，
 	// 建议框会随每次按键重新评估打开，形成连续向下钻取；
@@ -739,11 +670,7 @@ export function applySuggestion(
  * 若删掉从触发符到光标的整段，会把正文一起清掉（Esc 全没了）。
  * 仅当「触发后还没有任何有效查询」时（刚输入 @ / &）才去掉触发符本身，避免残留孤立符号。
  */
-export function clearSuggestionTrigger(
-	current: string,
-	cursor: number,
-	validSessionRefs?: Set<string>,
-): ComposerSuggestionResult {
+export function clearSuggestionTrigger(current: string, cursor: number, validSessionRefs?: Set<string>): ComposerSuggestionResult {
 	const trigger = detectTrigger(current, cursor, validSessionRefs);
 	if (!trigger) return { text: current, cursor };
 	// 已有查询内容：保留全文，只表示关闭菜单
@@ -774,26 +701,14 @@ export type SuggestionItem = {
 const PINNED_COMMAND_NAMES = new Set<string>();
 // 桌面端已有独立 UI 的 pi 内置命令不进 `/` 菜单，避免点进去却落到 CLI 语义。
 // `/new` 例外：发送时由桌面拦截，走新建 Agent 会话（与侧栏 + 同源），不再藏起来。
-const HIDDEN_DESKTOP_BUILTIN_COMMAND_NAMES = new Set([
-	"model",
-	"resume",
-	"fork",
-	"name",
-	"logout",
-	"goal",
-	"tree",
-	"reload",
-]);
+const HIDDEN_DESKTOP_BUILTIN_COMMAND_NAMES = new Set(["model", "resume", "fork", "name", "logout", "goal", "tree", "reload"]);
 
 function isBuiltinDesktopCommand(command: PiCommand) {
 	return command.source == null || command.source === "builtin";
 }
 
 function isVisibleDesktopCommand(command: PiCommand) {
-	return !(
-		isBuiltinDesktopCommand(command) &&
-		HIDDEN_DESKTOP_BUILTIN_COMMAND_NAMES.has(command.name.toLowerCase())
-	);
+	return !(isBuiltinDesktopCommand(command) && HIDDEN_DESKTOP_BUILTIN_COMMAND_NAMES.has(command.name.toLowerCase()));
 }
 
 function getBuiltinCommands(): PiCommand[] {
@@ -833,9 +748,7 @@ export const DSH_COMMAND_SUGGESTIONS: Array<{ name: string; descriptionKey: Tran
 export function mergeCommands(commands: PiCommand[]) {
 	const visibleCommands = commands.filter(isVisibleDesktopCommand);
 	const names = new Set(visibleCommands.map((command) => command.name));
-	const extras = getBuiltinCommands().filter(
-		(command) => !names.has(command.name) && isVisibleDesktopCommand(command),
-	);
+	const extras = getBuiltinCommands().filter((command) => !names.has(command.name) && isVisibleDesktopCommand(command));
 	return [...visibleCommands, ...extras];
 }
 
@@ -946,18 +859,10 @@ function buildFileTreeItems(entries: FileTreeNode[]): SuggestionItem[] {
 	return result;
 }
 
-export function buildSuggestionItems(
-	prompt: string,
-	cursor: number,
-	commands: PiCommand[],
-	files: FileTreeNode[],
-	sessions?: { id: string; filePath: string; projectPath?: string; name?: string; preview: string; updatedAt: number }[],
-): SuggestionItem[] {
+export function buildSuggestionItems(prompt: string, cursor: number, commands: PiCommand[], files: FileTreeNode[], sessions?: { id: string; filePath: string; projectPath?: string; name?: string; preview: string; updatedAt: number }[]): SuggestionItem[] {
 	const allCommands = mergeCommands(commands);
 	// 与 onChange 同一套白名单：& 只有仍是已知会话名前缀时才开建议
-	const sessionRefs = sessions
-		? new Set(sessions.map((session) => session.name ?? session.filePath))
-		: undefined;
+	const sessionRefs = sessions ? new Set(sessions.map((session) => session.name ?? session.filePath)) : undefined;
 	const trigger = detectTrigger(prompt, cursor, sessionRefs);
 	if (!trigger) return [];
 	const keyword = trigger.query.toLowerCase();
@@ -987,10 +892,7 @@ export function buildSuggestionItems(
 		return files
 			.map((file) => ({
 				file,
-				score:
-					fuzzyScore(file.relativePath, keyword) +
-					fuzzyScore(file.name, keyword) * 2 +
-					(file.type === "directory" ? 4 : 0),
+				score: fuzzyScore(file.relativePath, keyword) + fuzzyScore(file.name, keyword) * 2 + (file.type === "directory" ? 4 : 0),
 			}))
 			.filter((item) => item.score > 0)
 			.sort((a, b) => b.score - a.score)
@@ -1032,7 +934,11 @@ export function parseToolArgs(value: unknown): Record<string, unknown> | undefin
 	try {
 		let parsed = JSON.parse(value) as unknown;
 		if (typeof parsed === "string" && parsed.trim()) {
-			try { parsed = JSON.parse(parsed); } catch { return undefined; }
+			try {
+				parsed = JSON.parse(parsed);
+			} catch {
+				return undefined;
+			}
 		}
 		return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : undefined;
 	} catch {
@@ -1040,24 +946,38 @@ export function parseToolArgs(value: unknown): Record<string, unknown> | undefin
 	}
 }
 
-export function getToolFilePath(args: any): string | undefined {
+export function getToolFilePath(args: unknown): string | undefined {
 	if (!args) return undefined;
 	if (typeof args === "string" && args.trim()) {
-		try { args = JSON.parse(args); } catch { return undefined; }
+		try {
+			args = JSON.parse(args);
+		} catch {
+			return undefined;
+		}
 	}
 	if (typeof args !== "object") return undefined;
 	const a = args as Record<string, unknown>;
-	return typeof a.filePath === "string" && a.filePath ? a.filePath
-		: typeof a.file_path === "string" && a.file_path ? a.file_path
-		: typeof a.path === "string" && a.path ? a.path
-		: typeof a.targetPath === "string" && a.targetPath ? a.targetPath
-		: typeof a.target_path === "string" && a.target_path ? a.target_path
-		: typeof a.outputPath === "string" && a.outputPath ? a.outputPath
-		: typeof a.output_path === "string" && a.output_path ? a.output_path
-		: typeof a.file === "string" && a.file ? a.file
-		: typeof a.fileName === "string" && a.fileName ? a.fileName
-		: typeof a.filename === "string" && a.filename ? a.filename
-		: undefined;
+	return typeof a.filePath === "string" && a.filePath
+		? a.filePath
+		: typeof a.file_path === "string" && a.file_path
+			? a.file_path
+			: typeof a.path === "string" && a.path
+				? a.path
+				: typeof a.targetPath === "string" && a.targetPath
+					? a.targetPath
+					: typeof a.target_path === "string" && a.target_path
+						? a.target_path
+						: typeof a.outputPath === "string" && a.outputPath
+							? a.outputPath
+							: typeof a.output_path === "string" && a.output_path
+								? a.output_path
+								: typeof a.file === "string" && a.file
+									? a.file
+									: typeof a.fileName === "string" && a.fileName
+										? a.fileName
+										: typeof a.filename === "string" && a.filename
+											? a.filename
+											: undefined;
 }
 
 export function countTextLines(value: string): number {
@@ -1067,17 +987,19 @@ export function countTextLines(value: string): number {
 export function getToolEditDiff(args: Record<string, unknown>): { oldText: string; newText: string } | undefined {
 	const edits = Array.isArray(args.edits) ? args.edits : undefined;
 	if (edits) {
-		const parts = edits.map((edit: unknown) => {
-			if (!edit || typeof edit !== "object") return null;
-			const e = edit as Record<string, unknown>;
-			const oldText = String(e.oldText ?? e.old_text ?? e.old_string ?? "");
-			const newText = String(e.newText ?? e.new_text ?? e.new_string ?? "");
-			return { oldText, newText };
-		}).filter((p): p is { oldText: string; newText: string } => p !== null);
+		const parts = edits
+			.map((edit: unknown) => {
+				if (!edit || typeof edit !== "object") return null;
+				const e = edit as Record<string, unknown>;
+				const oldText = String(e.oldText ?? e.old_text ?? e.old_string ?? "");
+				const newText = String(e.newText ?? e.new_text ?? e.new_string ?? "");
+				return { oldText, newText };
+			})
+			.filter((p): p is { oldText: string; newText: string } => p !== null);
 		if (parts.length === 0) return undefined;
 		return {
-			oldText: parts.map(p => p.oldText).join("\n"),
-			newText: parts.map(p => p.newText).join("\n"),
+			oldText: parts.map((p) => p.oldText).join("\n"),
+			newText: parts.map((p) => p.newText).join("\n"),
 		};
 	}
 	const oldText = typeof args.oldText === "string" ? args.oldText : typeof args.old_text === "string" ? args.old_text : typeof args.old_string === "string" ? args.old_string : undefined;
@@ -1089,7 +1011,11 @@ export function getToolEditDiff(args: Record<string, unknown>): { oldText: strin
 export function getToolNewContent(toolName: string, args: any): string | undefined {
 	if (!args) return undefined;
 	if (typeof args === "string" && args.trim()) {
-		try { args = JSON.parse(args); } catch { return undefined; }
+		try {
+			args = JSON.parse(args);
+		} catch {
+			return undefined;
+		}
 	}
 	if (!toolName) return undefined;
 	if (/write|create/i.test(toolName)) {
@@ -1105,7 +1031,11 @@ export function getToolNewContent(toolName: string, args: any): string | undefin
 
 export function getToolChangedLineCount(toolName: string, args: any): number {
 	if (typeof args === "string" && args.trim()) {
-		try { args = JSON.parse(args); } catch { return 0; }
+		try {
+			args = JSON.parse(args);
+		} catch {
+			return 0;
+		}
 	}
 	if (!toolName) return 0;
 	if (/edit|patch/i.test(toolName)) {
@@ -1124,4 +1054,3 @@ export function getToolChangedLineCount(toolName: string, args: any): number {
 	}
 	return 0;
 }
-

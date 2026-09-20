@@ -19,17 +19,17 @@ const tabsBar = readFileSync("src/renderer/src/components/session/SessionTabsBar
 const sessionHeader = readFileSync("src/renderer/src/components/session/SessionHeader.tsx", "utf8");
 
 function extractFunction(source, name, nextName) {
-  const start = source.indexOf(`function ${name}(`);
-  const end = source.indexOf(`function ${nextName}(`);
-  assert.ok(start >= 0, `${name} should exist`);
-  assert.ok(end > start, `${nextName} should follow ${name}`);
-  return source.slice(start, end);
+	const start = source.indexOf(`function ${name}(`);
+	const end = source.indexOf(`function ${nextName}(`);
+	assert.ok(start >= 0, `${name} should exist`);
+	assert.ok(end > start, `${nextName} should follow ${name}`);
+	return source.slice(start, end);
 }
 
 function extractFunctionToEnd(source, name) {
-  const start = source.indexOf(`function ${name}(`);
-  assert.ok(start >= 0, `${name} should exist`);
-  return source.slice(start);
+	const start = source.indexOf(`function ${name}(`);
+	assert.ok(start >= 0, `${name} should exist`);
+	return source.slice(start);
 }
 
 const sessionTabBody = extractFunction(tabsBar, "SessionTab", "NewSessionMenu");
@@ -38,37 +38,37 @@ const editorTabBody = extractFunction(tabsBar, "EditorWorkbenchTab", "GroupCapsu
 function test_sessionTab() {}
 
 test("SessionTab 用富 Tooltip 替代原生 title，第二行显示工作区", () => {
-  const body = sessionTabBody;
-  // 原生 title 已移除（防止 Tooltip 与原生气泡双弹）。
-  assert.doesNotMatch(body, /\btitle=\{title\}/);
-  // 富提示：工作区来自 displayProjectDirectoryName（与面包屑/侧栏同一展示源）。
-  assert.match(body, /displayProjectDirectoryName\(tabProject\)/);
-  assert.match(body, /projectByIdAtomFamily\(record\?\.projectId \?\? ""\)/);
-  // Tooltip 两行结构：标题行 + 工作区行（含完整路径兜底）。
-  assert.match(body, /<Tooltip delayDuration=\{500\}>/);
-  assert.match(body, /<TooltipContent side="bottom" align="start"/);
-  assert.match(body, /\{workspaceName \? \(/);
-  assert.match(body, /tabProject\?\.path/);
-  // 读屏契约：aria-label 保留 标题 — 工作区。
-  assert.match(body, /aria-label=\{workspaceName \? `\$\{title\} — \$\{workspaceName\}` : title\}/);
+	const body = sessionTabBody;
+	// 原生 title 已移除（防止 Tooltip 与原生气泡双弹）。
+	assert.doesNotMatch(body, /\btitle=\{title\}/);
+	// 富提示：工作区来自 displayProjectDirectoryName（与面包屑/侧栏同一展示源）。
+	assert.match(body, /displayProjectDirectoryName\(tabProject\)/);
+	assert.match(body, /projectByIdAtomFamily\(record\?\.projectId \?\? ""\)/);
+	// Tooltip 两行结构：标题行 + 工作区行（含完整路径兜底）。
+	assert.match(body, /<Tooltip delayDuration=\{500\}>/);
+	assert.match(body, /<TooltipContent side="bottom" align="start"/);
+	assert.match(body, /\{workspaceName \? \(/);
+	assert.match(body, /tabProject\?\.path/);
+	// 读屏契约：aria-label 保留 标题 — 工作区。
+	assert.match(body, /aria-label=\{workspaceName \? `\$\{title\} — \$\{workspaceName\}` : title\}/);
 });
 
 test("EditorWorkbenchTab 用富 Tooltip 显示 标题 + 完整路径", () => {
-  const body = editorTabBody;
-  assert.doesNotMatch(body, /\btitle=\{tab\.title \?\? tab\.label\}/);
-  assert.match(body, /<Tooltip delayDuration=\{500\}>/);
-  // 第二行是文件完整路径（tab.title 由装配层传 filePath），mono 字体区分路径与标题。
-  assert.match(body, /font-mono text-\[11px\][^"]*"\>\{tab\.title\}/);
-  // title 缺省时不渲染 TooltipContent（退化为无提示，与旧行为一致）。
-  assert.match(body, /\{tab\.title \? \(/);
+	const body = editorTabBody;
+	assert.doesNotMatch(body, /\btitle=\{tab\.title \?\? tab\.label\}/);
+	assert.match(body, /<Tooltip delayDuration=\{500\}>/);
+	// 第二行是文件完整路径（tab.title 由装配层传 filePath），mono 字体区分路径与标题。
+	assert.match(body, /font-mono text-\[11px\][^"]*"\>\{tab\.title\}/);
+	// title 缺省时不渲染 TooltipContent（退化为无提示，与旧行为一致）。
+	assert.match(body, /\{tab\.title \? \(/);
 });
 
 test("面包屑工作区段加胶囊底色，与标题段拉开对比", () => {
-  const breadcrumb = sessionHeader.match(/\{projectName \? \(\s*<span[\s\S]*?\{projectName\}\s*<\/span>\s*\) : null\}/);
-  assert.ok(breadcrumb, "project breadcrumb segment should be discoverable");
-  // bg-muted 胶囊：项目段在明暗主题下都有底色可辨。
-  assert.match(breadcrumb[0], /bg-muted/);
-  assert.match(breadcrumb[0], /rounded/);
-  // 标题段保持无底色（对比来自项目段，不整行加胶囊）。
-  assert.doesNotMatch(sessionHeader, /session-pane-title[^"]*bg-muted/);
+	const breadcrumb = sessionHeader.match(/\{projectName \? \(\s*<span[\s\S]*?\{projectName\}\s*<\/span>\s*\) : null\}/);
+	assert.ok(breadcrumb, "project breadcrumb segment should be discoverable");
+	// bg-muted 胶囊：项目段在明暗主题下都有底色可辨。
+	assert.match(breadcrumb[0], /bg-muted/);
+	assert.match(breadcrumb[0], /rounded/);
+	// 标题段保持无底色（对比来自项目段，不整行加胶囊）。
+	assert.doesNotMatch(sessionHeader, /session-pane-title[^"]*bg-muted/);
 });

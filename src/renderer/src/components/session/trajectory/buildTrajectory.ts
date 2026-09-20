@@ -17,28 +17,14 @@
 
 import type { ChatMessage } from "../../../../../shared/types";
 import type { SessionProcessEvent } from "../../../../../shared/types/trajectory";
-import {
-	toolViewDetail,
-	toolViewInput,
-	toolViewOutput,
-	toolViewTitle,
-	type DshToolViewEnvelope,
-} from "./dshToolView";
+import { toolViewDetail, toolViewInput, toolViewOutput, toolViewTitle, type DshToolViewEnvelope } from "./dshToolView";
 import { compareTrajectoryRecords, seqOfMessage, sortTurnRecords, wallTime } from "./trajectoryOrder";
 
 export { compareTrajectoryRecords };
 
 export type TrajectoryLane = "input" | "model" | "tools" | "process";
 
-export type TrajectoryRecordKind =
-	| "user"
-	| "assistant"
-	| "thinking"
-	| "tool"
-	| "system"
-	| "error"
-	| "process"
-	| "systemPrompt";
+export type TrajectoryRecordKind = "user" | "assistant" | "thinking" | "tool" | "system" | "error" | "process" | "systemPrompt";
 
 export type TrajectoryRecord = {
 	id: string;
@@ -133,11 +119,7 @@ function laneOf(kind: TrajectoryRecordKind): TrajectoryLane {
 }
 
 function isThinkingOnly(message: ChatMessage): boolean {
-	return (
-		message.role === "assistant" &&
-		Boolean(message.thinking?.trim()) &&
-		!message.text.replace(/<thinking>[\s\S]*?<\/thinking>/gi, "").trim()
-	);
+	return message.role === "assistant" && Boolean(message.thinking?.trim()) && !message.text.replace(/<thinking>[\s\S]*?<\/thinking>/gi, "").trim();
 }
 
 function isInFlightTool(message: ChatMessage): boolean {
@@ -168,16 +150,9 @@ function pushRecord(records: TrajectoryRecord[], record: TrajectoryRecord): void
 	records.push(record);
 }
 
-function flushTurn(
-	turns: TrajectoryTurn[],
-	records: TrajectoryRecord[],
-	startedAt: number,
-	id: string,
-): void {
+function flushTurn(turns: TrajectoryTurn[], records: TrajectoryRecord[], startedAt: number, id: string): void {
 	if (records.length === 0) return;
-	const endedCandidates = records
-		.map((record) => record.endedAt)
-		.filter((value): value is number => typeof value === "number");
+	const endedCandidates = records.map((record) => record.endedAt).filter((value): value is number => typeof value === "number");
 	const inFlight = records.some((record) => record.endedAt === undefined);
 	const endedAt = inFlight ? undefined : endedCandidates.length > 0 ? Math.max(...endedCandidates) : startedAt;
 	turns.push({
@@ -214,11 +189,7 @@ function inferWorkDurations(turns: TrajectoryTurn[]): void {
 			if (record.kind !== "thinking" && record.kind !== "assistant") continue;
 
 			const next = turn.records[index + 1];
-			const sameStampAsAssistant =
-				record.kind === "thinking" &&
-				next?.kind === "assistant" &&
-				next.startedAt === record.startedAt &&
-				(record.endedAt === undefined || record.endedAt === record.startedAt);
+			const sameStampAsAssistant = record.kind === "thinking" && next?.kind === "assistant" && next.startedAt === record.startedAt && (record.endedAt === undefined || record.endedAt === record.startedAt);
 			if (sameStampAsAssistant) continue;
 
 			const prev = turn.records
@@ -241,9 +212,7 @@ function inferWorkDurations(turns: TrajectoryTurn[]): void {
 			record.durationMs = end - start;
 		}
 
-		const endedCandidates = turn.records
-			.map((record) => record.endedAt)
-			.filter((value): value is number => typeof value === "number");
+		const endedCandidates = turn.records.map((record) => record.endedAt).filter((value): value is number => typeof value === "number");
 		turn.inFlight = turn.records.some((record) => record.endedAt === undefined);
 		if (!turn.inFlight && endedCandidates.length > 0) {
 			turn.endedAt = Math.max(...endedCandidates);
@@ -328,11 +297,7 @@ function insertProcessEvents(turns: TrajectoryTurn[], events: SessionProcessEven
 /**
  * 从 ChatMessage[] 构建轨迹。now 仅用于空会话兜底 domain，不写入 in-flight duration。
  */
-export function buildTrajectory(
-	messages: ChatMessage[],
-	now = Date.now(),
-	extras: TrajectoryBuildExtras = {},
-): TrajectoryModel {
+export function buildTrajectory(messages: ChatMessage[], now = Date.now(), extras: TrajectoryBuildExtras = {}): TrajectoryModel {
 	const turns: TrajectoryTurn[] = [];
 	let current: TrajectoryRecord[] = [];
 	let turnStartedAt = 0;
@@ -388,31 +353,21 @@ export function buildTrajectory(
 			const durationMs = asNumber(message.meta?.durationMs);
 			const inFlight = isInFlightTool(message);
 			const name = toolNameOf(message);
-			const endedAt = inFlight
-				? undefined
-				: durationMs !== undefined
-					? startedAt + durationMs
-					: wallTime(message.timestamp);
+			const endedAt = inFlight ? undefined : durationMs !== undefined ? startedAt + durationMs : wallTime(message.timestamp);
 			// DSH 工具视图（host ToolEventView，dsh-web 同数据源）：call/result 视图
 			// 提供命令/输出/退出码/diff 等更完整的信息，标题用卡片头（如 "Write foo.txt"）。
-			const meta = message.meta as
-				| { view?: DshToolViewEnvelope; resultView?: DshToolViewEnvelope; args?: unknown; [key: string]: unknown }
-				| undefined;
+			const meta = message.meta as { view?: DshToolViewEnvelope; resultView?: DshToolViewEnvelope; args?: unknown; [key: string]: unknown } | undefined;
 			const viewTitle = toolViewTitle(meta);
 			const viewDetail = toolViewDetail(meta);
 			const inputDetail = toolViewInput(meta);
-			const outputDetail = toolViewOutput(meta)
-				?? asString(message.meta?.detailText)
-				?? asString(message.meta?.result);
+			const outputDetail = toolViewOutput(meta) ?? asString(message.meta?.detailText) ?? asString(message.meta?.result);
 			pushRecord(current, {
 				id: message.id,
 				kind: "tool",
 				lane: laneOf("tool"),
 				turnIndex: turns.length,
 				title: viewTitle ?? name,
-				summary: summarize(
-					viewTitle ?? asString(message.meta?.detailText) ?? message.text ?? name,
-				),
+				summary: summarize(viewTitle ?? asString(message.meta?.detailText) ?? message.text ?? name),
 				startedAt,
 				endedAt,
 				durationMs: inFlight ? undefined : durationMs,
@@ -432,9 +387,7 @@ export function buildTrajectory(
 			if (message.thinking?.trim()) {
 				const startedAt = wallTime(message.thinkingStartedAt ?? message.timestamp);
 				const hasSpan = message.thinkingStartedAt !== undefined && message.thinkingEndedAt !== undefined;
-				const endedAt = isThinkingOnly(message) && isInFlightAssistant(message)
-					? undefined
-					: wallTime(message.thinkingEndedAt ?? message.timestamp);
+				const endedAt = isThinkingOnly(message) && isInFlightAssistant(message) ? undefined : wallTime(message.thinkingEndedAt ?? message.timestamp);
 				pushRecord(current, {
 					id: `${message.id}:thinking`,
 					kind: "thinking",
@@ -489,12 +442,8 @@ export function buildTrajectory(
 			seq,
 			status: asString(message.meta?.status),
 			...(retry !== undefined ? { retry } : {}),
-			...(asNumber(message.meta?.maxAttempts) !== undefined
-				? { maxRetries: asNumber(message.meta?.maxAttempts) }
-				: {}),
-			...(asNumber(message.meta?.delayMs) !== undefined
-				? { retryDelayMs: asNumber(message.meta?.delayMs) }
-				: {}),
+			...(asNumber(message.meta?.maxAttempts) !== undefined ? { maxRetries: asNumber(message.meta?.maxAttempts) } : {}),
+			...(asNumber(message.meta?.delayMs) !== undefined ? { retryDelayMs: asNumber(message.meta?.delayMs) } : {}),
 		});
 	}
 
@@ -527,20 +476,18 @@ export function buildTrajectory(
 	for (const turn of turns) sortTurnRecords(turn);
 	inferWorkDurations(turns);
 
-	const records = turns.flatMap((turn) =>
-		turn.records.map((record) => ({ ...record, turnIndex: turn.index })),
-	);
-	const times = records.flatMap((record) => {
-		const values = [record.startedAt];
-		if (record.endedAt !== undefined) values.push(record.endedAt);
-		return values;
-	}).filter((value) => value > 0);
+	const records = turns.flatMap((turn) => turn.records.map((record) => ({ ...record, turnIndex: turn.index })));
+	const times = records
+		.flatMap((record) => {
+			const values = [record.startedAt];
+			if (record.endedAt !== undefined) values.push(record.endedAt);
+			return values;
+		})
+		.filter((value) => value > 0);
 	const domainStart = times.length > 0 ? Math.min(...times) : now;
 	const closedEnd = times.length > 0 ? Math.max(...times) : now;
 	// domain 右端：有 in-flight 时伸到 now，让时间线开区间可见；账本本身仍不写 duration。
-	const domainEnd = records.some((record) => record.endedAt === undefined)
-		? Math.max(closedEnd, now)
-		: closedEnd;
+	const domainEnd = records.some((record) => record.endedAt === undefined) ? Math.max(closedEnd, now) : closedEnd;
 
 	return { turns, records, domainStart, domainEnd };
 }
@@ -548,10 +495,7 @@ export function buildTrajectory(
 export type TrajectoryTimeRange = { start: number; end: number };
 
 /** 区间过滤：与 span 有重叠即保留；无区间则全量。 */
-export function filterRecordsByRange(
-	records: TrajectoryRecord[],
-	range: TrajectoryTimeRange | undefined,
-): TrajectoryRecord[] {
+export function filterRecordsByRange(records: TrajectoryRecord[], range: TrajectoryTimeRange | undefined): TrajectoryRecord[] {
 	if (!range) return records;
 	const lo = Math.min(range.start, range.end);
 	const hi = Math.max(range.start, range.end);

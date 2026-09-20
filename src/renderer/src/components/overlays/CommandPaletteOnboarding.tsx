@@ -5,14 +5,7 @@ import { t } from "../../i18n";
 import { formatAccelerator } from "../../../../shared/shortcuts";
 import { useShortcutBindings } from "../../hooks/useShortcutBindings";
 import { Button } from "../ui-shadcn/button";
-import {
-	Dialog,
-	DialogContent,
-	DialogDescription,
-	DialogFooter,
-	DialogHeader,
-	DialogTitle,
-} from "../ui-shadcn/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../ui-shadcn/dialog";
 
 /**
  * localStorage 键：看过的引导不再弹。
@@ -87,9 +80,7 @@ export function CommandPaletteOnboarding(props: {
 	const [open, setOpen] = useState(false);
 	// 键位跟随用户自定义（与侧栏 kbd 提示同一份解析实现），不硬编码 Ctrl+P
 	const { bindings, platform } = useShortcutBindings();
-	const shortcut = bindings
-		? formatAccelerator(bindings.openCommandPalette, platform)
-		: "Ctrl+P";
+	const shortcut = bindings ? formatAccelerator(bindings.openCommandPalette, platform) : "Ctrl+P";
 
 	useEffect(() => {
 		if (!props.enabled || hasSeenOnboarding()) return;
@@ -118,43 +109,23 @@ export function CommandPaletteOnboarding(props: {
 			<DialogContent className="sm:max-w-md">
 				<DialogHeader>
 					<DialogTitle>{t("command.onboarding.title")}</DialogTitle>
-					<DialogDescription>
-						{t("command.onboarding.desc", { shortcut })}
-					</DialogDescription>
+					<DialogDescription>{t("command.onboarding.desc", { shortcut })}</DialogDescription>
 				</DialogHeader>
 
 				{/* 键帽：整条快捷键一个大 kbd，比拆成多个小键帽更好认（macOS 下是 ⌘P 单字符） */}
 				<div className="flex justify-center py-1">
-					<kbd className="rounded-md border border-border bg-bg-muted/40 px-3 py-1.5 font-mono text-body font-medium text-foreground">
-						{shortcut}
-					</kbd>
+					<kbd className="rounded-md border border-border bg-bg-muted/40 px-3 py-1.5 font-mono text-body font-medium text-foreground">{shortcut}</kbd>
 				</div>
 
 				<div className="space-y-2.5">
-					<p className="text-caption font-semibold tracking-[0.06em] text-muted-foreground">
-						{t("command.onboarding.whatCanSearch")}
-					</p>
-					<ExampleRow
-						icon={SlidersHorizontal}
-						label={t("command.onboarding.exampleSettings")}
-						description={t("command.onboarding.exampleSettingsDesc")}
-					/>
-					<ExampleRow
-						icon={Zap}
-						label={t("command.onboarding.exampleActions")}
-						description={t("command.onboarding.exampleActionsDesc")}
-					/>
-					<ExampleRow
-						icon={Settings2}
-						label={t("command.onboarding.exampleConfig")}
-						description={t("command.onboarding.exampleConfigDesc")}
-					/>
+					<p className="text-caption font-semibold tracking-[0.06em] text-muted-foreground">{t("command.onboarding.whatCanSearch")}</p>
+					<ExampleRow icon={SlidersHorizontal} label={t("command.onboarding.exampleSettings")} description={t("command.onboarding.exampleSettingsDesc")} />
+					<ExampleRow icon={Zap} label={t("command.onboarding.exampleActions")} description={t("command.onboarding.exampleActionsDesc")} />
+					<ExampleRow icon={Settings2} label={t("command.onboarding.exampleConfig")} description={t("command.onboarding.exampleConfigDesc")} />
 				</div>
 
 				<DialogFooter className="items-center gap-2 sm:justify-between">
-					<span className="text-caption text-muted-foreground">
-						{t("command.onboarding.hint")}
-					</span>
+					<span className="text-caption text-muted-foreground">{t("command.onboarding.hint")}</span>
 					<div className="flex shrink-0 items-center gap-2">
 						<Button variant="ghost" onClick={() => close(false)}>
 							{t("command.onboarding.later")}

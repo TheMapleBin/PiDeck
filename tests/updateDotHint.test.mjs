@@ -20,50 +20,42 @@ function loadUpdateDotHint() {
 		fileName: filePath,
 	}).outputText;
 	const module = { exports: {} };
-	vm.runInNewContext(output, { module, exports: module.exports, require: () => { throw new Error("unexpected require"); } }, { filename: filePath });
+	vm.runInNewContext(
+		output,
+		{
+			module,
+			exports: module.exports,
+			require: () => {
+				throw new Error("unexpected require");
+			},
+		},
+		{ filename: filePath },
+	);
 	return module.exports;
 }
 
 const { shouldShowUpdateDotHint } = loadUpdateDotHint();
 
 test("shows on the rising edge when the hint has never been seen", () => {
-	assert.equal(
-		shouldShowUpdateDotHint({ hasPendingUpdate: true, prevHasPendingUpdate: false, hintSeen: false }),
-		true,
-	);
+	assert.equal(shouldShowUpdateDotHint({ hasPendingUpdate: true, prevHasPendingUpdate: false, hintSeen: false }), true);
 });
 
 test("does not show when the dot was already lit in the previous frame", () => {
 	// 持续亮着（用户已在上一次变化时被告知）不重复弹。
-	assert.equal(
-		shouldShowUpdateDotHint({ hasPendingUpdate: true, prevHasPendingUpdate: true, hintSeen: false }),
-		false,
-	);
+	assert.equal(shouldShowUpdateDotHint({ hasPendingUpdate: true, prevHasPendingUpdate: true, hintSeen: false }), false);
 });
 
 test("does not show when there is no pending update", () => {
-	assert.equal(
-		shouldShowUpdateDotHint({ hasPendingUpdate: false, prevHasPendingUpdate: false, hintSeen: false }),
-		false,
-	);
+	assert.equal(shouldShowUpdateDotHint({ hasPendingUpdate: false, prevHasPendingUpdate: false, hintSeen: false }), false);
 	// 更新消失（false 沿）也不是展示时机。
-	assert.equal(
-		shouldShowUpdateDotHint({ hasPendingUpdate: false, prevHasPendingUpdate: true, hintSeen: false }),
-		false,
-	);
+	assert.equal(shouldShowUpdateDotHint({ hasPendingUpdate: false, prevHasPendingUpdate: true, hintSeen: false }), false);
 });
 
 test("does not show again once the explanation has been seen", () => {
-	assert.equal(
-		shouldShowUpdateDotHint({ hasPendingUpdate: true, prevHasPendingUpdate: false, hintSeen: true }),
-		false,
-	);
+	assert.equal(shouldShowUpdateDotHint({ hasPendingUpdate: true, prevHasPendingUpdate: false, hintSeen: true }), false);
 });
 
 test("a new pending update after a seen explanation stays silent", () => {
 	// 已看过一次解释（持久化标记），后续任何新版本出现都不再打扰。
-	assert.equal(
-		shouldShowUpdateDotHint({ hasPendingUpdate: true, prevHasPendingUpdate: false, hintSeen: true }),
-		false,
-	);
+	assert.equal(shouldShowUpdateDotHint({ hasPendingUpdate: true, prevHasPendingUpdate: false, hintSeen: true }), false);
 });

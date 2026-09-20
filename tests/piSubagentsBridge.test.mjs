@@ -17,10 +17,7 @@ const __dirname = dirname(__filename);
 const ts = require("typescript");
 
 function loadBridgeModule() {
-	const source = readFileSync(
-		join(__dirname, "..", "resources", "extensions", "pi-deck-subagents.ts"),
-		"utf8",
-	);
+	const source = readFileSync(join(__dirname, "..", "resources", "extensions", "pi-deck-subagents.ts"), "utf8");
 	const { outputText } = ts.transpileModule(source, {
 		compilerOptions: {
 			module: ts.ModuleKind.CommonJS,
@@ -35,11 +32,7 @@ function loadBridgeModule() {
 
 test("reduceSnapshot: created adds queued agent", () => {
 	const { reduceSnapshot } = loadBridgeModule();
-	const { state, changed } = reduceSnapshot(
-		new Map(),
-		"subagents:created",
-		{ id: "agent-1", type: "Explore", description: "Find auth files" },
-	);
+	const { state, changed } = reduceSnapshot(new Map(), "subagents:created", { id: "agent-1", type: "Explore", description: "Find auth files" });
 	assert.equal(changed, true);
 	assert.equal(state.size, 1);
 	const agent = state.get("agent-1");
@@ -66,7 +59,11 @@ test("reduceSnapshot: completed transitions running → completed + carries tool
 	r = reduceSnapshot(state, "subagents:started", { id: "a1" });
 	state = r.state;
 	r = reduceSnapshot(state, "subagents:completed", {
-		id: "a1", type: "c", description: "d", toolUses: 5, tokens: 300,
+		id: "a1",
+		type: "c",
+		description: "d",
+		toolUses: 5,
+		tokens: 300,
 	});
 	assert.equal(r.changed, true);
 	const agent = r.state.get("a1");
@@ -180,11 +177,7 @@ test("reduceSnapshot: completed event honors payload status steered", () => {
 test("reduceSnapshot: terminal event upserts when created/started were missed", () => {
 	const { reduceSnapshot } = loadBridgeModule();
 	// 桥接晚加载：created/started 事件已错过，只有终态事件携带完整字段
-	const { state, changed } = reduceSnapshot(
-		new Map(),
-		"subagents:completed",
-		{ id: "ghost", type: "Explore", description: "late", status: "completed", toolUses: 4, tokens: 200 },
-	);
+	const { state, changed } = reduceSnapshot(new Map(), "subagents:completed", { id: "ghost", type: "Explore", description: "late", status: "completed", toolUses: 4, tokens: 200 });
 	assert.equal(changed, true);
 	const agent = state.get("ghost");
 	assert.equal(agent?.status, "completed");
@@ -199,7 +192,11 @@ test("reduceSnapshot: completed derives completedAt from durationMs payload", ()
 	state = r.state;
 	const startedAt = state.get("a1")?.startedAt;
 	r = reduceSnapshot(state, "subagents:completed", {
-		id: "a1", type: "c", description: "d", status: "completed", durationMs: 42000,
+		id: "a1",
+		type: "c",
+		description: "d",
+		status: "completed",
+		durationMs: 42000,
 	});
 	const agent = r.state.get("a1");
 	assert.equal(agent?.status, "completed");
@@ -224,7 +221,10 @@ test("reduceSnapshot: terminal upsert without durationMs sets arrival-time compl
 	const { reduceSnapshot } = loadBridgeModule();
 	const before = Date.now();
 	const { state } = reduceSnapshot(new Map(), "subagents:completed", {
-		id: "ghost", type: "Explore", description: "late", status: "completed",
+		id: "ghost",
+		type: "Explore",
+		description: "late",
+		status: "completed",
 	});
 	const after = Date.now();
 	const agent = state.get("ghost");
@@ -267,9 +267,17 @@ function createMockPi() {
 	const appendedEntries = [];
 	return {
 		pi: {
-			events: { on: (name, cb) => { handlers.set(name, cb); } },
-			on: (name, cb) => { lifecycle.set(name, cb); },
-			appendEntry: (type, data) => { appendedEntries.push({ type, data }); },
+			events: {
+				on: (name, cb) => {
+					handlers.set(name, cb);
+				},
+			},
+			on: (name, cb) => {
+				lifecycle.set(name, cb);
+			},
+			appendEntry: (type, data) => {
+				appendedEntries.push({ type, data });
+			},
 		},
 		handlers,
 		lifecycle,
@@ -309,9 +317,15 @@ test("bridge extension: appendEntry throw does not break snapshot flow", () => {
 	const { default: bridge } = loadBridgeModule();
 	const handlers = new Map();
 	const pi = {
-		events: { on: (name, cb) => { handlers.set(name, cb); } },
+		events: {
+			on: (name, cb) => {
+				handlers.set(name, cb);
+			},
+		},
 		on: () => {},
-		appendEntry: () => { throw new Error("session closed"); },
+		appendEntry: () => {
+			throw new Error("session closed");
+		},
 	};
 	bridge(pi);
 
@@ -360,8 +374,7 @@ test("reduceAcpToolEvent: start(acp_delegate) → running 条目（via 标记、
 
 test("reduceAcpToolEvent: end 从结果文本提取 runId（派发 ≠ 终态）", () => {
 	const { reduceAcpToolEvent } = loadBridgeModule();
-	const started = reduceAcpToolEvent(new Map(), new Map(), "tool_execution_start",
-		{ type: "tool_execution_start", toolCallId: ACP_DISPATCH, toolName: "acp_delegate", args: { agent: "worker" } }, 1000);
+	const started = reduceAcpToolEvent(new Map(), new Map(), "tool_execution_start", { type: "tool_execution_start", toolCallId: ACP_DISPATCH, toolName: "acp_delegate", args: { agent: "worker" } }, 1000);
 	const ended = reduceAcpToolEvent(started.state, started.runIds, "tool_execution_end", acpDispatchEndEvent(), 1100);
 	assert.equal(ended.changed, false); // 状态不变，widget 不重推
 	assert.equal(ended.runIds.get(ACP_RUN_ID), ACP_DISPATCH);
@@ -370,11 +383,9 @@ test("reduceAcpToolEvent: end 从结果文本提取 runId（派发 ≠ 终态）
 
 test("reduceAcpToolEvent: 取消按 runId 反查 → stopped", () => {
 	const { reduceAcpToolEvent } = loadBridgeModule();
-	const started = reduceAcpToolEvent(new Map(), new Map(), "tool_execution_start",
-		{ type: "tool_execution_start", toolCallId: ACP_DISPATCH, toolName: "acp_delegate", args: { agent: "worker" } }, 1000);
+	const started = reduceAcpToolEvent(new Map(), new Map(), "tool_execution_start", { type: "tool_execution_start", toolCallId: ACP_DISPATCH, toolName: "acp_delegate", args: { agent: "worker" } }, 1000);
 	const dispatched = reduceAcpToolEvent(started.state, started.runIds, "tool_execution_end", acpDispatchEndEvent(), 1100);
-	const cancelled = reduceAcpToolEvent(dispatched.state, dispatched.runIds, "tool_execution_start",
-		{ type: "tool_execution_start", toolCallId: "acp_delegate_cancel_x", toolName: "acp_delegate_cancel", args: { runId: ACP_RUN_ID } }, 1200);
+	const cancelled = reduceAcpToolEvent(dispatched.state, dispatched.runIds, "tool_execution_start", { type: "tool_execution_start", toolCallId: "acp_delegate_cancel_x", toolName: "acp_delegate_cancel", args: { runId: ACP_RUN_ID } }, 1200);
 	assert.equal(cancelled.changed, true);
 	assert.equal(cancelled.state.get(ACP_DISPATCH).status, "stopped");
 	assert.equal(cancelled.state.get(ACP_DISPATCH).completedAt, 1200);
@@ -382,46 +393,32 @@ test("reduceAcpToolEvent: 取消按 runId 反查 → stopped", () => {
 
 test("reduceAcpToolEvent: 非 acp 工具事件被忽略", () => {
 	const { reduceAcpToolEvent } = loadBridgeModule();
-	const result = reduceAcpToolEvent(new Map(), new Map(), "tool_execution_start",
-		{ type: "tool_execution_start", toolCallId: "bash_1", toolName: "bash", args: { command: "ls" } }, 1000);
+	const result = reduceAcpToolEvent(new Map(), new Map(), "tool_execution_start", { type: "tool_execution_start", toolCallId: "bash_1", toolName: "bash", args: { command: "ls" } }, 1000);
 	assert.equal(result.changed, false);
 	assert.equal(result.state.size, 0);
 });
 
 test("reduceAcpNotification: completed/FAILED 通知迁到终态并携带错误摘录", () => {
 	const { reduceAcpToolEvent, reduceAcpNotification } = loadBridgeModule();
-	const started = reduceAcpToolEvent(new Map(), new Map(), "tool_execution_start",
-		{ type: "tool_execution_start", toolCallId: ACP_DISPATCH, toolName: "acp_delegate", args: { agent: "worker" } }, 1000);
+	const started = reduceAcpToolEvent(new Map(), new Map(), "tool_execution_start", { type: "tool_execution_start", toolCallId: ACP_DISPATCH, toolName: "acp_delegate", args: { agent: "worker" } }, 1000);
 	const dispatched = reduceAcpToolEvent(started.state, started.runIds, "tool_execution_end", acpDispatchEndEvent(), 1100);
 
-	const completed = reduceAcpNotification(
-		dispatched.state, dispatched.runIds,
-		`[acp_delegate completed] **worker** (runId \`${ACP_RUN_ID}\`, exit 0) No delegates are currently running.`,
-		2000,
-	);
+	const completed = reduceAcpNotification(dispatched.state, dispatched.runIds, `[acp_delegate completed] **worker** (runId \`${ACP_RUN_ID}\`, exit 0) No delegates are currently running.`, 2000);
 	assert.equal(completed.changed, true);
 	assert.equal(completed.state.get(ACP_DISPATCH).status, "completed");
 	assert.equal(completed.state.get(ACP_DISPATCH).completedAt, 2000);
 
 	// FAILED 通知：错误摘录从 Output ~~~ 块提取
-	const failed = reduceAcpNotification(
-		dispatched.state, dispatched.runIds,
-		`[acp_delegate FAILED ⚠️] **worker** (runId \`${ACP_RUN_ID}\`, exit ?) failed.\n\nOutput:\n~~~\nspawn error: ENOENT\n~~~`,
-		3000,
-	);
+	const failed = reduceAcpNotification(dispatched.state, dispatched.runIds, `[acp_delegate FAILED ⚠️] **worker** (runId \`${ACP_RUN_ID}\`, exit ?) failed.\n\nOutput:\n~~~\nspawn error: ENOENT\n~~~`, 3000);
 	assert.equal(failed.changed, true);
 	assert.equal(failed.state.get(ACP_DISPATCH).status, "error");
 	assert.ok(failed.state.get(ACP_DISPATCH).error.includes("ENOENT"));
 	// 终态后再收通知不再迁移（幂等）
-	const repeated = reduceAcpNotification(failed.state, dispatched.runIds,
-		`[acp_delegate completed] **worker** (runId \`${ACP_RUN_ID}\`, exit 0)`, 4000);
+	const repeated = reduceAcpNotification(failed.state, dispatched.runIds, `[acp_delegate completed] **worker** (runId \`${ACP_RUN_ID}\`, exit 0)`, 4000);
 	assert.equal(repeated.changed, false);
 
 	// 未知 runId 的通知被忽略
-	const orphan = reduceAcpNotification(
-		dispatched.state, dispatched.runIds,
-		`[acp_delegate completed] **worker** (runId \`del_unknown\`, exit 0)`, 5000,
-	);
+	const orphan = reduceAcpNotification(dispatched.state, dispatched.runIds, `[acp_delegate completed] **worker** (runId \`del_unknown\`, exit 0)`, 5000);
 	assert.equal(orphan.changed, false);
 });
 
@@ -432,7 +429,9 @@ test("bridge extension: acp 委托派发落 start 锚点、终态通知落 subag
 
 	// 派发 start → 快照 + start 锚点
 	lifecycle.get("tool_execution_start")({
-		type: "tool_execution_start", toolCallId: ACP_DISPATCH, toolName: "acp_delegate",
+		type: "tool_execution_start",
+		toolCallId: ACP_DISPATCH,
+		toolName: "acp_delegate",
 		args: { agent: "worker", task: "Generate md", cwd: "/tmp" },
 	});
 	const anchor = appendedEntries.find((e) => e.type === "pi-deck-subagent-start");
@@ -471,8 +470,12 @@ test("bridge extension: 非 user 消息/非 acp 通知不触发落盘", () => {
 function pi4acp(lifecycle, appendedEntries) {
 	return {
 		events: { on: () => {} },
-		on: (name, cb) => { lifecycle.set(name, cb); },
-		appendEntry: (type, data) => { appendedEntries.push({ type, data }); },
+		on: (name, cb) => {
+			lifecycle.set(name, cb);
+		},
+		appendEntry: (type, data) => {
+			appendedEntries.push({ type, data });
+		},
 	};
 }
 
@@ -513,8 +516,12 @@ test("bridge extension: session_shutdown 无在飞条目时不落盘、落盘失
 	const throwingLifecycle = new Map();
 	const throwingPi = {
 		events: { on: () => {} },
-		on: (name, cb) => { throwingLifecycle.set(name, cb); },
-		appendEntry: () => { throw new Error("session closed"); },
+		on: (name, cb) => {
+			throwingLifecycle.set(name, cb);
+		},
+		appendEntry: () => {
+			throw new Error("session closed");
+		},
 	};
 	bridge(throwingPi);
 	// 需要再造一个在飞条目：走 acp 派发路径（无 ctx 也能进快照）

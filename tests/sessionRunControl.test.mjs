@@ -53,16 +53,19 @@ const STATE_MATRIX = [
 	{ state: "closed", hasBinding: true },
 ];
 
-test("every run state exposes at least one usable run-control action", () => {
+test("every run state keeps a way out of the current state", () => {
+	// 产品规则：不为「没进程 / 进程卡住」留死角——但出口不再全在运行控制里：
+	// 卡在 starting（握手未完成）时启动/重启会与 fork 竞争、abort 又没有可中断的回合，
+	// 出口是「关闭 Agent」（杀进程 + 解绑），它由 closeAgent 链路保证、不随策略置灰。
 	for (const input of STATE_MATRIX) {
 		const caps = sessionRunCapabilities(input);
-		const usable = ["start", "stop", "reload"].filter((action) =>
-			canRunSessionAction(caps, action),
-		);
-		assert.ok(
-			usable.length > 0,
-			`state=${input.state} binding=${input.hasBinding} should keep at least one action enabled`,
-		);
+		const usable = ["start", "abort", "reload"].filter((action) => canRunSessionAction(caps, action));
+		if (input.state === "starting") {
+			// 刻意全禁：此时唯一的合理动作是关掉卡住的进程，而不是在策略里假造一个。
+			assert.equal(usable.length, 0, "starting 只保留「关闭 Agent」这一个出口");
+			continue;
+		}
+		assert.ok(usable.length > 0, `state=${input.state} binding=${input.hasBinding} should keep at least one action enabled`);
 	}
 });
 
@@ -77,8 +80,8 @@ test("states without a live process use start as the primary action", () => {
 		const caps = sessionRunCapabilities(input);
 		assert.equal(caps.primaryAction, "start", `state=${input.state}`);
 		assert.equal(caps.canRestart, true, `state=${input.state} should still be startable`);
-		// 终态没有可停的进程：停止必须禁用，避免把已死的绑定再停一次。
-		assert.equal(caps.canStop, false, `state=${input.state} has no process to stop`);
+		// 终态没有在跑的回合：停止回答必须禁用（没有可中断的回合）。
+		assert.equal(caps.canAbort, false, `state=${input.state} has no running turn to abort`);
 		// 无进程时可以磁盘重载。
 		assert.equal(caps.canReload, true, `state=${input.state} should allow reload`);
 	}
@@ -88,7 +91,6 @@ test("live states use restart and require confirmation", () => {
 	for (const state of ["idle", "running"]) {
 		const caps = sessionRunCapabilities({ state, hasBinding: true });
 		assert.equal(caps.primaryAction, "restart", `state=${state}`);
-		assert.equal(caps.canStop, true, `state=${state} should be stoppable`);
 		assert.equal(caps.canRestart, true, `state=${state} should be restartable`);
 		// live 态强刷磁盘会覆盖内存中的流式消息：重载必须禁用。
 		assert.equal(caps.canReload, false, `state=${state} must not allow disk reload`);
@@ -97,15 +99,24 @@ test("live states use restart and require confirmation", () => {
 	}
 });
 
-test("starting blocks start/restart but keeps stop as a manual escape hatch", () => {
+test("abort is only offered while a turn is actually running", () => {
+	// 「停止回答」= 中断当前回合（abort），不是杀进程：只有回合在跑才可点。
+	assert.equal(sessionRunCapabilities({ state: "running", hasBinding: true }).canAbort, true);
+	assert.equal(sessionRunCapabilities({ state: "idle", hasBinding: true }).canAbort, false);
+	assert.equal(sessionRunCapabilities({ state: "error", hasBinding: true }).canAbort, false);
+	assert.equal(sessionRunCapabilities({ state: "unstarted", hasBinding: false }).canAbort, false);
+});
+
+test("starting blocks start/restart and offers no abort: the escape hatch is closing the agent", () => {
 	const caps = sessionRunCapabilities({ state: "starting", hasBinding: true });
 	// 握手期间再点启动/重启会与正在进行的 fork 竞争，必须挡住。
 	assert.equal(caps.canRestart, false);
 	assert.equal(canRunSessionAction(caps, "start"), false);
 	assert.equal(caps.pending, true);
-	// 但进程卡在启动阶段时，用户需要手动中断：停止保留可用。
-	assert.equal(caps.canStop, true);
-	assert.equal(canRunSessionAction(caps, "stop"), true);
+	// RPC 尚未握手：没有可中断的回合，abort 不可用。卡启动的出口是「关闭 Agent」
+	// （杀进程 + 解绑）——它不在本策略内，由 closeAgent 链路保证始终可点。
+	assert.equal(caps.canAbort, false);
+	assert.equal(canRunSessionAction(caps, "abort"), false);
 	// 进程虽未 ready 但确实存在：不允许磁盘强刷。
 	assert.equal(canRunSessionAction(caps, "reload"), false);
 });
@@ -114,12 +125,12 @@ test("busy flag suppresses every action to avoid concurrent rebinds", () => {
 	for (const input of STATE_MATRIX) {
 		const caps = sessionRunCapabilities({ ...input, busy: true });
 		assert.equal(caps.canStart, false, `state=${input.state} busy`);
-		assert.equal(caps.canStop, false, `state=${input.state} busy`);
+		assert.equal(caps.canAbort, false, `state=${input.state} busy`);
 		assert.equal(caps.canReload, false, `state=${input.state} busy`);
 	}
 });
 
-test("in-flight queued prompts block restart but not stop", () => {
+test("in-flight queued prompts block restart but not abort", () => {
 	const caps = sessionRunCapabilities({
 		state: "running",
 		hasBinding: true,
@@ -127,8 +138,8 @@ test("in-flight queued prompts block restart but not stop", () => {
 	});
 	// 队列里还有 sending/unknown 的消息：重启会丢消息，必须挡住。
 	assert.equal(caps.canRestart, false);
-	// 停止仍然可用（用户主动停机是明确的丢弃意图）。
-	assert.equal(caps.canStop, true);
+	// 停止回答（abort）不受影响：中断当前回合正是「就停这一步、别丢排队消息」的意图。
+	assert.equal(caps.canAbort, true);
 });
 
 test("resolveSessionRunState normalizes runtime snapshots", () => {
@@ -151,6 +162,10 @@ test("canRunSessionAction maps start and restart onto the same capability", () =
 	const live = sessionRunCapabilities({ state: "running", hasBinding: true });
 	assert.equal(canRunSessionAction(live, "start"), true);
 	assert.equal(canRunSessionAction(live, "reload"), false);
+	// 动作名与能力一一对应：abort 走 canAbort（历史名 stop 已废弃，避免与“关闭 Agent”混淆）。
+	assert.equal(canRunSessionAction(live, "abort"), true);
+	const idle = sessionRunCapabilities({ state: "idle", hasBinding: true });
+	assert.equal(canRunSessionAction(idle, "abort"), false);
 });
 
 // ── 会话代理设置的生效方式（一步开代理）──
@@ -160,39 +175,23 @@ test("canRunSessionAction maps start and restart onto the same capability", () =
 // DSH 共享 host 永远不按会话重启（会波及所有 DSH 会话）。
 
 test("proxy apply strategy restarts a live pi session so the change takes effect at once", () => {
-	assert.equal(
-		resolveProxyApplyStrategy({ backend: "pi", hasBinding: true, isLive: true }),
-		"restart-now",
-	);
+	assert.equal(resolveProxyApplyStrategy({ backend: "pi", hasBinding: true, isLive: true }), "restart-now");
 	// 后端缺省视为 pi（旧数据兼容），同样享受自动重启。
-	assert.equal(
-		resolveProxyApplyStrategy({ backend: undefined, hasBinding: true, isLive: true }),
-		"restart-now",
-	);
+	assert.equal(resolveProxyApplyStrategy({ backend: undefined, hasBinding: true, isLive: true }), "restart-now");
 });
 
 test("proxy apply strategy waits for next start when there is no live process", () => {
 	// 未启动/已解绑：下次启动进程时自然读到新配置，不需要额外动作。
-	assert.equal(
-		resolveProxyApplyStrategy({ backend: "pi", hasBinding: false, isLive: false }),
-		"next-start",
-	);
+	assert.equal(resolveProxyApplyStrategy({ backend: "pi", hasBinding: false, isLive: false }), "next-start");
 	// 终态（error/closed）持有绑定但进程已死：重启没有意义，等下次启动。
-	assert.equal(
-		resolveProxyApplyStrategy({ backend: "pi", hasBinding: true, isLive: false }),
-		"next-start",
-	);
+	assert.equal(resolveProxyApplyStrategy({ backend: "pi", hasBinding: true, isLive: false }), "next-start");
 });
 
 test("proxy apply strategy never auto-restarts the shared DSH host", () => {
 	// DSH 是单一共享 host：按会话重启会杀掉所有 DSH 会话，必须只提示不重启。
 	for (const isLive of [true, false]) {
 		for (const hasBinding of [true, false]) {
-			assert.equal(
-				resolveProxyApplyStrategy({ backend: "dsh", hasBinding, isLive }),
-				"dsh-host-restart",
-				`dsh live=${isLive} binding=${hasBinding} must not auto-restart`,
-			);
+			assert.equal(resolveProxyApplyStrategy({ backend: "dsh", hasBinding, isLive }), "dsh-host-restart", `dsh live=${isLive} binding=${hasBinding} must not auto-restart`);
 		}
 	}
 });

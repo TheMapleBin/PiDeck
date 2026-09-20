@@ -2,13 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
-const {
-	ChangelogService,
-	buildChangelogUrls,
-	countChangelogVersions,
-	decodeAtomGitContentsResponse,
-	looksLikeChangelog,
-} = loadTsCommonJs("src/main/update/ChangelogService.ts");
+const { ChangelogService, buildChangelogUrls, countChangelogVersions, decodeAtomGitContentsResponse, looksLikeChangelog } = loadTsCommonJs("src/main/update/ChangelogService.ts");
 
 /** 一份形态真实的 changelog 片段（本仓库实际格式：`## vX.Y.Z - 日期`）。 */
 const REAL_CHANGELOG = `## v0.7.5-beta - 2026-09-09
@@ -56,10 +50,8 @@ function atomgitContentsResponse(markdown, { status = 200 } = {}) {
 }
 
 /** OpenAPI contents 接口的匿名 URL（与 buildChangelogUrls 的拼法保持一致）。 */
-const ATOMGIT_API_URL =
-	"https://api.atomgit.com/api/v5/repos/ayuayue/PiDeck/contents/CHANGELOG.zh-CN.md?ref=main";
-const GITHUB_RAW_URL =
-	"https://raw.githubusercontent.com/ayuayue/PiDeck/main/CHANGELOG.zh-CN.md";
+const ATOMGIT_API_URL = "https://api.atomgit.com/api/v5/repos/ayuayue/PiDeck/contents/CHANGELOG.zh-CN.md?ref=main";
+const GITHUB_RAW_URL = "https://raw.githubusercontent.com/ayuayue/PiDeck/main/CHANGELOG.zh-CN.md";
 
 /** 按 URL 分派响应的 fetch 替身；未列出的 URL 抛网络错。 */
 function fetchByUrl(map, calls = []) {
@@ -80,10 +72,7 @@ test("looksLikeChangelog accepts real markdown and rejects HTML shells", () => {
 	// 大小写不敏感的前缀判断
 	assert.equal(looksLikeChangelog("<!DOCTYPE html><html>captcha</html>"), false);
 	// 正文里提到 HTML 不该被误杀（只查开头，不查全文）
-	assert.equal(
-		looksLikeChangelog(`${REAL_CHANGELOG}\n- 修复 <html> 标签渲染问题\n`),
-		true,
-	);
+	assert.equal(looksLikeChangelog(`${REAL_CHANGELOG}\n- 修复 <html> 标签渲染问题\n`), true);
 });
 
 test("countChangelogVersions counts ## vX.Y.Z headings", () => {
@@ -139,9 +128,7 @@ test("decodeAtomGitContentsResponse decodes base64 content and rejects bad shape
 	// 非法 JSON → 抛错（由逐源 try/catch 吞掉并回退）
 	assert.throws(() => decodeAtomGitContentsResponse(ATOMGIT_CAPTCHA_HTML));
 	// 形态不对（不是 file / 缺 content）→ 抛错
-	assert.throws(() =>
-		decodeAtomGitContentsResponse(JSON.stringify({ type: "dir", content: "" })),
-	);
+	assert.throws(() => decodeAtomGitContentsResponse(JSON.stringify({ type: "dir", content: "" })));
 	assert.throws(() => decodeAtomGitContentsResponse(JSON.stringify({ message: "Not Found" })));
 });
 
@@ -238,9 +225,7 @@ test("ChangelogService aborts a hung request via the timeout instead of hanging"
 		fetchImpl: (_url, init) =>
 			new Promise((_resolve, reject) => {
 				// 模拟挂起：只在 abort 信号触发时拒绝，验证超时确实生效
-				init?.signal?.addEventListener("abort", () =>
-					reject(new Error("aborted")),
-				);
+				init?.signal?.addEventListener("abort", () => reject(new Error("aborted")));
 			}),
 	});
 
@@ -250,12 +235,6 @@ test("ChangelogService aborts a hung request via the timeout instead of hanging"
 
 test("changelogPageUrl points at the AtomGit blob page for the fallback link", () => {
 	const service = new ChangelogService({ branch: "main" });
-	assert.equal(
-		service.changelogPageUrl("zh"),
-		"https://atomgit.com/ayuayue/PiDeck/blob/main/CHANGELOG.zh-CN.md",
-	);
-	assert.equal(
-		service.changelogPageUrl("en"),
-		"https://atomgit.com/ayuayue/PiDeck/blob/main/CHANGELOG.md",
-	);
+	assert.equal(service.changelogPageUrl("zh"), "https://atomgit.com/ayuayue/PiDeck/blob/main/CHANGELOG.zh-CN.md");
+	assert.equal(service.changelogPageUrl("en"), "https://atomgit.com/ayuayue/PiDeck/blob/main/CHANGELOG.md");
 });

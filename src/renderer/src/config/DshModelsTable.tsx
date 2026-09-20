@@ -63,9 +63,7 @@ export function ModelsTable(props: {
 		const typed = capacityDrafts[capacityDraftKey(index, field)];
 		if (typed !== undefined) return typed;
 		const numeric = typeof value === "number" ? value : undefined;
-		return props.allowCapacitySuffixes
-			? formatDshModelCapacity(numeric)
-			: (numeric === undefined ? "" : String(numeric));
+		return props.allowCapacitySuffixes ? formatDshModelCapacity(numeric) : numeric === undefined ? "" : String(numeric);
 	};
 	const updateCapacity = (index: number, field: "contextWindow" | "maxTokens", raw: string) => {
 		if (!props.allowCapacitySuffixes) {
@@ -97,39 +95,19 @@ export function ModelsTable(props: {
 		<div className="grid gap-1.5">
 			<div className="flex items-center gap-2">
 				<span className="text-caption font-semibold text-muted-foreground">{t("config.dsh.models")}</span>
-				<span className="text-micro text-muted-foreground/70">
-					{inherited
-						? t("config.dsh.modelsInherited")
-						: t("config.dsh.modelsCustomized", { count: models.length })}
-				</span>
+				<span className="text-micro text-muted-foreground/70">{inherited ? t("config.dsh.modelsInherited") : t("config.dsh.modelsCustomized", { count: models.length })}</span>
 				{overridden && props.onReset && (
-					<Button
-						type="button"
-						variant="ghost"
-						size="sm"
-						className="h-6 px-1.5 text-micro text-muted-foreground"
-						disabled={!writable}
-						onClick={props.onReset}
-					>
+					<Button type="button" variant="ghost" size="sm" className="h-6 px-1.5 text-micro text-muted-foreground" disabled={!writable} onClick={props.onReset}>
 						{t("config.dsh.resetModels")}
 					</Button>
 				)}
-				<Button
-					type="button"
-					variant="ghost"
-					size="sm"
-					className="ml-auto h-6 gap-1 px-1.5 text-micro text-muted-foreground"
-					disabled={!writable}
-					onClick={onAdd}
-				>
+				<Button type="button" variant="ghost" size="sm" className="ml-auto h-6 gap-1 px-1.5 text-micro text-muted-foreground" disabled={!writable} onClick={onAdd}>
 					<Plus className="size-3" aria-hidden="true" />
 					{t("config.dsh.addModel")}
 				</Button>
 			</div>
 			{shownModels.length === 0 ? (
-				<div className="rounded-sm border border-dashed border-border-subtle px-3 py-2.5 text-micro text-muted-foreground">
-					{inherited ? t("config.dsh.modelsEmptyHint") : t("config.dsh.modelsEmpty")}
-				</div>
+				<div className="rounded-sm border border-dashed border-border-subtle px-3 py-2.5 text-micro text-muted-foreground">{inherited ? t("config.dsh.modelsEmptyHint") : t("config.dsh.modelsEmpty")}</div>
 			) : (
 				<div className="overflow-hidden rounded-lg border border-border-subtle bg-bg-panel">
 					{shownModels.map((model, index) => {
@@ -140,16 +118,7 @@ export function ModelsTable(props: {
 							<div key={`${inherited ? "cat" : "row"}-${index}`} className="border-b border-border/40 last:border-b-0">
 								<div className="flex items-center gap-2 px-2.5 py-1.5">
 									{canEditRows ? (
-										<Button
-											type="button"
-											variant="ghost"
-											size="icon-sm"
-											className="size-6 shrink-0 text-muted-foreground"
-											title={t("config.dsh.modelCapacity")}
-											aria-label={t("config.dsh.modelCapacity")}
-											disabled={!writable}
-											onClick={() => setExpandedIndex(isOpen ? null : index)}
-										>
+										<Button type="button" variant="ghost" size="icon-sm" className="size-6 shrink-0 text-muted-foreground" title={t("config.dsh.modelCapacity")} aria-label={t("config.dsh.modelCapacity")} disabled={!writable} onClick={() => setExpandedIndex(isOpen ? null : index)}>
 											{isOpen ? <ChevronDown className="size-3.5" aria-hidden="true" /> : <ChevronRight className="size-3.5" aria-hidden="true" />}
 										</Button>
 									) : (
@@ -172,15 +141,11 @@ export function ModelsTable(props: {
 										<span className="min-w-0 flex-1 truncate font-mono text-control text-foreground">{id}</span>
 									)}
 									{canEditRows ? (
-										<Input
-											className="h-7 min-w-0 flex-1"
-											placeholder={t("config.dsh.modelNamePlaceholder")}
-											value={name}
-											disabled={!writable}
-											onChange={(event) => onUpdate(index, "name", event.target.value)}
-										/>
+										<Input className="h-7 min-w-0 flex-1" placeholder={t("config.dsh.modelNamePlaceholder")} value={name} disabled={!writable} onChange={(event) => onUpdate(index, "name", event.target.value)} />
+									) : name ? (
+										<span className="min-w-0 flex-1 truncate text-control text-muted-foreground">{name}</span>
 									) : (
-										name ? <span className="min-w-0 flex-1 truncate text-control text-muted-foreground">{name}</span> : <span className="min-w-0 flex-1" aria-hidden="true" />
+										<span className="min-w-0 flex-1" aria-hidden="true" />
 									)}
 									{canEditRows && (
 										<Button

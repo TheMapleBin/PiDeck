@@ -1,7 +1,4 @@
-import type {
-	ResolveLaunchDefaultsInput,
-	ResolvedLaunchDefaults,
-} from "../../shared/types";
+import type { ResolveLaunchDefaultsInput, ResolvedLaunchDefaults } from "../../shared/types";
 
 /**
  * 会话「默认启动偏好」解析器：createDraft 缺省填充与引导页展示共用，保证
@@ -49,11 +46,7 @@ export function resolveLaunchDefaultOptions(input: {
 		if (explicit) defaults.defaultModelConfigured = true;
 		// 仅在解析成功时落键：空结果必须是真 {}，调用方才能用 presence 判断是否预选
 		// 优先级：引导页点选 > 显式默认 > enabledModels（pi 模型切换列表）> 上次使用 > 空。
-		const model =
-			welcomeModelOfModelsConfig(input.welcomeModel, input.models) ??
-			explicit ??
-			enabledModelsOfModelsConfig(input.settings, input.models) ??
-			lastUsedModelOfModelsConfig(input.lastUsedModel, input.models);
+		const model = welcomeModelOfModelsConfig(input.welcomeModel, input.models) ?? explicit ?? enabledModelsOfModelsConfig(input.settings, input.models) ?? lastUsedModelOfModelsConfig(input.lastUsedModel, input.models);
 		if (model) defaults.model = model;
 	}
 	const thinkingLevel = optionalString(input.settings, "defaultThinkingLevel");
@@ -69,32 +62,22 @@ function strictModelPair(settings: unknown, models: unknown): ResolvedLaunchDefa
 	const provider = optionalString(settings, "defaultProvider");
 	const modelId = optionalString(settings, "defaultModel");
 	if (!provider || !modelId) return undefined;
-	return modelExistsInModelsConfig(models, provider, modelId)
-		? { provider, modelId }
-		: undefined;
+	return modelExistsInModelsConfig(models, provider, modelId) ? { provider, modelId } : undefined;
 }
 
 /** 显式传入的 model（如欢迎页偏好）是否存在：不存在视为无效，调用方应回退解析默认。 */
-export function isModelInModelsConfig(
-	models: unknown,
-	model: { provider: string; modelId: string },
-): boolean {
+export function isModelInModelsConfig(models: unknown, model: { provider: string; modelId: string }): boolean {
 	return modelExistsInModelsConfig(models, model.provider, model.modelId);
 }
 
 /** lastUsedModel（桌面端记录）同样必须仍存在于 models.json，删除后自动失效回退。 */
-function lastUsedModelOfModelsConfig(
-	lastUsed: unknown,
-	models: unknown,
-): ResolvedLaunchDefaults["model"] {
+function lastUsedModelOfModelsConfig(lastUsed: unknown, models: unknown): ResolvedLaunchDefaults["model"] {
 	if (!isRecord(lastUsed)) return undefined;
 	const provider = lastUsed.provider;
 	const modelId = lastUsed.modelId;
 	if (typeof provider !== "string" || typeof modelId !== "string") return undefined;
 	if (!provider || !modelId) return undefined;
-	return modelExistsInModelsConfig(models, provider, modelId)
-		? { provider, modelId }
-		: undefined;
+	return modelExistsInModelsConfig(models, provider, modelId) ? { provider, modelId } : undefined;
 }
 
 /** 模型是否存在于 models.json（provider 键 + models 数组 id 精确匹配）。 */
@@ -104,33 +87,23 @@ function modelExistsInModelsConfig(models: unknown, provider: string, modelId: s
 	if (!isRecord(providers)) return false;
 	const providerEntry = providers[provider];
 	if (!isRecord(providerEntry) || !Array.isArray(providerEntry.models)) return false;
-	return providerEntry.models.some(
-		(model) => isRecord(model) && model.id === modelId,
-	);
+	return providerEntry.models.some((model) => isRecord(model) && model.id === modelId);
 }
 
 /** 欢迎页偏好模型：必须形如 { provider, modelId } 且仍存在于 models.json，否则视为无偏好。 */
-function welcomeModelOfModelsConfig(
-	welcome: unknown,
-	models: unknown,
-): ResolvedLaunchDefaults["model"] {
+function welcomeModelOfModelsConfig(welcome: unknown, models: unknown): ResolvedLaunchDefaults["model"] {
 	if (!isRecord(welcome)) return undefined;
 	const provider = welcome.provider;
 	const modelId = welcome.modelId;
 	if (typeof provider !== "string" || typeof modelId !== "string") return undefined;
 	if (!provider || !modelId) return undefined;
-	return modelExistsInModelsConfig(models, provider, modelId)
-		? { provider, modelId }
-		: undefined;
+	return modelExistsInModelsConfig(models, provider, modelId) ? { provider, modelId } : undefined;
 }
 
 /** settings.enabledModels（pi 的 Ctrl+P 模型切换列表，glob 模式，格式同 --models）：
  *  顺序取第一个能在 models.json 中匹配到实际模型的 pattern，返回匹配的模型。
  *  pattern 含 / 视为 provider/modelId（两段各自 glob 匹配），否则按 modelId 匹配任意 provider。 */
-function enabledModelsOfModelsConfig(
-	settings: unknown,
-	models: unknown,
-): ResolvedLaunchDefaults["model"] {
+function enabledModelsOfModelsConfig(settings: unknown, models: unknown): ResolvedLaunchDefaults["model"] {
 	if (!isRecord(settings)) return undefined;
 	const enabled = settings.enabledModels;
 	if (!Array.isArray(enabled)) return undefined;
@@ -143,17 +116,12 @@ function enabledModelsOfModelsConfig(
 }
 
 /** 一个 enabledModels pattern 匹配 models.json 中的第一个模型（models.json provider 顺序）。 */
-function matchEnabledModelPattern(
-	pattern: string,
-	models: unknown,
-): ResolvedLaunchDefaults["model"] {
+function matchEnabledModelPattern(pattern: string, models: unknown): ResolvedLaunchDefaults["model"] {
 	if (!isRecord(models)) return undefined;
 	const providers = models.providers;
 	if (!isRecord(providers)) return undefined;
 	// pattern 含 / 时对应 provider/modelId（两段分别 glob）；bare pattern 只匹配 modelId
-	const [patternProvider, patternModelId] = pattern.includes("/")
-		? pattern.split("/")
-		: [undefined, pattern];
+	const [patternProvider, patternModelId] = pattern.includes("/") ? pattern.split("/") : [undefined, pattern];
 	for (const [providerName, provider] of Object.entries(providers)) {
 		if (patternProvider && !globMatch(patternProvider, providerName)) continue;
 		if (!isRecord(provider) || !Array.isArray(provider.models)) continue;

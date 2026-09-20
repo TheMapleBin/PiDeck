@@ -3,9 +3,7 @@ import test from "node:test";
 import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
 // 纯函数模块（无第三方依赖），转译后直接取导出。
-const { buildCronExpression, parseCronVisualState, switchCronKind } = loadTsCommonJs(
-	"src/renderer/src/components/automation/cronScheduleModel.ts",
-);
+const { buildCronExpression, parseCronVisualState, switchCronKind } = loadTsCommonJs("src/renderer/src/components/automation/cronScheduleModel.ts");
 
 // loadTsCommonJs 在独立 VM realm 执行，对象原型不同会导致 deepStrictEqual 失败；
 // 先 JSON 往返拉回主 realm 再比较（仅用于纯数据对象）。

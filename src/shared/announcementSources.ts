@@ -52,12 +52,7 @@ export const ANNOUNCEMENT_SOURCES: readonly AnnouncementSource[] = [
 export function unwrapAtomgitContents(text: string): string | null {
 	try {
 		const parsed: unknown = JSON.parse(text);
-		if (
-			typeof parsed !== "object" ||
-			parsed === null ||
-			!("encoding" in parsed) ||
-			!("content" in parsed)
-		) {
+		if (typeof parsed !== "object" || parsed === null || !("encoding" in parsed) || !("content" in parsed)) {
 			return null;
 		}
 		const { encoding, content } = parsed as { encoding: unknown; content: unknown };

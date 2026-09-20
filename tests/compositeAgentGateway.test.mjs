@@ -15,12 +15,7 @@ function makeFakeGateway(backend, { supportsOptional = true } = {}) {
 	const listeners = new Set();
 	const gateway = {
 		backend,
-		capabilities: new Set([
-			"compact",
-			"fork",
-			"getForkMessages",
-			...(supportsOptional ? ["editMessage", "deleteMessage", "getCommands", "exportHtml", "rewind"] : []),
-		]),
+		capabilities: new Set(["compact", "fork", "getForkMessages", ...(supportsOptional ? ["editMessage", "deleteMessage", "getCommands", "exportHtml", "rewind"] : [])]),
 		list() {
 			return [...tabs];
 		},
@@ -104,40 +99,40 @@ function makeFakeGateway(backend, { supportsOptional = true } = {}) {
 		// 可选能力：supportsOptional=false 时这些键不存在（同 DshAgentManager）
 		...(supportsOptional
 			? {
-				async getCommands(agentId) {
-					calls.push(["getCommands", backend, agentId]);
-					return [];
-				},
-				async exportHtml(agentId) {
-					calls.push(["exportHtml", backend, agentId]);
-					return "<html />";
-				},
-				async editMessage(agentId, messageId, newText) {
-					calls.push(["editMessage", backend, agentId, messageId, newText]);
-				},
-				async deleteMessage(agentId, messageId) {
-					calls.push(["deleteMessage", backend, agentId, messageId]);
-				},
-				async listCheckpoints(agentId) {
-					calls.push(["listCheckpoints", backend, agentId]);
-					return [];
-				},
-				async getCheckpointDiff(agentId, checkpointId) {
-					calls.push(["getCheckpointDiff", backend, agentId, checkpointId]);
-					return "diff";
-				},
-				async restoreCheckpoint(agentId, checkpointId, scope) {
-					calls.push(["restoreCheckpoint", backend, agentId, checkpointId, scope]);
-				},
-			async mutatePersistedSessionMessage(sessionPath, messageId, operation, extra) {
-				calls.push(["mutatePersistedSessionMessage", backend, sessionPath, messageId, operation, extra]);
-				return operation === "resend" ? { text: "hello" } : undefined;
-			},
-			reviveIfProcessAlive(agentId) {
-				calls.push(["reviveIfProcessAlive", backend, agentId]);
-				return backend === "pi";
-			},
-			}
+					async getCommands(agentId) {
+						calls.push(["getCommands", backend, agentId]);
+						return [];
+					},
+					async exportHtml(agentId) {
+						calls.push(["exportHtml", backend, agentId]);
+						return "<html />";
+					},
+					async editMessage(agentId, messageId, newText) {
+						calls.push(["editMessage", backend, agentId, messageId, newText]);
+					},
+					async deleteMessage(agentId, messageId) {
+						calls.push(["deleteMessage", backend, agentId, messageId]);
+					},
+					async listCheckpoints(agentId) {
+						calls.push(["listCheckpoints", backend, agentId]);
+						return [];
+					},
+					async getCheckpointDiff(agentId, checkpointId) {
+						calls.push(["getCheckpointDiff", backend, agentId, checkpointId]);
+						return "diff";
+					},
+					async restoreCheckpoint(agentId, checkpointId, scope) {
+						calls.push(["restoreCheckpoint", backend, agentId, checkpointId, scope]);
+					},
+					async mutatePersistedSessionMessage(sessionPath, messageId, operation, extra) {
+						calls.push(["mutatePersistedSessionMessage", backend, sessionPath, messageId, operation, extra]);
+						return operation === "resend" ? { text: "hello" } : undefined;
+					},
+					reviveIfProcessAlive(agentId) {
+						calls.push(["reviveIfProcessAlive", backend, agentId]);
+						return backend === "pi";
+					},
+				}
 			: {}),
 	};
 	gateway.calls = calls;
@@ -160,11 +155,11 @@ test("create 按 backend 路由：dsh 走 dsh 网关，pi 走 pi 网关，缺省
 	await composite.create({ projectId: "p1" });
 	// input 原样转发：显式传 backend 的记录保留该字段，缺省记录为 undefined。
 	assert.deepEqual(
-		pi.calls.filter(([name]) => name === "create").map(([,, input]) => input.backend),
+		pi.calls.filter(([name]) => name === "create").map(([, , input]) => input.backend),
 		["pi", undefined],
 	);
 	assert.deepEqual(
-		dsh.calls.filter(([name]) => name === "create").map(([,, input]) => input.backend),
+		dsh.calls.filter(([name]) => name === "create").map(([, , input]) => input.backend),
 		["dsh"],
 	);
 });
@@ -178,26 +173,17 @@ test("create 后 ownerByAgent 缓存命中：sendPrompt 直接路由到创建网
 
 test("未知 backend 抛错（装配层应保证注册完整）", async () => {
 	const { composite } = makeComposite();
-	await assert.rejects(
-		composite.create({ projectId: "p1", backend: "codex" }),
-		/no gateway for backend "codex"/,
-	);
+	await assert.rejects(composite.create({ projectId: "p1", backend: "codex" }), /no gateway for backend "codex"/);
 });
 
 test("未知 agent 抛错（Coordinator 转 SESSION_COMMAND_FAILED）", async () => {
 	const { composite } = makeComposite();
-	await assert.rejects(
-		composite.sendPrompt({ agentId: "ghost", message: "hi" }),
-		/no gateway owns agent "ghost"/,
-	);
+	await assert.rejects(composite.sendPrompt({ agentId: "ghost", message: "hi" }), /no gateway owns agent "ghost"/);
 });
 
 test("capabilities 取所有子网关并集（含可选能力项）", async () => {
 	const { composite } = makeComposite();
-	assert.deepEqual(
-		[...composite.capabilities].sort(),
-		["compact", "deleteMessage", "editMessage", "exportHtml", "fork", "getCommands", "getForkMessages", "rewind"].sort(),
-	);
+	assert.deepEqual([...composite.capabilities].sort(), ["compact", "deleteMessage", "editMessage", "exportHtml", "fork", "getCommands", "getForkMessages", "rewind"].sort());
 });
 
 test("可选能力缺失：getCommands/exportHtml/editMessage/deleteMessage/rewind 抛错且不落到子网关", async () => {
@@ -211,9 +197,7 @@ test("可选能力缺失：getCommands/exportHtml/editMessage/deleteMessage/rewi
 	await assert.rejects(composite.getCheckpointDiff(tab.id, "cp1"), /does not support getCheckpointDiff/);
 	await assert.rejects(composite.restoreCheckpoint(tab.id, "cp1", "files"), /does not support restoreCheckpoint/);
 	assert.equal(
-		dsh.calls.some(([name]) =>
-			["getCommands", "exportHtml", "editMessage", "deleteMessage", "listCheckpoints", "getCheckpointDiff", "restoreCheckpoint"].includes(name),
-		),
+		dsh.calls.some(([name]) => ["getCommands", "exportHtml", "editMessage", "deleteMessage", "listCheckpoints", "getCheckpointDiff", "restoreCheckpoint"].includes(name)),
 		false,
 	);
 });
@@ -240,11 +224,11 @@ test("可选能力存在：转发到所属网关并透传参数", async () => {
 test("无 runtime 的 JSONL 改写按 pi 网关转发，不落到 DSH", async () => {
 	const { pi, dsh, composite } = makeComposite();
 	await composite.mutatePersistedSessionMessage("C:/sessions/a.jsonl", "m1", "edit", { newText: "x" });
-	assert.deepEqual(
-		pi.calls.filter(([name]) => name === "mutatePersistedSessionMessage").at(-1),
-		["mutatePersistedSessionMessage", "pi", "C:/sessions/a.jsonl", "m1", "edit", { newText: "x" }],
+	assert.deepEqual(pi.calls.filter(([name]) => name === "mutatePersistedSessionMessage").at(-1), ["mutatePersistedSessionMessage", "pi", "C:/sessions/a.jsonl", "m1", "edit", { newText: "x" }]);
+	assert.equal(
+		dsh.calls.some(([name]) => name === "mutatePersistedSessionMessage"),
+		false,
 	);
-	assert.equal(dsh.calls.some(([name]) => name === "mutatePersistedSessionMessage"), false);
 });
 
 test("reviveIfProcessAlive 转发到 owner；dsh 未实现时返回 false 不抛错", async () => {
@@ -254,7 +238,10 @@ test("reviveIfProcessAlive 转发到 owner；dsh 未实现时返回 false 不抛
 	assert.equal(composite.reviveIfProcessAlive(piTab.id), true);
 	assert.equal(composite.reviveIfProcessAlive(dshTab.id), false);
 	assert.deepEqual(pi.calls.filter(([name]) => name === "reviveIfProcessAlive").at(-1), ["reviveIfProcessAlive", "pi", piTab.id]);
-	assert.equal(dsh.calls.some(([name]) => name === "reviveIfProcessAlive"), false);
+	assert.equal(
+		dsh.calls.some(([name]) => name === "reviveIfProcessAlive"),
+		false,
+	);
 });
 
 test("restart 走 owner 网关且缓存保持（不因其他网关 list 内容漂移）", async () => {
@@ -267,7 +254,10 @@ test("restart 走 owner 网关且缓存保持（不因其他网关 list 内容�
 	// 缓存仍指向 pi：后续 sendPrompt 不经过 list 兜底查找。
 	await composite.sendPrompt({ agentId: tab.id, message: "hi" });
 	assert.deepEqual(pi.calls.filter(([name]) => name === "sendPrompt").at(-1), ["sendPrompt", "pi", tab.id]);
-	assert.equal(dsh.calls.some(([name]) => name === "sendPrompt"), false);
+	assert.equal(
+		dsh.calls.some(([name]) => name === "sendPrompt"),
+		false,
+	);
 });
 
 test("onOutput 聚合转发所有子网关事件，退订后不再收到", async () => {

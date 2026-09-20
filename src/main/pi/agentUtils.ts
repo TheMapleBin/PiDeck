@@ -36,10 +36,7 @@ export function clampPercent(value: number | undefined): number | undefined {
  * record.id（coordinator 绑定维护）优先：renderer 的 sessionRecordByIdAtomFamily
  * 只按 record.id 索引会话；tab.sessionId 是 pi 侧会话 id（两套体系），仅作兜底。
  */
-export function resolveNotificationSessionId(
-	resolveRecordId: (() => string | undefined) | undefined,
-	piSessionId: string | undefined,
-): string | undefined {
+export function resolveNotificationSessionId(resolveRecordId: (() => string | undefined) | undefined, piSessionId: string | undefined): string | undefined {
 	return resolveRecordId?.() ?? piSessionId;
 }
 
@@ -98,19 +95,13 @@ export function countRoleMessagesBefore<T>(rawMessages: T[], endIndex: number): 
  * 卡片会被 slice 切出窗口导致用户看不到；这里把窗口前仍存在的系统卡片找回，
  * 保证压缩标记在时间线可见区顶部（"压缩展示在正确的时间位"）。
  */
-export function leadingSummaryCards(
-	all: ChatMessage[],
-	windowStart: number,
-): ChatMessage[] {
+export function leadingSummaryCards(all: ChatMessage[], windowStart: number): ChatMessage[] {
 	if (windowStart <= 0) return [];
 	const cards: ChatMessage[] = [];
 	const bound = Math.min(windowStart, all.length);
 	for (let i = 0; i < bound; i++) {
 		const message = all[i];
-		if (
-			message.role === "system" &&
-			(message.meta?.type === "compaction" || message.meta?.type === "branchSummary")
-		) {
+		if (message.role === "system" && (message.meta?.type === "compaction" || message.meta?.type === "branchSummary")) {
 			cards.push(message);
 		}
 	}
@@ -173,9 +164,7 @@ export function buildMessageFlushPayload(
 		totalLength: all.length,
 		...(boundedWindow > 0 ? { windowStart: boundedWindow } : {}),
 		...(fileVersion ? { fileVersion } : {}),
-		...(typeof windowStartFilePos === "number" && windowStartFilePos >= 0
-			? { windowStartFilePos }
-			: {}),
+		...(typeof windowStartFilePos === "number" && windowStartFilePos >= 0 ? { windowStartFilePos } : {}),
 	};
 }
 
@@ -209,9 +198,7 @@ export function cleanTitle(value?: string): string | undefined {
 /** 从消息列表推断会话标题（取首条 user 或 assistant 消息的清洗后文本）。 */
 export function inferTitleFromMessages(messages: ChatMessage[]): string | undefined {
 	const firstUserText = messages.find((message) => message.role === "user")?.text;
-	const firstAssistantText = messages.find(
-		(message) => message.role === "assistant",
-	)?.text;
+	const firstAssistantText = messages.find((message) => message.role === "assistant")?.text;
 	return cleanTitle(firstUserText) || cleanTitle(firstAssistantText);
 }
 
@@ -219,11 +206,7 @@ export function inferTitleFromMessages(messages: ChatMessage[]): string | undefi
  *  必须覆盖 catalog 草稿名（session.newTitle：「新会话」/「New session」）和 DSH 占位名，
  *  不能只认 `${project} agent`——漏判则 refreshAutoTitle 直接 return，侧栏一直停在占位名。
  *  pi 文件名时间戳 / catalog 清掉时间戳后的 Untitled 也算占位，否则历史会话加载后无法用首条消息补名。 */
-export function isDefaultAgentTitle(
-	title: string,
-	project: Project,
-	translate: (key: string, params?: Record<string, string | number>) => string,
-): boolean {
+export function isDefaultAgentTitle(title: string, project: Project, translate: (key: string, params?: Record<string, string | number>) => string): boolean {
 	const trimmed = title.replace(/\s+/g, " ").trim();
 	if (!trimmed) return true;
 	if (looksLikePiSessionFileStem(trimmed)) return true;

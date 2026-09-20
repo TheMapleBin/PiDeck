@@ -20,22 +20,28 @@ test("AutomationStore lifecycle: CRUD, recovery of interrupted runs, and snapsho
 		assert.equal(initialSnapshot.tasks.length, 0);
 		assert.equal(initialSnapshot.runs.length, 0);
 
-		const task = await store.createTask({
-			name: "Nightly Audit",
-			projectId: "project-1",
-			prompt: "Run project tests",
-			schedule: { type: "cron", expression: "0 2 * * *" },
-		}, 1_000);
+		const task = await store.createTask(
+			{
+				name: "Nightly Audit",
+				projectId: "project-1",
+				prompt: "Run project tests",
+				schedule: { type: "cron", expression: "0 2 * * *" },
+			},
+			1_000,
+		);
 
 		assert.equal(task.name, "Nightly Audit");
 		assert.equal(task.enabled, true);
 
-		const run = await store.createRun({
-			task,
-			trigger: "schedule",
-			scheduledFor: 1_200,
-			status: "running",
-		}, 1_200);
+		const run = await store.createRun(
+			{
+				task,
+				trigger: "schedule",
+				scheduledFor: 1_200,
+				status: "running",
+			},
+			1_200,
+		);
 
 		assert.equal(run.status, "running");
 
@@ -48,10 +54,14 @@ test("AutomationStore lifecycle: CRUD, recovery of interrupted runs, and snapsho
 		assert.match(snapshotAfterRestart.runs[0].error, /stopped before/);
 
 		// Update task
-		const updated = await reloadedStore.updateTask(task.id, {
-			name: "Nightly Audit Updated",
-			enabled: false,
-		}, 2_500);
+		const updated = await reloadedStore.updateTask(
+			task.id,
+			{
+				name: "Nightly Audit Updated",
+				enabled: false,
+			},
+			2_500,
+		);
 		assert.equal(updated.name, "Nightly Audit Updated");
 		assert.equal(updated.enabled, false);
 
@@ -96,9 +106,7 @@ test("AutomationStore normalizes the working mode and keeps legacy tasks compati
 		// 手工编辑 automation.json 注入非法模式（imagegen 不是定时任务合法档位）必须降级为未设置，
 		// 否则 dispatch 时会产出 pi 无法识别的隐藏标记，任务静默跑错。
 		const raw = JSON.parse(persistedText);
-		raw.tasks = raw.tasks.map((task) =>
-			task.name === "Plan" ? { ...task, mode: "imagegen" } : task,
-		);
+		raw.tasks = raw.tasks.map((task) => (task.name === "Plan" ? { ...task, mode: "imagegen" } : task));
 		await writeFile(storePath, JSON.stringify(raw), "utf8");
 		const reloaded = new AutomationStore(storePath);
 		await reloaded.load(2_000);
@@ -114,12 +122,15 @@ test("AutomationStore deleteRuns skips in-progress runs and clearTerminalRuns ke
 	try {
 		const store = new AutomationStore(storePath);
 		await store.load(1_000);
-		const task = await store.createTask({
-			name: "History Cleaner",
-			projectId: "project-1",
-			prompt: "noop",
-			schedule: { type: "cron", expression: "0 2 * * *" },
-		}, 1_000);
+		const task = await store.createTask(
+			{
+				name: "History Cleaner",
+				projectId: "project-1",
+				prompt: "noop",
+				schedule: { type: "cron", expression: "0 2 * * *" },
+			},
+			1_000,
+		);
 
 		const succeeded = await store.createRun({ task, trigger: "schedule", status: "succeeded" }, 1_100);
 		const failed = await store.createRun({ task, trigger: "schedule", status: "failed", error: "boom" }, 1_200);
@@ -129,13 +140,22 @@ test("AutomationStore deleteRuns skips in-progress runs and clearTerminalRuns ke
 		const deleted = await store.deleteRuns([succeeded.id, running.id, "ghost-id"]);
 		assert.equal(deleted, 1);
 		const afterBatch = store.listRuns();
-		assert.equal(afterBatch.some((run) => run.id === succeeded.id), false);
-		assert.equal(afterBatch.some((run) => run.id === running.id), true);
+		assert.equal(
+			afterBatch.some((run) => run.id === succeeded.id),
+			false,
+		);
+		assert.equal(
+			afterBatch.some((run) => run.id === running.id),
+			true,
+		);
 
 		// 清空历史保留进行中的任务。
 		const cleared = await store.clearTerminalRuns();
 		assert.equal(cleared, 1); // 只有 failed 那条已结束
-		assert.equal(store.listRuns().some((run) => run.id === running.id), true);
+		assert.equal(
+			store.listRuns().some((run) => run.id === running.id),
+			true,
+		);
 
 		// 进行中的 run 结束后即可被清空；空数组/无匹配 ID 幂等返回 0。
 		await store.updateRun(running.id, { status: "aborted" });
@@ -161,22 +181,29 @@ test("AutomationStore budget：编辑器留空(null)=不限，重启不伪造默
 		await store.load(1_000);
 
 		// 编辑器留空会显式传 null（IPC 丢 undefined 键，null 才能表达「不限」）
-		const unlimited = await store.createTask({
-			name: "Unlimited Budget",
-			projectId: "project-1",
-			prompt: "noop",
-			schedule: { type: "cron", expression: "0 2 * * *" },
-			budget: { timeoutMs: null, maxTokens: null, maxCostUsd: null, maxSteps: null },
-		}, 1_000);
+		const unlimited = await store.createTask(
+			{
+				name: "Unlimited Budget",
+				projectId: "project-1",
+				prompt: "noop",
+				schedule: { type: "cron", expression: "0 2 * * *" },
+				budget: { timeoutMs: null, maxTokens: null, maxCostUsd: null, maxSteps: null },
+			},
+			1_000,
+		);
 		assert.equal(unlimited.budget.timeoutMs, undefined);
 		assert.equal(unlimited.budget.maxTokens, undefined);
 		assert.equal(unlimited.budget.maxCostUsd, undefined);
 		assert.equal(unlimited.budget.maxSteps, undefined);
 
 		// 只改一个字段为 null 不影响其他已设字段（按键合并语义）
-		const resetTokens = await store.updateTask(unlimited.id, {
-			budget: { maxTokens: null },
-		}, 1_100);
+		const resetTokens = await store.updateTask(
+			unlimited.id,
+			{
+				budget: { maxTokens: null },
+			},
+			1_100,
+		);
 		assert.equal(resetTokens.budget.maxTokens, undefined);
 
 		// 重启后「不限」必须保持：读盘缺键不能再被 DEFAULT 兜底伪造回 30min/200K。
@@ -191,22 +218,28 @@ test("AutomationStore budget：编辑器留空(null)=不限，重启不伪造默
 		assert.equal(afterReload.budget.maxTokens, undefined);
 
 		// 外部调用方不传 budget：仍落默认保护（30min 等），不能因缺省语义变成裸奔
-		const defaulted = await store.createTask({
-			name: "Default Budget",
-			projectId: "project-1",
-			prompt: "noop",
-			schedule: { type: "cron", expression: "0 2 * * *" },
-		}, 1_200);
+		const defaulted = await store.createTask(
+			{
+				name: "Default Budget",
+				projectId: "project-1",
+				prompt: "noop",
+				schedule: { type: "cron", expression: "0 2 * * *" },
+			},
+			1_200,
+		);
 		assert.equal(defaulted.budget.timeoutMs, 30 * 60_000);
 
 		// 数值仍钳制到合法区间（最小 10s / 最大 7 天）
-		const clamped = await store.createTask({
-			name: "Clamped Budget",
-			projectId: "project-1",
-			prompt: "noop",
-			schedule: { type: "cron", expression: "0 2 * * *" },
-			budget: { timeoutMs: 5_000, maxSteps: 10_000_000 },
-		}, 1_300);
+		const clamped = await store.createTask(
+			{
+				name: "Clamped Budget",
+				projectId: "project-1",
+				prompt: "noop",
+				schedule: { type: "cron", expression: "0 2 * * *" },
+				budget: { timeoutMs: 5_000, maxSteps: 10_000_000 },
+			},
+			1_300,
+		);
 		assert.equal(clamped.budget.timeoutMs, 10_000);
 		assert.equal(clamped.budget.maxSteps, 100_000);
 	} finally {

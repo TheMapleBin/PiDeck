@@ -16,25 +16,16 @@
  */
 export type HistoryMutationKind = "edit" | "delete" | "resend";
 
-export type HistoryMutationPath =
-  | { path: "unsupported-anonymous"; reason: Exclude<HistoryMutationKind, "resend"> }
-  | { path: "runtime-anonymous-resend" }
-  | { path: "imagegen-resend" }
-  | { path: "catalog"; live: boolean };
+export type HistoryMutationPath = { path: "unsupported-anonymous"; reason: Exclude<HistoryMutationKind, "resend"> } | { path: "runtime-anonymous-resend" } | { path: "imagegen-resend" } | { path: "catalog"; live: boolean };
 
-export function resolveHistoryMutationPath(options: {
-  kind: HistoryMutationKind;
-  live: boolean;
-  persisted: boolean;
-  isImageGenSession?: boolean;
-}): HistoryMutationPath {
-  const { kind, live, persisted, isImageGenSession } = options;
-  if (persisted) {
-    return { path: "catalog", live };
-  }
-  if (kind === "resend") {
-    if (isImageGenSession) return { path: "imagegen-resend" };
-    return { path: "runtime-anonymous-resend" };
-  }
-  return { path: "unsupported-anonymous", reason: kind };
+export function resolveHistoryMutationPath(options: { kind: HistoryMutationKind; live: boolean; persisted: boolean; isImageGenSession?: boolean }): HistoryMutationPath {
+	const { kind, live, persisted, isImageGenSession } = options;
+	if (persisted) {
+		return { path: "catalog", live };
+	}
+	if (kind === "resend") {
+		if (isImageGenSession) return { path: "imagegen-resend" };
+		return { path: "runtime-anonymous-resend" };
+	}
+	return { path: "unsupported-anonymous", reason: kind };
 }

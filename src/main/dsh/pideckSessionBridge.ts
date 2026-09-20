@@ -69,11 +69,7 @@ export type SessionBridgeService = {
  * 桥 RPC 分发：method + params → 服务调用。纯函数（service 可注入替身），
  * 供 hostEntry 的 fetch 路由与单测共用。未知方法返回结构化错误。
  */
-export async function sessionBridgeRpc(
-	service: SessionBridgeService | undefined,
-	method: unknown,
-	params: unknown,
-): Promise<SessionBridgeResult<unknown>> {
+export async function sessionBridgeRpc(service: SessionBridgeService | undefined, method: unknown, params: unknown): Promise<SessionBridgeResult<unknown>> {
 	if (!service) return { ok: false, error: "session bridge service is not available" };
 	switch (method) {
 		case "cursor":
@@ -87,10 +83,7 @@ export async function sessionBridgeRpc(
  * hostEntry fetch 路由的桥请求处理：POST JSON { method, params } → 结构化 JSON 响应。
  * 与主进程 DshHost.bridgeRpc 的 rawFetch 协议对齐；错误返回 400 + { ok: false, error }。
  */
-export async function handleSessionBridgeFetch(
-	ctx: SessionBridgeCtx,
-	init?: { method?: string; headers?: Record<string, string>; body?: string },
-): Promise<Response> {
+export async function handleSessionBridgeFetch(ctx: SessionBridgeCtx, init?: { method?: string; headers?: Record<string, string>; body?: string }): Promise<Response> {
 	const result = await (async (): Promise<SessionBridgeResult<unknown>> => {
 		if ((init?.method ?? "GET").toUpperCase() !== "POST") {
 			return { ok: false, error: "session bridge requires POST" };
@@ -126,11 +119,17 @@ export function apply(ctx: SessionBridgeCtx): void {
 			if (!validated.ok) return validated;
 			const query = ctx.get?.("sessionQuery") as
 				| {
-					observeSession?(sessionId: string, options?: { projectionMode?: "all" | "none" }): Promise<{
-						cursor: unknown;
-						[Symbol.dispose]?(): unknown;
-					} | undefined>;
-				}
+						observeSession?(
+							sessionId: string,
+							options?: { projectionMode?: "all" | "none" },
+						): Promise<
+							| {
+									cursor: unknown;
+									[Symbol.dispose]?(): unknown;
+							  }
+							| undefined
+						>;
+				  }
 				| undefined;
 			if (!query?.observeSession) return { ok: false, error: "sessionQuery service is not mounted" };
 			try {

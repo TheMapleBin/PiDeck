@@ -1,11 +1,7 @@
 import { app } from "electron";
 import { basename } from "node:path";
 import type { AppSettings } from "../../shared/types";
-import {
-	listActiveBuiltInExtensionPaths,
-	resolveBuiltInExtensionsOverlayDir,
-	type BuiltInExtensionPathRoots,
-} from "./builtInExtensions";
+import { listActiveBuiltInExtensionPaths, resolveBuiltInExtensionsOverlayDir, type BuiltInExtensionPathRoots } from "./builtInExtensions";
 import { resolveEnabledExtensionPaths } from "./enabledExtensionResolver";
 import { readProjectResourceOverrides } from "../projects/projectResourceOverrides";
 
@@ -22,15 +18,8 @@ export function createPiProcessExtensionResolvers(
 	cwd: string,
 	settings: AppSettings,
 ): {
-	resolveBuiltInExtensionPaths: (
-		processSettings?: Partial<AppSettings>,
-		includeProjectResources?: boolean,
-	) => string[];
-	resolveEnabledExtensionPaths: (
-		processSettings?: Partial<AppSettings>,
-		cwd?: string,
-		includeProjectResources?: boolean,
-	) => string[] | null;
+	resolveBuiltInExtensionPaths: (processSettings?: Partial<AppSettings>, includeProjectResources?: boolean) => string[];
+	resolveEnabledExtensionPaths: (processSettings?: Partial<AppSettings>, cwd?: string, includeProjectResources?: boolean) => string[] | null;
 } {
 	const builtInRoots: BuiltInExtensionPathRoots = {
 		appPath: app.getAppPath(),
@@ -41,26 +30,15 @@ export function createPiProcessExtensionResolvers(
 	};
 	return {
 		resolveBuiltInExtensionPaths: (processSettings, includeProjectResources = true) => {
-			const disabledForProject = new Set(
-				includeProjectResources
-					? readProjectResourceOverrides(cwd).disabledGlobalExtensions
-					: [],
-			);
-			return listActiveBuiltInExtensionPaths(
-				builtInRoots,
-				processSettings?.removedBuiltInExtensions ?? settings.removedBuiltInExtensions ?? [],
-			).filter((path) => !disabledForProject.has(basename(path)));
+			const disabledForProject = new Set(includeProjectResources ? readProjectResourceOverrides(cwd).disabledGlobalExtensions : []);
+			return listActiveBuiltInExtensionPaths(builtInRoots, processSettings?.removedBuiltInExtensions ?? settings.removedBuiltInExtensions ?? []).filter((path) => !disabledForProject.has(basename(path)));
 		},
 		resolveEnabledExtensionPaths: (processSettings, _processCwd, includeProjectResources = true) =>
 			resolveEnabledExtensionPaths({
 				cwd,
 				includeProjectResources,
-				disabled:
-					processSettings?.disabledExtensions ?? settings.disabledExtensions ?? [],
-				removedBuiltInExtensions:
-					processSettings?.removedBuiltInExtensions ??
-					settings.removedBuiltInExtensions ??
-					[],
+				disabled: processSettings?.disabledExtensions ?? settings.disabledExtensions ?? [],
+				removedBuiltInExtensions: processSettings?.removedBuiltInExtensions ?? settings.removedBuiltInExtensions ?? [],
 				builtInRoots,
 			}),
 	};

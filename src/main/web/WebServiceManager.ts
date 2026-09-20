@@ -1,4 +1,5 @@
 import { createServer, request as httpRequest, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { randomUUID } from "node:crypto";
 import { Readable } from "node:stream";
 import type { AddressInfo } from "node:net";
 import { existsSync } from "node:fs";
@@ -31,20 +32,34 @@ import type {
 	SessionTargetedValue,
 	SessionUiResponseInput,
 	UpdateSessionRecordInput,
+	WebServiceStatusInfo,
 } from "../../shared/types";
 import type { PendingUiRequestSnapshot } from "../sessions/SessionRuntimeCoordinator";
 import { replaceExpandedRefBlocksWithLabels } from "../../shared/expandedRefBlocks";
 import { serializeWebClientDictionaries, webEnUS } from "./WebI18n";
-import {
-	WebEventStreamRouter,
-	serializeSseFrame,
-	type PiEvent,
-} from "./WebEventStream";
+import { WebEventStreamRouter, serializeSseFrame, type PiEvent } from "./WebEventStream";
 
-type WebServiceSettings = Pick<
-	AppSettings,
-	"webServiceEnabled" | "webServiceHost" | "webServicePort"
->;
+type WebServiceSettings = Pick<AppSettings, "webServiceEnabled" | "webServiceHost" | "webServicePort">;
+
+/**
+ * 仅环回地址绑定时不启用令牌校验：本机页面与既有测试无需令牌；
+ * 一旦绑定到网卡（0.0.0.0 / 局域网 IP / ::），所有 /api/*（/api/health 除外）强制令牌，
+ * 阻断局域网内任意主机的建项目/发 prompt/删会话等未授权调用（memo H2）。
+ */
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "::1"]);
+
+/** /api JSON 请求体逻辑上限：超出后丢弃剩余数据并回 413（合法 payload 都是短 JSON，见 memo H3） */
+const MAX_JSON_BODY_BYTES = 2 * 1024 * 1024;
+/** 硬上限：超过即断开连接，阻断无界上传占带宽/触发内存峰值 */
+const HARD_BODY_ABORT_BYTES = 16 * 1024 * 1024;
+
+/** readJson 超限的哨兵错误：由 createServer 的统一 catch 映射为 413 */
+class WebBodyTooLargeError extends Error {
+	constructor() {
+		super("WEB_SERVICE_BODY_TOO_LARGE");
+		this.name = "WebBodyTooLargeError";
+	}
+}
 
 type WebServiceDependencies = {
 	/**
@@ -72,9 +87,7 @@ type WebServiceDependencies = {
 	deleteSessionRecord: (sessionId: string) => Promise<boolean>;
 	copySessionRecord: (sessionId: string) => Promise<{ cancelled?: boolean; targetSessionId?: string }>;
 	exportSessionRecordHtml: (sessionId: string) => Promise<{ path: string }>;
-	readSessionReferenceMessages: (
-		sessionId: string,
-	) => Promise<Array<{ role: string; content: string; timestamp: number }>>;
+	readSessionReferenceMessages: (sessionId: string) => Promise<Array<{ role: string; content: string; timestamp: number }>>;
 	/**
 	 * 整量读入口（有界）：只返回「加载窗口」内的消息 + total/windowStart/truncated。
 	 * 全量历史请用 readSessionMessagePage 翻页——大会话一次全量下发会同时顶爆
@@ -86,93 +99,48 @@ type WebServiceDependencies = {
 		windowStart: number;
 		truncated: boolean;
 	}>;
-	readSessionMessagePage: (
-		sessionId: string,
-		before?: number,
-		pageSize?: number,
-	) => Promise<SessionMessagePage>;
+	readSessionMessagePage: (sessionId: string, before?: number, pageSize?: number) => Promise<SessionMessagePage>;
 	sendSessionPrompt: (input: SendSessionPromptInput) => Promise<SendSessionPromptResult>;
 	listSessionRuntimes: () => SessionRuntimeInfo[];
-	listSessionRuntimeModels: (target: SessionRuntimeTarget) => Promise<
-		SessionCommandResult<SessionTargetedValue<AvailableModel[]>>
-	>;
+	listSessionRuntimeModels: (target: SessionRuntimeTarget) => Promise<SessionCommandResult<SessionTargetedValue<AvailableModel[]>>>;
 	stopSessionRuntime: (target: SessionRuntimeTarget) => Promise<SessionCommandResult<SessionRuntimeTarget>>;
 	abortSessionRuntime: (target: SessionRuntimeTarget) => Promise<SessionCommandResult<SessionTargetedValue<void>>>;
 	restartSessionRuntime: (target: SessionRuntimeTarget) => Promise<SessionCommandResult<SessionRuntimeReplacement>>;
-	compactSessionRuntime: (target: SessionRuntimeTarget, prompt?: string) => Promise<
-		SessionCommandResult<SessionTargetedValue<AgentRuntimeState>>
+	compactSessionRuntime: (target: SessionRuntimeTarget, prompt?: string) => Promise<SessionCommandResult<SessionTargetedValue<AgentRuntimeState>>>;
+	getSessionRuntimeState: (target: SessionRuntimeTarget) => Promise<SessionCommandResult<SessionTargetedValue<AgentRuntimeState>>>;
+	listSessionRuntimeCommands: (target: SessionRuntimeTarget) => Promise<SessionCommandResult<SessionTargetedValue<PiCommand[]>>>;
+	exportSessionRuntimeHtml: (target: SessionRuntimeTarget) => Promise<SessionCommandResult<SessionTargetedValue<unknown>>>;
+	editSessionRuntimeMessage: (target: SessionRuntimeTarget, messageId: string, newText: string) => Promise<SessionCommandResult<SessionTargetedValue<void>>>;
+	deleteSessionRuntimeMessage: (target: SessionRuntimeTarget, messageId: string) => Promise<SessionCommandResult<SessionTargetedValue<void>>>;
+	listRewindCheckpoints: (target: SessionRuntimeTarget, params?: RewindCheckpointPageParams) => Promise<SessionCommandResult<SessionTargetedValue<RewindCheckpointPage>>>;
+	getRewindCheckpointDiff: (target: SessionRuntimeTarget, checkpointId: string) => Promise<SessionCommandResult<SessionTargetedValue<string>>>;
+	restoreRewindCheckpoint: (target: SessionRuntimeTarget, checkpointId: string, scope: RewindRestoreScope) => Promise<SessionCommandResult<SessionTargetedValue<RewindRestoreResult>>>;
+	prepareSessionRuntimeResend: (target: SessionRuntimeTarget, messageId: string) => Promise<SessionCommandResult<SessionTargetedValue<{ text: string; images?: ImageContent[] }>>>;
+	setSessionRuntimeModel: (target: SessionRuntimeTarget, provider: string, modelId: string) => Promise<SessionCommandResult<SessionTargetedValue<AgentRuntimeState>>>;
+	setSessionRuntimeThinking: (target: SessionRuntimeTarget, level: string) => Promise<SessionCommandResult<SessionTargetedValue<AgentRuntimeState>>>;
+	setSessionRuntimePermission: (target: SessionRuntimeTarget, preset: string) => Promise<SessionCommandResult<SessionTargetedValue<AgentRuntimeState>>>;
+	cloneSessionRuntime: (target: SessionRuntimeTarget) => Promise<
+		SessionCommandResult<{
+			cancelled?: boolean;
+			targetSessionId?: string;
+			[key: string]: unknown;
+		}>
 	>;
-	getSessionRuntimeState: (target: SessionRuntimeTarget) => Promise<
-		SessionCommandResult<SessionTargetedValue<AgentRuntimeState>>
-	>;
-	listSessionRuntimeCommands: (target: SessionRuntimeTarget) => Promise<
-		SessionCommandResult<SessionTargetedValue<PiCommand[]>>
-	>;
-	exportSessionRuntimeHtml: (target: SessionRuntimeTarget) => Promise<
-		SessionCommandResult<SessionTargetedValue<unknown>>
-	>;
-	editSessionRuntimeMessage: (
-		target: SessionRuntimeTarget,
-		messageId: string,
-		newText: string,
-	) => Promise<SessionCommandResult<SessionTargetedValue<void>>>;
-	deleteSessionRuntimeMessage: (
-		target: SessionRuntimeTarget,
-		messageId: string,
-	) => Promise<SessionCommandResult<SessionTargetedValue<void>>>;
-	listRewindCheckpoints: (
-		target: SessionRuntimeTarget,
-		params?: RewindCheckpointPageParams,
-	) => Promise<SessionCommandResult<SessionTargetedValue<RewindCheckpointPage>>>;
-	getRewindCheckpointDiff: (
-		target: SessionRuntimeTarget,
-		checkpointId: string,
-	) => Promise<SessionCommandResult<SessionTargetedValue<string>>>;
-	restoreRewindCheckpoint: (
-		target: SessionRuntimeTarget,
-		checkpointId: string,
-		scope: RewindRestoreScope,
-	) => Promise<SessionCommandResult<SessionTargetedValue<RewindRestoreResult>>>;
-	prepareSessionRuntimeResend: (
-		target: SessionRuntimeTarget,
-		messageId: string,
-	) => Promise<SessionCommandResult<SessionTargetedValue<{ text: string; images?: ImageContent[] }>>>;
-	setSessionRuntimeModel: (
-		target: SessionRuntimeTarget,
-		provider: string,
-		modelId: string,
-	) => Promise<SessionCommandResult<SessionTargetedValue<AgentRuntimeState>>>;
-	setSessionRuntimeThinking: (
-		target: SessionRuntimeTarget,
-		level: string,
-	) => Promise<SessionCommandResult<SessionTargetedValue<AgentRuntimeState>>>;
-	setSessionRuntimePermission: (
-		target: SessionRuntimeTarget,
-		preset: string,
-	) => Promise<SessionCommandResult<SessionTargetedValue<AgentRuntimeState>>>;
-	cloneSessionRuntime: (target: SessionRuntimeTarget) => Promise<SessionCommandResult<{
-		cancelled?: boolean;
-		targetSessionId?: string;
-		[key: string]: unknown;
-	}>>;
 	listPendingUiRequests: () => PendingUiRequestSnapshot[];
 	respondToUi: (input: SessionUiResponseInput) => Promise<void>;
 	/** DSH 子代理列表（S6.3：web 端工具面板；未装配 DSH 时缺省）。 */
-	listDshSubagents?: (agentId: string) => Promise<Array<{
-		id: string;
-		label?: string;
-		activity: "running" | "inactive";
-		hasChildren: boolean;
-		mode: "one-shot" | "continuable";
-		kind: "child" | "diagnostic";
-	}>>;
+	listDshSubagents?: (agentId: string) => Promise<
+		Array<{
+			id: string;
+			label?: string;
+			activity: "running" | "inactive";
+			hasChildren: boolean;
+			mode: "one-shot" | "continuable";
+			kind: "child" | "diagnostic";
+		}>
+	>;
 	/** DSH 子代理历史（S6.3：只读 transcript）。 */
-	readDshSubagentHistory?: (
-		agentId: string,
-		childSessionId: string,
-		beforeSeq?: number,
-		maxMessages?: number,
-	) => Promise<{ messages: ChatMessage[]; hasMore: boolean }>;
+	readDshSubagentHistory?: (agentId: string, childSessionId: string, beforeSeq?: number, maxMessages?: number) => Promise<{ messages: ChatMessage[]; hasMore: boolean }>;
 	/** DSH 技能目录（S6.3：skill.list 只读）。 */
 	listDshSkills?: (agentId: string) => Promise<import("../../shared/types").DshSkillView[]>;
 	/** DSH 动态插件清单（S6.5：进程内临时扩展；未装配 DSH 时缺省）。 */
@@ -180,9 +148,7 @@ type WebServiceDependencies = {
 	/** DSH 静态 Loader 条目清单（S6.5：origin 标注 user/builtin 来源）。 */
 	listDshStaticPlugins?: () => Promise<import("../../shared/types").DshStaticPluginView[]>;
 	/** DSH 用户自装静态插件卸载（移除用户补丁层行 + 可选回收插件目录）。 */
-	uninstallDshUserPlugin?: (
-		input: import("../../shared/types").DshUserPluginUninstallInput,
-	) => Promise<import("../../shared/types").DshUserPluginUninstallResult>;
+	uninstallDshUserPlugin?: (input: import("../../shared/types").DshUserPluginUninstallInput) => Promise<import("../../shared/types").DshUserPluginUninstallResult>;
 	/** DSH 动态插件安装（define：定义源码包，不运行；按会话归属）。 */
 	installDshPlugin?: (input: import("../../shared/types").DshPluginInstallInput) => Promise<unknown>;
 	/** DSH 动态插件生命周期（run/stop/uninstall；面板手势无需审批）。 */
@@ -194,13 +160,7 @@ type WebServiceDependencies = {
 function serializePublicWebPayload(body: unknown): string {
 	return JSON.stringify(body, function (key, value) {
 		if (key === "debugDetails" || key === "stack") return undefined;
-		if (
-			key === "error" &&
-			typeof value === "string" &&
-			this &&
-			typeof this === "object" &&
-			typeof (this as { i18nKey?: unknown }).i18nKey === "string"
-		) {
+		if (key === "error" && typeof value === "string" && this && typeof this === "object" && typeof (this as { i18nKey?: unknown }).i18nKey === "string") {
 			const i18nKey = (this as { i18nKey: string }).i18nKey;
 			return (webEnUS as Record<string, string>)[i18nKey] ?? webEnUS["webError.internal"];
 		}
@@ -210,7 +170,16 @@ function serializePublicWebPayload(body: unknown): string {
 
 export class WebServiceManager {
 	private server: Server | null = null;
-	private current: { host: string; port: number } | null = null;
+	private current: {
+		host: string;
+		port: number;
+		token: string;
+		requiresAuth: boolean;
+	} | null = null;
+	/** 访问令牌：每次启动随机重生成，泄露的旧令牌在服务重启后即失效。 */
+	private authToken = "";
+	/** 非环回绑定（暴露到网卡）时为 true，此时所有 /api/*（/api/health 除外）强制令牌。 */
+	private requiresAuth = false;
 	/** dev 模式渲染层 dev server 基址（无尾斜杠）；空串表示走构建产物。 */
 	private readonly devRendererUrl: string;
 	private readonly rendererRoot = join(__dirname, "../renderer");
@@ -219,9 +188,7 @@ export class WebServiceManager {
 
 	constructor(private readonly deps: WebServiceDependencies) {
 		this.devRendererUrl = deps.devRendererUrl?.trim() ? deps.devRendererUrl.trim().replace(/\/$/, "") : "";
-		this.eventStreamRouter = new WebEventStreamRouter(
-			(agentId) => this.deps.getSessionIdForAgent(agentId),
-		);
+		this.eventStreamRouter = new WebEventStreamRouter((agentId) => this.deps.getSessionIdForAgent(agentId));
 	}
 
 	async applySettings(settings: WebServiceSettings) {
@@ -230,7 +197,7 @@ export class WebServiceManager {
 			return;
 		}
 
-		const host = settings.webServiceHost.trim() || "0.0.0.0";
+		const host = settings.webServiceHost.trim() || "127.0.0.1";
 		const port = this.normalizePort(settings.webServicePort);
 		if (this.server && this.current?.host === host && this.current.port === port) return;
 		await this.stop();
@@ -243,10 +210,18 @@ export class WebServiceManager {
 	 */
 	async restart(settings: WebServiceSettings) {
 		if (!settings.webServiceEnabled) return;
-		const host = settings.webServiceHost.trim() || "0.0.0.0";
+		const host = settings.webServiceHost.trim() || "127.0.0.1";
 		const port = this.normalizePort(settings.webServicePort);
 		await this.stop();
 		await this.start(host, port);
+	}
+
+	/** 渲染层展示二维码/令牌用；未运行时返回空形状（running=false） */
+	getStatus(): WebServiceStatusInfo {
+		if (this.current) {
+			return { running: true, ...this.current };
+		}
+		return { running: false, host: "", port: 0, token: "", requiresAuth: false };
 	}
 
 	async stop() {
@@ -275,13 +250,12 @@ export class WebServiceManager {
 			try {
 				await this.handleRequest(request, response, host, port, server);
 			} catch (error) {
+				if (error instanceof WebBodyTooLargeError) {
+					this.sendError(response, 413, "webError.bodyTooLarge", "Request body exceeds the size limit");
+					return;
+				}
 				console.error("[WebService] Request failed", error);
-				this.sendError(
-					response,
-					500,
-					"webError.internal",
-					"The web service encountered an internal error",
-				);
+				this.sendError(response, 500, "webError.internal", "The web service encountered an internal error");
 			}
 		});
 
@@ -305,529 +279,464 @@ export class WebServiceManager {
 			});
 		});
 		this.server = server;
-		this.current = { host, port: this.getPort(server, port) };
+		// 令牌每次启动随机重生成：泄露的旧令牌在服务重启后即失效。
+		this.authToken = randomUUID();
+		this.requiresAuth = !LOOPBACK_HOSTS.has(host);
+		this.current = {
+			host,
+			port: this.getPort(server, port),
+			token: this.authToken,
+			requiresAuth: this.requiresAuth,
+		};
 	}
 
-	private async handleRequest(
-		request: IncomingMessage,
-		response: ServerResponse,
-		host: string,
-		port: number,
-		server: Server,
-	) {
-			const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
-			if (request.method === "OPTIONS") {
-				this.sendNoContent(response);
+	private async handleRequest(request: IncomingMessage, response: ServerResponse, host: string, port: number, server: Server) {
+		const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
+		if (request.method === "OPTIONS") {
+			this.sendNoContent(response);
+			return;
+		}
+
+		if (url.pathname === "/api/health") {
+			this.sendJson(response, {
+				ok: true,
+				service: "PiDeck",
+				host,
+				port: this.getPort(server, port),
+			});
+			return;
+		}
+
+		// 非环回绑定（0.0.0.0 / 局域网 IP）时强制令牌；环回绑定豁免保持本机/测试零摩擦。
+		// GET 与 SSE 允许 ?token= 查询参数（浏览器 EventSource 无法携带 header），其余走 Authorization: Bearer。
+		if (this.requiresAuth && url.pathname.startsWith("/api/") && !this.isAuthorized(request, url)) {
+			this.sendError(response, 401, "webError.unauthorized", "A valid web service token is required");
+			return;
+		}
+		if (url.pathname === "/api/state") {
+			this.sendJson(response, await this.getState());
+			return;
+		}
+		if (url.pathname === "/api/ui-response" && request.method === "POST") {
+			const body = await this.readJson<Partial<SessionUiResponseInput>>(request);
+			const sessionId = typeof body.sessionId === "string" ? body.sessionId.trim() : "";
+			const requestId = typeof body.requestId === "string" ? body.requestId.trim() : "";
+			const agentId = typeof body.agentId === "string" ? body.agentId.trim() : "";
+			const runtimeGeneration = typeof body.runtimeGeneration === "number" ? body.runtimeGeneration : NaN;
+			if (!sessionId || !requestId || !agentId || !Number.isFinite(runtimeGeneration)) {
+				this.sendError(response, 400, "webError.requestIdRequired", "ui response target is required");
 				return;
 			}
-
-			if (url.pathname === "/api/health") {
+			try {
+				await this.deps.respondToUi({
+					sessionId,
+					requestId,
+					agentId,
+					runtimeGeneration,
+					response: body.response ?? {},
+				});
+				this.sendJson(response, { ok: true });
+			} catch (error) {
+				this.sendError(response, 409, "webError.runtimeTargetRequired", error instanceof Error ? error.message : "ui response rejected");
+			}
+			return;
+		}
+		if (url.pathname === "/api/models" && request.method === "GET") {
+			// force=1：目标端 UI 点刷新时绕过模型列表缓存，重新 fork pi --list-models。
+			const force = url.searchParams.get("force") === "1";
+			this.sendJson(response, { models: await this.deps.listModels(force) });
+			return;
+		}
+		if (url.pathname === "/api/projects" && request.method === "POST") {
+			const body = await this.readJson<{ path?: string }>(request);
+			const path = body.path?.trim() ?? "";
+			if (!path) {
+				this.sendError(response, 400, "webError.projectPathRequired", "path is required");
+				return;
+			}
+			const project = await this.deps.createProject(path);
+			this.sendJson(response, { project });
+			return;
+		}
+		const deleteProjectMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/delete$/);
+		if (deleteProjectMatch && request.method === "POST") {
+			const projectId = decodeURIComponent(deleteProjectMatch[1]);
+			const project = this.deps.listProjects().find((item) => item.id === projectId);
+			if (!project) {
+				this.sendError(response, 404, "webError.projectNotFound", "project not found");
+				return;
+			}
+			if (project.kind === "chat") {
+				this.sendError(response, 400, "webError.chatProjectProtected", "the built-in chat project cannot be deleted");
+				return;
+			}
+			const deleted = await this.deps.deleteProject(projectId);
+			this.sendJson(response, { deleted });
+			return;
+		}
+		const sessionsMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/sessions$/);
+		if (sessionsMatch && request.method === "GET") {
+			const sessions = await this.deps.listSessions(decodeURIComponent(sessionsMatch[1]));
+			this.sendJson(response, { sessions });
+			return;
+		}
+		const catalogSessionsMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/sessions\/catalog$/);
+		if (catalogSessionsMatch && request.method === "GET") {
+			const sessions = await this.deps.listCatalogSessions(decodeURIComponent(catalogSessionsMatch[1]));
+			this.sendJson(response, { sessions });
+			return;
+		}
+		// ── DSH 工具面板路由（S6.3：goals/subagents/skills；无活跃 runtime 返回空）──
+		const dshSubagentsMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/dsh\/subagents$/);
+		if (dshSubagentsMatch && request.method === "GET") {
+			const agentId = this.runtimeAgentIdForSession(decodeURIComponent(dshSubagentsMatch[1]));
+			if (!agentId || !this.deps.listDshSubagents) {
+				this.sendJson(response, { subagents: [] });
+				return;
+			}
+			this.sendJson(response, { subagents: await this.deps.listDshSubagents(agentId) });
+			return;
+		}
+		const dshSubagentHistoryMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/dsh\/subagents\/([^/]+)\/history$/);
+		if (dshSubagentHistoryMatch && request.method === "GET") {
+			const agentId = this.runtimeAgentIdForSession(decodeURIComponent(dshSubagentHistoryMatch[1]));
+			const childSessionId = decodeURIComponent(dshSubagentHistoryMatch[2]);
+			if (!agentId || !this.deps.readDshSubagentHistory) {
+				this.sendJson(response, { messages: [], hasMore: false });
+				return;
+			}
+			const beforeSeq = this.queryNumber(url, "beforeSeq");
+			const maxMessages = this.queryNumber(url, "maxMessages");
+			this.sendJson(response, await this.deps.readDshSubagentHistory(agentId, childSessionId, beforeSeq, maxMessages));
+			return;
+		}
+		const dshSkillsMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/dsh\/skills$/);
+		if (dshSkillsMatch && request.method === "GET") {
+			const agentId = this.runtimeAgentIdForSession(decodeURIComponent(dshSkillsMatch[1]));
+			if (!agentId || !this.deps.listDshSkills) {
+				this.sendJson(response, { skills: [] });
+				return;
+			}
+			this.sendJson(response, { skills: await this.deps.listDshSkills(agentId) });
+			return;
+		}
+		const dshGoalMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/dsh\/goal$/);
+		if (dshGoalMatch && request.method === "GET") {
+			const target = this.runtimeTargetForSession(decodeURIComponent(dshGoalMatch[1]));
+			if (!target) {
+				this.sendJson(response, { goal: null });
+				return;
+			}
+			const result = await this.deps.getSessionRuntimeState(target);
+			const state = result.ok && result.value && "value" in result.value ? (result.value as { value?: AgentRuntimeState }).value : undefined;
+			this.sendJson(response, { goal: state?.goal ?? null });
+			return;
+		}
+		// ── DSH 插件路由（S6.5：动态插件清单/安装/启停/卸载，与桌面配置页同源）──
+		if (url.pathname === "/api/dsh/plugins" && request.method === "GET") {
+			this.sendJson(response, {
+				dynamic: this.deps.listDshDynamicPlugins ? await this.deps.listDshDynamicPlugins() : [],
+				static: this.deps.listDshStaticPlugins ? await this.deps.listDshStaticPlugins() : [],
+			});
+			return;
+		}
+		if (url.pathname === "/api/dsh/plugins/install" && request.method === "POST") {
+			const body = await this.readJson<import("../../shared/types").DshPluginInstallInput>(request);
+			if (!body.sessionId?.trim() || !this.deps.installDshPlugin) {
+				this.sendError(response, 400, "webError.pluginInstallRequired", "plugin install requires sessionId");
+				return;
+			}
+			try {
+				this.sendJson(response, { receipt: await this.deps.installDshPlugin(body) });
+			} catch (error) {
+				this.sendError(response, 400, "webError.pluginInstallFailed", error instanceof Error ? error.message : "plugin install failed");
+			}
+			return;
+		}
+		const dshPluginActionMatch = url.pathname.match(/^\/api\/dsh\/plugins\/([^/]+)\/(run|stop|uninstall)$/);
+		if (dshPluginActionMatch && request.method === "POST") {
+			const pluginId = decodeURIComponent(dshPluginActionMatch[1]);
+			const action = dshPluginActionMatch[2];
+			const body = await this.readJson<{ sessionId?: string; packageId?: string }>(request);
+			if (!body.sessionId?.trim()) {
+				this.sendError(response, 400, "webError.pluginActionRequired", "plugin action requires sessionId");
+				return;
+			}
+			const fn = action === "run" ? this.deps.runDshPlugin : action === "stop" ? this.deps.stopDshPlugin : this.deps.uninstallDshPlugin;
+			if (!fn) {
+				this.sendError(response, 400, "webError.pluginUnavailable", "DSH plugins are not available");
+				return;
+			}
+			try {
 				this.sendJson(response, {
 					ok: true,
-					service: "PiDeck",
-					host,
-					port: this.getPort(server, port),
-				});
-				return;
-			}
-			if (url.pathname === "/api/state") {
-				this.sendJson(response, await this.getState());
-				return;
-			}
-			if (url.pathname === "/api/ui-response" && request.method === "POST") {
-				const body = await this.readJson<Partial<SessionUiResponseInput>>(request);
-				const sessionId = typeof body.sessionId === "string" ? body.sessionId.trim() : "";
-				const requestId = typeof body.requestId === "string" ? body.requestId.trim() : "";
-				const agentId = typeof body.agentId === "string" ? body.agentId.trim() : "";
-				const runtimeGeneration = typeof body.runtimeGeneration === "number" ? body.runtimeGeneration : NaN;
-				if (!sessionId || !requestId || !agentId || !Number.isFinite(runtimeGeneration)) {
-					this.sendError(response, 400, "webError.requestIdRequired", "ui response target is required");
-					return;
-				}
-				try {
-					await this.deps.respondToUi({
-						sessionId,
-						requestId,
-						agentId,
-						runtimeGeneration,
-						response: body.response ?? {},
-					});
-					this.sendJson(response, { ok: true });
-				} catch (error) {
-					this.sendError(
-						response,
-						409,
-						"webError.runtimeTargetRequired",
-						error instanceof Error ? error.message : "ui response rejected",
-					);
-				}
-				return;
-			}
-			if (url.pathname === "/api/models" && request.method === "GET") {
-				// force=1：目标端 UI 点刷新时绕过模型列表缓存，重新 fork pi --list-models。
-				const force = url.searchParams.get("force") === "1";
-				this.sendJson(response, { models: await this.deps.listModels(force) });
-				return;
-			}
-			if (url.pathname === "/api/projects" && request.method === "POST") {
-				const body = await this.readJson<{ path?: string }>(request);
-				const path = body.path?.trim() ?? "";
-				if (!path) {
-					this.sendError(response, 400, "webError.projectPathRequired", "path is required");
-					return;
-				}
-				const project = await this.deps.createProject(path);
-				this.sendJson(response, { project });
-				return;
-			}
-			const deleteProjectMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/delete$/);
-			if (deleteProjectMatch && request.method === "POST") {
-				const projectId = decodeURIComponent(deleteProjectMatch[1]);
-				const project = this.deps.listProjects().find((item) => item.id === projectId);
-				if (!project) {
-					this.sendError(response, 404, "webError.projectNotFound", "project not found");
-					return;
-				}
-				if (project.kind === "chat") {
-					this.sendError(response, 400, "webError.chatProjectProtected", "the built-in chat project cannot be deleted");
-					return;
-				}
-				const deleted = await this.deps.deleteProject(projectId);
-				this.sendJson(response, { deleted });
-				return;
-			}
-			const sessionsMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/sessions$/);
-			if (sessionsMatch && request.method === "GET") {
-				const sessions = await this.deps.listSessions(decodeURIComponent(sessionsMatch[1]));
-				this.sendJson(response, { sessions });
-				return;
-			}
-			const catalogSessionsMatch = url.pathname.match(
-				/^\/api\/projects\/([^/]+)\/sessions\/catalog$/,
-			);
-			if (catalogSessionsMatch && request.method === "GET") {
-				const sessions = await this.deps.listCatalogSessions(
-					decodeURIComponent(catalogSessionsMatch[1]),
-				);
-				this.sendJson(response, { sessions });
-				return;
-			}
-			// ── DSH 工具面板路由（S6.3：goals/subagents/skills；无活跃 runtime 返回空）──
-			const dshSubagentsMatch = url.pathname.match(
-				/^\/api\/sessions\/([^/]+)\/dsh\/subagents$/,
-			);
-			if (dshSubagentsMatch && request.method === "GET") {
-				const agentId = this.runtimeAgentIdForSession(decodeURIComponent(dshSubagentsMatch[1]));
-				if (!agentId || !this.deps.listDshSubagents) {
-					this.sendJson(response, { subagents: [] });
-					return;
-				}
-				this.sendJson(response, { subagents: await this.deps.listDshSubagents(agentId) });
-				return;
-			}
-			const dshSubagentHistoryMatch = url.pathname.match(
-				/^\/api\/sessions\/([^/]+)\/dsh\/subagents\/([^/]+)\/history$/,
-			);
-			if (dshSubagentHistoryMatch && request.method === "GET") {
-				const agentId = this.runtimeAgentIdForSession(decodeURIComponent(dshSubagentHistoryMatch[1]));
-				const childSessionId = decodeURIComponent(dshSubagentHistoryMatch[2]);
-				if (!agentId || !this.deps.readDshSubagentHistory) {
-					this.sendJson(response, { messages: [], hasMore: false });
-					return;
-				}
-				const beforeSeq = this.queryNumber(url, "beforeSeq");
-				const maxMessages = this.queryNumber(url, "maxMessages");
-				this.sendJson(response, await this.deps.readDshSubagentHistory(
-					agentId,
-					childSessionId,
-					beforeSeq,
-					maxMessages,
-				));
-				return;
-			}
-			const dshSkillsMatch = url.pathname.match(
-				/^\/api\/sessions\/([^/]+)\/dsh\/skills$/,
-			);
-			if (dshSkillsMatch && request.method === "GET") {
-				const agentId = this.runtimeAgentIdForSession(decodeURIComponent(dshSkillsMatch[1]));
-				if (!agentId || !this.deps.listDshSkills) {
-					this.sendJson(response, { skills: [] });
-					return;
-				}
-				this.sendJson(response, { skills: await this.deps.listDshSkills(agentId) });
-				return;
-			}
-			const dshGoalMatch = url.pathname.match(
-				/^\/api\/sessions\/([^/]+)\/dsh\/goal$/,
-			);
-			if (dshGoalMatch && request.method === "GET") {
-				const target = this.runtimeTargetForSession(decodeURIComponent(dshGoalMatch[1]));
-				if (!target) {
-					this.sendJson(response, { goal: null });
-					return;
-				}
-				const result = await this.deps.getSessionRuntimeState(target);
-				const state = result.ok && result.value && "value" in result.value
-					? (result.value as { value?: AgentRuntimeState }).value
-					: undefined;
-				this.sendJson(response, { goal: state?.goal ?? null });
-				return;
-			}
-			// ── DSH 插件路由（S6.5：动态插件清单/安装/启停/卸载，与桌面配置页同源）──
-			if (url.pathname === "/api/dsh/plugins" && request.method === "GET") {
-				this.sendJson(response, {
-					dynamic: this.deps.listDshDynamicPlugins ? await this.deps.listDshDynamicPlugins() : [],
-					static: this.deps.listDshStaticPlugins ? await this.deps.listDshStaticPlugins() : [],
-				});
-				return;
-			}
-			if (url.pathname === "/api/dsh/plugins/install" && request.method === "POST") {
-				const body = await this.readJson<import("../../shared/types").DshPluginInstallInput>(request);
-				if (!body.sessionId?.trim() || !this.deps.installDshPlugin) {
-					this.sendError(response, 400, "webError.pluginInstallRequired", "plugin install requires sessionId");
-					return;
-				}
-				try {
-					this.sendJson(response, { receipt: await this.deps.installDshPlugin(body) });
-				} catch (error) {
-					this.sendError(response, 400, "webError.pluginInstallFailed",
-						error instanceof Error ? error.message : "plugin install failed");
-				}
-				return;
-			}
-			const dshPluginActionMatch = url.pathname.match(
-				/^\/api\/dsh\/plugins\/([^/]+)\/(run|stop|uninstall)$/,
-			);
-			if (dshPluginActionMatch && request.method === "POST") {
-				const pluginId = decodeURIComponent(dshPluginActionMatch[1]);
-				const action = dshPluginActionMatch[2];
-				const body = await this.readJson<{ sessionId?: string; packageId?: string }>(request);
-				if (!body.sessionId?.trim()) {
-					this.sendError(response, 400, "webError.pluginActionRequired", "plugin action requires sessionId");
-					return;
-				}
-				const fn = action === "run"
-					? this.deps.runDshPlugin
-					: action === "stop"
-						? this.deps.stopDshPlugin
-						: this.deps.uninstallDshPlugin;
-				if (!fn) {
-					this.sendError(response, 400, "webError.pluginUnavailable", "DSH plugins are not available");
-					return;
-				}
-				try {
-					this.sendJson(response, { ok: true, value: await fn({
+					value: await fn({
 						sessionId: body.sessionId,
 						pluginId,
 						...(typeof body.packageId === "string" ? { packageId: body.packageId } : {}),
-					}) });
-				} catch (error) {
-					this.sendError(response, 400, "webError.pluginActionFailed",
-						error instanceof Error ? error.message : `plugin ${action} failed`);
-				}
+					}),
+				});
+			} catch (error) {
+				this.sendError(response, 400, "webError.pluginActionFailed", error instanceof Error ? error.message : `plugin ${action} failed`);
+			}
+			return;
+		}
+		if (url.pathname === "/api/sessions/runtimes" && request.method === "GET") {
+			this.sendJson(response, { runtimes: this.deps.listSessionRuntimes() });
+			return;
+		}
+		if (url.pathname === "/api/sessions" && request.method === "POST") {
+			const body = await this.readJson<CreateSessionDraftInput>(request);
+			if (!body.projectId?.trim()) {
+				this.sendError(response, 400, "webError.projectIdRequired", "projectId is required");
 				return;
 			}
-			if (url.pathname === "/api/sessions/runtimes" && request.method === "GET") {
-				this.sendJson(response, { runtimes: this.deps.listSessionRuntimes() });
+			const session = await this.deps.createSessionDraft(body);
+			this.sendJson(response, { session });
+			return;
+		}
+		if (url.pathname === "/api/sessions/anonymous" && request.method === "POST") {
+			const body = await this.readJson<CreateAnonymousSessionInput>(request);
+			if (!body.projectId?.trim()) {
+				this.sendError(response, 400, "webError.projectIdRequired", "projectId is required");
 				return;
 			}
-			if (url.pathname === "/api/sessions" && request.method === "POST") {
-				const body = await this.readJson<CreateSessionDraftInput>(request);
-				if (!body.projectId?.trim()) {
-					this.sendError(response, 400, "webError.projectIdRequired", "projectId is required");
-					return;
-				}
-				const session = await this.deps.createSessionDraft(body);
+			const result = await this.deps.createAnonymousSession(body);
+			this.sendJson(response, result);
+			return;
+		}
+		const sessionRecordActionMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/(update|delete|copy|export-html)$/);
+		if (sessionRecordActionMatch && request.method === "POST") {
+			const sessionId = decodeURIComponent(sessionRecordActionMatch[1]);
+			const action = sessionRecordActionMatch[2];
+			if (action === "update") {
+				const patch = await this.readJson<UpdateSessionRecordInput>(request);
+				const session = await this.deps.updateSessionRecord(sessionId, patch);
 				this.sendJson(response, { session });
-				return;
-			}
-			if (url.pathname === "/api/sessions/anonymous" && request.method === "POST") {
-				const body = await this.readJson<CreateAnonymousSessionInput>(request);
-				if (!body.projectId?.trim()) {
-					this.sendError(response, 400, "webError.projectIdRequired", "projectId is required");
-					return;
-				}
-				const result = await this.deps.createAnonymousSession(body);
-				this.sendJson(response, result);
-				return;
-			}
-			const sessionRecordActionMatch = url.pathname.match(
-				/^\/api\/sessions\/([^/]+)\/(update|delete|copy|export-html)$/,
-			);
-			if (sessionRecordActionMatch && request.method === "POST") {
-				const sessionId = decodeURIComponent(sessionRecordActionMatch[1]);
-				const action = sessionRecordActionMatch[2];
-				if (action === "update") {
-					const patch = await this.readJson<UpdateSessionRecordInput>(request);
-					const session = await this.deps.updateSessionRecord(sessionId, patch);
-					this.sendJson(response, { session });
-				} else if (action === "delete") {
-					const deleted = await this.deps.deleteSessionRecord(sessionId);
-					this.sendJson(response, { deleted });
-				} else if (action === "copy") {
-					const result = await this.deps.copySessionRecord(sessionId);
-					this.sendJson(response, { result });
-				} else {
-					const result = await this.deps.exportSessionRecordHtml(sessionId);
-					this.sendJson(response, { result });
-				}
-				return;
-			}
-			const sessionReferenceMessagesMatch = url.pathname.match(
-				/^\/api\/sessions\/([^/]+)\/reference-messages$/,
-			);
-			if (sessionReferenceMessagesMatch && request.method === "GET") {
-				const messages = await this.deps.readSessionReferenceMessages(
-					decodeURIComponent(sessionReferenceMessagesMatch[1]),
-				);
-				this.sendJson(response, { messages });
-				return;
-			}
-			const sessionMessagePageMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/messages\/page$/);
-			if (sessionMessagePageMatch && request.method === "GET") {
-				const beforeValue = url.searchParams.get("before");
-				const pageSizeValue = url.searchParams.get("pageSize");
-				const before = beforeValue === null ? undefined : Number(beforeValue);
-				const pageSize = pageSizeValue === null ? undefined : Number(pageSizeValue);
-				const page = await this.deps.readSessionMessagePage(
-					decodeURIComponent(sessionMessagePageMatch[1]),
-					Number.isSafeInteger(before) ? before : undefined,
-					Number.isSafeInteger(pageSize) ? pageSize : undefined,
-				);
-				this.sendJson(response, page);
-				return;
-			}
-			const sessionMessagesMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/messages$/);
-			if (sessionMessagesMatch && request.method === "GET") {
-				// 有界窗口（total/windowStart/truncated 一并下发，客户端据 nextBefore 走
-				// /messages/page 翻更早历史），不再一次性吐出整份历史。
-				const window = await this.deps.readSessionMessages(
-					decodeURIComponent(sessionMessagesMatch[1]),
-				);
-				this.sendJson(response, {
-					messages: window.messages,
-					total: window.total,
-					windowStart: window.windowStart,
-					truncated: window.truncated,
-				});
-				return;
-			}
-			const sessionPromptMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/prompt$/);
-			if (sessionPromptMatch && request.method === "POST") {
-				const sessionId = decodeURIComponent(sessionPromptMatch[1]);
-				const body = await this.readJson<Omit<SendSessionPromptInput, "sessionId">>(request);
-				const message = body.message?.trim() ?? "";
-				if (!body.requestId?.trim()) {
-					this.sendError(response, 400, "webError.requestIdRequired", "requestId is required");
-					return;
-				}
-				if (!message && !body.images?.length) {
-					this.sendError(response, 400, "webError.messageRequired", "message or images is required");
-					return;
-				}
-				const result = await this.deps.sendSessionPrompt({
-					...body,
-					sessionId,
-					message,
-				});
+			} else if (action === "delete") {
+				const deleted = await this.deps.deleteSessionRecord(sessionId);
+				this.sendJson(response, { deleted });
+			} else if (action === "copy") {
+				const result = await this.deps.copySessionRecord(sessionId);
 				this.sendJson(response, { result });
+			} else {
+				const result = await this.deps.exportSessionRecordHtml(sessionId);
+				this.sendJson(response, { result });
+			}
+			return;
+		}
+		const sessionReferenceMessagesMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/reference-messages$/);
+		if (sessionReferenceMessagesMatch && request.method === "GET") {
+			const messages = await this.deps.readSessionReferenceMessages(decodeURIComponent(sessionReferenceMessagesMatch[1]));
+			this.sendJson(response, { messages });
+			return;
+		}
+		const sessionMessagePageMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/messages\/page$/);
+		if (sessionMessagePageMatch && request.method === "GET") {
+			const beforeValue = url.searchParams.get("before");
+			const pageSizeValue = url.searchParams.get("pageSize");
+			const before = beforeValue === null ? undefined : Number(beforeValue);
+			const pageSize = pageSizeValue === null ? undefined : Number(pageSizeValue);
+			const page = await this.deps.readSessionMessagePage(decodeURIComponent(sessionMessagePageMatch[1]), Number.isSafeInteger(before) ? before : undefined, Number.isSafeInteger(pageSize) ? pageSize : undefined);
+			this.sendJson(response, page);
+			return;
+		}
+		const sessionMessagesMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/messages$/);
+		if (sessionMessagesMatch && request.method === "GET") {
+			// 有界窗口（total/windowStart/truncated 一并下发，客户端据 nextBefore 走
+			// /messages/page 翻更早历史），不再一次性吐出整份历史。
+			const window = await this.deps.readSessionMessages(decodeURIComponent(sessionMessagesMatch[1]));
+			this.sendJson(response, {
+				messages: window.messages,
+				total: window.total,
+				windowStart: window.windowStart,
+				truncated: window.truncated,
+			});
+			return;
+		}
+		const sessionPromptMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/prompt$/);
+		if (sessionPromptMatch && request.method === "POST") {
+			const sessionId = decodeURIComponent(sessionPromptMatch[1]);
+			const body = await this.readJson<Omit<SendSessionPromptInput, "sessionId">>(request);
+			const message = body.message?.trim() ?? "";
+			if (!body.requestId?.trim()) {
+				this.sendError(response, 400, "webError.requestIdRequired", "requestId is required");
+				return;
+			}
+			if (!message && !body.images?.length) {
+				this.sendError(response, 400, "webError.messageRequired", "message or images is required");
+				return;
+			}
+			const result = await this.deps.sendSessionPrompt({
+				...body,
+				sessionId,
+				message,
+			});
+			this.sendJson(response, { result });
+			return;
+		}
+
+		// SSE 流式端点：按 AI SDK v5 UIMessageStream 协议输出 pi agent 事件，
+		// 前端提交 prompt 后订阅本端点实现打字机/思考/工具实时展示（A1）；
+		// 协议与 useChat 兼容，升级 A2 时前端换成 React hook 即可，后端零改动。
+		const streamMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/stream$/);
+		if (streamMatch && request.method === "GET") {
+			const sessionId = decodeURIComponent(streamMatch[1]);
+			this.handleStream(sessionId, request, response);
+			return;
+		}
+
+		// AI SDK useChat 契约端点（A2）：POST body = { id: sessionId, messages, trigger, messageId }。
+		// 先建立该 session 的流式连接，再发 prompt；pi 事件到达后经翻译器流式返回，
+		// 前端 useChat 通过 x-vercel-ai-ui-message-stream: v1 头识别协议。
+		if (url.pathname === "/api/chat" && request.method === "POST") {
+			const body = await this.readJson<{
+				id?: string;
+				messages?: Array<{ role?: string; content?: unknown; parts?: Array<{ type?: string; text?: string }> }>;
+				/** 本轮提交的 user 消息 id（AI SDK submit-message 必然携带）。 */
+				messageId?: string;
+			}>(request);
+			const sessionId = body.id?.trim();
+			if (!sessionId) {
+				this.sendError(response, 400, "webError.requestIdRequired", "session id is required");
+				return;
+			}
+			// 取最后一条 user 消息的文本（useChat 的 parts 或 content 均可）
+			const lastUser = [...(body.messages ?? [])].reverse().find((message) => message.role === "user");
+			const partsText = (lastUser?.parts ?? [])
+				.filter((part) => part.type === "text" && typeof part.text === "string")
+				.map((part) => part.text ?? "")
+				.join("");
+			const contentText = typeof lastUser?.content === "string" ? lastUser.content : "";
+			const message = (partsText || contentText).trim();
+			if (!message) {
+				this.sendError(response, 400, "webError.messageRequired", "message is required");
 				return;
 			}
 
-			// SSE 流式端点：按 AI SDK v5 UIMessageStream 协议输出 pi agent 事件，
-			// 前端提交 prompt 后订阅本端点实现打字机/思考/工具实时展示（A1）；
-			// 协议与 useChat 兼容，升级 A2 时前端换成 React hook 即可，后端零改动。
-			const streamMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/stream$/);
-			if (streamMatch && request.method === "GET") {
-				const sessionId = decodeURIComponent(streamMatch[1]);
-				this.handleStream(sessionId, request, response);
-				return;
-			}
+			// 幂等键必须「每轮唯一」：body.id 是 useChat 的 chatId（== sessionId），每轮
+			// 提交都相同。直接拿它当 requestId 会被 SessionRuntimeCoordinator 的投递缓存
+			// （按 sessionId+requestId 去重，TTL 10 分钟）误判为同一请求的重试，第二轮起
+			// 只返回上一轮缓存的 accepted 结果而不再派发给 pi —— Web 端没有任何响应，
+			// 桌面端也不会落盘。messageId 是本轮 user 消息 id：同一轮重试保持不变（天然
+			// 幂等），不同轮必然不同，正好是投递缓存需要的键；缺失时退化为一次性 UUID。
+			const requestId = body.messageId?.trim() || crypto.randomUUID();
 
-			// AI SDK useChat 契约端点（A2）：POST body = { id: sessionId, messages, trigger, messageId }。
-			// 先建立该 session 的流式连接，再发 prompt；pi 事件到达后经翻译器流式返回，
-			// 前端 useChat 通过 x-vercel-ai-ui-message-stream: v1 头识别协议。
-			if (url.pathname === "/api/chat" && request.method === "POST") {
-				const body = await this.readJson<{
-					id?: string;
-					messages?: Array<{ role?: string; content?: unknown; parts?: Array<{ type?: string; text?: string }> }>;
-					/** 本轮提交的 user 消息 id（AI SDK submit-message 必然携带）。 */
-					messageId?: string;
-				}>(request);
-				const sessionId = body.id?.trim();
-				if (!sessionId) {
-					this.sendError(response, 400, "webError.requestIdRequired", "session id is required");
-					return;
-				}
-				// 取最后一条 user 消息的文本（useChat 的 parts 或 content 均可）
-				const lastUser = [...(body.messages ?? [])]
-					.reverse()
-					.find((message) => message.role === "user");
-				const partsText = (lastUser?.parts ?? [])
-					.filter((part) => part.type === "text" && typeof part.text === "string")
-					.map((part) => part.text ?? "")
-					.join("");
-				const contentText = typeof lastUser?.content === "string" ? lastUser.content : "";
-				const message = (partsText || contentText).trim();
-				if (!message) {
-					this.sendError(response, 400, "webError.messageRequired", "message is required");
-					return;
-				}
-
-				// 幂等键必须「每轮唯一」：body.id 是 useChat 的 chatId（== sessionId），每轮
-				// 提交都相同。直接拿它当 requestId 会被 SessionRuntimeCoordinator 的投递缓存
-				// （按 sessionId+requestId 去重，TTL 10 分钟）误判为同一请求的重试，第二轮起
-				// 只返回上一轮缓存的 accepted 结果而不再派发给 pi —— Web 端没有任何响应，
-				// 桌面端也不会落盘。messageId 是本轮 user 消息 id：同一轮重试保持不变（天然
-				// 幂等），不同轮必然不同，正好是投递缓存需要的键；缺失时退化为一次性 UUID。
-				const requestId = body.messageId?.trim() || crypto.randomUUID();
-
-				// 先开流（事件可能在 prompt 预检返回前就到达），再发 prompt。
-				this.handleStream(sessionId, request, response);
-				const result = await this.deps.sendSessionPrompt({
+			// 先开流（事件可能在 prompt 预检返回前就到达），再发 prompt。
+			this.handleStream(sessionId, request, response);
+			const result = await this.deps
+				.sendSessionPrompt({
 					sessionId,
 					requestId,
 					message,
-				}).catch((error: unknown) => ({
+				})
+				.catch((error: unknown) => ({
 					accepted: false as const,
 					error: error instanceof Error ? error.message : String(error),
 				}));
-				if (!result.accepted) {
-					// 预检拒绝：向已建立的流写入 error + finish + [DONE]，
-					// 前端 useChat 会进入 error 状态并可重试。
-					// 无法直接访问 router 的 entry，走响应流写协议帧。
-					const errText = typeof result.error === "string"
-						? result.error
-						: "Prompt was rejected";
-					this.writeStreamError(response, errText);
-					return;
-				}
+			if (!result.accepted) {
+				// 预检拒绝：向已建立的流写入 error + finish + [DONE]，
+				// 前端 useChat 会进入 error 状态并可重试。
+				// 无法直接访问 router 的 entry，走响应流写协议帧。
+				const errText = typeof result.error === "string" ? result.error : "Prompt was rejected";
+				this.writeStreamError(response, errText);
 				return;
 			}
-			const sessionRuntimeMatch = url.pathname.match(
-				/^\/api\/sessions\/([^/]+)\/runtime\/(stop|abort|restart|compact|state|commands|export-html|edit-message|delete-message|prepare-resend|models|model|thinking|permission|clone|rewind-list|rewind-diff|rewind-restore)$/,
-			);
-			if (sessionRuntimeMatch && request.method === "POST") {
-				const sessionId = decodeURIComponent(sessionRuntimeMatch[1]);
-				const action = sessionRuntimeMatch[2];
-				const body = await this.readJson<{
-					target?: SessionRuntimeTarget;
-					prompt?: string;
-					messageId?: string;
-					newText?: string;
-					provider?: string;
-					modelId?: string;
-					level?: string;
-					preset?: string;
-					checkpointId?: string;
-					scope?: string;
-					/** 检查点列表分页：每页条数 / 游标（rewind-list 用）。 */
-					limit?: number;
-					beforeTimestamp?: number;
-				}>(request);
-				const target = body.target;
-				if (!target || target.sessionId !== sessionId) {
-					this.sendError(
-						response,
-						400,
-						"webError.runtimeTargetRequired",
-						"A matching Session runtime target is required",
-					);
-					return;
-				}
-				let result: unknown;
-				switch (action) {
-					case "stop":
-						result = await this.deps.stopSessionRuntime(target);
-						break;
-					case "abort":
-						result = await this.deps.abortSessionRuntime(target);
-						break;
-					case "restart":
-						result = await this.deps.restartSessionRuntime(target);
-						break;
-					case "compact":
-						result = await this.deps.compactSessionRuntime(target, body.prompt);
-						break;
-					case "state":
-						result = await this.deps.getSessionRuntimeState(target);
-						break;
-					case "commands":
-						result = await this.deps.listSessionRuntimeCommands(target);
-						break;
-					case "models":
-						result = await this.deps.listSessionRuntimeModels(target);
-						break;
-					case "export-html":
-						result = await this.deps.exportSessionRuntimeHtml(target);
-						break;
-					case "edit-message":
-						result = await this.deps.editSessionRuntimeMessage(
-							target,
-							body.messageId ?? "",
-							body.newText ?? "",
-						);
-						break;
-					case "delete-message":
-						result = await this.deps.deleteSessionRuntimeMessage(target, body.messageId ?? "");
-						break;
-					case "prepare-resend":
-						result = await this.deps.prepareSessionRuntimeResend(target, body.messageId ?? "");
-						break;
-					case "model":
-						result = await this.deps.setSessionRuntimeModel(
-							target,
-							body.provider ?? "",
-							body.modelId ?? "",
-						);
-						break;
-					case "thinking":
-						result = await this.deps.setSessionRuntimeThinking(target, body.level ?? "");
-						break;
-					case "permission":
-						result = await this.deps.setSessionRuntimePermission(target, body.preset ?? "");
-						break;
-					case "clone":
-						result = await this.deps.cloneSessionRuntime(target);
-						break;
-					case "rewind-list":
-						result = await this.deps.listRewindCheckpoints(
-							target,
-							{
-								limit:
-									typeof body.limit === "number" && Number.isFinite(body.limit)
-										? body.limit
-										: undefined,
-								beforeTimestamp:
-									typeof body.beforeTimestamp === "number" && Number.isFinite(body.beforeTimestamp)
-										? body.beforeTimestamp
-										: undefined,
-							},
-						);
-						break;
-					case "rewind-diff":
-						result = await this.deps.getRewindCheckpointDiff(
-							target,
-							body.checkpointId ?? "",
-						);
-						break;
-					case "rewind-restore":
-						result = await this.deps.restoreRewindCheckpoint(
-							target,
-						body.checkpointId ?? "",
-						body.scope === "files" ? "files" : body.scope === "conversation" ? "conversation" : "all",
-					);
+			return;
+		}
+		const sessionRuntimeMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/runtime\/(stop|abort|restart|compact|state|commands|export-html|edit-message|delete-message|prepare-resend|models|model|thinking|permission|clone|rewind-list|rewind-diff|rewind-restore)$/);
+		if (sessionRuntimeMatch && request.method === "POST") {
+			const sessionId = decodeURIComponent(sessionRuntimeMatch[1]);
+			const action = sessionRuntimeMatch[2];
+			const body = await this.readJson<{
+				target?: SessionRuntimeTarget;
+				prompt?: string;
+				messageId?: string;
+				newText?: string;
+				provider?: string;
+				modelId?: string;
+				level?: string;
+				preset?: string;
+				checkpointId?: string;
+				scope?: string;
+				/** 检查点列表分页：每页条数 / 游标（rewind-list 用）。 */
+				limit?: number;
+				beforeTimestamp?: number;
+			}>(request);
+			const target = body.target;
+			if (!target || target.sessionId !== sessionId) {
+				this.sendError(response, 400, "webError.runtimeTargetRequired", "A matching Session runtime target is required");
+				return;
+			}
+			let result: unknown;
+			switch (action) {
+				case "stop":
+					result = await this.deps.stopSessionRuntime(target);
 					break;
-				}
-				this.sendJson(response, { result });
-				return;
+				case "abort":
+					result = await this.deps.abortSessionRuntime(target);
+					break;
+				case "restart":
+					result = await this.deps.restartSessionRuntime(target);
+					break;
+				case "compact":
+					result = await this.deps.compactSessionRuntime(target, body.prompt);
+					break;
+				case "state":
+					result = await this.deps.getSessionRuntimeState(target);
+					break;
+				case "commands":
+					result = await this.deps.listSessionRuntimeCommands(target);
+					break;
+				case "models":
+					result = await this.deps.listSessionRuntimeModels(target);
+					break;
+				case "export-html":
+					result = await this.deps.exportSessionRuntimeHtml(target);
+					break;
+				case "edit-message":
+					result = await this.deps.editSessionRuntimeMessage(target, body.messageId ?? "", body.newText ?? "");
+					break;
+				case "delete-message":
+					result = await this.deps.deleteSessionRuntimeMessage(target, body.messageId ?? "");
+					break;
+				case "prepare-resend":
+					result = await this.deps.prepareSessionRuntimeResend(target, body.messageId ?? "");
+					break;
+				case "model":
+					result = await this.deps.setSessionRuntimeModel(target, body.provider ?? "", body.modelId ?? "");
+					break;
+				case "thinking":
+					result = await this.deps.setSessionRuntimeThinking(target, body.level ?? "");
+					break;
+				case "permission":
+					result = await this.deps.setSessionRuntimePermission(target, body.preset ?? "");
+					break;
+				case "clone":
+					result = await this.deps.cloneSessionRuntime(target);
+					break;
+				case "rewind-list":
+					result = await this.deps.listRewindCheckpoints(target, {
+						limit: typeof body.limit === "number" && Number.isFinite(body.limit) ? body.limit : undefined,
+						beforeTimestamp: typeof body.beforeTimestamp === "number" && Number.isFinite(body.beforeTimestamp) ? body.beforeTimestamp : undefined,
+					});
+					break;
+				case "rewind-diff":
+					result = await this.deps.getRewindCheckpointDiff(target, body.checkpointId ?? "");
+					break;
+				case "rewind-restore":
+					result = await this.deps.restoreRewindCheckpoint(target, body.checkpointId ?? "", body.scope === "files" ? "files" : body.scope === "conversation" ? "conversation" : "all");
+					break;
 			}
-			if (url.pathname.startsWith("/api/")) {
-				this.sendError(response, 404, "webError.apiNotFound", "API not found");
-				return;
-			}
+			this.sendJson(response, { result });
+			return;
+		}
+		if (url.pathname.startsWith("/api/")) {
+			this.sendError(response, 404, "webError.apiNotFound", "API not found");
+			return;
+		}
 
-			await this.serveRenderer(url, response);
+		await this.serveRenderer(url, response);
 	}
 
 	/** 按 sessionId 找活跃 runtime 的 agentId（DSH 工具面板路由；无 runtime 返回 undefined）。 */
@@ -862,11 +771,7 @@ export class WebServiceManager {
 			const snapshot = this.deps.getSessionRuntimeMessages(runtime.sessionId);
 			if (!snapshot) continue;
 			const { target } = snapshot;
-			if (
-				target.sessionId !== runtime.sessionId ||
-				target.agentId !== runtime.agentId ||
-				target.runtimeGeneration !== runtime.runtimeGeneration
-			) continue;
+			if (target.sessionId !== runtime.sessionId || target.agentId !== runtime.agentId || target.runtimeGeneration !== runtime.runtimeGeneration) continue;
 			messagesBySession[runtime.sessionId] = snapshot.value;
 		}
 		return {
@@ -1395,14 +1300,11 @@ export class WebServiceManager {
 		// Web 服务根路径：优先 serve React 版 web.html（A2）；
 		// 构建产物缺失时回退到内嵌 renderPage（A1 vanilla 页，保持兼容）。
 		const webEntry = join(this.rendererRoot, "web.html");
-		const relativePath = requestedPath === "/" || !extname(requestedPath)
-			? (existsSync(webEntry) ? "web.html" : "index.html")
-			: requestedPath.replace(/^\/+/, "");
+		const relativePath = requestedPath === "/" || !extname(requestedPath) ? (existsSync(webEntry) ? "web.html" : "index.html") : requestedPath.replace(/^\/+/, "");
 		const filePath = normalize(join(this.rendererRoot, relativePath));
 		// 资源请求（带扩展名且非 .html）缺失时返回 404，不回退内嵌页：
 		// 缺失资源若被 HTML 冒充，浏览器按 module script 解析报 MIME 错误白屏。
-		const isResourceRequest =
-			Boolean(extname(requestedPath)) && !requestedPath.endsWith(".html");
+		const isResourceRequest = Boolean(extname(requestedPath)) && !requestedPath.endsWith(".html");
 		// 路径逃逸检查 + 文件存在性；文档请求缺失时回退内嵌页，资源请求 404。
 		if (!filePath.startsWith(normalize(this.rendererRoot)) || !existsSync(filePath)) {
 			if (isResourceRequest) {
@@ -1430,23 +1332,13 @@ export class WebServiceManager {
 		// 否则 /@vite/client 会被换成 web.html 的 HTML，浏览器按 module script 执行
 		// 报 "MIME text/html" 错误，整个页面空白。query 也要保留：vite 依赖预构建/
 		// HMR 模块 URL 依赖 ?v= / ?t= / ?import 参数，丢弃会 404 或失去缓存失效语义。
-		const passthrough =
-			requestedPath.startsWith("/@") || requestedPath.startsWith("/api/");
-		const targetPath =
-			passthrough
-				? `${requestedPath}${url.search}`
-				: requestedPath === "/" || !extname(requestedPath)
-					? "/web.html"
-					: `${requestedPath}${url.search}`;
+		const passthrough = requestedPath.startsWith("/@") || requestedPath.startsWith("/api/");
+		const targetPath = passthrough ? `${requestedPath}${url.search}` : requestedPath === "/" || !extname(requestedPath) ? "/web.html" : `${requestedPath}${url.search}`;
 		// 文档请求（HTML 页面）判定：根路径/无扩展名路径或 .html 结尾；
 		// /@* 是 vite 内部模块（/@vite/client、/@fs/...），即便无扩展名也必须是模块请求，
 		// 对模块请求绝不能回退/转发 HTML——浏览器按 module script 解析会报 "MIME text/html"，
 		// 整页白屏且不自动恢复。
-		const isDocumentRequest =
-			!requestedPath.startsWith("/@") &&
-			(requestedPath === "/" ||
-				!extname(requestedPath) ||
-				requestedPath.endsWith(".html"));
+		const isDocumentRequest = !requestedPath.startsWith("/@") && (requestedPath === "/" || !extname(requestedPath) || requestedPath.endsWith(".html"));
 		let upstream: Response;
 		try {
 			upstream = await fetch(`${this.devRendererUrl}${targetPath}`);
@@ -1461,8 +1353,7 @@ export class WebServiceManager {
 			return;
 		}
 		const status = upstream.status;
-		const contentType =
-			upstream.headers.get("content-type") ?? "application/octet-stream";
+		const contentType = upstream.headers.get("content-type") ?? "application/octet-stream";
 		// 上游非 200（如 vite 504 Outdated Optimize Dep——deps 重新优化期间旧 URL 失效）：
 		// 文档请求回退 A1 内嵌页；模块请求透传上游状态。绝不能对模块请求回退 HTML。
 		if (status !== 200 || !upstream.body) {
@@ -1489,9 +1380,7 @@ export class WebServiceManager {
 		});
 		// 流式转发 body，避免整包缓冲大体积 vendor chunk。
 		// 上游中断（vite 重启/浏览器取消）时销毁响应而不是让 error 冒泡崩掉进程。
-		const bodyStream = Readable.fromWeb(
-			upstream.body as import("node:stream/web").ReadableStream,
-		);
+		const bodyStream = Readable.fromWeb(upstream.body as import("node:stream/web").ReadableStream);
 		bodyStream.on("error", () => response.destroy());
 		response.on("error", () => bodyStream.destroy());
 		bodyStream.pipe(response);
@@ -1503,11 +1392,7 @@ export class WebServiceManager {
 	 * 状态行与响应头，再双向管道透传帧数据。失败时直接销毁 socket，浏览器侧
 	 * 会自动重连（vite client 内置重连逻辑），不影响页面本身。
 	 */
-	private proxyDevWebSocket(
-		request: IncomingMessage,
-		socket: import("node:stream").Duplex,
-		head: Buffer,
-	) {
+	private proxyDevWebSocket(request: IncomingMessage, socket: import("node:stream").Duplex, head: Buffer) {
 		const devUrl = new URL(this.devRendererUrl);
 		// vite 会校验 HMR 握手的 Host/Origin：把两者改写为 dev server 自身，
 		// 否则外部端口访问时 vite 按「跨源请求」拒绝 403，HMR 连不上。
@@ -1527,9 +1412,7 @@ export class WebServiceManager {
 			const headerLines = Object.entries(upstreamResponse.headers)
 				.map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(", ") : value}`)
 				.join("\r\n");
-			socket.write(
-				`HTTP/1.1 ${upstreamResponse.statusCode ?? 101} ${upstreamResponse.statusMessage ?? "Switching Protocols"}\r\n${headerLines}\r\n\r\n`,
-			);
+			socket.write(`HTTP/1.1 ${upstreamResponse.statusCode ?? 101} ${upstreamResponse.statusMessage ?? "Switching Protocols"}\r\n${headerLines}\r\n\r\n`);
 			// 双向管道；任一端异常时关闭另一端，避免悬挂连接。
 			upstreamSocket.pipe(socket).pipe(upstreamSocket);
 			upstreamSocket.on("error", () => socket.destroy());
@@ -1590,11 +1473,7 @@ export class WebServiceManager {
 	 * SSE 流式响应：把 pi agent 事件以 AI SDK UIMessageStream 协议推送给指定 session 的订阅者。
 	 * 连接保持到 agent_end（或客户端断开）；断开时由 response close 事件清理路由注册。
 	 */
-	private handleStream(
-		sessionId: string,
-		request: IncomingMessage,
-		response: ServerResponse,
-	): void {
+	private handleStream(sessionId: string, request: IncomingMessage, response: ServerResponse): void {
 		// 写入 SSE 响应头；AI SDK 前端（useChat）靠 x-vercel-ai-ui-message-stream: v1 识别协议。
 		response.writeHead(200, {
 			"content-type": "text/event-stream; charset=utf-8",
@@ -1678,23 +1557,29 @@ export class WebServiceManager {
 		}
 	}
 
-	private sendError(
-		response: ServerResponse,
-		statusCode: number,
-		code: string,
-		error: string,
-		params?: Record<string, string | number>,
-	) {
+	/**
+	 * 鉴权：Authorization: Bearer 对所有方法生效；?token= 查询参数仅限 GET/SSE
+	 * （EventSource 无法携带 header），写操作必须走 Bearer，避免令牌进代理/访问日志。
+	 */
+	private isAuthorized(request: IncomingMessage, url: URL): boolean {
+		if (request.headers.authorization === `Bearer ${this.authToken}`) return true;
+		if (request.method !== "GET") return false;
+		return url.searchParams.get("token") === this.authToken;
+	}
+
+	private sendError(response: ServerResponse, statusCode: number, code: string, error: string, params?: Record<string, string | number>) {
 		response.writeHead(statusCode, {
 			"content-type": "application/json; charset=utf-8",
 			"cache-control": "no-store",
 			"access-control-allow-origin": "*",
 		});
-		response.end(JSON.stringify({
-			code,
-			error,
-			...(params ? { params } : {}),
-		}));
+		response.end(
+			JSON.stringify({
+				code,
+				error,
+				...(params ? { params } : {}),
+			}),
+		);
 	}
 
 	private sendNoContent(response: ServerResponse) {
@@ -1708,9 +1593,23 @@ export class WebServiceManager {
 
 	private async readJson<T>(request: IncomingMessage) {
 		const chunks: Buffer[] = [];
+		let totalBytes = 0;
+		let oversized = false;
 		for await (const chunk of request) {
+			totalBytes += chunk.length;
+			if (totalBytes > HARD_BODY_ABORT_BYTES) {
+				// 硬上限：直接断连（此分支下 413 可能来不及送达，属预期）
+				request.destroy();
+				throw new WebBodyTooLargeError();
+			}
+			if (totalBytes > MAX_JSON_BODY_BYTES) {
+				// 逻辑上限：丢弃超限 chunk 但继续排空连接，保证 413 响应能送达客户端
+				oversized = true;
+				continue;
+			}
 			chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
 		}
+		if (oversized) throw new WebBodyTooLargeError();
 		if (chunks.length === 0) return {} as T;
 		return JSON.parse(Buffer.concat(chunks).toString("utf8")) as T;
 	}

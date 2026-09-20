@@ -30,17 +30,13 @@ test("settings select: option is clickable through dialog layers", async ({ wind
 	const saveButton = modal.getByRole("button", { name: "保存" });
 	await expect(saveButton).toBeVisible({ timeout: 3000 });
 	await saveButton.click();
-	await expect
-		.poll(() => window.evaluate(() => document.documentElement.dataset.theme), { timeout: 5000 })
-		.toBe("dark");
+	await expect.poll(() => window.evaluate(() => document.documentElement.dataset.theme), { timeout: 5000 }).toBe("dark");
 
 	// 恢复亮色，避免影响同 worker 的其他用例
 	await modal.locator("[data-slot='select-trigger']").first().click();
 	await window.locator("[data-slot='select-content']").getByText("浅色").click();
 	await modal.getByRole("button", { name: "保存" }).click();
-	await expect
-		.poll(() => window.evaluate(() => document.documentElement.dataset.theme), { timeout: 5000 })
-		.toBe("light");
+	await expect.poll(() => window.evaluate(() => document.documentElement.dataset.theme), { timeout: 5000 }).toBe("light");
 });
 
 /**

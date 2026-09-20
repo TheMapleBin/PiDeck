@@ -24,12 +24,7 @@
  * （notify.ts 的 sendCompletion 使用 `subagent-notify`，历史版本用过另一种命名）。
  * subagent_control_notice / subagent_supervisor_request：子代理控制与请求父代理介入。
  */
-export const NOTIFY_CUSTOM_TYPES: ReadonlySet<string> = new Set([
-	"subagent-notify",
-	"subagent-notification",
-	"subagent_control_notice",
-	"subagent_supervisor_request",
-]);
+export const NOTIFY_CUSTOM_TYPES: ReadonlySet<string> = new Set(["subagent-notify", "subagent-notification", "subagent_control_notice", "subagent_supervisor_request"]);
 
 /** customType 是否为需要展示的通知类消息。 */
 export function isNotifiableCustomType(customType: unknown): boolean {
@@ -68,7 +63,13 @@ export function parseNotifySummary(text: string): NotifySummary {
 	const rawLines = (text ?? "").split("\n");
 	const headlineIndex = rawLines.findIndex((line) => line.trim().length > 0);
 	const headline = headlineIndex >= 0 ? rawLines[headlineIndex].trim() : "";
-	const body = headlineIndex >= 0 ? rawLines.slice(headlineIndex + 1).join("\n").trim() : "";
+	const body =
+		headlineIndex >= 0
+			? rawLines
+					.slice(headlineIndex + 1)
+					.join("\n")
+					.trim()
+			: "";
 
 	const colonIndex = headline.search(/[:：]/);
 	const prefix = colonIndex > 0 ? headline.slice(0, colonIndex) : headline;
@@ -82,9 +83,7 @@ export function parseNotifySummary(text: string): NotifySummary {
 	status = matchIn(prefix);
 	if (status === "unknown") status = matchIn(headline);
 
-	const agents = [...headline.matchAll(/\*\*(.+?)\*\*/g)]
-		.map((match) => match[1].trim())
-		.filter((name) => name.length > 0);
+	const agents = [...headline.matchAll(/\*\*(.+?)\*\*/g)].map((match) => match[1].trim()).filter((name) => name.length > 0);
 
 	return { status, agents, headline, body };
 }

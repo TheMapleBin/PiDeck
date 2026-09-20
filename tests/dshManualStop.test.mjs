@@ -19,18 +19,12 @@ import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
 const { DshHost } = loadTsCommonJs("src/main/dsh/DshHost.ts");
 const { DshHostProcess } = loadTsCommonJs("src/main/dsh/DshHostProcess.ts");
-const {
-	DSH_MANUALLY_STOPPED_ERROR,
-	dshManuallyStoppedError,
-	isDshManuallyStoppedError,
-} = loadTsCommonJs("src/main/dsh/dshManualStop.ts");
+const { DSH_MANUALLY_STOPPED_ERROR, dshManuallyStoppedError, isDshManuallyStoppedError } = loadTsCommonJs("src/main/dsh/dshManualStop.ts");
 
 /** 跨 realm 安全断言：错误是「手动停止拒绝」（稳定文案精确匹配；不用 instanceof——错误在 vm realm 内构造，跨 realm instanceof 恒 false）。 */
-const rejectsManuallyStopped = (fn) =>
-	assert.rejects(fn, (error) => error?.message === DSH_MANUALLY_STOPPED_ERROR);
+const rejectsManuallyStopped = (fn) => assert.rejects(fn, (error) => error?.message === DSH_MANUALLY_STOPPED_ERROR);
 /** 跨 realm 安全断言：错误不是「手动停止拒绝」（不掩盖真实 boot 失败）。 */
-const rejectsNotManuallyStopped = (fn) =>
-	assert.rejects(fn, (error) => error?.message !== DSH_MANUALLY_STOPPED_ERROR);
+const rejectsNotManuallyStopped = (fn) => assert.rejects(fn, (error) => error?.message !== DSH_MANUALLY_STOPPED_ERROR);
 
 /** DshHost 位置参数的中间桩（门控分支不触达真实文件系统/进程）。 */
 const NOOP = () => {};
@@ -84,7 +78,13 @@ test("DshHostProcess.start: 手动停止时拒绝 fork", async () => {
 test("DshHostProcess.restartAfterCrash: 手动停止时静默放弃且不算失败信号", async () => {
 	const logs = [];
 	let stopped = true;
-	const proc = new DshHostProcess("entry.js", [], {}, (scope, msg) => logs.push(`${scope}: ${msg}`), () => stopped);
+	const proc = new DshHostProcess(
+		"entry.js",
+		[],
+		{},
+		(scope, msg) => logs.push(`${scope}: ${msg}`),
+		() => stopped,
+	);
 	assert.equal(await proc.restartAfterCrash(), false);
 	// 静默语义：只留一条「manually stopped」info 日志，不产生「restart failed」假故障。
 	const manualLogs = logs.filter((line) => line.includes("manually stopped"));

@@ -8,10 +8,7 @@ import * as tar from "tar";
 import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
 // dshRuntimeIo 依赖 electron（仅用于下载），测试里给个最小替身即可加载解压实现。
-const { createTarExtractor, createNetDownloader, fetchDshRuntimeIndex } = loadTsCommonJs(
-	"src/main/dsh/runtime/dshRuntimeIo.ts",
-	{ stubs: { electron: { net: { request: () => undefined } } } },
-);
+const { createTarExtractor, createNetDownloader, fetchDshRuntimeIndex } = loadTsCommonJs("src/main/dsh/runtime/dshRuntimeIo.ts", { stubs: { electron: { net: { request: () => undefined } } } });
 const createFetchIndex = () => fetchDshRuntimeIndex;
 
 const { DshRuntimeManager } = loadTsCommonJs("src/main/dsh/runtime/DshRuntimeManager.ts");
@@ -155,10 +152,7 @@ test("本地下载源：file:// 索引与归档都能读（发布位置未就绪
 		download: createNetDownloader(),
 		extract: createTarExtractor(),
 	});
-	const result = await manager.installFromUrl(
-		pathToFileURL(archive).href,
-		index.releases[0].sha256,
-	);
+	const result = await manager.installFromUrl(pathToFileURL(archive).href, index.releases[0].sha256);
 	assert.equal(result.ok, true, JSON.stringify(result));
 	assert.equal(manager.resolveActive()?.dirName, VERSION);
 	rmSync(root, { recursive: true, force: true });
@@ -180,10 +174,7 @@ async function makeBundledDir(root, { over = {}, withArchive = true } = {}) {
 	if (withArchive) {
 		for await (const chunk of createReadStream(archivePath)) hash.update(chunk);
 	}
-	writeFileSync(
-		join(dir, "manifest.json"),
-		JSON.stringify(manifest({ archiveSha256: hash.digest("hex"), ...over })),
-	);
+	writeFileSync(join(dir, "manifest.json"), JSON.stringify(manifest({ archiveSha256: hash.digest("hex"), ...over })));
 	return dir;
 }
 
@@ -296,29 +287,16 @@ test("runtime:pack 默认 lite，CI 交叉打满 6 平台并上传，禁止独�
 	const pkgJson = readFileSync("package.json", "utf8");
 	const pkg = JSON.parse(pkgJson);
 	const release = readFileSync(".github/workflows/release.yml", "utf8");
-	assert.match(
-		pack,
-		/const lite = !argv.includes\("--full"\)/,
-		"官方默认 lite；--full 才把 runtime 拷进 extraResources",
-	);
-	assert.match(pack, /isNpmHashedLeftoverDir/,
-		"npm 升级残留 .pkg-<8char> 必须从种子/闭包/walk 跳过");
+	assert.match(pack, /const lite = !argv.includes\("--full"\)/, "官方默认 lite；--full 才把 runtime 拷进 extraResources");
+	assert.match(pack, /isNpmHashedLeftoverDir/, "npm 升级残留 .pkg-<8char> 必须从种子/闭包/walk 跳过");
 	assert.equal(pkg.scripts["runtime:pack"], "node scripts/pack-dsh-runtime.mjs");
-	assert.match(
-		pkgJson,
-		/@larksuiteoapi\/node-sdk\/es/,
-		"electron-builder files 必须排除飞书 SDK 的 ESM 副本",
-	);
+	assert.match(pkgJson, /@larksuiteoapi\/node-sdk\/es/, "electron-builder files 必须排除飞书 SDK 的 ESM 副本");
 	// 2026-09 起 runtime tgz 由 pack-dsh-runtime job（单 runner 交叉打包）上传，
 	// 安装包构建 job 不再顺带产出 runtime（glob 已从它的 files 列表移除）。
 	const packJob = release.split("pack-dsh-runtime:")[1] ?? "";
 	assert.ok(packJob.includes("dsh-runtime-${{ matrix.os }}-${{ matrix.arch }}.tgz"), "交叉 job 必须上传目标平台命名的归档");
 	assert.ok(packJob.includes("--target-os ${{ matrix.os }}"), "交叉 job 必须传 --target-*");
-	assert.doesNotMatch(
-		release,
-		/releases\/download\/dsh-runtime/,
-		"独立 sidecar tag 会抢走 GitHub /releases/latest",
-	);
+	assert.doesNotMatch(release, /releases\/download\/dsh-runtime/, "独立 sidecar tag 会抢走 GitHub /releases/latest");
 });
 
 /** 手动补发入口：runtime 变更后不必重打安装包，但仍必须挂 latest v*。 */
@@ -375,11 +353,7 @@ test("publish-dsh-runtime.yml 默认原生矩阵 + 可选交叉模式，挂 late
 	assert.match(publish, /dsh-runtime-\$\{\{ matrix\.os \}\}-\$\{\{ matrix\.arch \}\}\.tgz/);
 	assert.match(publish, /\^v\[0-9\]/, "只允许挂到 v* 应用 tag");
 	assert.doesNotMatch(publish, /TAG=dsh-runtime/);
-	assert.doesNotMatch(
-		publish,
-		/gh release create\s+dsh-runtime/,
-		"禁止新建独立 sidecar Release",
-	);
+	assert.doesNotMatch(publish, /gh release create\s+dsh-runtime/, "禁止新建独立 sidecar Release");
 });
 
 test("解压器过滤逃逸条目：../ 不会写出目标目录", async () => {
@@ -388,7 +362,14 @@ test("解压器过滤逃逸条目：../ 不会写出目标目录", async () => {
 	writeFileSync(join(src, "evil.txt"), "pwned");
 	const archive = join(src, "evil.tar");
 	await tar.c(
-		{ file: archive, cwd: src, portable: true, onWriteEntry: (e) => { e.path = "../../escaped/evil.txt"; } },
+		{
+			file: archive,
+			cwd: src,
+			portable: true,
+			onWriteEntry: (e) => {
+				e.path = "../../escaped/evil.txt";
+			},
+		},
 		["./evil.txt"],
 	);
 
@@ -439,9 +420,12 @@ test("发版自动化链：release → pack-dsh-runtime/sidecars → sync-atomgi
 	// （win32/darwin/linux × x64/arm64），linux 强制 glibc（非 Linux 宿主上 npm 检测
 	// 不到 libc 会静默过滤 @img/sharp-linux-x64 等平台包）。
 	for (const [os, arch] of [
-		["win32", "x64"], ["win32", "arm64"],
-		["darwin", "x64"], ["darwin", "arm64"],
-		["linux", "x64"], ["linux", "arm64"],
+		["win32", "x64"],
+		["win32", "arm64"],
+		["darwin", "x64"],
+		["darwin", "arm64"],
+		["linux", "x64"],
+		["linux", "arm64"],
 	]) {
 		assert.match(release, new RegExp(`os: ${os}\\s*\\n\\s*arch: ${arch}`), `缺失平台 ${os}-${arch}`);
 	}

@@ -3,15 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
-const {
-	DEFAULT_DEV_USER_DATA_NAME,
-	DEFAULT_DEV_VITE_PORT,
-	sanitizeDevBranchSegment,
-	isSharedDevBranch,
-	resolveDevUserDataDirName,
-	resolveDevVitePort,
-	readDevGitBranch,
-} = loadTsCommonJs("src/main/devIsolation.ts");
+const { DEFAULT_DEV_USER_DATA_NAME, DEFAULT_DEV_VITE_PORT, sanitizeDevBranchSegment, isSharedDevBranch, resolveDevUserDataDirName, resolveDevVitePort, readDevGitBranch } = loadTsCommonJs("src/main/devIsolation.ts");
 
 test("sanitizeDevBranchSegment 把路径分隔符和非法字符收成目录安全段", () => {
 	assert.equal(sanitizeDevBranchSegment("feat/dsh-agent-mvp"), "feat-dsh-agent-mvp");
@@ -29,17 +21,11 @@ test("main/dev/master 继续用历史 pi-desktop-dev 和 5181", () => {
 });
 
 test("功能分支拆开 userData 目录且不用 5181", () => {
-	assert.equal(
-		resolveDevUserDataDirName("feat/dsh-agent-mvp"),
-		"pi-desktop-dev-feat-dsh-agent-mvp",
-	);
+	assert.equal(resolveDevUserDataDirName("feat/dsh-agent-mvp"), "pi-desktop-dev-feat-dsh-agent-mvp");
 	const port = resolveDevVitePort("feat/dsh-agent-mvp");
 	assert.notEqual(port, DEFAULT_DEV_VITE_PORT);
 	assert.ok(port >= 5182 && port <= 5281);
-	assert.notEqual(
-		resolveDevUserDataDirName("feat/dsh-agent-mvp"),
-		resolveDevUserDataDirName("fix/docs-custom-domain-base"),
-	);
+	assert.notEqual(resolveDevUserDataDirName("feat/dsh-agent-mvp"), resolveDevUserDataDirName("fix/docs-custom-domain-base"));
 });
 
 test("electron-vite renderer 用同一套端口解析，避免和主进程 userData 各算各的", () => {
@@ -57,16 +43,7 @@ test("主进程未打包时按分支解析 userData，打包 dev 构建仍固定
 });
 
 test("readDevGitBranch 优先读环境变量，否则走 git", () => {
-	assert.equal(
-		readDevGitBranch({ env: { PIDECK_DEV_BRANCH: "feat/from-env" }, execGit: () => "should-not-run" }),
-		"feat/from-env",
-	);
-	assert.equal(
-		readDevGitBranch({ env: {}, cwd: "/tmp", execGit: (cwd) => (cwd === "/tmp" ? "feat/from-git" : "") }),
-		"feat/from-git",
-	);
-	assert.equal(
-		readDevGitBranch({ env: {}, execGit: () => "HEAD" }),
-		undefined,
-	);
+	assert.equal(readDevGitBranch({ env: { PIDECK_DEV_BRANCH: "feat/from-env" }, execGit: () => "should-not-run" }), "feat/from-env");
+	assert.equal(readDevGitBranch({ env: {}, cwd: "/tmp", execGit: (cwd) => (cwd === "/tmp" ? "feat/from-git" : "") }), "feat/from-git");
+	assert.equal(readDevGitBranch({ env: {}, execGit: () => "HEAD" }), undefined);
 });

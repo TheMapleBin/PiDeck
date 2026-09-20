@@ -9,10 +9,7 @@ import { useSessionDismissedFiles } from "../../hooks/useSessionDismissedFiles";
 import type { SessionFileChange } from "../../../../shared/types";
 import { t } from "../../i18n";
 import { Button } from "../ui-shadcn/button";
-import {
-	ComposerWidgetFrame,
-	useComposerWidgetCollapsed,
-} from "./ComposerWidgetLayout";
+import { ComposerWidgetFrame, useComposerWidgetCollapsed } from "./ComposerWidgetLayout";
 
 /**
  * composer 上方的「修改的文件」常驻条（最新一轮文件汇总横栏）。
@@ -31,12 +28,9 @@ const FileEntry = (props: {
 	onOpenFile?: (path: string) => void;
 	onDiffFile?: DiffFileHandler;
 }) => {
-		// 行级折叠走 composer 通道（本组件在 ComposerWidgetLayoutProvider 内），
-		// key 与旧弹层 widgetsDisclosureCollapsedFamily 同构，跨轮次记忆展开态
-	const { collapsed, toggleCollapsed } = useComposerWidgetCollapsed(
-		`modified-file-diff:${props.sessionId}:session:${props.entry.path}`,
-		true,
-	);
+	// 行级折叠走 composer 通道（本组件在 ComposerWidgetLayoutProvider 内），
+	// key 与旧弹层 widgetsDisclosureCollapsedFamily 同构，跨轮次记忆展开态
+	const { collapsed, toggleCollapsed } = useComposerWidgetCollapsed(`modified-file-diff:${props.sessionId}:session:${props.entry.path}`, true);
 	return (
 		// items-start + h-9 包裹：跳转按钮始终与顶部文件行（min-h-9）垂直居中对齐，
 		// 不会因 FileDiff 展开后整体变高而跑到中间
@@ -48,7 +42,9 @@ const FileEntry = (props: {
 				lines={fileChangeToDiffLines(props.entry)}
 				status="complete"
 				open={!collapsed}
-				onOpenChange={(open) => { if (open === collapsed) toggleCollapsed(); }}
+				onOpenChange={(open) => {
+					if (open === collapsed) toggleCollapsed();
+				}}
 				maxHeight={200}
 				language="diff"
 				// 折叠卡内展开高度变化传导给 ComposerMeasuredExtras 驱动面板增高，无需瞬时动画
@@ -83,10 +79,7 @@ export function SessionFilesStrip(props: {
 	onOpenFile?: (path: string) => void;
 	onDiffFile?: DiffFileHandler;
 }) {
-	const { collapsed, toggleCollapsed } = useComposerWidgetCollapsed(
-		`files:${props.sessionId}`,
-		true,
-	);
+	const { collapsed, toggleCollapsed } = useComposerWidgetCollapsed(`files:${props.sessionId}`, true);
 
 	// 会话级文件汇总（主进程全量 + 当前 run 增量），跨轮次/会话切换不丢
 	const { entries: fileEntries, loading } = useSessionFileChanges(props.sessionId, props.run);
@@ -103,24 +96,12 @@ export function SessionFilesStrip(props: {
 	if (visibleFileEntries.length === 0) return null;
 
 	return (
-		<ComposerWidgetFrame
-			data-testid="session-files-strip"
-			aria-label={t("sessionFiles.title")}
-		>
+		<ComposerWidgetFrame data-testid="session-files-strip" aria-label={t("sessionFiles.title")}>
 			<div className="flex h-9 w-full items-center gap-2.5 px-3">
-				<button
-					type="button"
-					className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
-					aria-expanded={!collapsed}
-					onClick={toggleCollapsed}
-				>
+				<button type="button" className="flex min-w-0 flex-1 items-center gap-2.5 text-left" aria-expanded={!collapsed} onClick={toggleCollapsed}>
 					<FileEdit size={14} aria-hidden="true" className="shrink-0 text-text-tertiary" />
-					<span className="shrink-0 text-[13px] font-medium leading-6 text-foreground">
-						{t("sessionFiles.title")}
-					</span>
-					<span className="shrink-0 text-[13px] leading-5 text-text-tertiary">
-						{t("sessionFiles.count", { count: visibleFileEntries.length })}
-					</span>
+					<span className="shrink-0 text-[13px] font-medium leading-6 text-foreground">{t("sessionFiles.title")}</span>
+					<span className="shrink-0 text-[13px] leading-5 text-text-tertiary">{t("sessionFiles.count", { count: visibleFileEntries.length })}</span>
 					<span className="min-w-0 flex-1" />
 					<span className="shrink-0 text-text-tertiary" aria-hidden="true">
 						{collapsed ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
@@ -130,9 +111,7 @@ export function SessionFilesStrip(props: {
 			{!collapsed && (
 				<>
 					<div className="flex items-center justify-between px-3 pt-1">
-						<span className="text-[13px] text-text-tertiary">
-							{t("sessionFiles.count", { count: visibleFileEntries.length })}
-						</span>
+						<span className="text-[13px] text-text-tertiary">{t("sessionFiles.count", { count: visibleFileEntries.length })}</span>
 						<Button
 							variant="ghost"
 							size="sm"
@@ -148,12 +127,7 @@ export function SessionFilesStrip(props: {
 					<ul className="mb-2 flex max-h-[200px] flex-col gap-1 overflow-y-auto overscroll-contain [contain:layout_paint] [scrollbar-gutter:stable] px-3 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-100 motion-reduce:animate-none">
 						{visibleFileEntries.map((entry) => (
 							<li key={entry.path} className="flex min-w-0 items-center gap-1">
-								<FileEntry
-									sessionId={props.sessionId}
-									entry={entry}
-									onOpenFile={props.onOpenFile}
-									onDiffFile={props.onDiffFile}
-								/>
+								<FileEntry sessionId={props.sessionId} entry={entry} onOpenFile={props.onOpenFile} onDiffFile={props.onDiffFile} />
 							</li>
 						))}
 					</ul>

@@ -12,17 +12,24 @@ test("listWebNetworkAddresses filters loopback and sorts private LAN addresses f
 			{ address: "100.64.0.8", netmask: "255.192.0.0", family: "IPv4", mac: "", internal: false, cidr: "100.64.0.8/10" },
 			{ address: "10.0.0.12", netmask: "255.0.0.0", family: "IPv4", mac: "", internal: false, cidr: "10.0.0.12/8" },
 		],
-		IPv6: [
-			{ address: "fe80::1", netmask: "ffff:ffff:ffff:ffff::", family: "IPv6", mac: "", internal: false, cidr: "fe80::1/64" },
-		],
+		IPv6: [{ address: "fe80::1", netmask: "ffff:ffff:ffff:ffff::", family: "IPv6", mac: "", internal: false, cidr: "fe80::1/64" }],
 	});
 
-	assert.deepEqual(result.map(({ address }) => address), ["10.0.0.12", "192.168.1.23", "100.64.0.8"]);
+	assert.deepEqual(
+		result.map(({ address }) => address),
+		["10.0.0.12", "192.168.1.23", "100.64.0.8"],
+	);
 	assert.equal(result[0].interfaceName, "VPN");
 	assert.equal(result[0].isPrivate, true);
 	assert.equal(result[2].isPrivate, false);
-	assert.equal(result.some(({ address }) => address === "127.0.0.1"), false);
-	assert.equal(result.some(({ address }) => address.includes(":")), false);
+	assert.equal(
+		result.some(({ address }) => address === "127.0.0.1"),
+		false,
+	);
+	assert.equal(
+		result.some(({ address }) => address.includes(":")),
+		false,
+	);
 });
 
 test("listWebNetworkAddresses deduplicates addresses across virtual adapters", () => {

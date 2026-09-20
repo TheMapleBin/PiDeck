@@ -94,14 +94,8 @@ test("isDirectoryImportCandidate：选定会话容器时只收目录内的会话
 	const sameCwdOutside = scanSummary(`${CONTAINER_DIR}/--d--work-old--2/x.jsonl`, {
 		projectPath: "D:\\work\\old",
 	});
-	assert.equal(
-		core.isDirectoryImportCandidate({ summary: inside, dir: GROUP_DIR, pickedIsContainer: true }),
-		true,
-	);
-	assert.equal(
-		core.isDirectoryImportCandidate({ summary: outside, dir: GROUP_DIR, pickedIsContainer: true }),
-		false,
-	);
+	assert.equal(core.isDirectoryImportCandidate({ summary: inside, dir: GROUP_DIR, pickedIsContainer: true }), true);
+	assert.equal(core.isDirectoryImportCandidate({ summary: outside, dir: GROUP_DIR, pickedIsContainer: true }), false);
 	assert.equal(
 		core.isDirectoryImportCandidate({
 			summary: sameCwdOutside,
@@ -117,14 +111,8 @@ test("isDirectoryImportCandidate：选定项目目录时按会话记录里的原
 	const other = scanSummary(`${CONTAINER_DIR}/--d--work-other--/y.jsonl`, {
 		projectPath: "D:\\work\\other",
 	});
-	assert.equal(
-		core.isDirectoryImportCandidate({ summary: moved, dir: PROJECT_DIR, pickedIsContainer: false }),
-		true,
-	);
-	assert.equal(
-		core.isDirectoryImportCandidate({ summary: other, dir: PROJECT_DIR, pickedIsContainer: false }),
-		false,
-	);
+	assert.equal(core.isDirectoryImportCandidate({ summary: moved, dir: PROJECT_DIR, pickedIsContainer: false }), true);
+	assert.equal(core.isDirectoryImportCandidate({ summary: other, dir: PROJECT_DIR, pickedIsContainer: false }), false);
 	// 没有原目录信息的会话不能靠项目目录匹配进来
 	assert.equal(
 		core.isDirectoryImportCandidate({
@@ -198,10 +186,7 @@ test("scan 只收选定目录的会话、回读标题、标注原目录存在性
 test("scan 在选定项目目录时按原工作目录找回历史", async () => {
 	const { importer, state } = createImporter();
 	state.shape = { hasJsonl: false, hasEncodedGroups: false };
-	state.sessions = [
-		scanSummary(SESSION_FILE, { projectPath: "D:\\work\\old", name: "移动前的会话" }),
-		scanSummary(`${CONTAINER_DIR}/--d--work-other--/y.jsonl`, { projectPath: "D:\\work\\other" }),
-	];
+	state.sessions = [scanSummary(SESSION_FILE, { projectPath: "D:\\work\\old", name: "移动前的会话" }), scanSummary(`${CONTAINER_DIR}/--d--work-other--/y.jsonl`, { projectPath: "D:\\work\\other" })];
 	// 原目录已不存在（典型「目录被移动/改名」）
 	const rows = plain(await importer.scan(PROJECT_DIR));
 	assert.deepEqual(
@@ -213,9 +198,7 @@ test("scan 在选定项目目录时按原工作目录找回历史", async () => 
 test("scan 截断到上限条数（按时间倒序保留最新的）", async () => {
 	const { importer, state } = createImporter();
 	state.shape = { hasJsonl: true, hasEncodedGroups: false };
-	state.sessions = Array.from({ length: core.DIRECTORY_IMPORT_MAX_SUMMARIES + 20 }, (_, index) =>
-		scanSummary(`${GROUP_DIR}/s-${index}.jsonl`, { updatedAt: index }),
-	);
+	state.sessions = Array.from({ length: core.DIRECTORY_IMPORT_MAX_SUMMARIES + 20 }, (_, index) => scanSummary(`${GROUP_DIR}/s-${index}.jsonl`, { updatedAt: index }));
 	const rows = await importer.scan(GROUP_DIR);
 	assert.equal(rows.length, core.DIRECTORY_IMPORT_MAX_SUMMARIES);
 	// 最新的一条（updatedAt 最大）必须留下
@@ -225,15 +208,9 @@ test("scan 截断到上限条数（按时间倒序保留最新的）", async () 
 test("import 把候选摘要并入目标项目（一次 mergeScanned，幂等）", async () => {
 	const { importer, state } = createImporter();
 	state.shape = { hasJsonl: true, hasEncodedGroups: false };
-	state.sessions = [
-		scanSummary(`${GROUP_DIR}/a.jsonl`, { name: "会话 A" }),
-		scanSummary(`${GROUP_DIR}/b.jsonl`, { name: "会话 B" }),
-	];
+	state.sessions = [scanSummary(`${GROUP_DIR}/a.jsonl`, { name: "会话 A" }), scanSummary(`${GROUP_DIR}/b.jsonl`, { name: "会话 B" })];
 
-	const report = await importer.import("project-1", GROUP_DIR, [
-		`${GROUP_DIR}/a.jsonl`,
-		`${GROUP_DIR}/b.jsonl`,
-	]);
+	const report = await importer.import("project-1", GROUP_DIR, [`${GROUP_DIR}/a.jsonl`, `${GROUP_DIR}/b.jsonl`]);
 	assert.equal(report.imported, 2);
 	assert.equal(report.failed, 0);
 	assert.equal(state.mergeCalls.length, 1);
@@ -256,18 +233,11 @@ test("import 拒绝伪造/越界路径（不在候选清单里）", async () => 
 		scanSummary("C:/Windows/system32/evil.jsonl", { projectPath: "D:\\work\\other" }),
 	];
 
-	const report = await importer.import("project-1", GROUP_DIR, [
-		`${GROUP_DIR}/real.jsonl`,
-		"C:/Windows/system32/evil.jsonl",
-		`${GROUP_DIR}/never-scanned.jsonl`,
-	]);
+	const report = await importer.import("project-1", GROUP_DIR, [`${GROUP_DIR}/real.jsonl`, "C:/Windows/system32/evil.jsonl", `${GROUP_DIR}/never-scanned.jsonl`]);
 	assert.equal(report.imported, 1);
 	assert.equal(report.failed, 2);
 	assert.deepEqual(state.merged, [`${GROUP_DIR}/real.jsonl`]);
-	assert.equal(
-		plain(report.results).filter((result) => result.error === "SESSION_NOT_IN_DIRECTORY").length,
-		2,
-	);
+	assert.equal(plain(report.results).filter((result) => result.error === "SESSION_NOT_IN_DIRECTORY").length, 2);
 });
 
 test("import 在 catalog 写入失败时全部记为失败并回调上报", async () => {
@@ -276,10 +246,7 @@ test("import 在 catalog 写入失败时全部记为失败并回调上报", asyn
 	state.sessions = [scanSummary(`${GROUP_DIR}/a.jsonl`), scanSummary(`${GROUP_DIR}/b.jsonl`)];
 	state.mergeError = new Error("catalog write failed");
 
-	const report = await importer.import("project-1", GROUP_DIR, [
-		`${GROUP_DIR}/a.jsonl`,
-		`${GROUP_DIR}/b.jsonl`,
-	]);
+	const report = await importer.import("project-1", GROUP_DIR, [`${GROUP_DIR}/a.jsonl`, `${GROUP_DIR}/b.jsonl`]);
 	assert.equal(report.imported, 0);
 	assert.equal(report.failed, 2);
 	assert.equal(state.errors.length, 1);

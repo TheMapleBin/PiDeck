@@ -5,11 +5,7 @@
  * 因此 dev 默认跟随 latest，只有维护者显式设置 tag 时才锁定指定 Release。
  * 已安装包则默认跟随自身版本 tag，避免把正式版误下载成另一版应用的 runtime。
  */
-export function resolveDshRuntimeReleaseTag(input: {
-	explicitTag?: string;
-	isPackaged: boolean;
-	appVersion: string;
-}): string | undefined {
+export function resolveDshRuntimeReleaseTag(input: { explicitTag?: string; isPackaged: boolean; appVersion: string }): string | undefined {
 	const explicitTag = input.explicitTag?.trim();
 	if (explicitTag) return explicitTag;
 	if (!input.isPackaged) return undefined;

@@ -26,9 +26,7 @@ import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 const require = createRequire(import.meta.url);
 const { PiRpcClient } = loadTsCommonJs("src/main/pi/PiRpcClient.ts");
 const { describeSpawnFailure } = loadTsCommonJs("src/main/pi/piSpawnFailure.ts");
-const { decideExtensionFallback, describeExtensionFallbackSkip } = loadTsCommonJs(
-	"src/main/pi/extensionStartupFallback.ts",
-);
+const { decideExtensionFallback, describeExtensionFallbackSkip } = loadTsCommonJs("src/main/pi/extensionStartupFallback.ts");
 
 function transpile(filePath) {
 	return ts.transpileModule(readFileSync(filePath, "utf8"), {
@@ -156,7 +154,10 @@ test("spawn 失败且 cwd/pi 路径都正常时，报「找不到可执行文件
 
 		const pending = pi.client.request({ type: "get_state" }, 600_000);
 		child.emit("error", Object.assign(new Error("spawn something.exe ENOENT"), { code: "ENOENT" }));
-		const error = await pending.then(() => null, (reason) => reason);
+		const error = await pending.then(
+			() => null,
+			(reason) => reason,
+		);
 
 		assert.match(error.message, /找不到可执行文件/);
 		assert.equal(pi.getDiagnostics()?.cwdMissing, false);
@@ -174,7 +175,10 @@ test("spawn 失败且 pi 路径失效时，直接指出路径而不是「找不�
 
 	const pending = pi.client.request({ type: "get_state" }, 600_000);
 	child.emit("error", Object.assign(new Error("spawn C:\\Windows\\system32\\cmd.exe ENOENT"), { code: "ENOENT" }));
-	const error = await pending.then(() => null, (reason) => reason);
+	const error = await pending.then(
+		() => null,
+		(reason) => reason,
+	);
 
 	assert.match(error.message, /pi 路径不存在/);
 	assert.doesNotMatch(error.message, /找不到可执行文件/);
@@ -193,10 +197,7 @@ test("describeSpawnFailure 只对可归因的 errno 给结论", () => {
 	};
 
 	// cwd 不存在：实测复现的那条误导性 ENOENT（且此时不能顺带说 pi 路径有问题）
-	assert.match(
-		describeSpawnFailure({ ...base, cwdExists: false, cwdIsDirectory: false }),
-		/项目工作目录不存在/,
-	);
+	assert.match(describeSpawnFailure({ ...base, cwdExists: false, cwdIsDirectory: false }), /项目工作目录不存在/);
 	assert.match(describeSpawnFailure({ ...base, cwdExists: false, cwdIsDirectory: false }), /误报成 spawn <cmd\.exe> ENOENT/);
 
 	// cwd 正常但 pi 路径丢了（nvm 切版本后典型）：必须指出 pi 路径，而不是「找不到 cmd.exe」
@@ -236,10 +237,7 @@ test("spawn 失败不触发扩展回退，并给出原因（扩展尚未加载�
 	assert.match(describeExtensionFallbackSkip(input), /与加载了哪些扩展无关/);
 
 	// 回归保护：错误文本被改写成人话后，仍要靠 spawnFailed 判据认出「与扩展无关」。
-	assert.equal(
-		decideExtensionFallback({ ...input, stderr: "", errorMessage: "项目工作目录不存在" }).retry,
-		false,
-	);
+	assert.equal(decideExtensionFallback({ ...input, stderr: "", errorMessage: "项目工作目录不存在" }).retry, false);
 });
 
 test("扩展加载失败仍然回退（原有能力不受影响）", () => {
@@ -273,13 +271,8 @@ test("close 后的 PiRpcClient 立即拒绝新请求（不再空等超时）", a
 test("PiProcess 诊断里带上 Windows 启动通道与 cmd.exe 回退原因", async () => {
 	const child = createFailedSpawnChild();
 	const { PiProcess } = loadPiProcess(child);
-	const reason =
-		"垫片引用的 JS 入口不存在：C:\\nvm4w\\nodejs\\node_modules\\@earendil-works\\pi-coding-agent\\dist\\bundle\\cli.js";
-	const pi = new PiProcess(
-		process.cwd(),
-		{},
-		createLocator("C:\\nvm4w\\nodejs\\pi.cmd", { channel: "cmd-shim", reason }),
-	);
+	const reason = "垫片引用的 JS 入口不存在：C:\\nvm4w\\nodejs\\node_modules\\@earendil-works\\pi-coding-agent\\dist\\bundle\\cli.js";
+	const pi = new PiProcess(process.cwd(), {}, createLocator("C:\\nvm4w\\nodejs\\pi.cmd", { channel: "cmd-shim", reason }));
 	await pi.start();
 
 	// 命令行里出现 cmd.exe 时必须能回答「为什么没走 node 直启」，否则会被当成启动方式回归。

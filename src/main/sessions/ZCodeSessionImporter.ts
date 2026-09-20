@@ -4,26 +4,11 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, readdir, stat, utimes, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import type {
-	ZCodeImportReport,
-	ZCodeImportResult,
-	ZCodeImportStatus,
-	ZCodeSessionSummary,
-} from "../../shared/types";
-import {
-	defaultSessionImportCopy,
-	type SessionImportCopy,
-} from "./SessionImportCopy";
+import type { ZCodeImportReport, ZCodeImportResult, ZCodeImportStatus, ZCodeSessionSummary } from "../../shared/types";
+import { defaultSessionImportCopy, type SessionImportCopy } from "./SessionImportCopy";
 import { normalizeImportedToolArguments } from "./importToolArguments";
 import { readImportMetaHead } from "./importMetaHead";
-import {
-	IMPORTED_SKIP_PART_TYPES,
-	capImportedImage,
-	importedAttachmentPlaceholder,
-	importedContentHasToolCall,
-	importedUnknownBlockAsText,
-	normalizeImportedStopReason,
-} from "./importNormalize";
+import { IMPORTED_SKIP_PART_TYPES, capImportedImage, importedAttachmentPlaceholder, importedContentHasToolCall, importedUnknownBlockAsText, normalizeImportedStopReason } from "./importNormalize";
 
 /**
  * zcode（Z.ai CLI）会话导入器。
@@ -49,9 +34,7 @@ export class ZCodeSessionImporter {
 	async scan(projectPath: string): Promise<ZCodeSessionSummary[]> {
 		if (!existsSync(this.zcodeDb)) return [];
 		const sessions = await this.readZCodeSessions(projectPath);
-		const summaries = await Promise.all(
-			sessions.map((session) => this.toSummary(session, projectPath)),
-		);
+		const summaries = await Promise.all(sessions.map((session) => this.toSummary(session, projectPath)));
 		return summaries.sort((a, b) => b.updatedAt - a.updatedAt);
 	}
 
@@ -60,9 +43,7 @@ export class ZCodeSessionImporter {
 		const bySourcePath = new Map(sessions.map((session) => [session.sourcePath, session]));
 		const results: ZCodeImportResult[] = [];
 		for (const sourcePath of sourcePaths) {
-			results.push(
-				await this.importOne(projectPath, sourcePath, bySourcePath.get(sourcePath)),
-			);
+			results.push(await this.importOne(projectPath, sourcePath, bySourcePath.get(sourcePath)));
 		}
 		return {
 			results,
@@ -71,11 +52,7 @@ export class ZCodeSessionImporter {
 		};
 	}
 
-	private async importOne(
-		projectPath: string,
-		sourcePath: string,
-		parsed?: ParsedZCodeSession,
-	): Promise<ZCodeImportResult> {
+	private async importOne(projectPath: string, sourcePath: string, parsed?: ParsedZCodeSession): Promise<ZCodeImportResult> {
 		try {
 			if (!parsed) throw new Error("ZCode session not found in database");
 			const targetPath = this.getTargetPath(projectPath, parsed);
@@ -110,21 +87,13 @@ export class ZCodeSessionImporter {
 		}
 	}
 
-	private async toSummary(
-		session: ParsedZCodeSession,
-		projectPath: string,
-	): Promise<ZCodeSessionSummary> {
+	private async toSummary(session: ParsedZCodeSession, projectPath: string): Promise<ZCodeSessionSummary> {
 		const targetPath = this.getTargetPath(projectPath, session);
 		const importMeta = await this.readImportMeta(targetPath);
 		const converted = await this.convertToPiSession(projectPath, session);
 		// 状态判定与 Claude/OpenCode 一致：以导入标记中记录的源 mtime/size 对比当前源文件，
 		// 源未变化视为已导入（current），源更新过则提示可覆盖（outdated）。
-		const status: ZCodeImportStatus = !importMeta
-			? "new"
-			: importMeta.sourceMtime === session.sourceMtime &&
-			  importMeta.sourceSize === session.sourceSize
-				? "current"
-				: "outdated";
+		const status: ZCodeImportStatus = !importMeta ? "new" : importMeta.sourceMtime === session.sourceMtime && importMeta.sourceSize === session.sourceSize ? "current" : "outdated";
 
 		return {
 			id: String(session.meta.id),
@@ -144,9 +113,7 @@ export class ZCodeSessionImporter {
 
 	private async convertToPiSession(projectPath: string, session: ParsedZCodeSession) {
 		const sessionId = String(session.meta.id);
-		const timestamp = new Date(
-			Number(session.meta.time_created ?? session.sourceMtime),
-		).toISOString();
+		const timestamp = new Date(Number(session.meta.time_created ?? session.sourceMtime)).toISOString();
 		const titleState = { title: "", preview: "" };
 		const lines: string[] = [];
 		let parentId: string | null = null;
@@ -154,12 +121,7 @@ export class ZCodeSessionImporter {
 		let messageCount = 0;
 
 		const pushEntry = (entry: Record<string, unknown>) => lines.push(JSON.stringify(entry));
-		const pushMessage = (
-			role: "user" | "assistant" | "toolResult",
-			content: unknown[],
-			extra: Record<string, unknown> = {},
-			timestampValue?: number,
-		) => {
+		const pushMessage = (role: "user" | "assistant" | "toolResult", content: unknown[], extra: Record<string, unknown> = {}, timestampValue?: number) => {
 			if (content.length === 0) return;
 			const id = this.makeId(sessionId, sequence++);
 			const messageTimestamp = Number(timestampValue ?? session.sourceMtime + sequence);
@@ -245,12 +207,7 @@ export class ZCodeSessionImporter {
 					const image = await this.resolveFilePart(partData, String(session.meta.id));
 					const label = String(partData.url ?? partData.filename ?? "image");
 					if (image) {
-						content.push(
-							capImportedImage(
-								{ type: "image", data: image.data, mimeType: image.mimeType || "image/png" },
-								label,
-							),
-						);
+						content.push(capImportedImage({ type: "image", data: image.data, mimeType: image.mimeType || "image/png" }, label));
 					} else {
 						content.push(importedAttachmentPlaceholder(label));
 					}
@@ -309,11 +266,7 @@ export class ZCodeSessionImporter {
 			}
 		}
 
-		const title =
-			this.cleanTitle(String(session.meta.title ?? "")) ||
-			titleState.title ||
-			this.cleanTitle(basename(session.sourcePath)) ||
-			this.translate("session.importedTitle", { source: "ZCode" });
+		const title = this.cleanTitle(String(session.meta.title ?? "")) || titleState.title || this.cleanTitle(basename(session.sourcePath)) || this.translate("session.importedTitle", { source: "ZCode" });
 		// 使用 pi 原生 session_info 格式追加在末尾，避免旧版 sessionName 行（无 type 字段）
 		// 在文件头破坏 pi 的首行校验导致会话无法加载（见 #114）。
 		const sessionInfoId = randomUUID().slice(0, 8);
@@ -330,17 +283,13 @@ export class ZCodeSessionImporter {
 		return {
 			raw: `${lines.join("\n")}\n`,
 			title,
-			preview:
-				titleState.preview || this.translate("session.importedPreview", { source: "ZCode" }),
+			preview: titleState.preview || this.translate("session.importedPreview", { source: "ZCode" }),
 			messageCount,
 		};
 	}
 
 	/** 解析 zcode file part 为 pi image content；解析失败返回 undefined 由调用方降级。 */
-	private async resolveFilePart(
-		partData: Record<string, unknown>,
-		sessionId: string,
-	): Promise<{ type: "image"; data: string; mimeType?: string } | undefined> {
+	private async resolveFilePart(partData: Record<string, unknown>, sessionId: string): Promise<{ type: "image"; data: string; mimeType?: string } | undefined> {
 		const url = String(partData.url ?? "");
 		// url 形如 zcode-artifact://sess_<id>/tool-result-<uuid>，取尾部 uuid 定位文件。
 		const match = url.match(/tool-result-([0-9a-f-]+)$/i);
@@ -393,41 +342,41 @@ export class ZCodeSessionImporter {
 			return sessions
 				.filter((session) => !String(session.id).startsWith("sess_subagent_"))
 				.map((session) => {
-				const messages = db
-					.prepare(
-						`select id, sequence, time_created, time_updated, data
+					const messages = db
+						.prepare(
+							`select id, sequence, time_created, time_updated, data
 						 from message where session_id = ? order by coalesce(sequence, time_created), time_created`,
-					)
-					.all(String(session.id)) as Array<Record<string, unknown>>;
-				const parts = db
-					.prepare(
-						`select id, message_id, session_id, sequence, time_created, time_updated, data
+						)
+						.all(String(session.id)) as Array<Record<string, unknown>>;
+					const parts = db
+						.prepare(
+							`select id, message_id, session_id, sequence, time_created, time_updated, data
 						 from part where session_id = ? order by coalesce(sequence, time_created), time_created`,
-					)
-					.all(String(session.id)) as Array<Record<string, unknown>>;
-				const partsByMessage = new Map<string, ZCodePart[]>();
-				for (const part of parts) {
-					const parsedPart = { ...part, data: this.parseJson(part.data) } as ZCodePart;
-					const current = partsByMessage.get(String(parsedPart.message_id)) ?? [];
-					current.push(parsedPart);
-					partsByMessage.set(String(parsedPart.message_id), current);
-				}
-				const parsedMessages = messages.map((message) => ({
-					id: String(message.id),
-					time_created: Number(message.time_created),
-					time_updated: Number(message.time_updated),
-					data: this.parseJson(message.data),
-					parts: partsByMessage.get(String(message.id)) ?? [],
-				}));
-				return {
-					meta: session,
-					messages: parsedMessages,
-					sourcePath: `${this.zcodeDb}#${session.id}`,
-					// 单会话内容大小估算（而非整个 DB 文件大小），供列表展示与状态对比。
-					sourceSize: this.estimateSessionSize(session, parsedMessages),
-					sourceMtime: info.mtimeMs,
-				};
-			});
+						)
+						.all(String(session.id)) as Array<Record<string, unknown>>;
+					const partsByMessage = new Map<string, ZCodePart[]>();
+					for (const part of parts) {
+						const parsedPart = { ...part, data: this.parseJson(part.data) } as ZCodePart;
+						const current = partsByMessage.get(String(parsedPart.message_id)) ?? [];
+						current.push(parsedPart);
+						partsByMessage.set(String(parsedPart.message_id), current);
+					}
+					const parsedMessages = messages.map((message) => ({
+						id: String(message.id),
+						time_created: Number(message.time_created),
+						time_updated: Number(message.time_updated),
+						data: this.parseJson(message.data),
+						parts: partsByMessage.get(String(message.id)) ?? [],
+					}));
+					return {
+						meta: session,
+						messages: parsedMessages,
+						sourcePath: `${this.zcodeDb}#${session.id}`,
+						// 单会话内容大小估算（而非整个 DB 文件大小），供列表展示与状态对比。
+						sourceSize: this.estimateSessionSize(session, parsedMessages),
+						sourceMtime: info.mtimeMs,
+					};
+				});
 		} finally {
 			db.close();
 		}
@@ -482,10 +431,7 @@ export class ZCodeSessionImporter {
 	}
 
 	private getTargetPath(projectPath: string, session: ParsedZCodeSession) {
-		const id = String(session.meta.id ?? this.hash(session.sourcePath)).replace(
-			/[^a-zA-Z0-9_-]/g,
-			"-",
-		);
+		const id = String(session.meta.id ?? this.hash(session.sourcePath)).replace(/[^a-zA-Z0-9_-]/g, "-");
 		return join(this.getProjectSessionDir(projectPath), `zcode_${id}.jsonl`);
 	}
 

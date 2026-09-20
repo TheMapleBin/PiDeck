@@ -1,11 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { FolderOpen, RefreshCw, RotateCcw, Undo2, UploadCloud } from "lucide-react";
 import { Button } from "../components/ui-shadcn/button";
-import type {
-	BuiltinContentCheckResult,
-	BuiltinContentUpdateResult,
-	BuiltinContentUpdateStatus,
-} from "../../../shared/types/contentUpdate";
+import type { BuiltinContentCheckResult, BuiltinContentUpdateResult, BuiltinContentUpdateStatus } from "../../../shared/types/contentUpdate";
 import { t } from "../i18n";
 import { showNotice } from "../utils/notice";
 
@@ -46,11 +42,7 @@ function errorText(error: unknown): string {
  * - 更新/还原成功后清掉 check 结果（本地状态已变），并让父级刷新列表。
  * - 三种结果分支（失败 / 有写盘 / 已是最新）分别 toast。
  */
-export function ContentStoreUpdatePanel(props: {
-	api: ContentStoreApiGroup;
-	text: ContentStorePanelText;
-	onApplied?: () => void;
-}) {
+export function ContentStoreUpdatePanel(props: { api: ContentStoreApiGroup; text: ContentStorePanelText; onApplied?: () => void }) {
 	const { api } = props;
 	const [status, setStatus] = useState<BuiltinContentUpdateStatus | null>(null);
 	const [check, setCheck] = useState<BuiltinContentCheckResult | null>(null);
@@ -135,12 +127,7 @@ export function ContentStoreUpdatePanel(props: {
 			} else if (!result.updated) {
 				showNotice(t("config.contentStore.nothingToRestoreToast"), 3500);
 			} else {
-				showNotice(
-					previous
-						? t("config.contentStore.restoredPreviousToast")
-						: t("config.contentStore.restoredToast"),
-					4500,
-				);
+				showNotice(previous ? t("config.contentStore.restoredPreviousToast") : t("config.contentStore.restoredToast"), 4500);
 			}
 			setCheck(null);
 			props.onApplied?.();
@@ -170,17 +157,9 @@ export function ContentStoreUpdatePanel(props: {
 				<div className="min-w-0">
 					<div className="flex flex-wrap items-center gap-2">
 						<strong className="text-control font-semibold text-foreground">{props.text.title}</strong>
-						<span className="font-mono text-caption tabular-nums text-muted-foreground">
-							{effectiveVersion
-								? t("config.contentStore.version", { version: effectiveVersion })
-								: t("config.contentStore.versionUnknown")}
-						</span>
+						<span className="font-mono text-caption tabular-nums text-muted-foreground">{effectiveVersion ? t("config.contentStore.version", { version: effectiveVersion }) : t("config.contentStore.versionUnknown")}</span>
 						{/* 覆盖层生效标识：版本号相同时用户需知道自己跑的是热补丁而非随包版本 */}
-						{overlayActive && (
-							<span className="text-micro text-text-primary">
-								{t("config.contentStore.overlayActive")}
-							</span>
-						)}
+						{overlayActive && <span className="text-micro text-text-primary">{t("config.contentStore.overlayActive")}</span>}
 						{hasUpdate && (
 							<span className="text-caption text-text-primary">
 								{t("config.contentStore.hasUpdate", {
@@ -190,17 +169,9 @@ export function ContentStoreUpdatePanel(props: {
 							</span>
 						)}
 					</div>
-					<small className="mt-1 block text-caption leading-4 text-muted-foreground">
-						{props.text.description}
-					</small>
-					{check?.ok && !check.hasUpdate && (
-						<small className="block text-caption text-muted-foreground">
-							{t("config.contentStore.upToDate", { version: check.remoteVersion ?? "?" })}
-						</small>
-					)}
-					{overlayActive && (
-						<small className="block text-caption text-muted-foreground">{props.text.restartHint}</small>
-					)}
+					<small className="mt-1 block text-caption leading-4 text-muted-foreground">{props.text.description}</small>
+					{check?.ok && !check.hasUpdate && <small className="block text-caption text-muted-foreground">{t("config.contentStore.upToDate", { version: check.remoteVersion ?? "?" })}</small>}
+					{overlayActive && <small className="block text-caption text-muted-foreground">{props.text.restartHint}</small>}
 				</div>
 				{/* shrink-0 + flex-wrap + justify-end：窄窗口下按钮换行而不是溢出被裁 */}
 				<div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
@@ -225,13 +196,7 @@ export function ContentStoreUpdatePanel(props: {
 							{t("config.contentStore.restorePrevious")}
 						</Button>
 					)}
-					<Button
-						variant="ghost"
-						size="icon-sm"
-						className="size-7"
-						onClick={() => void handleOpenDir()}
-						title={t("config.contentStore.openDirTitle")}
-					>
+					<Button variant="ghost" size="icon-sm" className="size-7" onClick={() => void handleOpenDir()} title={t("config.contentStore.openDirTitle")}>
 						<FolderOpen size={14} strokeWidth={1.8} />
 					</Button>
 				</div>

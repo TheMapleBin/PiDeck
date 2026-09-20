@@ -1,17 +1,5 @@
-import type {
-	DirectoryImportReport,
-	DirectoryImportResult,
-	DirectorySessionSummary,
-	SessionSummary,
-} from "../../shared/types";
-import {
-	DIRECTORY_IMPORT_MAX_SUMMARIES,
-	isDirectoryImportCandidate,
-	isSessionContainerProbe,
-	normalizeSessionPathKey,
-	toDirectorySessionSummary,
-	type DirectoryShapeProbe,
-} from "./directorySessionImport";
+import type { DirectoryImportReport, DirectoryImportResult, DirectorySessionSummary, SessionSummary } from "../../shared/types";
+import { DIRECTORY_IMPORT_MAX_SUMMARIES, isDirectoryImportCandidate, isSessionContainerProbe, normalizeSessionPathKey, toDirectorySessionSummary, type DirectoryShapeProbe } from "./directorySessionImport";
 
 /**
  * 外置目录会话导入编排：扫描用户选定的目录 → 挂到当前项目（catalog）。
@@ -43,11 +31,7 @@ export type DirectorySessionImporterDeps = {
 	 * 把摘要并入目标项目（生产装配：SessionCatalog.mergeScanned，幂等）。
 	 * manualAssignment 置位后该条目的项目归属被钉住，别的项目扫描不会把它改回去。
 	 */
-	mergeScanned: (
-		projectId: string,
-		summaries: SessionSummary[],
-		options?: { manualAssignment?: boolean },
-	) => Promise<unknown>;
+	mergeScanned: (projectId: string, summaries: SessionSummary[], options?: { manualAssignment?: boolean }) => Promise<unknown>;
 	/** 路径存在性（原工作目录是否还在磁盘上） */
 	pathExists: (path: string) => Promise<boolean>;
 	/** 失败回调（不阻断其余会话） */
@@ -97,11 +81,7 @@ export class DirectorySessionImporter {
 	 * 把选中的会话挂到目标项目（一次 mergeScanned，幂等：已入册的只改项目归属）。
 	 * 只接受本次扫描真实出现的候选路径；其余记失败，绝不入 catalog。
 	 */
-	async import(
-		projectId: string,
-		dir: string,
-		sourcePaths: readonly string[],
-	): Promise<DirectoryImportReport> {
+	async import(projectId: string, dir: string, sourcePaths: readonly string[]): Promise<DirectoryImportReport> {
 		const results: DirectoryImportResult[] = [];
 		if (sourcePaths.length === 0) return { results, imported: 0, failed: 0 };
 		const { candidates, pickedIsContainer } = await this.collectCandidates(dir);
@@ -158,9 +138,7 @@ export class DirectorySessionImporter {
 	}
 
 	/** 选定目录的候选清单（按 mtime 倒序截断；标题留给 scan 按需回读）。 */
-	private async collectCandidates(
-		dir: string,
-	): Promise<{ candidates: SessionSummary[]; pickedIsContainer: boolean }> {
+	private async collectCandidates(dir: string): Promise<{ candidates: SessionSummary[]; pickedIsContainer: boolean }> {
 		const probe = await this.deps.readDirectoryShape(dir).catch(() => ({
 			hasJsonl: false,
 			hasEncodedGroups: false,

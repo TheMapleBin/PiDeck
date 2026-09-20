@@ -26,25 +26,13 @@ function sameArgs(actual, expected) {
 
 test("appendBuiltInExtensionArgs adds repeated --extension flags", () => {
 	const { appendBuiltInExtensionArgs } = loadBuiltInExtensionsModule();
-	const next = appendBuiltInExtensionArgs(["--mode", "rpc"], [
-		"C:\\app\\resources\\extensions\\pi-deck-todo.ts",
-		"C:\\app\\resources\\extensions\\pi-deck-plan-mode.ts",
-	]);
-	sameArgs(next, [
-		"--mode",
-		"rpc",
-		"--extension",
-		"C:\\app\\resources\\extensions\\pi-deck-todo.ts",
-		"--extension",
-		"C:\\app\\resources\\extensions\\pi-deck-plan-mode.ts",
-	]);
+	const next = appendBuiltInExtensionArgs(["--mode", "rpc"], ["C:\\app\\resources\\extensions\\pi-deck-todo.ts", "C:\\app\\resources\\extensions\\pi-deck-plan-mode.ts"]);
+	sameArgs(next, ["--mode", "rpc", "--extension", "C:\\app\\resources\\extensions\\pi-deck-todo.ts", "--extension", "C:\\app\\resources\\extensions\\pi-deck-plan-mode.ts"]);
 });
 
 test("appendBuiltInExtensionArgs skips when noExtensions is true", () => {
 	const { appendBuiltInExtensionArgs } = loadBuiltInExtensionsModule();
-	const next = appendBuiltInExtensionArgs(["--mode", "rpc", "--no-extensions"], [
-		"/tmp/pi-deck-todo.ts",
-	], { noExtensions: true });
+	const next = appendBuiltInExtensionArgs(["--mode", "rpc", "--no-extensions"], ["/tmp/pi-deck-todo.ts"], { noExtensions: true });
 	sameArgs(next, ["--mode", "rpc", "--no-extensions"]);
 });
 
@@ -58,13 +46,9 @@ test("listActiveBuiltInExtensionPaths respects removedBuiltIn and missing files"
 	writeFileSync(join(extDir, "pi-deck-todo.ts"), "// todo\n", "utf8");
 
 	try {
-		const paths = listActiveBuiltInExtensionPaths(
-			{ appPath: root, resourcesPath: root, isDev: true },
-			["pi-deck-todo.ts"],
-		);
+		const paths = listActiveBuiltInExtensionPaths({ appPath: root, resourcesPath: root, isDev: true }, ["pi-deck-todo.ts"]);
 		assert.equal(paths.length, 1);
 		assert.ok(String(paths[0]).endsWith("pi-deck-ask-question.ts"));
-		// 内置扩展清单随版本增长：ask/goal/nul-redirect/plan-mode/retry-no-body/security-gate/session-title/subagents/todo/vision
 		// 内置扩展清单随版本增长：ask/goal/nul-redirect/plan-mode/request-size-recovery/retry-no-body/security-gate/session-title/subagents/todo/trash-guard/vision
 		assert.equal(BUILT_IN_EXTENSIONS.length, 12);
 		assert.ok(BUILT_IN_EXTENSIONS.includes("pi-deck-goal-mode.ts"));

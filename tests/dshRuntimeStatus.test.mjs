@@ -2,18 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
-const {
-	dshUiVisibilityFor,
-	resolveEffectiveAgentBackend,
-	dshSendBlockReason,
-	isDshRuntimeVersionMismatch,
-} = loadTsCommonJs("src/shared/types/dshRuntime.ts");
+const { dshUiVisibilityFor, resolveEffectiveAgentBackend, dshSendBlockReason, isDshRuntimeVersionMismatch } = loadTsCommonJs("src/shared/types/dshRuntime.ts");
 
-const {
-	probeBundledDshRuntime,
-	dshRuntimeStateFromProbe,
-	DshRuntimeStatusService,
-} = loadTsCommonJs("src/main/dsh/runtime/DshRuntimeStatus.ts");
+const { probeBundledDshRuntime, dshRuntimeStateFromProbe, DshRuntimeStatusService } = loadTsCommonJs("src/main/dsh/runtime/DshRuntimeStatus.ts");
 
 // 注意：loadTsCommonJs 用 vm 沙箱加载，返回对象的原型不是本 realm 的 Object.prototype，
 // deepStrictEqual 会因原型不同而失败——逐字段断言，避开跨 realm 比较。
@@ -146,10 +137,7 @@ test("builtin 内置分发携带版本号（UI 文案模板带 v 前缀，缺版
 	const status = service.getStatus();
 	if (status.state === "installed") {
 		// 版本号必须是形如 x.y.z 的语义版本，不能是空串——空串会导致配置页显示「随应用内置 v」。
-		assert.ok(
-			typeof status.runtimeVersion === "string" && status.runtimeVersion.length > 0,
-			"builtin runtimeVersion 应存在且非空",
-		);
+		assert.ok(typeof status.runtimeVersion === "string" && status.runtimeVersion.length > 0, "builtin runtimeVersion 应存在且非空");
 	}
 });
 

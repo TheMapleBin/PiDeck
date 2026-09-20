@@ -14,10 +14,7 @@ test("abort feedback is toast-only and seals stream generation", () => {
 	const ipc = readFileSync("src/shared/ipc.ts", "utf8");
 
 	// 1) 停止反馈不得再 addMessage 系统卡片
-	assert.doesNotMatch(
-		agentManager,
-		/addMessage\(agentId,\s*"system",\s*"已请求停止当前响应"/,
-	);
+	assert.doesNotMatch(agentManager, /addMessage\(agentId,\s*"system",\s*"已请求停止当前响应"/);
 	assert.match(agentManager, /ipcChannels\.agentsNotice/);
 	assert.match(ipc, /agentsNotice:\s*"agents:notice"/);
 
@@ -32,19 +29,11 @@ test("abort feedback is toast-only and seals stream generation", () => {
 	assert.match(streamGate, /pendingOpenAfterSettled/);
 
 	// 3) message_update / tool 事件不得再依赖“有 activeAssistantMessageIds 就放行”的例外
-	assert.doesNotMatch(
-		agentManager,
-		/recentlyAborted\.has\(agentId\)\s*&&\s*!this\.activeAssistantMessageIds\.has\(agentId\)/,
-	);
-	assert.doesNotMatch(
-		agentManager,
-		/recentlyAborted\.has\(agentId\)\s*&&\s*!this\.activeToolCallsByAgent\.has\(agentId\)/,
-	);
+	assert.doesNotMatch(agentManager, /recentlyAborted\.has\(agentId\)\s*&&\s*!this\.activeAssistantMessageIds\.has\(agentId\)/);
+	assert.doesNotMatch(agentManager, /recentlyAborted\.has\(agentId\)\s*&&\s*!this\.activeToolCallsByAgent\.has\(agentId\)/);
 
 	// 4) agent_settled 必须 noteAbortSettled，但不得直接 openAgentStream
-	const settledBlock = agentManager.match(
-		/if \(typed\.type === "agent_settled"\) \{[\s\S]*?\n\t\t\}/,
-	)?.[0] ?? "";
+	const settledBlock = agentManager.match(/if \(typed\.type === "agent_settled"\) \{[\s\S]*?\n\t\t\}/)?.[0] ?? "";
 	assert.match(settledBlock, /noteAgentAbortSettled\(agentId\)/);
 	assert.match(settledBlock, /recentlyAborted\.delete\(agentId\)/);
 	assert.doesNotMatch(settledBlock, /openAgentStream/);

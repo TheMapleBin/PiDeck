@@ -3,11 +3,7 @@
  * 放独立模块是为了可单测，并避免 McpTab 继续变长。
  */
 
-import type {
-	McpConfigFile,
-	McpConfigSnapshot,
-	McpServerListItem,
-} from "../../../shared/types/mcp";
+import type { McpConfigFile, McpConfigSnapshot, McpServerListItem } from "../../../shared/types/mcp";
 import type { ResourceScope } from "./ResourceScopeSelector";
 
 const SERVER_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
@@ -44,11 +40,7 @@ export function omitUndefined<T extends Record<string, unknown>>(value: T): Part
 	return out;
 }
 
-export function buildMcpDisplayServers(
-	snapshot: McpConfigSnapshot,
-	writable: McpConfigFile,
-	scope: ResourceScope,
-): McpServerListItem[] {
+export function buildMcpDisplayServers(snapshot: McpConfigSnapshot, writable: McpConfigFile, scope: ResourceScope): McpServerListItem[] {
 	// Main already merged all six layers in precedence order. Project scope is read-only and must
 	// never reapply the lower-precedence global writable file over a project definition.
 	if (scope === "project") return [...snapshot.servers];

@@ -12,12 +12,7 @@ export type TerminalIpcDeps = {
 	toSessionCommandIpcError: (error: SessionCommandError) => Error;
 };
 
-export function registerTerminalIpc({
-	appLogger,
-	sessionRuntimeCoordinator,
-	terminalManager,
-	toSessionCommandIpcError,
-}: TerminalIpcDeps): void {
+export function registerTerminalIpc({ appLogger, sessionRuntimeCoordinator, terminalManager, toSessionCommandIpcError }: TerminalIpcDeps): void {
 	/**
 	 * 终端目标必须可落地：agent 目标校验 runtime 绑定（session/agent/generation 一致）；
 	 * project 目标（引导页/未激活 agent/历史会话）不依赖 runtime，直接以 cwd 隔离。
@@ -51,18 +46,12 @@ export function registerTerminalIpc({
 		});
 		return result;
 	});
-	ipcMain.handle(
-		ipcChannels.terminalInput,
-		(_event, tabId: string, data: string) => {
-			terminalManager.input(tabId, data);
-		},
-	);
-	ipcMain.handle(
-		ipcChannels.terminalResize,
-		(_event, tabId: string, cols: number, rows: number) => {
-			terminalManager.resize(tabId, cols, rows);
-		},
-	);
+	ipcMain.handle(ipcChannels.terminalInput, (_event, tabId: string, data: string) => {
+		terminalManager.input(tabId, data);
+	});
+	ipcMain.handle(ipcChannels.terminalResize, (_event, tabId: string, cols: number, rows: number) => {
+		terminalManager.resize(tabId, cols, rows);
+	});
 	ipcMain.handle(ipcChannels.terminalClose, (_event, tabId: string) => {
 		terminalManager.close(tabId);
 		void appLogger.info("terminal", "Terminal closed", { tabId });

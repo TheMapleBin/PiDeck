@@ -11,9 +11,7 @@ import { importCustomSound, listCustomSounds, removeCustomSound } from "../sound
 export function registerSoundIpc(): void {
 	ipcMain.handle(ipcChannels.soundsListCustom, () => listCustomSounds());
 
-	ipcMain.handle(ipcChannels.soundsImportCustom, (event) =>
-		importCustomSound(event.sender as unknown as BrowserWindow | null),
-	);
+	ipcMain.handle(ipcChannels.soundsImportCustom, (event) => importCustomSound(event.sender as unknown as BrowserWindow | null));
 
 	ipcMain.handle(ipcChannels.soundsRemoveCustom, (_event, name: unknown) => {
 		// 入参不可信：只接受字符串 + 合法文件名，其余静默失败（返回 false）。

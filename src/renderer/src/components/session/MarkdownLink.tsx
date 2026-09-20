@@ -1,25 +1,13 @@
 import { useState } from "react";
 import type React from "react";
-import {
-	isLocalPathRef,
-	remarkLinkifyPaths,
-} from "./MarkdownLinkCore";
+import { isLocalPathRef, remarkLinkifyPaths } from "./MarkdownLinkCore";
 import { useFileLinkContext, useFilePathExists } from "./FileLinkBase";
-import {
-	extractFileLinkLocation,
-	relativeFilePathWithinRoot,
-	resolveFileLinkPath,
-} from "../../utils/filePathLinks";
+import { extractFileLinkLocation, relativeFilePathWithinRoot, resolveFileLinkPath } from "../../utils/filePathLinks";
 import { t } from "../../i18n";
 import { showNotice } from "../../utils/notice";
 import { writeClipboardText } from "../ui-shadcn/notice-toast";
 import { desktopApi } from "../../desktopApi";
-import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuItem,
-	DropdownMenuTrigger,
-} from "../ui-shadcn/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../ui-shadcn/dropdown-menu";
 export {
 	isLocalPathRef,
 	markdownUrlTransform,
@@ -44,25 +32,15 @@ export function MarkdownLink(
 	const isLocalRef = !isFileLink && isLocalPathRef(props.href ?? "");
 	// 显式 Markdown 链接可能写成 /C:/path/file.ts:42：先还原 Windows 盘符，
 	// 再把行号从路径里拆出来。校验用纯路径，点击带上行号（打开后滚动定位）。
-	const fileLinkRawPath = isFileLink
-		? props.href!.slice(7)
-		: isLocalRef
-			? props.href
-			: undefined;
-	const fileLinkLocation = fileLinkRawPath === undefined
-		? undefined
-		: extractFileLinkLocation(fileLinkRawPath);
+	const fileLinkRawPath = isFileLink ? props.href!.slice(7) : isLocalRef ? props.href : undefined;
+	const fileLinkLocation = fileLinkRawPath === undefined ? undefined : extractFileLinkLocation(fileLinkRawPath);
 	const fileLinkPath = fileLinkLocation?.path;
 	const fileLinkLine = fileLinkLocation?.line;
 	const pathExists = useFilePathExists(fileLinkPath);
 	// 右键菜单用：与存在性校验/点击打开同一份基准解析，保证三个入口拿到同一绝对路径
 	const { baseDir, projectRoot, scope } = useFileLinkContext();
-	const resolvedPath = fileLinkPath === undefined
-		? null
-		: resolveFileLinkPath(fileLinkPath, baseDir, projectRoot);
-	const relativePath = resolvedPath && projectRoot
-		? relativeFilePathWithinRoot(resolvedPath, projectRoot)
-		: null;
+	const resolvedPath = fileLinkPath === undefined ? null : resolveFileLinkPath(fileLinkPath, baseDir, projectRoot);
+	const relativePath = resolvedPath && projectRoot ? relativeFilePathWithinRoot(resolvedPath, projectRoot) : null;
 	const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
 		e.preventDefault();
 		if (!props.href) return;
@@ -95,9 +73,7 @@ export function MarkdownLink(
 					showNotice(t("app.fileLinkNotFound", { path: resolvedPath }), undefined, "error");
 					return undefined;
 				}
-				return stat.isDirectory
-					? desktopApi.files.open(resolvedPath, scope)
-					: desktopApi.files.showInFolder(resolvedPath, scope);
+				return stat.isDirectory ? desktopApi.files.open(resolvedPath, scope) : desktopApi.files.showInFolder(resolvedPath, scope);
 			})
 			.catch((error) =>
 				showNotice(
@@ -128,15 +104,7 @@ export function MarkdownLink(
 			return <span className="text-text-tertiary">{children}</span>;
 		}
 	}
-	const linkClass =
-		[
-			className,
-			isFileLink || isLocalRef
-				? "cursor-pointer font-mono text-[var(--color-accent)] underline decoration-[var(--color-accent)]/50 underline-offset-2 hover:decoration-[var(--color-accent)]"
-				: undefined,
-		]
-			.filter(Boolean)
-			.join(" ") || undefined;
+	const linkClass = [className, isFileLink || isLocalRef ? "cursor-pointer font-mono text-[var(--color-accent)] underline decoration-[var(--color-accent)]/50 underline-offset-2 hover:decoration-[var(--color-accent)]" : undefined].filter(Boolean).join(" ") || undefined;
 	return (
 		<>
 			<a
@@ -151,7 +119,12 @@ export function MarkdownLink(
 				{children}
 			</a>
 			{menu && resolvedPath && (
-				<DropdownMenu open onOpenChange={(open) => { if (!open) setMenu(undefined); }}>
+				<DropdownMenu
+					open
+					onOpenChange={(open) => {
+						if (!open) setMenu(undefined);
+					}}
+				>
 					{/* 不可见 Trigger 钉在右键坐标上（同 FileContextMenu 的坐标菜单模式）：
 					    Radix 负责视口碰撞翻转/焦点圈定/ESC 关闭。 */}
 					<DropdownMenuTrigger
@@ -170,15 +143,11 @@ export function MarkdownLink(
 						}}
 					/>
 					<DropdownMenuContent align="start" side="bottom" className="min-w-40" onCloseAutoFocus={(e) => e.preventDefault()}>
-						<DropdownMenuItem onSelect={openInExplorer}>
-							{t("fileLink.openInExplorer")}
-						</DropdownMenuItem>
+						<DropdownMenuItem onSelect={openInExplorer}>{t("fileLink.openInExplorer")}</DropdownMenuItem>
 						<DropdownMenuItem onSelect={copyRelativePath} disabled={!relativePath}>
 							{t("fileLink.copyRelativePath")}
 						</DropdownMenuItem>
-						<DropdownMenuItem onSelect={copyAbsolutePath}>
-							{t("fileLink.copyAbsolutePath")}
-						</DropdownMenuItem>
+						<DropdownMenuItem onSelect={copyAbsolutePath}>{t("fileLink.copyAbsolutePath")}</DropdownMenuItem>
 					</DropdownMenuContent>
 				</DropdownMenu>
 			)}

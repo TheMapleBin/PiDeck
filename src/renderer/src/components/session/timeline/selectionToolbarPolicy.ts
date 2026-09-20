@@ -4,8 +4,7 @@
  */
 
 /** 命中任一祖先选择器即不可引用：流式中的 turn、工具卡、折叠执行过程。 */
-export const QUOTE_EXCLUDED_SELECTOR =
-	".turn-row--pending, .execution-summary-details, [data-tool-kind]";
+export const QUOTE_EXCLUDED_SELECTOR = ".turn-row--pending, .execution-summary-details, [data-tool-kind]";
 
 /** 引用快照长度上限：超长划选截断并提示语义由 label 省略号体现（防极端大文本入 atom）。 */
 export const MAX_QUOTE_CHARS = 4000;
@@ -49,11 +48,7 @@ export type ToolbarSize = { width: number; height: number };
  * 浮层定位：默认悬在选区上方居中；顶部放不下时翻转到选区下方；
  * 水平夹紧在视口内（margin=8）。返回 fixed 定位的 top/left。
  */
-export function computeToolbarPosition(
-	rect: ToolbarRect,
-	viewport: ToolbarViewport,
-	size: ToolbarSize,
-): { top: number; left: number } {
+export function computeToolbarPosition(rect: ToolbarRect, viewport: ToolbarViewport, size: ToolbarSize): { top: number; left: number } {
 	const margin = 8;
 	const gap = 6;
 	const aboveTop = rect.top - gap - size.height;

@@ -96,21 +96,14 @@ export function getBot(botId: string): FeishuBotConfig | undefined {
 }
 
 /** 添加 Bot */
-export function addBot(input: {
-	name: string;
-	appId: string;
-	appSecret: string;
-	defaultWorkspaceId?: string;
-	defaultUserOpenId?: string;
-	requireMention?: boolean;
-}): FeishuBotConfig {
+export function addBot(input: { name: string; appId: string; appSecret: string; defaultWorkspaceId?: string; defaultUserOpenId?: string; requireMention?: boolean }): FeishuBotConfig {
 	const config = readConfig();
 	const appId = input.appId.trim();
 	const existingIndex = config.bots.findIndex((b) => b.appId === appId);
 	const reusedId = config.deletedBotIdsByAppId?.[appId];
 	const bot: FeishuBotConfig = {
 		// 同一飞书应用重新添加时复用旧 botId，旧绑定文件才能继续按 sessionPath/chatId 复用。
-		id: existingIndex >= 0 ? config.bots[existingIndex].id : (reusedId || randomUUID()),
+		id: existingIndex >= 0 ? config.bots[existingIndex].id : reusedId || randomUUID(),
 		name: input.name,
 		enabled: true,
 		appId,

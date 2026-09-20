@@ -11,11 +11,14 @@ function loadImporter(homePath) {
 	const load = createTsSandbox({
 		stubs: { electron: { app: { getPath: () => homePath } } },
 	});
-	return new (load("src/main/sessions/ClaudeSessionImporter.ts")).ClaudeSessionImporter();
+	return new (load("src/main/sessions/ClaudeSessionImporter.ts").ClaudeSessionImporter)();
 }
 
 function writeClaudeSession(home, projectPath, sessionId, entries) {
-	const slug = projectPath.replace(/\\/g, "/").replace(/^([A-Za-z]):\//, "$1--").replace(/\//g, "-");
+	const slug = projectPath
+		.replace(/\\/g, "/")
+		.replace(/^([A-Za-z]):\//, "$1--")
+		.replace(/\//g, "-");
 	const dir = join(home, ".claude", "projects", slug);
 	mkdirSync(dir, { recursive: true });
 	const file = join(dir, `${sessionId}.jsonl`);
@@ -55,9 +58,7 @@ test("import: user.content 里的 tool_result 写成 pi toolResult，不变成�
 				timestamp: "2026-09-15T00:00:02.000Z",
 				message: {
 					role: "user",
-					content: [
-						{ type: "tool_result", tool_use_id: "toolu_1", content: "export const x = 1;" },
-					],
+					content: [{ type: "tool_result", tool_use_id: "toolu_1", content: "export const x = 1;" }],
 				},
 			},
 			{

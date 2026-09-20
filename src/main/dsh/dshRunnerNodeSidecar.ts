@@ -10,8 +10,9 @@ import { join } from "node:path";
  * 给 runner AllocConsole 再 Hide 又会闪一帧。
  *
  * 把第一级 / 第二级 runner 的可执行文件换成随包 node.exe 后，runner 本身是 CUI：
- * 继承 host 的隐藏控制台即可，不必再 AllocConsole，也不允许 CREATE_NO_WINDOW
- * （受限 token 下 CREATE_NO_WINDOW 会 STATUS_DLL_INIT_FAILED）。
+ * 用 CREATE_NO_WINDOW 自建无窗口可继承控制台即可，不必再 AllocConsole。
+ * 受限 token 的 CreateProcessAsUserW（pwsh）必须继承这份控制台，不能自己再
+ * CREATE_NO_WINDOW（否则 STATUS_DLL_INIT_FAILED）。
  *
  * 仅 Windows 需要这份 sidecar；macOS / Linux 的 electron 当 Node 跑没有 GUI 子系统问题。
  */
@@ -39,10 +40,7 @@ export interface ResolveDshRunnerNodeSidecarInput {
 }
 
 /** userData 里 PiDeck 专用 node.exe（一键下载产物）。 */
-export function dshRunnerNodeUserDataSidecar(
-	userDataPath: string,
-	platform: NodeJS.Platform = "win32",
-): string {
+export function dshRunnerNodeUserDataSidecar(userDataPath: string, platform: NodeJS.Platform = "win32"): string {
 	return join(userDataPath, DSH_RUNNER_NODE_DIRNAME, dshRunnerNodeFileName(platform));
 }
 
@@ -50,9 +48,7 @@ export function dshRunnerNodeUserDataSidecar(
  * 只解析「已落盘的专用副本」（userData / 旧包残留），不含 env 与用户配置。
  * 给自动探测用：配置路径另外处理，避免坏配置把 sidecar 盖掉。
  */
-export function resolveInstalledDshRunnerNodeSidecar(
-	input: Pick<ResolveDshRunnerNodeSidecarInput, "platform" | "resourcesPath" | "appPath" | "userDataPath">,
-): string | undefined {
+export function resolveInstalledDshRunnerNodeSidecar(input: Pick<ResolveDshRunnerNodeSidecarInput, "platform" | "resourcesPath" | "appPath" | "userDataPath">): string | undefined {
 	const platform = input.platform ?? "win32";
 	if (platform !== "win32") return undefined;
 	const fileName = dshRunnerNodeFileName(platform);
@@ -60,9 +56,7 @@ export function resolveInstalledDshRunnerNodeSidecar(
 		const fromUserData = dshRunnerNodeUserDataSidecar(input.userDataPath, platform);
 		if (existsSync(fromUserData)) return fromUserData;
 	}
-	const packaged = input.resourcesPath
-		? join(input.resourcesPath, DSH_RUNNER_NODE_DIRNAME, fileName)
-		: undefined;
+	const packaged = input.resourcesPath ? join(input.resourcesPath, DSH_RUNNER_NODE_DIRNAME, fileName) : undefined;
 	if (packaged && existsSync(packaged)) return packaged;
 	if (input.appPath) {
 		const fromApp = join(input.appPath, "resources", DSH_RUNNER_NODE_DIRNAME, fileName);

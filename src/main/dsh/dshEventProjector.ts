@@ -1,10 +1,5 @@
 import type { ChatMessage, ImageContent, TodoItem } from "../../shared/types";
-import {
-	defaultToolDetailTranslate,
-	formatToolDetail,
-	truncateDetailWithMeta,
-	type ToolDetailTranslate,
-} from "../../shared/formatToolDetail";
+import { defaultToolDetailTranslate, formatToolDetail, truncateDetailWithMeta, type ToolDetailTranslate } from "../../shared/formatToolDetail";
 
 /**
  * DSH SessionEvent → PiDeck ChatMessage 投影（纯函数，无副作用，可单测）。
@@ -181,11 +176,7 @@ function toolResultTextFromBlocks(blocks: unknown): string {
  *    增量不落会话日志（durable 只有 assistant/message 终态），骨架 id 由 attemptId
  *    派生，终态到达时按 pendingAssistantId 原地更新，Live→History 不 remount。
  */
-function applyAssistantDelta(
-	next: DshProjection,
-	base: DshProjection,
-	delta: { id: string; kind?: "text" | "reasoning"; text?: string },
-): void {
+function applyAssistantDelta(next: DshProjection, base: DshProjection, delta: { id: string; kind?: "text" | "reasoning"; text?: string }): void {
 	if (!delta.kind || typeof delta.text !== "string" || delta.text === "") return;
 	next.pendingAssistantId ??= delta.id;
 	if (delta.kind === "text") {
@@ -309,13 +300,13 @@ export function projectDshEvent(
 			const { images, refs } = imagePartsFromContent(data.content);
 			const imageMeta = refs.length > 0 ? { dshImageRefs: refs } : undefined;
 			next.messages = appendMessageOnce(base.messages, {
-					id: `dsh:${seq}`,
-					agentId,
-					role: "user",
-					text,
-					timestamp: eventTime(event.time),
-					...(images.length > 0 ? { images } : {}),
-					...(imageMeta ? { meta: imageMeta } : {}),
+				id: `dsh:${seq}`,
+				agentId,
+				role: "user",
+				text,
+				timestamp: eventTime(event.time),
+				...(images.length > 0 ? { images } : {}),
+				...(imageMeta ? { meta: imageMeta } : {}),
 			});
 			next.messagesChanged = true;
 			break;
@@ -348,9 +339,7 @@ export function projectDshEvent(
 			// 载荷在 data.texts 数组，逐成员是 token 增量；mux 与 history 都可能出现，
 			// 与 assistant/chunk 的 text-delta/reasoning-delta 是同一内容的两种形态，
 			// 同一段 run 只会出现其中一种，不会双累积）。
-			const texts = Array.isArray(data.texts)
-				? data.texts.filter((entry): entry is string => typeof entry === "string")
-				: [];
+			const texts = Array.isArray(data.texts) ? data.texts.filter((entry): entry is string => typeof entry === "string") : [];
 			applyAssistantDelta(next, base, {
 				id: `dsh:${seq0}`,
 				kind: type === "text-chunks" ? "text" : "reasoning",
@@ -362,9 +351,7 @@ export function projectDshEvent(
 			// 终态：以组装后的完整内容块为准（delta 可能因适配器差异与终态不完全一致）
 			const message = (data.message ?? {}) as { content?: unknown };
 			const { images: assistantImages, refs: assistantImageRefs } = imagePartsFromContent(message.content);
-			const assistantImageMeta = assistantImageRefs.length > 0
-				? { dshImageRefs: assistantImageRefs }
-				: undefined;
+			const assistantImageMeta = assistantImageRefs.length > 0 ? { dshImageRefs: assistantImageRefs } : undefined;
 			// G2：assistant 终态也必须保留图片块，避免终态更新流式骨架时把图片覆盖掉。
 			const assistantImagesPresent = assistantImages.length > 0 || assistantImageRefs.length > 0;
 			// G16：usage 统计——adapter 报告 token 用量时 assistant/message 携带 usage，
@@ -400,9 +387,7 @@ export function projectDshEvent(
 			// 有流式骨架（reasoning/text delta 已渲染）时不在此列——骨架已在时间线
 			// 挂载 Live 思考/正文，终态必须更新它而不是丢弃。
 			// （splitBlocks 不抽 tool-call 块，text/reasoning 均为空即命中。）
-			const hasToolCalls = Array.isArray(message.content) && message.content.some(
-				(block) => block !== null && typeof block === "object" && (block as { type?: unknown }).type === "tool-call",
-			);
+			const hasToolCalls = Array.isArray(message.content) && message.content.some((block) => block !== null && typeof block === "object" && (block as { type?: unknown }).type === "tool-call");
 			// stopReason 归一化（对齐 pi RPC 的 provider 枚举，见 shared/types/session.ts）。
 			// 为什么：DSH 一次 turn 的每步模型响应都各落一条 assistant/message（中间步骤
 			// 也带 tool-call 块，实测 73 条全部如此），而渲染层 groupToolMessages 以
@@ -422,9 +407,7 @@ export function projectDshEvent(
 				// 更新流式骨架：同 id 保持 Live→History 不 remount
 				// （渲染层 thinking group id = msg-thinking-<消息 id>，id 变化会拆掉重建）。
 				const messages = [...base.messages];
-				const skeletonIndex = messages.findIndex(
-					(candidate) => candidate.id === base.pendingAssistantId && candidate.role === "assistant",
-				);
+				const skeletonIndex = messages.findIndex((candidate) => candidate.id === base.pendingAssistantId && candidate.role === "assistant");
 				if (skeletonIndex >= 0) {
 					const previous = messages[skeletonIndex];
 					messages[skeletonIndex] = {
@@ -435,14 +418,10 @@ export function projectDshEvent(
 						thinking: finalThinking.trim() ? finalThinking : undefined,
 						timestamp: eventTime(event.time),
 						stopReason: assistantStopReason,
-						...(assistantImages.length > 0 ? { images: assistantImages } : (previous.images ? { images: previous.images } : {})),
+						...(assistantImages.length > 0 ? { images: assistantImages } : previous.images ? { images: previous.images } : {}),
 						// 思考耗时：终态时间作为结束点（startedAt 已在骨架创建时记录）
-						...((finalThinking.trim() || previous.thinkingStartedAt !== undefined)
-							? { thinkingEndedAt: eventTime(event.time) }
-							: {}),
-						...((previous.thinkingStartedAt !== undefined)
-							? { thinkingStartedAt: previous.thinkingStartedAt }
-							: {}),
+						...(finalThinking.trim() || previous.thinkingStartedAt !== undefined ? { thinkingEndedAt: eventTime(event.time) } : {}),
+						...(previous.thinkingStartedAt !== undefined ? { thinkingStartedAt: previous.thinkingStartedAt } : {}),
 						// 保留骨架已有 meta（工具视图等），并写入本条 usage（轨迹 token 用量）
 						meta: {
 							...(previous.meta ?? {}),
@@ -488,11 +467,7 @@ export function projectDshEvent(
 			break;
 		}
 		case "tool/call": {
-			const toolName = typeof data.toolName === "string"
-				? data.toolName
-				: typeof data.name === "string"
-					? data.name
-					: "tool";
+			const toolName = typeof data.toolName === "string" ? data.toolName : typeof data.name === "string" ? data.name : "tool";
 			const callId = typeof data.callId === "string" ? data.callId : undefined;
 			// DSH 的 arguments 是 JSON 字符串（模型调用侧约定，host 侧 presentCall 也
 			// JSON.parse 后消费）。解析成对象投影进 meta.args——PiDeck 工具卡片的
@@ -516,19 +491,19 @@ export function projectDshEvent(
 			activeToolCalls.set(toolId, toolName);
 			next.activeToolCalls = activeToolCalls;
 			next.messages = appendMessageOnce(base.messages, {
-					id: `dsh:${seq}`,
-					agentId,
-					role: "tool",
-					text: toolName,
-					timestamp: eventTime(event.time),
-					// status=running 驱动渲染层工具卡片的旋转动画；tool/result 到达后清掉。
-					meta: {
-						toolCallId: toolId,
-						toolName,
-						status: "running",
-						...(args !== undefined ? { args } : {}),
-						...(view !== undefined ? { view } : {}),
-					},
+				id: `dsh:${seq}`,
+				agentId,
+				role: "tool",
+				text: toolName,
+				timestamp: eventTime(event.time),
+				// status=running 驱动渲染层工具卡片的旋转动画；tool/result 到达后清掉。
+				meta: {
+					toolCallId: toolId,
+					toolName,
+					status: "running",
+					...(args !== undefined ? { args } : {}),
+					...(view !== undefined ? { view } : {}),
+				},
 			});
 			next.executingTool = toolName;
 			next.messagesChanged = true;
@@ -548,11 +523,7 @@ export function projectDshEvent(
 			// 必须按 callId 精确匹配工具卡，不能更新“最后一条 tool”——并发/乱序
 			// 结果下会把结果挂错卡，并把先到的卡永远留在 running。
 			const source = isRecord(message.source) ? message.source : undefined;
-			const resultCallId = typeof source?.callId === "string"
-				? source.callId
-				: typeof data.callId === "string"
-					? data.callId
-					: undefined;
+			const resultCallId = typeof source?.callId === "string" ? source.callId : typeof data.callId === "string" ? data.callId : undefined;
 			const activeToolCalls = new Map(base.activeToolCalls ?? new Map<string, string>());
 			if (resultCallId) activeToolCalls.delete(resultCallId);
 
@@ -579,9 +550,7 @@ export function projectDshEvent(
 			if (targetIndex >= 0) {
 				const target = messages[targetIndex];
 				// 无 callId 的 fallback 路径也要让活跃集合与卡片同步收口。
-				const fallbackCallId = typeof target.meta?.toolCallId === "string"
-					? target.meta.toolCallId
-					: undefined;
+				const fallbackCallId = typeof target.meta?.toolCallId === "string" ? target.meta.toolCallId : undefined;
 				if (!resultCallId && fallbackCallId) activeToolCalls.delete(fallbackCallId);
 
 				const resultTime = eventTime(event.time);
@@ -589,13 +558,7 @@ export function projectDshEvent(
 				const toolName = typeof target.meta?.toolName === "string" ? target.meta.toolName : "tool";
 				// 与 PI 同一套 detailText（工具/状态/参数/结果）；结果正文用已截断的 text，
 				// 超长仍走 meta.fullText + truncated，展开区「查看完整输出」契约不变。
-				const detailText = formatToolDetail(
-					toolName,
-					target.meta?.args,
-					text || undefined,
-					false,
-					translate,
-				);
+				const detailText = formatToolDetail(toolName, target.meta?.args, text || undefined, false, translate);
 				const detailDelivery = truncateDetailWithMeta(detailText, translate);
 				const keepFullText = truncated || detailDelivery.truncated;
 				messages[targetIndex] = {
@@ -603,17 +566,17 @@ export function projectDshEvent(
 					text: text ? `${target.text}: ${text}` : target.text,
 					meta: target.meta
 						? {
-							...target.meta,
-							status: "done",
-							durationMs: Math.max(0, resultTime - callTime),
-							detailText: detailDelivery.text,
-							// host 为结果事件计算的下发 view（dsh-web 历史页同数据）：
-							// 与 call 侧 meta.view 区分存放（resultView），供轨迹面板
-							// 展示输出/退出码/实际 diff 等结果态信息。
-							...(view !== undefined ? { resultView: view } : {}),
-							// 截断标记与完整文本：渲染层 ToolCard 据此显示「查看完整输出」
-							...(keepFullText ? { truncated: true as const, fullText } : {}),
-						}
+								...target.meta,
+								status: "done",
+								durationMs: Math.max(0, resultTime - callTime),
+								detailText: detailDelivery.text,
+								// host 为结果事件计算的下发 view（dsh-web 历史页同数据）：
+								// 与 call 侧 meta.view 区分存放（resultView），供轨迹面板
+								// 展示输出/退出码/实际 diff 等结果态信息。
+								...(view !== undefined ? { resultView: view } : {}),
+								// 截断标记与完整文本：渲染层 ToolCard 据此显示「查看完整输出」
+								...(keepFullText ? { truncated: true as const, fullText } : {}),
+							}
 						: target.meta,
 				};
 				next.messages = messages;
@@ -658,9 +621,7 @@ export function projectDshEvent(
 			// 写回骨架——已渲染的思考/正文不因 turn/end 清 pending 而丢失。
 			if (base.pendingAssistantId && (base.pendingAssistantText || base.pendingAssistantThinking)) {
 				const messages = [...base.messages];
-				const skeletonIndex = messages.findIndex(
-					(candidate) => candidate.id === base.pendingAssistantId && candidate.role === "assistant",
-				);
+				const skeletonIndex = messages.findIndex((candidate) => candidate.id === base.pendingAssistantId && candidate.role === "assistant");
 				if (skeletonIndex >= 0) {
 					const previous = messages[skeletonIndex];
 					messages[skeletonIndex] = {
@@ -683,11 +644,7 @@ export function projectDshEvent(
 			// D9：回合结束（含中断/停止）时，仍 running 的工具卡兜底收口——host 崩溃/取消后
 			// tool/result 可能永远不来，卡片不能一直转圈；只清 running 状态不改文案。
 			if (next.messages.some((m) => m.role === "tool" && m.meta?.status === "running")) {
-				next.messages = next.messages.map((m) =>
-					m.role === "tool" && m.meta?.status === "running"
-						? { ...m, meta: { ...m.meta, status: "done" } }
-						: m,
-				);
+				next.messages = next.messages.map((m) => (m.role === "tool" && m.meta?.status === "running" ? { ...m, meta: { ...m.meta, status: "done" } } : m));
 				next.messagesChanged = true;
 			}
 			next.isStreaming = false;
@@ -715,9 +672,7 @@ export function projectDshEvent(
 			// 路由上下文容量：adapter 上报时随 request/context 下发（contextWindow），
 			// 上下文圆环的窗口数据源。last-wins；缺失不覆盖已有值。
 			const ctxData = (event.data ?? {}) as { contextWindow?: unknown };
-			const contextWindow = typeof ctxData.contextWindow === "number" && ctxData.contextWindow > 0
-				? ctxData.contextWindow
-				: undefined;
+			const contextWindow = typeof ctxData.contextWindow === "number" && ctxData.contextWindow > 0 ? ctxData.contextWindow : undefined;
 			if (contextWindow !== undefined && contextWindow !== base.contextWindow) {
 				next.contextWindow = contextWindow;
 				next.stateChanged = true;
@@ -732,9 +687,7 @@ export function projectDshEvent(
 			} else if (isRecord(meta.goal)) {
 				const g = meta.goal as Record<string, unknown>;
 				const rawPhase = g.phase;
-				const phase = rawPhase === "active" || rawPhase === "paused" || rawPhase === "blocked" || rawPhase === "complete"
-					? rawPhase
-					: "active";
+				const phase = rawPhase === "active" || rawPhase === "paused" || rawPhase === "blocked" || rawPhase === "complete" ? rawPhase : "active";
 				next.goal = {
 					refId: typeof g.id === "string" ? g.id : "",
 					revision: typeof g.revision === "number" ? g.revision : 0,
@@ -752,9 +705,7 @@ export function projectDshEvent(
 			// sections 展开后的完整文本，dsh-web 轨迹展示同源）。同一会话可能因模型切换/
 			// 权限变化多次发请求头，last wins；无 system 字段（低版本 host）不覆盖已有值。
 			const header = isRecord(data.header) ? data.header : undefined;
-			const system = header && typeof (header as { system?: unknown }).system === "string"
-				? (header as { system: string }).system
-				: undefined;
+			const system = header && typeof (header as { system?: unknown }).system === "string" ? (header as { system: string }).system : undefined;
 			if (system && system !== base.systemPrompt) {
 				next.systemPrompt = system;
 				next.stateChanged = true;
