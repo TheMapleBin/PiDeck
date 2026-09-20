@@ -709,8 +709,10 @@ function EditorWorkbenchTab(props: {
 					className={cn(
 						"session-tab group relative flex h-7 shrink-0 cursor-pointer select-none items-center rounded-md border px-2 text-micro transition-[color,background-color,border-color,box-shadow,transform] duration-200",
 						"w-fit max-w-52",
-						// 选中态：灰色柔和实底（以 bg-accent = --color-bg-active，与会话 Tab/侧栏一致），文字 text-foreground
-						tab.active ? "border-transparent font-medium text-foreground" : "border-transparent text-muted-foreground hover:-translate-y-px hover:bg-accent/50 hover:text-foreground",
+						// hover 底改用 accent-soft（主题淡背景 token，随 data-accent 切换）而非 accent/50：
+						// 半透明的 accent/50 叠在 #ffffff 上 ≈ #eff1f3，浅色主题下几乎看不到底色、只有文字变色，
+						// 鼠标掠过像“闪一下”（用户反馈「悬停太丑」）；opaque 的 accent-soft 底色稳定可辨且不随背景沾染。
+						tab.active ? "border-transparent font-medium text-foreground" : "border-transparent text-muted-foreground hover:-translate-y-px hover:bg-accent-soft hover:text-foreground",
 						tab.preview && "italic font-normal text-muted-foreground",
 					)}
 					onClick={() => props.onSelect?.(tab.id)}
@@ -751,7 +753,10 @@ function EditorWorkbenchTab(props: {
 				<TooltipContent side="bottom" align="start" className="max-w-80">
 					<div className="flex min-w-0 flex-col gap-0.5">
 						<span className="truncate font-medium">{tab.label}</span>
-						<span className="truncate font-mono text-[11px] text-muted-foreground">{tab.title}</span>
+						{/* 第二行是文件路径：TooltipContent 是反色面（bg-foreground + text-background），
+						    次行必须用 text-background 派生色。用 text-muted-foreground(#4b5563) 画在近黑底
+						    上只有 ≈2.0:1，用户报过「路径黑色的看不清」。 */}
+						<span className="truncate font-mono text-[11px] text-background/75">{tab.title}</span>
 					</div>
 				</TooltipContent>
 			) : null}
@@ -910,7 +915,8 @@ function SessionTab(props: {
 								// 选中态：灰色柔和实底（bg-accent = --color-bg-active，与左侧 SessionTree 选中行一致），
 								// 背景由下方共享 layoutId 的 motion.span spring 滑到当前 Tab；不做黑色实底/阴影/底部条。
 								// 文字用 text-foreground（灰底上直接可读，无需反色）。
-								active ? "border-transparent font-medium text-foreground" : "border-transparent text-muted-foreground hover:-translate-y-px hover:bg-accent/50 hover:text-foreground",
+								// hover 底用 accent-soft 实底而非 accent/50：半透明灰叠在白底上几乎不可见（同 EditorWorkbenchTab 注释）。
+								active ? "border-transparent font-medium text-foreground" : "border-transparent text-muted-foreground hover:-translate-y-px hover:bg-accent-soft hover:text-foreground",
 								preview && "italic font-normal text-muted-foreground",
 							)}
 						>
@@ -980,8 +986,11 @@ function SessionTab(props: {
 					<TooltipContent side="bottom" align="start" className="max-w-80">
 						<div className="flex min-w-0 flex-col gap-0.5">
 							<span className="truncate font-medium">{title}</span>
+							{/* 第二行是「工作区 · 目录」：反色面（浅色近黑底 / 暗色近白底）上不能用页面次要文字色
+							    text-muted-foreground，否则浅色 #4b5563 on #202124 ≈ 2.0:1、暗色 #b8b8b2 on #ecece7
+							    ≈ 1.6:1 都看不清（用户反馈「目录、路径黑色的看不清」）；改用同族降透明度保留层级。 */}
 							{workspaceName ? (
-								<span className="truncate text-[11px] text-muted-foreground" title={tabProject?.path}>
+								<span className="truncate text-[11px] text-background/75" title={tabProject?.path}>
 									{workspaceName}
 									{tabProject?.path && tabProject.path !== workspaceName ? ` · ${tabProject.path}` : ""}
 								</span>
