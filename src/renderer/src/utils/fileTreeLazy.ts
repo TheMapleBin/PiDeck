@@ -86,6 +86,40 @@ export function findLoadedDirectory(
 	return undefined;
 }
 
+/**
+ * 把某个目录标记为「加载失败」：hasChildren 置 false。
+ *
+ * 为什么需要：展开目录的 children 拉取失败（目录被删、权限、超过
+ * FILE_TREE_MAX_DIRECTORY_ENTRIES 上限等）时，树里该节点仍是
+ * 「无 children 且 hasChildren=true」，FileNode 会永久显示「加载中...」占位
+ * 覆盖文件名。置 false 后占位消失（hasChildren !== false 条件不再成立），
+ * 用户重新点开目录时 toggleDirectory 走 findLoadedDirectory 未命中，会再次
+ * 发起拉取——相当于一次自然的重试入口，不会永久卡死。
+ */
+export function markFileTreeLoadFailed(
+	nodes: FileTreeNode[],
+	directoryPath: string,
+): FileTreeNode[] {
+	// 快速路径：本层不含目标时返回原数组引用，避免无谓重建导致
+	// FilesPanel 的 useMemo / FileNode 全量重渲染（与 compactMiddlePackages 同约定）。
+	let touched = false;
+	const marked = nodes.map((node) => {
+		if (node.type === "directory" && node.path === directoryPath) {
+			touched = true;
+			return { ...node, hasChildren: false };
+		}
+		if (node.children?.length) {
+			const nextChildren = markFileTreeLoadFailed(node.children, directoryPath);
+			if (nextChildren !== node.children) {
+				touched = true;
+				return { ...node, children: nextChildren };
+			}
+		}
+		return node;
+	});
+	return touched ? marked : nodes;
+}
+
 export function mergeFileTreeChildren(
 	nodes: FileTreeNode[],
 	directoryPath: string,
