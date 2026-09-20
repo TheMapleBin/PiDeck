@@ -15,16 +15,7 @@ import test from "node:test";
 import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
 const catalog = loadTsCommonJs("src/main/pi/piAiBuiltinCatalog.ts");
-const {
-	PI_AI_CATALOG_MANIFEST_FILE_NAME,
-	getPiAiCatalogIndex,
-	invalidatePiAiCatalogIndex,
-	loadPiAiCatalogEntries,
-	parsePiAiCatalogArtifact,
-	resetPiAiCatalogIndexForTests,
-	resolvePiAiCatalogArtifactCandidates,
-	setPiAiCatalogUserDataDir,
-} = catalog;
+const { PI_AI_CATALOG_MANIFEST_FILE_NAME, getPiAiCatalogIndex, invalidatePiAiCatalogIndex, loadPiAiCatalogEntries, parsePiAiCatalogArtifact, resetPiAiCatalogIndexForTests, resolvePiAiCatalogArtifactCandidates, setPiAiCatalogUserDataDir } = catalog;
 
 function sha256(text) {
 	return createHash("sha256").update(text, "utf8").digest("hex");
@@ -32,9 +23,7 @@ function sha256(text) {
 
 /** 写一份覆盖层 artifact 到 dir，返回条目数。 */
 function writeOverlay(dir, packageVersion = "9.9.9-overlay") {
-	const entries = [
-		{ id: "overlay-only", name: "Overlay Only", provider: "demo", contextWindow: 999 },
-	];
+	const entries = [{ id: "overlay-only", name: "Overlay Only", provider: "demo", contextWindow: 999 }];
 	const catalogRaw = JSON.stringify({ schemaVersion: 1, entries });
 	const manifestRaw = JSON.stringify({
 		schemaVersion: 1,
@@ -154,10 +143,7 @@ test("parsePiAiCatalogArtifact 对覆盖层产物与内置同标准（回归）"
 	const overlayDir = tempDir();
 	try {
 		const raw = writeOverlay(overlayDir, "9.9.9-overlay");
-		const entries = parsePiAiCatalogArtifact(
-			readFileSync(join(overlayDir, "pi-ai-catalog.json"), "utf8"),
-			readFileSync(join(overlayDir, PI_AI_CATALOG_MANIFEST_FILE_NAME), "utf8"),
-		);
+		const entries = parsePiAiCatalogArtifact(readFileSync(join(overlayDir, "pi-ai-catalog.json"), "utf8"), readFileSync(join(overlayDir, PI_AI_CATALOG_MANIFEST_FILE_NAME), "utf8"));
 		assert.equal(entries.length, raw);
 	} finally {
 		rmSync(overlayDir, { recursive: true, force: true });

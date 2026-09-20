@@ -5,17 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
-const {
-	DSH_RUNNER_NODE_MAJOR,
-	isDshRunnerNodeCompatible,
-	pathLooksLikeOtherNodeMajor,
-	nodePathCandidates,
-	versionManagerNodeCandidates,
-	parseNodeVersion,
-	resolveConfiguredNodePath,
-	detectDshRunnerNode,
-	resolveDshRunnerNodePath,
-} = loadTsCommonJs("src/main/dsh/dshRunnerNode.ts");
+const { DSH_RUNNER_NODE_MAJOR, isDshRunnerNodeCompatible, pathLooksLikeOtherNodeMajor, nodePathCandidates, versionManagerNodeCandidates, parseNodeVersion, resolveConfiguredNodePath, detectDshRunnerNode, resolveDshRunnerNodePath } = loadTsCommonJs("src/main/dsh/dshRunnerNode.ts");
 
 test("Windows 候选路径含官方安装目录", () => {
 	const candidates = nodePathCandidates("win32", { ProgramFiles: "C:\\Program Files" });

@@ -32,14 +32,18 @@ function compile(filePath, stubs = {}) {
 	}).outputText;
 	const module = { exports: {} };
 	const localRequire = (specifier) => stubs[specifier] ?? {};
-	vm.runInNewContext(output, {
-		module,
-		exports: module.exports,
-		require: localRequire,
-		console,
-		// canonicalSync/canonical 依赖 process.platform 做 Windows 大小写归一化
-		process,
-	}, { filename: filePath });
+	vm.runInNewContext(
+		output,
+		{
+			module,
+			exports: module.exports,
+			require: localRequire,
+			console,
+			// canonicalSync/canonical 依赖 process.platform 做 Windows 大小写归一化
+			process,
+		},
+		{ filename: filePath },
+	);
 	return module.exports;
 }
 
@@ -102,17 +106,7 @@ function setupFixture() {
 	mkdirSync(root, { recursive: true });
 	mkdirSync(wtA);
 	mkdirSync(wtB);
-	const porcelain = [
-		`worktree ${root}`,
-		"branch refs/heads/main",
-		"",
-		`worktree ${wtA}`,
-		"branch refs/heads/feat-a",
-		"",
-		`worktree ${wtB}`,
-		"branch refs/heads/feat-b",
-		"",
-	].join("\n");
+	const porcelain = [`worktree ${root}`, "branch refs/heads/main", "", `worktree ${wtA}`, "branch refs/heads/feat-a", "", `worktree ${wtB}`, "branch refs/heads/feat-b", ""].join("\n");
 	const cleanup = () => rmSync(tmp, { recursive: true, force: true });
 	return { root, wtA, wtB, porcelain, cleanup };
 }
@@ -197,7 +191,10 @@ test("remove() 正常删除 worktree：目录进回收站、分支被删除", as
 		const ok = await svc.remove(wtB, wtA);
 		assert.equal(ok, true);
 		// 目录应移入回收站（fake trashPath 模拟真实移动：源目录被删除）
-		assert.ok(trashCalls.some((p) => lower(p) === lower(wtB)), "worktree 目录应移入回收站");
+		assert.ok(
+			trashCalls.some((p) => lower(p) === lower(wtB)),
+			"worktree 目录应移入回收站",
+		);
 		assert.ok(!existsSync(wtB), "回收站移动后源目录应不存在");
 		// 分支名（feat-b）等于目录名 → PiDeck 创建的 worktree，应删除分支
 		assert.ok(
@@ -218,10 +215,7 @@ test("remove() 对未注册路径返回 false 且不调用 git worktree remove",
 		const ghost = join(root, "..", "not-a-worktree");
 		const ok = await svc.remove(ghost, wtA);
 		assert.equal(ok, false);
-		assert.ok(
-			!calls.some((c) => c.args[0] === "worktree" && c.args[1] === "remove"),
-			"未注册路径不得触发 git worktree remove",
-		);
+		assert.ok(!calls.some((c) => c.args[0] === "worktree" && c.args[1] === "remove"), "未注册路径不得触发 git worktree remove");
 		assert.equal(trashCalls.length, 0, "未注册路径不得进入回收站");
 	} finally {
 		cleanup();

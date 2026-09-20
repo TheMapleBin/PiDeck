@@ -22,9 +22,7 @@ import type { DshHomeSharingState } from "../../../shared/types/dshHome";
  *  只说「有风险」用户不知道怎么办；按平台给可直接粘贴的一行
  *  （与 dshRuntimeHint.ts 一致用 userAgent 判定，不引 Node/Electron 依赖）。 */
 function isolationCommand(): string {
-	return typeof navigator === "undefined" || navigator.userAgent.includes("Windows")
-		? "set DSH_HOME=%USERPROFILE%\\.dsh-cli"
-		: "export DSH_HOME=$HOME/.dsh-cli";
+	return typeof navigator === "undefined" || navigator.userAgent.includes("Windows") ? "set DSH_HOME=%USERPROFILE%\\.dsh-cli" : "export DSH_HOME=$HOME/.dsh-cli";
 }
 
 export function DshHomeSharingNotice({ sharing }: { sharing?: DshHomeSharingState }) {
@@ -55,10 +53,7 @@ export function DshHomeSharingNotice({ sharing }: { sharing?: DshHomeSharingStat
 
 /** 两种色调共用外壳：warning = 冲突（warning 语义 token）；info = 常态风险说明（面板色）。 */
 function Notice({ tone, children }: { tone: "warning" | "info"; children: ReactNode }) {
-	const className =
-		tone === "warning"
-			? "border-warning/40 bg-warning/10 text-warning"
-			: "border-border-subtle bg-bg-panel text-muted-foreground";
+	const className = tone === "warning" ? "border-warning/40 bg-warning/10 text-warning" : "border-border-subtle bg-bg-panel text-muted-foreground";
 	const Icon = tone === "warning" ? AlertTriangle : Info;
 	return (
 		<div role="status" className={`flex items-start gap-2 rounded-md border px-3.5 py-2.5 ${className}`}>

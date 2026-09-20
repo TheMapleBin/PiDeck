@@ -1,21 +1,9 @@
 import { createReadStream } from "node:fs";
-import {
-	appendFile,
-	mkdir,
-	open,
-	readdir,
-	rename,
-	stat,
-	writeFile,
-} from "node:fs/promises";
+import { appendFile, mkdir, open, readdir, rename, stat, writeFile } from "node:fs/promises";
 import { createInterface } from "node:readline";
 import { dirname, join } from "node:path";
 import type { ChatMessage, ImageContent } from "../../shared/types";
-import {
-	IMAGE_BLOB_REF_RE,
-	ImageBlobStore,
-	imageBlobMimeType,
-} from "./ImageBlobStore";
+import { IMAGE_BLOB_REF_RE, ImageBlobStore, imageBlobMimeType } from "./ImageBlobStore";
 
 /**
  * "Image session" 独立存储：生图记录不依赖 pi 会话文件。
@@ -47,8 +35,7 @@ import {
  * - sessionId 白名单（UUID）防路径注入；
  * - 写失败静默（best-effort：生图结果已在响应里，历史记录尽力而为）。
  */
-const SESSION_ID_RE =
-	/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+const SESSION_ID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 /** 单会话生图历史行数上限（每轮 2 行：user + assistant）。 */
 const MAX_MESSAGES = 2000;
 /**
@@ -66,10 +53,7 @@ const LEGACY_PROBE_BYTES = 256 * 1024;
  * 2. 长 base64 字面量——兜住键序不同的写法，也是「体积异常」的直接证据。
  * 引用格式永远写 `"type":"image","ref":`，两条都不会误命中。
  */
-const LEGACY_INLINE_IMAGE_MARKERS: readonly RegExp[] = [
-	/"type":"image","data":/,
-	/"data":"[A-Za-z0-9+/]{256,}/,
-];
+const LEGACY_INLINE_IMAGE_MARKERS: readonly RegExp[] = [/"type":"image","data":/, /"data":"[A-Za-z0-9+/]{256,}/];
 
 function looksLikeLegacyInlineImages(head: string): boolean {
 	return LEGACY_INLINE_IMAGE_MARKERS.some((marker) => marker.test(head));
@@ -78,12 +62,7 @@ function looksLikeLegacyInlineImages(head: string): boolean {
 const BLOB_REF_RE_G = /"ref":"([0-9a-f]{64}\.[a-z]+)"/g;
 
 function isMessageShape(value: unknown): value is ChatMessage {
-	return (
-		value !== null &&
-		typeof value === "object" &&
-		typeof Reflect.get(value, "id") === "string" &&
-		typeof Reflect.get(value, "role") === "string"
-	);
+	return value !== null && typeof value === "object" && typeof Reflect.get(value, "id") === "string" && typeof Reflect.get(value, "role") === "string";
 }
 
 /** 读文件头部窗口（不存在/不可读返回 null）。 */
@@ -196,9 +175,7 @@ export class ImageSessionStore {
 	 * Map 不随会话数无界增长。
 	 */
 	private withFileLock<T>(file: string, action: () => Promise<T>): Promise<T> {
-		const run = (this.fileLocks.get(file) ?? Promise.resolve())
-			.catch(() => undefined)
-			.then(action);
+		const run = (this.fileLocks.get(file) ?? Promise.resolve()).catch(() => undefined).then(action);
 		this.fileLocks.set(file, run);
 		void run
 			.finally(() => {
@@ -233,9 +210,7 @@ export class ImageSessionStore {
 			if (!ref) continue;
 			stored.push({ type: "image", ref, mimeType: imageBlobMimeType(ref) });
 		}
-		return stored.length > 0
-			? { ...message, images: stored }
-			: { ...message, images: undefined };
+		return stored.length > 0 ? { ...message, images: stored } : { ...message, images: undefined };
 	}
 
 	/** 追加一轮生图记录（user + assistant 两条）。白名单外/目录不可写时静默降级。 */
@@ -289,9 +264,7 @@ export class ImageSessionStore {
 					// 单行损坏不应阻断整段历史
 				}
 			}
-			return messages.length > MAX_MESSAGES
-				? messages.slice(messages.length - MAX_MESSAGES)
-				: messages;
+			return messages.length > MAX_MESSAGES ? messages.slice(messages.length - MAX_MESSAGES) : messages;
 		} catch {
 			// 文件缺失 = 无 ImageSession 记录
 			return [];
@@ -312,11 +285,7 @@ export class ImageSessionStore {
 		if (size <= 0) return false;
 		const head = await readHead(file, LEGACY_PROBE_BYTES);
 		// 头部窗口没命中、文件也没超过水位 → 不是旧格式（只读一个探测窗口即可判定，代价极低）
-		if (
-			!head ||
-			(size <= MAX_SESSION_BYTES && !looksLikeLegacyInlineImages(head))
-		)
-			return false;
+		if (!head || (size <= MAX_SESSION_BYTES && !looksLikeLegacyInlineImages(head))) return false;
 
 		const lines: string[] = [];
 		const reader = createInterface({
@@ -352,9 +321,7 @@ export class ImageSessionStore {
 		}
 		if (!isMessageShape(parsed)) return trimmed;
 		const images = parsed.images;
-		const hasInline = images?.some(
-			(image) => typeof image?.data === "string" && image.data.length > 0,
-		);
+		const hasInline = images?.some((image) => typeof image?.data === "string" && image.data.length > 0);
 		if (!hasInline) return trimmed;
 		const stored = await this.toStoredMessage(parsed);
 		// 迁移不丢图（M5）：原图数 ≠ 落库后图数说明有图片没能换成 ref
@@ -379,10 +346,7 @@ export class ImageSessionStore {
 		}
 		if (size <= MAX_SESSION_BYTES) return;
 		const lines = await readTailLines(file, MAX_READ_BYTES);
-		const kept =
-			lines.length > MAX_MESSAGES
-				? lines.slice(lines.length - MAX_MESSAGES)
-				: lines;
+		const kept = lines.length > MAX_MESSAGES ? lines.slice(lines.length - MAX_MESSAGES) : lines;
 		// 压缩可能丢掉仍被引用的图片行 → 需要在重写后统一回收孤儿 blob
 		await writeFileAtomic(file, tailPayloadWithinBudget(kept));
 		await this.pruneOrphanBlobs();

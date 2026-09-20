@@ -6,10 +6,7 @@
 export type ModelSelectionState = "checked" | "indeterminate" | "unchecked";
 
 /** 切换单个模型行的选中状态，返回新集合，避免原地修改 React state。 */
-export function toggleModelIndex(
-	selectedIndexes: ReadonlySet<number>,
-	index: number,
-): Set<number> {
+export function toggleModelIndex(selectedIndexes: ReadonlySet<number>, index: number): Set<number> {
 	const next = new Set(selectedIndexes);
 	if (next.has(index)) next.delete(index);
 	else next.add(index);
@@ -17,10 +14,7 @@ export function toggleModelIndex(
 }
 
 /** 计算当前有效选中行数；数据变化后遗留的越界索引不会污染批量工具栏。 */
-export function countSelectedModelIndexes(
-	selectedIndexes: ReadonlySet<number>,
-	total: number,
-): number {
+export function countSelectedModelIndexes(selectedIndexes: ReadonlySet<number>, total: number): number {
 	let count = 0;
 	for (const index of selectedIndexes) {
 		if (index >= 0 && index < total) count += 1;
@@ -29,20 +23,14 @@ export function countSelectedModelIndexes(
 }
 
 /** 表头三态：全选、部分选中或未选。 */
-export function getModelSelectionState(
-	selectedIndexes: ReadonlySet<number>,
-	total: number,
-): ModelSelectionState {
+export function getModelSelectionState(selectedIndexes: ReadonlySet<number>, total: number): ModelSelectionState {
 	const selectedCount = countSelectedModelIndexes(selectedIndexes, total);
 	if (selectedCount === 0) return "unchecked";
 	return selectedCount === total ? "checked" : "indeterminate";
 }
 
 /** 表头切换：已全选时清空，否则选中当前表格的所有行。 */
-export function toggleAllModelIndexes(
-	selectedIndexes: ReadonlySet<number>,
-	total: number,
-): Set<number> {
+export function toggleAllModelIndexes(selectedIndexes: ReadonlySet<number>, total: number): Set<number> {
 	if (total > 0 && getModelSelectionState(selectedIndexes, total) === "checked") {
 		return new Set<number>();
 	}
@@ -50,9 +38,6 @@ export function toggleAllModelIndexes(
 }
 
 /** 按选中行索引移除模型，供确认删除回调和测试共同复用。 */
-export function removeSelectedModelIndexes<T>(
-	items: ReadonlyArray<T>,
-	selectedIndexes: ReadonlySet<number>,
-): T[] {
+export function removeSelectedModelIndexes<T>(items: ReadonlyArray<T>, selectedIndexes: ReadonlySet<number>): T[] {
 	return items.filter((_, index) => !selectedIndexes.has(index));
 }

@@ -29,9 +29,5 @@ export const pendingCatalogUpdateAtom = atom<boolean>((get) => {
 
 /** 是否有任一「可提示」更新（侧栏设置按钮角标依据：app / pi CLI / 模型目录）。 */
 export const hasPendingUpdateAtom = atom<boolean>((get) => {
-	return (
-		get(pendingAppUpdateAtom) ||
-		get(pendingPiUpdateAtom) ||
-		get(pendingCatalogUpdateAtom)
-	);
+	return get(pendingAppUpdateAtom) || get(pendingPiUpdateAtom) || get(pendingCatalogUpdateAtom);
 });

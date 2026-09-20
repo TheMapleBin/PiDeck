@@ -2,9 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
-const { builtinPresetKeys, presetDisplayDescription, presetDisplayName } = loadTsCommonJs(
-	"src/renderer/src/config/dshPresetDisplay.ts",
-);
+const { builtinPresetKeys, presetDisplayDescription, presetDisplayName } = loadTsCommonJs("src/renderer/src/config/dshPresetDisplay.ts");
 
 /** 桩 t：直接回显 key，验证路由到 i18n 而非文件元数据。 */
 const t = (key) => `[${key}]`;

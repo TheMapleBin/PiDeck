@@ -11,12 +11,7 @@ import { useState, useEffect, useCallback } from "react";
 import { X } from "lucide-react";
 import { ConfirmDialog } from "../../app/AppParts";
 import { writeClipboard } from "../../../utils/clipboard";
-import type {
-	FeishuBotConfig,
-	FeishuBridgeStatus,
-	FeishuChatBinding,
-	FeishuTestResult,
-} from "../../../../../shared/types";
+import type { FeishuBotConfig, FeishuBridgeStatus, FeishuChatBinding, FeishuTestResult } from "../../../../../shared/types";
 import { formatI18nDateTime, t } from "../../../i18n";
 import { Label } from "../../ui-shadcn/label";
 
@@ -148,15 +143,14 @@ export function ImTab(_props: Props) {
 	}, []);
 
 	const loadData = useCallback(async () => {
-		if (!api) { setLoading(false); return; }
+		if (!api) {
+			setLoading(false);
+			return;
+		}
 		setLoading(true);
 		setError(null);
 		try {
-			const [botsList, statusRes, bindingsList] = await Promise.all([
-				api.botsList?.(),
-				api.statusRequest?.(),
-				api.bindingsList?.(),
-			]);
+			const [botsList, statusRes, bindingsList] = await Promise.all([api.botsList?.(), api.statusRequest?.(), api.bindingsList?.()]);
 			setBots(botsList ?? []);
 			setStatus(statusRes ?? { status: "disconnected", activeBindings: 0 });
 			setBindings(bindingsList ?? []);
@@ -245,24 +239,33 @@ export function ImTab(_props: Props) {
 		}
 	}, [api, appId, appSecret, botName, addFormOpenId, loadData]);
 
-	const handleRemoveBot = useCallback(async (botId: string) => {
-		if (!api) return;
-		await api.botRemove!(botId);
-		await loadData();
-	}, [api, loadData]);
+	const handleRemoveBot = useCallback(
+		async (botId: string) => {
+			if (!api) return;
+			await api.botRemove!(botId);
+			await loadData();
+		},
+		[api, loadData],
+	);
 
-	const handleEditOpenId = useCallback(async (botId: string) => {
-		if (!api) return;
-		await api.botConfig!(botId, { defaultUserOpenId: editOpenIdValue.trim() || undefined });
-		setEditingOpenIdBotId(null);
-		await loadData();
-	}, [api, editOpenIdValue, loadData]);
+	const handleEditOpenId = useCallback(
+		async (botId: string) => {
+			if (!api) return;
+			await api.botConfig!(botId, { defaultUserOpenId: editOpenIdValue.trim() || undefined });
+			setEditingOpenIdBotId(null);
+			await loadData();
+		},
+		[api, editOpenIdValue, loadData],
+	);
 
-	const handleRemoveBinding = useCallback(async (chatId: string) => {
-		if (!api) return;
-		await api.bindingRemove!(chatId);
-		await loadData();
-	}, [api, loadData]);
+	const handleRemoveBinding = useCallback(
+		async (chatId: string) => {
+			if (!api) return;
+			await api.bindingRemove!(chatId);
+			await loadData();
+		},
+		[api, loadData],
+	);
 
 	const handleCopyValue = useCallback(async (key: string, value: string) => {
 		await writeClipboard(value);
@@ -270,23 +273,32 @@ export function ImTab(_props: Props) {
 		setTimeout(() => setCopiedCredential(null), 1600);
 	}, []);
 
-	const handleLoadSecret = useCallback(async (botId: string) => {
-		if (!api?.botSecret) return "";
-		const cached = revealedSecrets[botId];
-		if (cached) return cached;
-		const secret = await api.botSecret(botId);
-		setRevealedSecrets((prev) => ({ ...prev, [botId]: secret }));
-		return secret;
-	}, [api, revealedSecrets]);
+	const handleLoadSecret = useCallback(
+		async (botId: string) => {
+			if (!api?.botSecret) return "";
+			const cached = revealedSecrets[botId];
+			if (cached) return cached;
+			const secret = await api.botSecret(botId);
+			setRevealedSecrets((prev) => ({ ...prev, [botId]: secret }));
+			return secret;
+		},
+		[api, revealedSecrets],
+	);
 
-	const handleCopySecret = useCallback(async (botId: string) => {
-		const secret = await handleLoadSecret(botId);
-		if (secret) await handleCopyValue(`secret:${botId}`, secret);
-	}, [handleCopyValue, handleLoadSecret]);
+	const handleCopySecret = useCallback(
+		async (botId: string) => {
+			const secret = await handleLoadSecret(botId);
+			if (secret) await handleCopyValue(`secret:${botId}`, secret);
+		},
+		[handleCopyValue, handleLoadSecret],
+	);
 
-	const handleRevealSecret = useCallback(async (botId: string) => {
-		await handleLoadSecret(botId);
-	}, [handleLoadSecret]);
+	const handleRevealSecret = useCallback(
+		async (botId: string) => {
+			await handleLoadSecret(botId);
+		},
+		[handleLoadSecret],
+	);
 
 	const getVisibleBindingsForBot = useCallback((botId: string) => visibleBindingsByBot[botId] ?? 10, [visibleBindingsByBot]);
 
@@ -304,52 +316,51 @@ export function ImTab(_props: Props) {
 				<div className="config-im-status-bar">
 					<span className="config-im-status-dot connected" />
 					<div className="config-im-status-info">
-						<div className="config-im-status-title">
-							{t("config.im.linkedAgentsCount", { count: bindings.length })}
-						</div>
-						<div className="config-im-status-meta">
-							{t("config.im.activeBindings", { count: bindings.length })}
-						</div>
-						{status.errorMessage && (
-							<div className="config-im-status-error">{status.errorMessage}</div>
-						)}
+						<div className="config-im-status-title">{t("config.im.linkedAgentsCount", { count: bindings.length })}</div>
+						<div className="config-im-status-meta">{t("config.im.activeBindings", { count: bindings.length })}</div>
+						{status.errorMessage && <div className="config-im-status-error">{status.errorMessage}</div>}
 					</div>
 				</div>
 			)}
 
-			{status.status === "error" && status.errorMessage && (
-				<div className="config-im-message warn">{status.errorMessage}</div>
-			)}
+			{status.status === "error" && status.errorMessage && <div className="config-im-message warn">{status.errorMessage}</div>}
 
 			{error && (
 				<div className="config-im-error">
 					<span>{error}</span>
-					<Button variant="ghost" size="icon-sm" className="size-7" onClick={() => setError(null)}>×</Button>
+					<Button variant="ghost" size="icon-sm" className="size-7" onClick={() => setError(null)}>
+						×
+					</Button>
 				</div>
 			)}
 
 			{/* ── 单 Bot 连接提示 ── */}
-			<div className="config-im-hint">
-				{t("config.im.singleConnectionHint")}
-			</div>
+			<div className="config-im-hint">{t("config.im.singleConnectionHint")}</div>
 
 			{/* ── Bot 配置管理 ── */}
 			<div className="config-section">
 				<div className="mb-3 flex items-center justify-between gap-3">
 					<span className="font-mono text-xs tabular-nums text-text-tertiary">{t("config.im.botConfig", { count: bots.length })}</span>
 					<div className="flex min-w-0 items-center gap-1.5">
-						<Button size="sm" variant="outline"
-							onClick={() => setGuideOpen(true)}
-						>
+						<Button size="sm" variant="outline" onClick={() => setGuideOpen(true)}>
 							{t("config.im.guide")}
 						</Button>
-						<Button size="sm" variant="outline"
-							onClick={() => openExternal("https://xid01i1952l.feishu.cn/wiki/Yf8Gw5QW3is7xdkuG98cvRVen5d?from=from_copylink", true)}
-						>
+						<Button size="sm" variant="outline" onClick={() => openExternal("https://xid01i1952l.feishu.cn/wiki/Yf8Gw5QW3is7xdkuG98cvRVen5d?from=from_copylink", true)}>
 							{t("config.im.onlineGuide")}
 						</Button>
-						<Button size="sm" variant="default"
-							onClick={() => { if (showAddForm && addStep === "connected") void api?.disconnect?.(); setShowAddForm((v) => !v); setAddStep("input"); setAddError(null); setAppId(""); setAppSecret(""); setBotName(""); setAddFormOpenId(""); }}
+						<Button
+							size="sm"
+							variant="default"
+							onClick={() => {
+								if (showAddForm && addStep === "connected") void api?.disconnect?.();
+								setShowAddForm((v) => !v);
+								setAddStep("input");
+								setAddError(null);
+								setAppId("");
+								setAppSecret("");
+								setBotName("");
+								setAddFormOpenId("");
+							}}
 						>
 							{showAddForm ? t("common.cancel") : t("config.im.addBot")}
 						</Button>
@@ -363,7 +374,11 @@ export function ImTab(_props: Props) {
 							<Input
 								type="text"
 								value={appId}
-								onChange={(e) => { setAppId(e.target.value); setAddError(null); if (addStep !== "input") setAddStep("input"); }}
+								onChange={(e) => {
+									setAppId(e.target.value);
+									setAddError(null);
+									if (addStep !== "input") setAddStep("input");
+								}}
 								placeholder="cli_xxxxxxxxxxxx"
 								className="config-input"
 								disabled={addStep !== "input"}
@@ -374,70 +389,50 @@ export function ImTab(_props: Props) {
 							<Input
 								type="password"
 								value={appSecret}
-								onChange={(e) => { setAppSecret(e.target.value); setAddError(null); if (addStep !== "input") setAddStep("input"); }}
+								onChange={(e) => {
+									setAppSecret(e.target.value);
+									setAddError(null);
+									if (addStep !== "input") setAddStep("input");
+								}}
 								placeholder="••••••••••••••••"
 								className="config-input"
 								disabled={addStep !== "input"}
 							/>
 						</div>
 						<div className="config-field">
-							<Label>{t("config.im.botName")} <span className="config-field-optional">({t("common.optional")})</span></Label>
-							<Input
-								type="text"
-								value={botName}
-								onChange={(e) => setBotName(e.target.value)}
-								placeholder={t("config.im.botNamePlaceholder")}
-								className="config-input"
-								disabled={addStep !== "input"}
-							/>
+							<Label>
+								{t("config.im.botName")} <span className="config-field-optional">({t("common.optional")})</span>
+							</Label>
+							<Input type="text" value={botName} onChange={(e) => setBotName(e.target.value)} placeholder={t("config.im.botNamePlaceholder")} className="config-input" disabled={addStep !== "input"} />
 						</div>
 
 						{/* 连接成功后才显示 Open ID 输入框 */}
 						{addStep === "connected" && (
 							<div className="config-im-openid-section">
 								<div className="config-field">
-									<Label>{t("config.im.openId")} <span className="config-field-required">*</span></Label>
-									<Input
-										type="text"
-										value={addFormOpenId}
-										onChange={(e) => setAddFormOpenId(e.target.value)}
-										placeholder="ou_xxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-										className="config-input"
-									/>
+									<Label>
+										{t("config.im.openId")} <span className="config-field-required">*</span>
+									</Label>
+									<Input type="text" value={addFormOpenId} onChange={(e) => setAddFormOpenId(e.target.value)} placeholder="ou_xxxxxxxxxxxxxxxxxxxxxxxxxxxx" className="config-input" />
 								</div>
-								<div className="config-im-openid-hint">
-									💡 {t("config.im.openIdHint")}
-								</div>
+								<div className="config-im-openid-hint">💡 {t("config.im.openIdHint")}</div>
 							</div>
 						)}
 
-						{addStep === "input" && addConnecting && (
-							<div className="config-im-test-result info">⏳ {t("config.im.connectingToFeishu")}</div>
-						)}
+						{addStep === "input" && addConnecting && <div className="config-im-test-result info">⏳ {t("config.im.connectingToFeishu")}</div>}
 
-						{addError && (
-							<div className="config-im-test-result warn">⚠️ {addError}</div>
-						)}
+						{addError && <div className="config-im-test-result warn">⚠️ {addError}</div>}
 
 						<div className="config-im-form-actions">
 							{addStep === "input" && (
-								<Button size="sm" variant="default"
-									onClick={handleConnectTemp}
-									disabled={addConnecting || !appId.trim() || !appSecret.trim()}
-									style={{ flex: 1 }}
-								>
+								<Button size="sm" variant="default" onClick={handleConnectTemp} disabled={addConnecting || !appId.trim() || !appSecret.trim()} style={{ flex: 1 }}>
 									{addConnecting ? t("config.im.connecting") : t("config.im.connect")}
 								</Button>
 							)}
 							{addStep === "connected" && (
 								<>
 									<div className="config-im-connected-info">✅ {t("config.im.connectedToFeishu")}</div>
-									<Button size="sm" variant="default"
-										onClick={handleSaveBot}
-										disabled={adding || !addFormOpenId.trim()}
-										style={{ flex: 1 }}
-										title={!addFormOpenId.trim() ? t("config.im.openIdRequired") : undefined}
-									>
+									<Button size="sm" variant="default" onClick={handleSaveBot} disabled={adding || !addFormOpenId.trim()} style={{ flex: 1 }} title={!addFormOpenId.trim() ? t("config.im.openIdRequired") : undefined}>
 										{adding ? t("config.im.saving") : t("config.im.saveBot")}
 									</Button>
 								</>
@@ -446,9 +441,7 @@ export function ImTab(_props: Props) {
 					</div>
 				)}
 
-				{bots.length === 0 && !showAddForm && (
-					<div className="py-12 text-center text-control text-text-tertiary">{t("config.im.noBotConfig")}</div>
-				)}
+				{bots.length === 0 && !showAddForm && <div className="py-12 text-center text-control text-text-tertiary">{t("config.im.noBotConfig")}</div>}
 
 				{bots.slice(0, visibleBots).map((bot) => {
 					const botBindings = bindings.filter((binding) => binding.botId === bot.id);
@@ -463,12 +456,14 @@ export function ImTab(_props: Props) {
 						<div key={bot.id} className={`mb-2 overflow-hidden rounded-lg border border-border-subtle bg-bg-panel transition-[border-color,box-shadow,background-color] duration-150 config-im-bot-card${isThisConnected ? " border-[var(--color-accent)]/30" : ""}`}>
 							<div
 								className="flex cursor-pointer items-center gap-3 px-3.5 py-2.5 hover:bg-bg-hover config-im-bot-header"
-								onClick={() => setExpandedBotIds((prev) => {
-									const next = new Set(prev);
-									if (next.has(bot.id)) next.delete(bot.id);
-									else next.add(bot.id);
-									return next;
-								})}
+								onClick={() =>
+									setExpandedBotIds((prev) => {
+										const next = new Set(prev);
+										if (next.has(bot.id)) next.delete(bot.id);
+										else next.add(bot.id);
+										return next;
+									})
+								}
 							>
 								<div className="min-w-0 flex-1">
 									<div className="truncate text-control font-semibold text-text-primary">
@@ -482,7 +477,10 @@ export function ImTab(_props: Props) {
 								</div>
 								<div className="flex shrink-0 gap-1.5" onClick={(e) => e.stopPropagation()}>
 									{isThisConnected ? (
-										<Button variant="outline" size="sm" className="text-destructive"
+										<Button
+											variant="outline"
+											size="sm"
+											className="text-destructive"
 											disabled={connecting}
 											onClick={async () => {
 												setConnecting(true);
@@ -497,16 +495,18 @@ export function ImTab(_props: Props) {
 											{connecting ? t("config.im.connecting") : t("config.im.disconnect")}
 										</Button>
 									) : (
-										<Button variant="default" size="sm"
+										<Button
+											variant="default"
+											size="sm"
 											disabled={connecting}
 											onClick={async () => {
 												setConnecting(true);
 												try {
 													await api?.connectByBot?.(bot.id);
 													await loadData();
-											} catch (e) {
-												console.error("[Feishu] Failed to connect saved Bot", e);
-												setError(t("config.im.connectFailed"));
+												} catch (e) {
+													console.error("[Feishu] Failed to connect saved Bot", e);
+													setError(t("config.im.connectFailed"));
 												} finally {
 													setConnecting(false);
 												}
@@ -515,7 +515,9 @@ export function ImTab(_props: Props) {
 											{connecting ? t("config.im.connecting") : t("config.im.connect")}
 										</Button>
 									)}
-									<Button size="sm" variant="outline"
+									<Button
+										size="sm"
+										variant="outline"
 										onClick={() => {
 											setExpandedBotIds((prev) => {
 												const next = new Set(prev);
@@ -527,7 +529,7 @@ export function ImTab(_props: Props) {
 									>
 										{isExpanded ? t("common.collapse") : t("common.details")}
 									</Button>
-									<Button size="sm"  variant="destructive" onClick={() => setDeleteConfirmBotId(bot.id)}>
+									<Button size="sm" variant="destructive" onClick={() => setDeleteConfirmBotId(bot.id)}>
 										{t("common.delete")}
 									</Button>
 								</div>
@@ -551,11 +553,23 @@ export function ImTab(_props: Props) {
 													<Button variant="outline" size="sm" onClick={() => handleCopySecret(bot.id)}>
 														{copiedCredential === `secret:${bot.id}` ? t("common.copied") : t("common.copy")}
 													</Button>
-													<Button variant="outline" size="sm"
-													onClick={() => { if (secretValue) { setRevealedSecrets((prev) => { const next = { ...prev }; delete next[bot.id]; return next; }); } else { void handleRevealSecret(bot.id); } }}
-												>
-													{secretValue ? t("config.im.hideSecret") : t("config.im.revealSecret")}
-												</Button>
+													<Button
+														variant="outline"
+														size="sm"
+														onClick={() => {
+															if (secretValue) {
+																setRevealedSecrets((prev) => {
+																	const next = { ...prev };
+																	delete next[bot.id];
+																	return next;
+																});
+															} else {
+																void handleRevealSecret(bot.id);
+															}
+														}}
+													>
+														{secretValue ? t("config.im.hideSecret") : t("config.im.revealSecret")}
+													</Button>
 												</div>
 											</div>
 										</div>
@@ -565,20 +579,25 @@ export function ImTab(_props: Props) {
 										<div className="config-im-section-title">{t("config.im.openId")}</div>
 										{isEditingOpenId ? (
 											<div className="config-im-openid-edit">
-												<Input
-													type="text"
-													value={editOpenIdValue}
-													onChange={(e) => setEditOpenIdValue(e.target.value)}
-													placeholder="ou_xxxxxxxxxxxx"
-													className="config-input config-input-xs"
-												/>
-												<Button variant="default" size="sm" onClick={() => handleEditOpenId(bot.id)}>{t("common.save")}</Button>
-												<Button variant="outline" size="sm" onClick={() => setEditingOpenIdBotId(null)}>{t("common.cancel")}</Button>
+												<Input type="text" value={editOpenIdValue} onChange={(e) => setEditOpenIdValue(e.target.value)} placeholder="ou_xxxxxxxxxxxx" className="config-input config-input-xs" />
+												<Button variant="default" size="sm" onClick={() => handleEditOpenId(bot.id)}>
+													{t("common.save")}
+												</Button>
+												<Button variant="outline" size="sm" onClick={() => setEditingOpenIdBotId(null)}>
+													{t("common.cancel")}
+												</Button>
 											</div>
 										) : (
 											<div className="config-im-openid-line">
 												{bot.defaultUserOpenId ? <code>{bot.defaultUserOpenId}</code> : <span className="config-im-openid-empty">{t("config.im.openIdEmpty")}</span>}
-												<Button variant="outline" size="sm" onClick={() => { setEditingOpenIdBotId(bot.id); setEditOpenIdValue(bot.defaultUserOpenId || ""); }}>
+												<Button
+													variant="outline"
+													size="sm"
+													onClick={() => {
+														setEditingOpenIdBotId(bot.id);
+														setEditOpenIdValue(bot.defaultUserOpenId || "");
+													}}
+												>
 													{t("config.im.editOpenId")}
 												</Button>
 											</div>
@@ -597,7 +616,7 @@ export function ImTab(_props: Props) {
 														<div className="config-im-binding-info">
 															<div className="config-im-binding-title">{binding.groupName || binding.chatId.slice(0, 10)}</div>
 															<div className="config-im-binding-meta">
-														{t("config.im.agentId")}: {binding.sessionId.slice(0, 8)} · {t("config.im.chat")}: {binding.chatId.slice(0, 10)} · {formatI18nDateTime(binding.createdAt)}
+																{t("config.im.agentId")}: {binding.sessionId.slice(0, 8)} · {t("config.im.chat")}: {binding.chatId.slice(0, 10)} · {formatI18nDateTime(binding.createdAt)}
 															</div>
 														</div>
 														<Button variant="destructive" size="sm" onClick={() => handleRemoveBinding(binding.chatId)}>
@@ -606,9 +625,7 @@ export function ImTab(_props: Props) {
 													</div>
 												))}
 												{botBindings.length > visibleBindingCount && (
-													<Button variant="outline" size="sm" className="config-im-show-more"
-														onClick={() => setVisibleBindingsByBot((prev) => ({ ...prev, [bot.id]: Math.min((prev[bot.id] ?? 10) + 10, botBindings.length) }))}
-													>
+													<Button variant="outline" size="sm" className="config-im-show-more" onClick={() => setVisibleBindingsByBot((prev) => ({ ...prev, [bot.id]: Math.min((prev[bot.id] ?? 10) + 10, botBindings.length) }))}>
 														{t("config.im.showMoreAgents")} ({botBindings.length - visibleBindingCount})
 													</Button>
 												)}
@@ -650,47 +667,95 @@ export function ImTab(_props: Props) {
 					onClick={(e) => {
 						if (e.target === e.currentTarget) {
 							setGuideAnimating(true);
-							setTimeout(() => { setGuideAnimating(false); setGuideOpen(false); }, 150);
+							setTimeout(() => {
+								setGuideAnimating(false);
+								setGuideOpen(false);
+							}, 150);
 						}
 					}}
 				>
 					<div className="config-im-guide-modal">
 						<div className="config-im-guide-modal-header">
 							<strong>{t("config.im.guide")}</strong>
-							<Button variant="ghost" size="icon-sm" className="size-7"
-								onClick={() => { setGuideAnimating(true); setTimeout(() => { setGuideAnimating(false); setGuideOpen(false); }, 150); }}
+							<Button
+								variant="ghost"
+								size="icon-sm"
+								className="size-7"
+								onClick={() => {
+									setGuideAnimating(true);
+									setTimeout(() => {
+										setGuideAnimating(false);
+										setGuideOpen(false);
+									}, 150);
+								}}
 							>
 								<X size={16} strokeWidth={2.2} />
 							</Button>
 						</div>
 						<div className="config-im-guide-modal-body">
-							<p><strong>{t("config.im.guideMethodTitle")}</strong></p>
+							<p>
+								<strong>{t("config.im.guideMethodTitle")}</strong>
+							</p>
 
 							{/* 方式一：智能体（推荐） */}
-							<p><strong>{t("config.im.guideMethodA")}</strong></p>
+							<p>
+								<strong>{t("config.im.guideMethodA")}</strong>
+							</p>
 							<p style={{ fontSize: "var(--font-size-micro)", color: "var(--color-text-tertiary)" }}>{t("config.im.guideMethodADesc")}</p>
 							<ol>
-								<li>{t("config.im.guideMethodAStep1a")}<br /><Button variant="link" size="sm" className="config-link-like h-auto p-0" onClick={() => openExternal("https://open.feishu.cn/app", true)}>https://open.feishu.cn/app</Button> → {t("config.im.guideMethodAStep1b")}</li>
+								<li>
+									{t("config.im.guideMethodAStep1a")}
+									<br />
+									<Button variant="link" size="sm" className="config-link-like h-auto p-0" onClick={() => openExternal("https://open.feishu.cn/app", true)}>
+										https://open.feishu.cn/app
+									</Button>{" "}
+									→ {t("config.im.guideMethodAStep1b")}
+								</li>
 								<li>{t("config.im.guideMethodAStep2")}</li>
 								<li>{t("config.im.guideMethodAStep3")}</li>
 								<li>{t("config.im.guideMethodAStep4")}</li>
 							</ol>
 
 							{/* 方式二：开放平台（手动） */}
-							<p style={{ marginTop: 16 }}><strong>{t("config.im.guideMethodB")}</strong></p>
+							<p style={{ marginTop: 16 }}>
+								<strong>{t("config.im.guideMethodB")}</strong>
+							</p>
 							<p style={{ fontSize: "var(--font-size-micro)", color: "var(--color-text-tertiary)" }}>{t("config.im.guideMethodBDesc")}</p>
 							<ol>
-								<li>{t("config.im.guideMethodBStep1a")}<br /><Button variant="link" size="sm" className="config-link-like h-auto p-0" onClick={() => openExternal("https://open.feishu.cn/app", true)}>https://open.feishu.cn/app</Button> → {t("config.im.guideMethodBStep1b")}</li>
+								<li>
+									{t("config.im.guideMethodBStep1a")}
+									<br />
+									<Button variant="link" size="sm" className="config-link-like h-auto p-0" onClick={() => openExternal("https://open.feishu.cn/app", true)}>
+										https://open.feishu.cn/app
+									</Button>{" "}
+									→ {t("config.im.guideMethodBStep1b")}
+								</li>
 								<li>{t("config.im.guideMethodBStep2")}</li>
-								<li>{t("config.im.guideMethodBStep3")}<br />
+								<li>
+									{t("config.im.guideMethodBStep3")}
+									<br />
 									<ul className="config-im-guide-perms">
-										<li><code>im:message:send_as_bot</code> — {t("config.im.permSendMessage")}</li>
-										<li><code>im:message.p2p_msg:readonly</code> — {t("config.im.permGetMessageP2P")}</li>
-										<li><code>im:message.group_at_msg:readonly</code> — {t("config.im.permGetMessageGroup")}</li>
-										<li><code>im:message:update</code> — {t("config.im.permUpdateMessage")}</li>
-										<li><code>im:chat:read</code> / <code>im:chat:create</code> / <code>im:chat:update</code> — {t("config.im.permChatManage")}</li>
-										<li><code>im:resource</code> — {t("config.im.permDownload")}</li>
-										<li><code>contact:contact.base:readonly</code> — {t("config.im.permContact")}</li>
+										<li>
+											<code>im:message:send_as_bot</code> — {t("config.im.permSendMessage")}
+										</li>
+										<li>
+											<code>im:message.p2p_msg:readonly</code> — {t("config.im.permGetMessageP2P")}
+										</li>
+										<li>
+											<code>im:message.group_at_msg:readonly</code> — {t("config.im.permGetMessageGroup")}
+										</li>
+										<li>
+											<code>im:message:update</code> — {t("config.im.permUpdateMessage")}
+										</li>
+										<li>
+											<code>im:chat:read</code> / <code>im:chat:create</code> / <code>im:chat:update</code> — {t("config.im.permChatManage")}
+										</li>
+										<li>
+											<code>im:resource</code> — {t("config.im.permDownload")}
+										</li>
+										<li>
+											<code>contact:contact.base:readonly</code> — {t("config.im.permContact")}
+										</li>
 									</ul>
 								</li>
 								<li>{t("config.im.guideMethodBStep4")}</li>
@@ -705,21 +770,45 @@ export function ImTab(_props: Props) {
 							<p style={{ marginTop: 20, fontWeight: 600 }}>{t("config.im.guideScopeTitle")}</p>
 							<p style={{ fontSize: "var(--font-size-micro)", color: "var(--color-text-tertiary)" }}>{t("config.im.guideScopeDesc")}</p>
 							<pre className="config-im-code-block">{SCOPES_JSON}</pre>
-							<Button variant="outline" size="sm" onClick={() => { writeClipboard(SCOPES_JSON); setCopiedScope(true); setTimeout(() => setCopiedScope(false), 2000); }}>
+							<Button
+								variant="outline"
+								size="sm"
+								onClick={() => {
+									writeClipboard(SCOPES_JSON);
+									setCopiedScope(true);
+									setTimeout(() => setCopiedScope(false), 2000);
+								}}
+							>
 								{copiedScope ? t("common.copied") : t("common.copy")}
 							</Button>
 
 							<p style={{ marginTop: 20, fontWeight: 600 }}>{t("config.im.guideEventsTitle")}</p>
 							<p style={{ fontSize: "var(--font-size-micro)", color: "var(--color-text-tertiary)" }}>{t("config.im.guideEventsDesc")}</p>
 							<pre className="config-im-code-block">{EVENTS_JSON}</pre>
-							<Button variant="outline" size="sm" onClick={() => { writeClipboard(EVENTS_JSON); setCopiedEvents(true); setTimeout(() => setCopiedEvents(false), 2000); }}>
+							<Button
+								variant="outline"
+								size="sm"
+								onClick={() => {
+									writeClipboard(EVENTS_JSON);
+									setCopiedEvents(true);
+									setTimeout(() => setCopiedEvents(false), 2000);
+								}}
+							>
 								{copiedEvents ? t("common.copied") : t("common.copy")}
 							</Button>
 
 							<p style={{ marginTop: 20, fontWeight: 600 }}>{t("config.im.guideCallbacksTitle")}</p>
 							<p style={{ fontSize: "var(--font-size-micro)", color: "var(--color-text-tertiary)" }}>{t("config.im.guideCallbacksDesc")}</p>
 							<pre className="config-im-code-block">{CALLBACKS_JSON}</pre>
-							<Button variant="outline" size="sm" onClick={() => { writeClipboard(CALLBACKS_JSON); setCopiedCallbacks(true); setTimeout(() => setCopiedCallbacks(false), 2000); }}>
+							<Button
+								variant="outline"
+								size="sm"
+								onClick={() => {
+									writeClipboard(CALLBACKS_JSON);
+									setCopiedCallbacks(true);
+									setTimeout(() => setCopiedCallbacks(false), 2000);
+								}}
+							>
 								{copiedCallbacks ? t("common.copied") : t("common.copy")}
 							</Button>
 						</div>

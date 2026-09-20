@@ -3,21 +3,13 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import {
-	generatePiAiCatalog,
-	PI_AI_CATALOG_FILE_NAME,
-	PI_AI_CATALOG_MANIFEST_FILE_NAME,
-	sha256,
-} from "../scripts/generate-pi-ai-catalog.mjs";
+import { generatePiAiCatalog, PI_AI_CATALOG_FILE_NAME, PI_AI_CATALOG_MANIFEST_FILE_NAME, sha256 } from "../scripts/generate-pi-ai-catalog.mjs";
 
 function createPiAiFixture(root) {
 	const sourceDir = join(root, "pi-ai");
 	const dataDir = join(sourceDir, "dist", "providers", "data");
 	mkdirSync(dataDir, { recursive: true });
-	writeFileSync(
-		join(sourceDir, "package.json"),
-		JSON.stringify({ name: "@earendil-works/pi-ai", version: "9.9.9-test" }),
-	);
+	writeFileSync(join(sourceDir, "package.json"), JSON.stringify({ name: "@earendil-works/pi-ai", version: "9.9.9-test" }));
 	// 文件名倒序写入，生成器必须自行排序为 a.json → z.json。
 	writeFileSync(
 		join(dataDir, "z.json"),
@@ -101,10 +93,7 @@ test("生成器裁剪 pi-ai catalog、写入可验证的确定性 artifact", () 
 		const before = `${catalogRaw}\n${readFileSync(manifestPath, "utf8")}`;
 		const second = generatePiAiCatalog({ sourceDir, outDir });
 		assert.equal(second.changed, false, "相同输入不应产生资源 churn");
-		assert.equal(
-			`${readFileSync(catalogPath, "utf8")}\n${readFileSync(manifestPath, "utf8")}`,
-			before,
-		);
+		assert.equal(`${readFileSync(catalogPath, "utf8")}\n${readFileSync(manifestPath, "utf8")}`, before);
 		assert.equal(generatePiAiCatalog({ sourceDir, outDir, check: true }).ok, true);
 
 		writeFileSync(catalogPath, "tampered\n");
@@ -117,17 +106,11 @@ test("生成器裁剪 pi-ai catalog、写入可验证的确定性 artifact", () 
 test("生成器拒绝缺失或损坏的上游 catalog", () => {
 	const root = mkdtempSync(join(tmpdir(), "pi-ai-catalog-invalid-"));
 	try {
-		assert.throws(
-			() => generatePiAiCatalog({ sourceDir: join(root, "missing"), outDir: join(root, "out") }),
-			/package\.json not found/,
-		);
+		assert.throws(() => generatePiAiCatalog({ sourceDir: join(root, "missing"), outDir: join(root, "out") }), /package\.json not found/);
 
 		const sourceDir = createPiAiFixture(root);
 		writeFileSync(join(sourceDir, "dist", "providers", "data", "broken.json"), "{not-json");
-		assert.throws(
-			() => generatePiAiCatalog({ sourceDir, outDir: join(root, "out") }),
-			/failed to parse pi-ai catalog file broken\.json/,
-		);
+		assert.throws(() => generatePiAiCatalog({ sourceDir, outDir: join(root, "out") }), /failed to parse pi-ai catalog file broken\.json/);
 	} finally {
 		rmSync(root, { recursive: true, force: true });
 	}

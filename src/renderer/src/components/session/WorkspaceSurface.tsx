@@ -1,26 +1,7 @@
 import { cn } from "../../lib/utils";
 import { useAtom } from "jotai";
-import {
-	useCallback,
-	useEffect,
-	useMemo,
-	useRef,
-	useState,
-	type CSSProperties,
-	type MouseEvent as ReactMouseEvent,
-	type ReactNode,
-} from "react";
-import {
-	ChevronDown,
-	ChevronRight,
-	ChevronsDownUp,
-	FileText,
-	Folder,
-	FolderOpen,
-	FolderTree,
-	RefreshCw,
-	X,
-} from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { ChevronDown, ChevronRight, ChevronsDownUp, FileText, Folder, FolderOpen, FolderTree, LoaderCircle, RefreshCw, X } from "lucide-react";
 import { normalizeSessionPathForCompare } from "../../agentListDisplay";
 import { SessionSourceBadge } from "./SessionSourceBadge";
 import { Button } from "../ui-shadcn/button";
@@ -35,13 +16,7 @@ import { writeFileNodeDragPayload } from "../app/AppUtils";
 import { t } from "../../i18n";
 import type { WorkspaceDrawerPanel } from "../../hooks/useWorkspacePanels";
 import { showNotice } from "../../utils/notice";
-import {
-	Dialog,
-	DialogClose,
-	DialogContent,
-	DialogHeader,
-	DialogTitle,
-} from "../ui-shadcn/dialog";
+import { Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle } from "../ui-shadcn/dialog";
 import type { FileTreeNode, Project, SessionSummary } from "../../../../shared/types";
 import { Input } from "../ui-shadcn/input";
 import { PathTooltip } from "../ui-shadcn/PathTooltip";
@@ -96,12 +71,7 @@ export function DrawerContent(props: {
 	/** 文件树内部拖拽移动文件/目录到目标目录 */
 	onMoveFiles?: (sourcePaths: string[], targetDir: string) => void;
 }) {
-	const title =
-		props.panel === "files"
-			? null
-			: props.project
-				? t("drawer.projectSessions", { name: props.project.name })
-				: t("drawer.historyTitle");
+	const title = props.panel === "files" ? null : props.project ? t("drawer.projectSessions", { name: props.project.name }) : t("drawer.historyTitle");
 	return (
 		<>
 			{/* 文件抽屉：去掉「文件 + ×」顶栏，关闭改走右侧 rail；会话历史仍保留顶栏。 */}
@@ -109,15 +79,7 @@ export function DrawerContent(props: {
 				<div className="drawer-header flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border/40 bg-background px-3">
 					<strong className="truncate text-sm font-semibold text-foreground">{title}</strong>
 					<div className="drawer-header-actions flex shrink-0 items-center gap-1">
-						<Button
-							type="button"
-							variant="ghost"
-							size="icon-sm"
-							className="inline-grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-							title={t("drawer.closePanel")}
-							aria-label={t("drawer.closePanel")}
-							onClick={props.onClose}
-						>
+						<Button type="button" variant="ghost" size="icon-sm" className="inline-grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground" title={t("drawer.closePanel")} aria-label={t("drawer.closePanel")} onClick={props.onClose}>
 							<X size={16} />
 						</Button>
 					</div>
@@ -141,17 +103,7 @@ export function DrawerContent(props: {
 					onPasteFiles={props.onPasteFiles}
 				/>
 			)}
-			{props.panel === "sessions" && (
-				<SessionsPanel
-					sessions={props.sessions}
-					onRefresh={props.onRefreshSessions}
-					onOpen={props.onOpenSession}
-					onRename={props.onRenameSession}
-					onCopy={props.onCopySession}
-					onExport={props.onExportSession}
-					onDelete={props.onDeleteSession}
-				/>
-			)}
+			{props.panel === "sessions" && <SessionsPanel sessions={props.sessions} onRefresh={props.onRefreshSessions} onOpen={props.onOpenSession} onRename={props.onRenameSession} onCopy={props.onCopySession} onExport={props.onExportSession} onDelete={props.onDeleteSession} />}
 		</>
 	);
 }
@@ -210,15 +162,9 @@ function FilesPanel(props: {
 		fileSearch.clearSearch();
 	}, [fileSearch]);
 	// 排序是纯展示层变换：不改变 props.files 引用，只影响渲染次序
-	const sortedFiles = useMemo(
-		() => sortFileNodes(props.files, sortMode, sortDirection),
-		[props.files, sortMode, sortDirection],
-	);
+	const sortedFiles = useMemo(() => sortFileNodes(props.files, sortMode, sortDirection), [props.files, sortMode, sortDirection]);
 	// 折叠中间包是排序之后的另一层纯展示变换：开启时把单子目录链压成一行。
-	const displayFiles = useMemo(
-		() => (compactPackages ? compactMiddlePackages(sortedFiles) : sortedFiles),
-		[sortedFiles, compactPackages],
-	);
+	const displayFiles = useMemo(() => (compactPackages ? compactMiddlePackages(sortedFiles) : sortedFiles), [sortedFiles, compactPackages]);
 	/** 拖入高亮的目标目录路径（null = 拖在面板空白区域） */
 	const [dragOverDir, setDragOverDir] = useState<string | null>(null);
 	const dragCountRef = useRef(0);
@@ -267,7 +213,10 @@ function FilesPanel(props: {
 			className="files-panel flex min-h-0 flex-1 flex-col overflow-x-hidden"
 			tabIndex={-1}
 			onDragOver={handlePanelDragOver}
-			onDragLeave={() => { setDragOverDir(null); dragCountRef.current = 0; }}
+			onDragLeave={() => {
+				setDragOverDir(null);
+				dragCountRef.current = 0;
+			}}
 			onDrop={handlePanelDrop}
 			onKeyDown={handlePanelKeyDown}
 			onContextMenu={handlePanelContextMenu}
@@ -276,23 +225,13 @@ function FilesPanel(props: {
 			<div className="panel-action-row flex h-7 min-w-0 shrink-0 items-center justify-end gap-1 border-b border-border/40 px-2 text-xs text-muted-foreground">
 				<div className="panel-action-buttons flex min-w-0 items-center gap-0.5">
 					{/* 文件树排序：方向切换与维度选择合并在一个图标菜单内（默认按名称·升序） */}
-					<FileSortControl
-						sortMode={sortMode}
-						sortDirection={sortDirection}
-						onSortModeChange={setSortMode}
-						onToggleDirection={() => setSortDirection((d) => (d === "asc" ? "desc" : "asc"))}
-					/>
+					<FileSortControl sortMode={sortMode} sortDirection={sortDirection} onSortModeChange={setSortMode} onToggleDirection={() => setSortDirection((d) => (d === "asc" ? "desc" : "asc"))} />
 					{/* 折叠中间包：开启时深包目录链合并成一行（默认开），与排序互不影响 */}
 					<Button
 						type="button"
 						variant="ghost"
 						size="icon-sm"
-						className={cn(
-							"icon-only inline-grid size-6 place-items-center rounded-md",
-							compactPackages
-								? "bg-accent text-foreground"
-								: "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-						)}
+						className={cn("icon-only inline-grid size-6 place-items-center rounded-md", compactPackages ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent hover:text-accent-foreground")}
 						onClick={() => setCompactPackages((v) => !v)}
 						title={t("drawer.compactPackages")}
 						aria-label={t("drawer.compactPackages")}
@@ -306,12 +245,7 @@ function FilesPanel(props: {
 							type="button"
 							variant="ghost"
 							size="icon-sm"
-							className={cn(
-								"icon-only inline-grid size-6 place-items-center rounded-md",
-								searchOpen
-									? "bg-accent text-foreground"
-									: "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-							)}
+							className={cn("icon-only inline-grid size-6 place-items-center rounded-md", searchOpen ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent hover:text-accent-foreground")}
 							onClick={() => (searchOpen ? closeSearch() : setSearchOpen(true))}
 							title={t("drawer.fileSearch")}
 							aria-label={t("drawer.fileSearch")}
@@ -326,15 +260,7 @@ function FilesPanel(props: {
 						</Button>
 					)}
 					{/* 刷新与全部收起：纯图标，密度对齐 shadcn icon button */}
-					<Button
-						type="button"
-						variant="ghost"
-						size="icon-sm"
-						className="icon-only inline-grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-						onClick={props.onRefreshFiles}
-						title={t("common.refresh")}
-						aria-label={t("common.refresh")}
-					>
+					<Button type="button" variant="ghost" size="icon-sm" className="icon-only inline-grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground" onClick={props.onRefreshFiles} title={t("common.refresh")} aria-label={t("common.refresh")}>
 						<RefreshCw size={13} />
 					</Button>
 					{props.onCollapseAll && (
@@ -354,55 +280,41 @@ function FilesPanel(props: {
 				</div>
 			</div>
 			{searchOpen ? (
-				<FileSearchResults
-					query={fileSearch.query}
-					onQueryChange={fileSearch.setQuery}
-					results={fileSearch.results}
-					isSearching={fileSearch.isSearching}
-					onViewFile={props.onViewFile}
-					onFileContextMenu={props.onFileContextMenu}
-					onClear={closeSearch}
-				/>
+				<FileSearchResults query={fileSearch.query} onQueryChange={fileSearch.setQuery} results={fileSearch.results} isSearching={fileSearch.isSearching} onViewFile={props.onViewFile} onFileContextMenu={props.onFileContextMenu} onClear={closeSearch} />
 			) : (
 				displayFiles.map((node) => (
-				<FileNode
-					key={node.path}
-					node={node}
-					expandedDirs={props.expandedDirs}
-					onToggleDirectory={props.onToggleDirectory}
-					onFileContextMenu={props.onFileContextMenu}
-					onOpenFile={props.onOpenFile}
-					onViewFile={props.onViewFile}
-					onDropFiles={props.onDropFiles}
-					onMoveFiles={props.onMoveFiles}
-				dragOverDir={dragOverDir}
-					onDragOverDirChange={setDragOverDir}
-				/>
+					<FileNode
+						key={node.path}
+						node={node}
+						expandedDirs={props.expandedDirs}
+						onToggleDirectory={props.onToggleDirectory}
+						onFileContextMenu={props.onFileContextMenu}
+						onOpenFile={props.onOpenFile}
+						onViewFile={props.onViewFile}
+						onDropFiles={props.onDropFiles}
+						onMoveFiles={props.onMoveFiles}
+						dragOverDir={dragOverDir}
+						onDragOverDirChange={setDragOverDir}
+					/>
 				))
 			)}
 		</div>
 	);
 }
 
-const SESSION_FILE_SUMMARY_COLLAPSED_KEY_PREFIX =
-	"pid:session-file-summary-collapsed:";
-const SESSION_FILE_SUMMARY_FILE_LIST_EXPANDED_KEY_PREFIX =
-	"pid:session-file-summary-file-list-expanded:";
+const SESSION_FILE_SUMMARY_COLLAPSED_KEY_PREFIX = "pid:session-file-summary-collapsed:";
+const SESSION_FILE_SUMMARY_FILE_LIST_EXPANDED_KEY_PREFIX = "pid:session-file-summary-file-list-expanded:";
 
 /** 读取指定 session 的折叠状态(无存储返回默认值) */
 function loadCollapsed(sessionKey: string | null): boolean {
 	if (!sessionKey || typeof window === "undefined") return true;
-	const stored = localStorage.getItem(
-		SESSION_FILE_SUMMARY_COLLAPSED_KEY_PREFIX + sessionKey,
-	);
+	const stored = localStorage.getItem(SESSION_FILE_SUMMARY_COLLAPSED_KEY_PREFIX + sessionKey);
 	return stored !== null ? stored === "true" : true;
 }
 
 function loadFileListExpanded(sessionKey: string | null): boolean {
 	if (!sessionKey || typeof window === "undefined") return false;
-	const stored = localStorage.getItem(
-		SESSION_FILE_SUMMARY_FILE_LIST_EXPANDED_KEY_PREFIX + sessionKey,
-	);
+	const stored = localStorage.getItem(SESSION_FILE_SUMMARY_FILE_LIST_EXPANDED_KEY_PREFIX + sessionKey);
 	return stored !== null ? stored === "true" : false;
 }
 
@@ -414,12 +326,8 @@ export function SessionFileSummary(props: {
 	 *  组件卸载后再次挂载相同标识时,恢复之前保存的折叠偏好。 */
 	sessionIdOrPath?: string;
 }) {
-	const [collapsed, setCollapsed] = useState(() =>
-		loadCollapsed(props.sessionIdOrPath ?? null),
-	);
-	const [fileListExpanded, setFileListExpanded] = useState(() =>
-		loadFileListExpanded(props.sessionIdOrPath ?? null),
-	);
+	const [collapsed, setCollapsed] = useState(() => loadCollapsed(props.sessionIdOrPath ?? null));
+	const [fileListExpanded, setFileListExpanded] = useState(() => loadFileListExpanded(props.sessionIdOrPath ?? null));
 	const prevSessionRef = useRef(props.sessionIdOrPath);
 
 	// 当 sessionIdOrPath 变化时重新从 localStorage 读取
@@ -435,10 +343,7 @@ export function SessionFileSummary(props: {
 		setCollapsed((prev) => {
 			const next = !prev;
 			if (props.sessionIdOrPath) {
-				localStorage.setItem(
-					SESSION_FILE_SUMMARY_COLLAPSED_KEY_PREFIX + props.sessionIdOrPath,
-					String(next),
-				);
+				localStorage.setItem(SESSION_FILE_SUMMARY_COLLAPSED_KEY_PREFIX + props.sessionIdOrPath, String(next));
 			}
 			return next;
 		});
@@ -448,11 +353,7 @@ export function SessionFileSummary(props: {
 		setFileListExpanded((prev) => {
 			const next = !prev;
 			if (props.sessionIdOrPath) {
-				localStorage.setItem(
-					SESSION_FILE_SUMMARY_FILE_LIST_EXPANDED_KEY_PREFIX +
-						props.sessionIdOrPath,
-					String(next),
-				);
+				localStorage.setItem(SESSION_FILE_SUMMARY_FILE_LIST_EXPANDED_KEY_PREFIX + props.sessionIdOrPath, String(next));
 			}
 			return next;
 		});
@@ -466,16 +367,8 @@ export function SessionFileSummary(props: {
 
 	return (
 		<section className="session-file-summary-list-card" aria-label={t("drawer.modifiedFilesAria")}>
-			<button
-				className="session-file-summary-header"
-				type="button"
-				onClick={handleToggleCollapsed}
-				aria-expanded={!collapsed}
-			>
-				<ChevronDown
-					size={14}
-					className={`session-file-summary-chevron${collapsed ? "" : " open"}`}
-				/>
+			<button className="session-file-summary-header" type="button" onClick={handleToggleCollapsed} aria-expanded={!collapsed}>
+				<ChevronDown size={14} className={`session-file-summary-chevron${collapsed ? "" : " open"}`} />
 				<span className="session-file-summary-title-span">{t("drawer.modifiedFiles")}</span>
 				<small className="session-file-summary-count">
 					{props.files.length} {t("app.files")}
@@ -488,12 +381,7 @@ export function SessionFileSummary(props: {
 							const fileName = file.path.split(/[/\\]/).pop() ?? file.path;
 							return (
 								<li key={file.path}>
-									<button
-										className="session-file-summary-row"
-										type="button"
-										title={file.path}
-										onClick={() => props.onDiffFile?.(file.path, file.originalContent, file.content)}
-									>
+									<button className="session-file-summary-row" type="button" title={file.path} onClick={() => props.onDiffFile?.(file.path, file.originalContent, file.content)}>
 										<span className="session-file-summary-name">{fileName}</span>
 									</button>
 								</li>
@@ -501,11 +389,7 @@ export function SessionFileSummary(props: {
 						})}
 					</ul>
 					{props.files.length > 4 && (
-						<button
-							className="session-file-summary-toggle"
-							type="button"
-							onClick={handleToggleFileList}
-						>
+						<button className="session-file-summary-toggle" type="button" onClick={handleToggleFileList}>
 							{fileListExpanded ? t("common.collapse") : t("drawer.moreFiles", { count: hiddenCount })}
 						</button>
 					)}
@@ -524,14 +408,7 @@ function fileIconElement(name: string, isDirectory: boolean, isExpanded: boolean
 		const color = getFileIconColor(colorName);
 		// SVG 只来自仓库内附带许可证的只读 Seti 数据快照，不接收文件内容或用户输入。
 		// 尺寸由 .file-node-seti-icon → --file-type-icon-size 承担（树行不用 shadcn Button，避免其 [&_svg]:size-4 抢尺寸）。
-		return (
-			<span
-				aria-hidden="true"
-				className="file-node-seti-icon"
-				style={{ color }}
-				dangerouslySetInnerHTML={{ __html: svg }}
-			/>
-		);
+		return <span aria-hidden="true" className="file-node-seti-icon" style={{ color }} dangerouslySetInnerHTML={{ __html: svg }} />;
 	} catch {
 		return <FileText size={16} aria-hidden="true" />;
 	}
@@ -568,36 +445,45 @@ function FileNode(props: {
 	};
 	// 内部拖拽移动：dataTransfer 携带源路径，目录行是落点；OS 文件拖入则是复制
 	// effectAllowed=copyMove：目录落点显式选 move（内部移动），composer 落点选 copy（插入 @ 引用）
-	const handleDragStart = useCallback((event: React.DragEvent) => {
-		event.dataTransfer.effectAllowed = "copyMove";
-		writeFileNodeDragPayload(event.dataTransfer, node);
-	}, [node]);
-	const handleDragOver = useCallback((event: React.DragEvent) => {
-		event.preventDefault();
-		event.stopPropagation();
-		event.dataTransfer.dropEffect = "move";
-		props.onDragOverDirChange?.(node.path);
-	}, [node.path, props.onDragOverDirChange]);
+	const handleDragStart = useCallback(
+		(event: React.DragEvent) => {
+			event.dataTransfer.effectAllowed = "copyMove";
+			writeFileNodeDragPayload(event.dataTransfer, node);
+		},
+		[node],
+	);
+	const handleDragOver = useCallback(
+		(event: React.DragEvent) => {
+			event.preventDefault();
+			event.stopPropagation();
+			event.dataTransfer.dropEffect = "move";
+			props.onDragOverDirChange?.(node.path);
+		},
+		[node.path, props.onDragOverDirChange],
+	);
 	const handleDragLeave = useCallback(() => {
 		props.onDragOverDirChange?.(null);
 	}, [props.onDragOverDirChange]);
-	const handleDrop = useCallback((event: React.DragEvent) => {
-		event.preventDefault();
-		event.stopPropagation();
-		props.onDragOverDirChange?.(null);
-		// 内部拖拽移动：优先检查 pi-file-path
-		const sourcePath = event.dataTransfer.getData("text/pi-file-path");
-		if (sourcePath) {
-			if (sourcePath !== node.path && props.onMoveFiles) {
-				props.onMoveFiles([sourcePath], node.path);
+	const handleDrop = useCallback(
+		(event: React.DragEvent) => {
+			event.preventDefault();
+			event.stopPropagation();
+			props.onDragOverDirChange?.(null);
+			// 内部拖拽移动：优先检查 pi-file-path
+			const sourcePath = event.dataTransfer.getData("text/pi-file-path");
+			if (sourcePath) {
+				if (sourcePath !== node.path && props.onMoveFiles) {
+					props.onMoveFiles([sourcePath], node.path);
+				}
+				return;
 			}
-			return;
-		}
-		// 外部 OS 文件拖入：复制到目标目录
-		if (event.dataTransfer.files.length > 0 && props.onDropFiles) {
-			props.onDropFiles(node.path, event.dataTransfer.files);
-		}
-	}, [node.path, props.onDropFiles, props.onMoveFiles, props.onDragOverDirChange]);
+			// 外部 OS 文件拖入：复制到目标目录
+			if (event.dataTransfer.files.length > 0 && props.onDropFiles) {
+				props.onDropFiles(node.path, event.dataTransfer.files);
+			}
+		},
+		[node.path, props.onDropFiles, props.onMoveFiles, props.onDragOverDirChange],
+	);
 	const isDragOver = props.dragOverDir === node.path;
 	/* 树行用原生 button，不用 shadcn Button：后者基类强制子 SVG size-4，
 	   会压掉 Seti --file-type-icon-size 与 lucide size，靠 ! 反压是补丁。
@@ -622,9 +508,7 @@ function FileNode(props: {
 					}}
 					onContextMenu={menu}
 				>
-					<span className="file-node-icon">
-						{fileIconElement(node.name, false, false)}
-					</span>
+					<span className="file-node-icon">{fileIconElement(node.name, false, false)}</span>
 					<span className="file-node-name">{node.name}</span>
 					<span className="file-node-type-label">{typeLabel}</span>
 				</button>
@@ -634,33 +518,38 @@ function FileNode(props: {
 		<div className="file-node" style={rowStyle}>
 			<Collapsible open={expanded} onOpenChange={() => onToggleDirectory(node.path)}>
 				<CollapsibleTrigger asChild>
-					<button
-						type="button"
-						className={cn("directory group", fileRowButtonClass, isDragOver && "bg-muted ring-1 ring-border")}
-						style={rowStyle}
-						title={node.relativePath}
-						draggable
-						onDragStart={handleDragStart}
-						onDragOver={handleDragOver}
-						onDragLeave={handleDragLeave}
-						onDrop={handleDrop}
-						onContextMenu={menu}
-					>
-						<ChevronRight className="file-node-chevron size-3.5 shrink-0 transition-transform group-data-[state=open]:rotate-90" aria-hidden="true" />
-						<span className="file-node-icon">
-							{fileIconElement(node.name, true, expanded)}
-						</span>
+					<button type="button" className={cn("directory group", fileRowButtonClass, isDragOver && "bg-muted ring-1 ring-border")} style={rowStyle} title={node.relativePath} draggable onDragStart={handleDragStart} onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop} onContextMenu={menu}>
+						<ChevronRight
+							className={cn(
+								"file-node-chevron size-3.5 shrink-0 transition-transform",
+								/* 受控 Collapsible 在部分挂载时序下 data-state=open 不可靠，
+							   按 expanded 显式旋转，保证与子树可见性一致。 */
+								expanded ? "rotate-90" : "rotate-0",
+							)}
+							aria-hidden="true"
+						/>
+						<span className="file-node-icon">{fileIconElement(node.name, true, expanded)}</span>
 						<span className="file-node-name">{node.name}</span>
 					</button>
 				</CollapsibleTrigger>
 				<CollapsibleContent>
+					{/* 懒加载占位与加载失败态：二者互斥，都不会再盖住文件名。
+					 - 占位独立成行（不是行内绝对定位），children 到位后整行消失；
+					 - hasChildren=false 表示目录 listing 已失败或目录为空，不展示占位。
+					 展开态的 chevron 修正：expanded 且子项未加载时 data-[state=open] 不生效
+					 （Collapsible 由 open 受控，这里直接按 expanded 旋转）。 */}
 					{expanded && node.hasChildren !== false && !node.children && (
-						<div className="file-children px-2 py-1 text-xs text-muted-foreground">{t("drawer.lazyLoading")}</div>
+						<div className="file-children flex items-center gap-1.5 px-2 py-1 text-xs text-muted-foreground">
+							<LoaderCircle size={12} className="animate-pideck-spin shrink-0" aria-hidden="true" />
+							<span>{t("drawer.lazyLoading")}</span>
+						</div>
 					)}
 					{node.children && node.children.length > 0 && (
 						<div className="file-children">
 							{node.children.map((child) => (
-								<FileNode key={child.path} node={child}
+								<FileNode
+									key={child.path}
+									node={child}
 									expandedDirs={expandedDirs}
 									onToggleDirectory={onToggleDirectory}
 									onFileContextMenu={props.onFileContextMenu}
@@ -670,7 +559,8 @@ function FileNode(props: {
 									onMoveFiles={props.onMoveFiles}
 									dragOverDir={props.dragOverDir}
 									onDragOverDirChange={props.onDragOverDirChange}
-									depth={depth + 1} />
+									depth={depth + 1}
+								/>
 							))}
 						</div>
 					)}
@@ -696,8 +586,7 @@ function SessionsPanel(props: {
 		filePath: string;
 		action: "copy" | "export" | "delete";
 	} | null>(null);
-	const [deleteConfirmSession, setDeleteConfirmSession] =
-		useState<SessionSummary | null>(null);
+	const [deleteConfirmSession, setDeleteConfirmSession] = useState<SessionSummary | null>(null);
 	const inputRef = useRef<HTMLInputElement>(null);
 
 	function startRename(session: SessionSummary) {
@@ -714,29 +603,14 @@ function SessionsPanel(props: {
 		setEditValue("");
 	}
 
-	async function runSessionAction(
-		session: SessionSummary,
-		actionType: "copy" | "export" | "delete",
-		action: () => void | Promise<void>,
-		successText: string,
-	) {
+	async function runSessionAction(session: SessionSummary, actionType: "copy" | "export" | "delete", action: () => void | Promise<void>, successText: string) {
 		setSessionActionLoading({ filePath: session.filePath, action: actionType });
-		showNotice(
-			actionType === "copy"
-				? t("drawer.sessionActionCopying")
-				: actionType === "export"
-					? t("drawer.sessionActionExporting")
-					: t("drawer.sessionActionDeleting"),
-			3500,
-		);
+		showNotice(actionType === "copy" ? t("drawer.sessionActionCopying") : actionType === "export" ? t("drawer.sessionActionExporting") : t("drawer.sessionActionDeleting"), 3500);
 		try {
 			await action();
 			showNotice(successText, 1600);
 		} catch (error) {
-			showNotice(
-				error instanceof Error ? error.message : t("drawer.sessionActionFailed"),
-				2400,
-			);
+			showNotice(error instanceof Error ? error.message : t("drawer.sessionActionFailed"), 2400);
 		} finally {
 			setSessionActionLoading(null);
 		}
@@ -756,14 +630,11 @@ function SessionsPanel(props: {
 		return map;
 	}, [props.sessions]);
 	// 仅显示顶层会话（非子会话）的计数
-	const parentSessions = useMemo(() =>
-		props.sessions.filter(s => !s.parentSessionPath),
-		[props.sessions],
-	);
+	const parentSessions = useMemo(() => props.sessions.filter((s) => !s.parentSessionPath), [props.sessions]);
 	const [expandedParents, setExpandedParents] = useState<Set<string>>(new Set());
 	const toggleParent = useCallback((filePath: string) => {
 		const key = normalizeSessionPathForCompare(filePath) ?? filePath;
-		setExpandedParents(prev => {
+		setExpandedParents((prev) => {
 			const next = new Set(prev);
 			if (next.has(key)) next.delete(key);
 			else next.add(key);
@@ -775,7 +646,9 @@ function SessionsPanel(props: {
 		<div className="sessions-panel">
 			<div className="panel-action-row">
 				<span>{t("drawer.sessionCount", { count: parentSessions.length })}</span>
-				<Button variant="ghost" size="sm" onClick={props.onRefresh}>{t("common.refresh")}</Button>
+				<Button variant="ghost" size="sm" onClick={props.onRefresh}>
+					{t("common.refresh")}
+				</Button>
 			</div>
 			{parentSessions.length === 0 && (
 				<div className="sessions-empty">
@@ -788,203 +661,134 @@ function SessionsPanel(props: {
 				const normalizedPath = normalizeSessionPathForCompare(session.filePath) ?? session.filePath;
 				const isExpanded = expandedParents.has(normalizedPath);
 				return (
-				<div
-					key={session.filePath}
-					className="session-card-group"
-				>
-					<div className="session-card">
-					{renamingPath === session.filePath ? (
-						<div className="session-rename-row">
-							<Input
-								ref={inputRef}
-								value={editValue}
-								onChange={(e) => setEditValue(e.target.value)}
-								onKeyDown={(e) => {
-									if (e.key === "Enter") confirmRename();
-									if (e.key === "Escape") {
-										setRenamingPath(null);
-										setEditValue("");
-									}
-								}}
-								autoFocus
-							/>
-							<Button size="sm" onClick={confirmRename}>{t("common.save")}</Button>
-							<Button
-								size="sm"
-								variant="outline"
-								onClick={() => {
-									setRenamingPath(null);
-									setEditValue("");
-								}}
-							>
-								{t("common.cancel")}
-							</Button>
-						</div>
-					) : (
-						<div className="session-card-display">
-							<PathTooltip content={`${session.name || t("common.untitled")}\n${session.filePath}`}>
-								<button
-									className="session-card-inner"
-									onClick={() => props.onOpen(session)}
-								>
-									<div className="session-card-title">
-										<strong>{session.name || t("common.untitled")}</strong>
-										{session.source && session.source !== "pi" && (
-											<SessionSourceBadge source={session.source} />
-										)}
-										<small>
-											{new Date(session.updatedAt).toLocaleString()} ·{" "}
-											{t("drawer.sessionMessages", {
-												count: session.messageCount,
-											})}
-										</small>
-									</div>
-								</button>
-							</PathTooltip>
-							<div className="session-card-actions">
-								<Button
-									variant="ghost"
-									className="session-rename-button"
-									title={t("menu.copySession")}
-									disabled={Boolean(sessionActionLoading)}
-									onClick={() =>
-										void runSessionAction(
-											session,
-											"copy",
-											() => props.onCopy(session),
-											t("drawer.sessionCopied"),
-										)
-									}
-								>
-									{sessionActionLoading?.filePath === session.filePath &&
-										sessionActionLoading.action === "copy" && <span className="mini-loader animate-pideck-spin" />}
-									<span>
-										{sessionActionLoading?.filePath === session.filePath &&
-										sessionActionLoading.action === "copy"
-											? t("menu.copying")
-											: t("common.copy")}
-									</span>
-								</Button>
-								<Button
-									variant="ghost"
-									className="session-rename-button"
-									title={t("menu.exportHtml")}
-									disabled={Boolean(sessionActionLoading)}
-									onClick={() =>
-										void runSessionAction(
-											session,
-											"export",
-											() => props.onExport(session),
-											t("drawer.sessionExported"),
-										)
-									}
-								>
-									{sessionActionLoading?.filePath === session.filePath &&
-										sessionActionLoading.action === "export" && <span className="mini-loader animate-pideck-spin" />}
-									<span>
-										{sessionActionLoading?.filePath === session.filePath &&
-										sessionActionLoading.action === "export"
-											? t("menu.exporting")
-											: t("common.export")}
-									</span>
-								</Button>
-								<Button
-									variant="ghost"
-									className="session-rename-button"
-									title={t("common.rename")}
-									onClick={() => startRename(session)}
-								>
-									<span>{t("common.rename")}</span>
-								</Button>
-								<Button
-									variant="ghost"
-									className="session-rename-button text-destructive"
-									title={t("common.delete")}
-									disabled={Boolean(sessionActionLoading)}
-									onClick={() => setDeleteConfirmSession(session)}
-								>
-									{sessionActionLoading?.filePath === session.filePath &&
-										sessionActionLoading.action === "delete" && <span className="mini-loader animate-pideck-spin" />}
-									<span>
-										{sessionActionLoading?.filePath === session.filePath &&
-										sessionActionLoading.action === "delete"
-											? t("drawer.sessionActionDeleting")
-											: t("common.delete")}
-									</span>
-								</Button>
-							</div>
-							{/* sessionActionNotice 已改用 toast (sonner) 实现 */}
-						</div>
-					)}
-				</div>
-					{children && children.length > 0 && (
-						<div className="session-card-children-header">
-							<button
-								className="session-card-expand-btn"
-								title={isExpanded ? t("drawer.collapseSubagentSessions") : t("drawer.expandSubagentSessions")}
-								onClick={() => toggleParent(session.filePath)}
-							>
-								{isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-								<span>{t("drawer.subagentSessionCount", { count: children.length })}</span>
-							</button>
-						</div>
-					)}
-					{isExpanded && children?.map((child) => (
-						<div key={child.filePath} className="session-card session-card-child">
-							<div className="session-card-display">
-								<PathTooltip content={`${child.name || t("common.untitled")}\n${child.filePath}`}>
-									<button
-										className="session-card-inner"
-										onClick={() => props.onOpen(child)}
+					<div key={session.filePath} className="session-card-group">
+						<div className="session-card">
+							{renamingPath === session.filePath ? (
+								<div className="session-rename-row">
+									<Input
+										ref={inputRef}
+										value={editValue}
+										onChange={(e) => setEditValue(e.target.value)}
+										onKeyDown={(e) => {
+											if (e.key === "Enter") confirmRename();
+											if (e.key === "Escape") {
+												setRenamingPath(null);
+												setEditValue("");
+											}
+										}}
+										autoFocus
+									/>
+									<Button size="sm" onClick={confirmRename}>
+										{t("common.save")}
+									</Button>
+									<Button
+										size="sm"
+										variant="outline"
+										onClick={() => {
+											setRenamingPath(null);
+											setEditValue("");
+										}}
 									>
-										<div className="session-card-title">
-											<strong>{child.name || t("common.untitled")}</strong>
-											<SessionSourceBadge label={t("drawer.subagentSession")} source="codex" />
-											<small>
-												{new Date(child.updatedAt).toLocaleString()} ·{" "}
-												{t("drawer.sessionMessages", {
-													count: child.messageCount,
-												})}
-											</small>
-										</div>
-									</button>
-								</PathTooltip>
-							</div>
+										{t("common.cancel")}
+									</Button>
+								</div>
+							) : (
+								<div className="session-card-display">
+									<PathTooltip content={`${session.name || t("common.untitled")}\n${session.filePath}`}>
+										<button className="session-card-inner" onClick={() => props.onOpen(session)}>
+											<div className="session-card-title">
+												<strong>{session.name || t("common.untitled")}</strong>
+												{session.source && session.source !== "pi" && <SessionSourceBadge source={session.source} />}
+												<small>
+													{new Date(session.updatedAt).toLocaleString()} ·{" "}
+													{t("drawer.sessionMessages", {
+														count: session.messageCount,
+													})}
+												</small>
+											</div>
+										</button>
+									</PathTooltip>
+									<div className="session-card-actions">
+										<Button variant="ghost" className="session-rename-button" title={t("menu.copySession")} disabled={Boolean(sessionActionLoading)} onClick={() => void runSessionAction(session, "copy", () => props.onCopy(session), t("drawer.sessionCopied"))}>
+											{sessionActionLoading?.filePath === session.filePath && sessionActionLoading.action === "copy" && <span className="mini-loader animate-pideck-spin" />}
+											<span>{sessionActionLoading?.filePath === session.filePath && sessionActionLoading.action === "copy" ? t("menu.copying") : t("common.copy")}</span>
+										</Button>
+										<Button variant="ghost" className="session-rename-button" title={t("menu.exportHtml")} disabled={Boolean(sessionActionLoading)} onClick={() => void runSessionAction(session, "export", () => props.onExport(session), t("drawer.sessionExported"))}>
+											{sessionActionLoading?.filePath === session.filePath && sessionActionLoading.action === "export" && <span className="mini-loader animate-pideck-spin" />}
+											<span>{sessionActionLoading?.filePath === session.filePath && sessionActionLoading.action === "export" ? t("menu.exporting") : t("common.export")}</span>
+										</Button>
+										<Button variant="ghost" className="session-rename-button" title={t("common.rename")} onClick={() => startRename(session)}>
+											<span>{t("common.rename")}</span>
+										</Button>
+										<Button variant="ghost" className="session-rename-button text-destructive" title={t("common.delete")} disabled={Boolean(sessionActionLoading)} onClick={() => setDeleteConfirmSession(session)}>
+											{sessionActionLoading?.filePath === session.filePath && sessionActionLoading.action === "delete" && <span className="mini-loader animate-pideck-spin" />}
+											<span>{sessionActionLoading?.filePath === session.filePath && sessionActionLoading.action === "delete" ? t("drawer.sessionActionDeleting") : t("common.delete")}</span>
+										</Button>
+									</div>
+									{/* sessionActionNotice 已改用 toast (sonner) 实现 */}
+								</div>
+							)}
 						</div>
-					))}
-				</div>
+						{children && children.length > 0 && (
+							<div className="session-card-children-header">
+								<button className="session-card-expand-btn" title={isExpanded ? t("drawer.collapseSubagentSessions") : t("drawer.expandSubagentSessions")} onClick={() => toggleParent(session.filePath)}>
+									{isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+									<span>{t("drawer.subagentSessionCount", { count: children.length })}</span>
+								</button>
+							</div>
+						)}
+						{isExpanded &&
+							children?.map((child) => (
+								<div key={child.filePath} className="session-card session-card-child">
+									<div className="session-card-display">
+										<PathTooltip content={`${child.name || t("common.untitled")}\n${child.filePath}`}>
+											<button className="session-card-inner" onClick={() => props.onOpen(child)}>
+												<div className="session-card-title">
+													<strong>{child.name || t("common.untitled")}</strong>
+													<SessionSourceBadge label={t("drawer.subagentSession")} source="codex" />
+													<small>
+														{new Date(child.updatedAt).toLocaleString()} ·{" "}
+														{t("drawer.sessionMessages", {
+															count: child.messageCount,
+														})}
+													</small>
+												</div>
+											</button>
+										</PathTooltip>
+									</div>
+								</div>
+							))}
+					</div>
 				);
 			})}
-			{deleteConfirmSession && (() => {
+			{deleteConfirmSession &&
+				(() => {
 					const deleteChildren = parentToChildren.get(normalizeSessionPathForCompare(deleteConfirmSession.filePath) ?? "") ?? [];
 					// #115 U5：删除确认统一走 shadcn ConfirmDialog（danger 变体），删掉散装 backdrop
 					return (
 						<ConfirmDialog
 							title={t("drawer.sessionDeleteTitle")}
-							message={deleteChildren.length > 0
-								? t("drawer.sessionDeleteBodyWithChildren", {
-										name: deleteConfirmSession.name || t("common.untitled"),
-										count: deleteChildren.length,
-									})
-								: t("drawer.sessionDeleteBody", {
-										name: deleteConfirmSession.name || t("common.untitled"),
-									})}
+							message={
+								deleteChildren.length > 0
+									? t("drawer.sessionDeleteBodyWithChildren", {
+											name: deleteConfirmSession.name || t("common.untitled"),
+											count: deleteChildren.length,
+										})
+									: t("drawer.sessionDeleteBody", {
+											name: deleteConfirmSession.name || t("common.untitled"),
+										})
+							}
 							confirmLabel={t("common.delete")}
 							danger
 							onCancel={() => setDeleteConfirmSession(null)}
 							onConfirm={() => {
 								const target = deleteConfirmSession;
 								setDeleteConfirmSession(null);
-								void runSessionAction(
-									target,
-									"delete",
-									() => props.onDelete(target),
-									t("drawer.sessionDeleted"),
-								);
+								void runSessionAction(target, "delete", () => props.onDelete(target), t("drawer.sessionDeleted"));
 							}}
 						/>
-					); })()
-		}
+					);
+				})()}
 		</div>
 	);
 }
@@ -1022,18 +826,9 @@ export function SessionHistoryModal(props: {
 							<span>{t("drawer.historyLoading")}</span>
 						</div>
 					) : (
-						<SessionsPanel
-							sessions={props.sessions}
-							onRefresh={props.onRefresh}
-							onOpen={props.onOpen}
-							onRename={props.onRename}
-							onCopy={props.onCopy}
-							onExport={props.onExport}
-							onDelete={props.onDelete}
-						/>
+						<SessionsPanel sessions={props.sessions} onRefresh={props.onRefresh} onOpen={props.onOpen} onRename={props.onRename} onCopy={props.onCopy} onExport={props.onExport} onDelete={props.onDelete} />
 					)}
 				</div>
-		
 			</DialogContent>
 		</Dialog>
 	);

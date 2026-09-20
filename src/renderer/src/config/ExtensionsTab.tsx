@@ -26,8 +26,7 @@ type ExtensionsApi = {
 };
 
 function getExtensionsApi(): ExtensionsApi {
-	const api = (window as unknown as { piDesktop?: { extensions?: ExtensionsApi } })
-		.piDesktop?.extensions;
+	const api = (window as unknown as { piDesktop?: { extensions?: ExtensionsApi } }).piDesktop?.extensions;
 	if (!api) throw new Error("PiDeck extensions API is not available");
 	return api;
 }
@@ -116,11 +115,7 @@ export function ExtensionsTab(props: {
 			await getExtensionsApi().removeBuiltIn(extension.source);
 			props.onRefresh();
 		} catch (e) {
-			showNotice(
-				t("config.extensionOperationFailed", { error: formatExtensionError(e) }),
-				4500,
-				"error",
-			);
+			showNotice(t("config.extensionOperationFailed", { error: formatExtensionError(e) }), 4500, "error");
 		} finally {
 			setRemovingBuiltIn(null);
 		}
@@ -138,21 +133,9 @@ export function ExtensionsTab(props: {
 				await getExtensionsApi().toggle(extension.source, enabled, extension.scope);
 			}
 			props.onRefresh();
-			showNotice(
-				t(
-					enabled
-						? "config.extensionEnabledToast"
-						: "config.extensionDisabledToast",
-					{ name: shortName(extension.source) },
-				),
-				3500,
-			);
+			showNotice(t(enabled ? "config.extensionEnabledToast" : "config.extensionDisabledToast", { name: shortName(extension.source) }), 3500);
 		} catch (e) {
-			showNotice(
-				t("config.extensionOperationFailed", { error: formatExtensionError(e) }),
-				4500,
-				"error",
-			);
+			showNotice(t("config.extensionOperationFailed", { error: formatExtensionError(e) }), 4500, "error");
 		} finally {
 			setTogglingSource(null);
 		}
@@ -177,11 +160,7 @@ export function ExtensionsTab(props: {
 			setWhitelistDisabled(next);
 			showNotice(t(next ? "config.extensionWhitelistOnToast" : "config.extensionWhitelistOffToast"), 3500);
 		} catch (e) {
-			showNotice(
-				t("config.extensionWhitelistToggleFailed", { error: formatExtensionError(e) }),
-				4500,
-				"error",
-			);
+			showNotice(t("config.extensionWhitelistToggleFailed", { error: formatExtensionError(e) }), 4500, "error");
 		} finally {
 			setTogglingWhitelist(false);
 		}
@@ -195,11 +174,7 @@ export function ExtensionsTab(props: {
 			const result = await getExtensionsApi().update();
 			setUpdateResult(result);
 		} catch (e) {
-			showNotice(
-				t("config.extensionOperationFailed", { error: formatExtensionError(e) }),
-				4500,
-				"error",
-			);
+			showNotice(t("config.extensionOperationFailed", { error: formatExtensionError(e) }), 4500, "error");
 		} finally {
 			setUpdating(null);
 		}
@@ -214,11 +189,7 @@ export function ExtensionsTab(props: {
 			props.onRefresh();
 			showNotice(t("config.extensionUpdatedToast", { name: shortName(extension.source) }), 3000);
 		} catch (e) {
-			showNotice(
-				t("config.extensionOperationFailed", { error: formatExtensionError(e) }),
-				4500,
-				"error",
-			);
+			showNotice(t("config.extensionOperationFailed", { error: formatExtensionError(e) }), 4500, "error");
 		} finally {
 			setUpdatingOne(null);
 		}
@@ -233,9 +204,7 @@ export function ExtensionsTab(props: {
 
 	const projectExtensions = props.data.extensions.filter((extension) => extension.scope === "project");
 	const globalExtensions = props.data.extensions.filter((extension) => extension.scope !== "project");
-	const visibleExtensions = props.scope === "project"
-		? [...projectExtensions, ...globalExtensions]
-		: globalExtensions;
+	const visibleExtensions = props.scope === "project" ? [...projectExtensions, ...globalExtensions] : globalExtensions;
 	const disabledGlobalSources = new Set(props.projectOverrides.disabledGlobalExtensions);
 	// discovery 行去重：与已安装列表同 source 的条目只保留普通行（带操作），列表只显示一次
 	const installedSources = new Set(props.data.extensions.map((extension) => extension.source));
@@ -284,144 +253,118 @@ export function ExtensionsTab(props: {
 				<div className="shrink-0">{props.scopeSelector}</div>
 			</div>
 			{extTab === "store" ? (
-				<ExtensionStoreTab
-					installedExtensions={props.scope === "project"
-						? props.data.extensions.filter((extension) => extension.scope === "project")
-						: props.data.extensions}
-					projectId={props.scope === "project" ? props.projectId : undefined}
-					onInstalled={() => props.onRefresh()}
-				/>
+				<ExtensionStoreTab installedExtensions={props.scope === "project" ? props.data.extensions.filter((extension) => extension.scope === "project") : props.data.extensions} projectId={props.scope === "project" ? props.projectId : undefined} onInstalled={() => props.onRefresh()} />
 			) : (
-			<>
-			{showUpdateDialog && (
-				<div className="config-update-dialog-backdrop" role="dialog" aria-modal="true">
-					<div className="config-update-dialog">
-						<div className="config-update-dialog-header">
-							<strong>{t("settings.updateExtensionsAll")}</strong>
-							<Button variant="ghost" size="icon-sm" className="size-7"
-								onClick={() => {
-									setShowUpdateDialog(false);
-									props.onRefresh();
-								}}
-								disabled={Boolean(updating)}
-							>
-								×
-							</Button>
+				<>
+					{showUpdateDialog && (
+						<div className="config-update-dialog-backdrop" role="dialog" aria-modal="true">
+							<div className="config-update-dialog">
+								<div className="config-update-dialog-header">
+									<strong>{t("settings.updateExtensionsAll")}</strong>
+									<Button
+										variant="ghost"
+										size="icon-sm"
+										className="size-7"
+										onClick={() => {
+											setShowUpdateDialog(false);
+											props.onRefresh();
+										}}
+										disabled={Boolean(updating)}
+									>
+										×
+									</Button>
+								</div>
+								<p className="config-im-form-hint">{updating ? t("settings.extensionsUpdatingDesc") : t("settings.extensionsUpdateResultHint")}</p>
+								<pre className="setting-update-output">{updateResult ? `${updateResult.command}\n${updateResult.output}` : t("settings.extensionsUpdating")}</pre>
+								<div className="config-update-dialog-actions">
+									<Button
+										variant="default"
+										size="sm"
+										onClick={() => {
+											setShowUpdateDialog(false);
+											props.onRefresh();
+										}}
+										disabled={Boolean(updating)}
+									>
+										{t("common.close")}
+									</Button>
+								</div>
+							</div>
 						</div>
-						<p className="config-im-form-hint">
-							{updating ? t("settings.extensionsUpdatingDesc") : t("settings.extensionsUpdateResultHint")}
-						</p>
-						<pre className="setting-update-output">
-							{updateResult ? `${updateResult.command}\n${updateResult.output}` : t("settings.extensionsUpdating")}
-						</pre>
-						<div className="config-update-dialog-actions">
-							<Button variant="default"
-								size="sm"
-								onClick={() => {
-									setShowUpdateDialog(false);
-									props.onRefresh();
-								}}
-								disabled={Boolean(updating)}
-							>
-								{t("common.close")}
-							</Button>
-						</div>
-					</div>
-				</div>
-			)}
-			{false && <RecommendedPackagesPanel data={props.data} onRefresh={props.onRefresh} />}
-
-			{/* 已安装扩展列表 */}
-			<div className="config-section">
-				<h3 className="extensions-installed-title mb-2 text-sm font-semibold tracking-tight text-foreground">
-					{t("config.installedExtensions")}
-				</h3>
-				<div className="mb-3 mt-2 flex items-center justify-between gap-3">
-					<div className="min-w-0">
-						<span className="font-mono text-xs tabular-nums text-muted-foreground">
-							{t("config.count.extensions", { count: visibleExtensions.length })}
-						</span>
-						<small className="skills-restart-hint block text-caption text-muted-foreground">
-							{t("config.extensionRestartHint")}
-						</small>
-					</div>
-					{/* 窄窗口下按钮换行而不是被裁掉：shrink-0 保证按钮不被压缩，
-				    flex-wrap + justify-end 让溢出部分落到第二行右对齐 */}
-				<div className="skills-toolbar-actions flex shrink-0 flex-wrap items-center justify-end gap-1.5">
-						{props.scope === "global" ? (
-							<>
-								{/* 白名单总开关：开启后 -e 白名单失效，pi 默认加载全部扩展（防御个别扩展导致启动失败） */}
-								<Button
-									variant={whitelistDisabled ? "default" : "outline"}
-									size="sm"
-									onClick={() => void handleToggleWhitelist()}
-									disabled={props.loading || togglingWhitelist}
-									title={t("config.extensionWhitelistHint")}
-								>
-									{whitelistDisabled
-										? <ToggleRight size={18} strokeWidth={1.8} className="mr-1.5" aria-hidden="true" />
-										: <ToggleLeft size={18} strokeWidth={1.8} className="mr-1.5" aria-hidden="true" />}
-									{t(whitelistDisabled ? "config.extensionWhitelistOn" : "config.extensionWhitelistOff")}
-								</Button>
-								{/* 工具栏统一 size=sm，与设置页/会话顶栏控件高度对齐 */}
-								<Button variant="outline" size="sm" onClick={handleUpdateExtensions} disabled={props.loading || Boolean(updating)}>
-									{updating ? t("settings.updating") : t("settings.updateExtensionsAll")}
-								</Button>
-							</>
-						) : null}
-						<Button variant="outline" size="sm" onClick={props.onRefresh} disabled={props.loading}>
-							{t("common.refresh")}
-						</Button>
-					</div>
-				</div>
-				{/* 内置扩展版本 + 热更新：包级版本号（不跟应用版本走），检测走 AtomGit 清单。
-				    只放全局作用域——内置扩展是全局资源，项目视图里给「更新」入口会误导。 */}
-				{props.scope === "global" && <BuiltInExtensionsUpdatePanel onApplied={props.onRefresh} />}
-				<div className="overflow-hidden rounded-lg border border-border-subtle bg-bg-panel">
-					{props.loading ? (
-						<div className="py-12 text-center text-control text-muted-foreground">{t("config.loadingExtensions")}</div>
-					) : visibleExtensions.length === 0 ? (
-						<div className="py-12 text-center text-control text-muted-foreground">{t("config.emptyExtensions")}</div>
-					) : (
-						<Table>
-							<TableHeader>
-								<TableRow>
-									<TableHead>{t("config.extension")}</TableHead>
-									<TableHead>{t("config.extensionVersion")}</TableHead>
-									<TableHead className="w-28 text-right">{t("config.actions")}</TableHead>
-								</TableRow>
-							</TableHeader>
-							<TableBody>
-								{props.scope === "project" && projectExtensions.length > 0 ? (
-									<TableRow>
-										<TableCell colSpan={3} className="bg-bg-hover px-3 py-1.5 text-caption font-semibold text-foreground">
-											{t("config.resourceGroup.project")}
-										</TableCell>
-									</TableRow>
-								) : null}
-								{props.scope === "project" ? renderExtensionRows(projectExtensions, false) : null}
-								{props.scope === "project" &&
-									uniqueDiscoveryExtensions
-										.filter((item) => isProjectDiscoverySource(item.sourceId))
-										.map((item) => <DiscoveredExtensionRow key={`discovered:${item.path}`} item={item} />)}
-								{props.scope === "project" && globalExtensions.length > 0 ? (
-									<TableRow>
-										<TableCell colSpan={3} className="bg-bg-hover px-3 py-1.5 text-caption font-semibold text-foreground">
-											{t("config.resourceGroup.global")}
-										</TableCell>
-									</TableRow>
-								) : null}
-								{renderExtensionRows(globalExtensions, props.scope === "project")}
-								{props.scope === "project" &&
-									uniqueDiscoveryExtensions
-										.filter((item) => !isProjectDiscoverySource(item.sourceId))
-										.map((item) => <DiscoveredExtensionRow key={`discovered:${item.path}`} item={item} />)}
-							</TableBody>
-						</Table>
 					)}
-				</div>
-			</div>
-			</>
+					{false && <RecommendedPackagesPanel data={props.data} onRefresh={props.onRefresh} />}
+
+					{/* 已安装扩展列表 */}
+					<div className="config-section">
+						<h3 className="extensions-installed-title mb-2 text-sm font-semibold tracking-tight text-foreground">{t("config.installedExtensions")}</h3>
+						<div className="mb-3 mt-2 flex items-center justify-between gap-3">
+							<div className="min-w-0">
+								<span className="font-mono text-xs tabular-nums text-muted-foreground">{t("config.count.extensions", { count: visibleExtensions.length })}</span>
+								<small className="skills-restart-hint block text-caption text-muted-foreground">{t("config.extensionRestartHint")}</small>
+							</div>
+							{/* 窄窗口下按钮换行而不是被裁掉：shrink-0 保证按钮不被压缩，
+				    flex-wrap + justify-end 让溢出部分落到第二行右对齐 */}
+							<div className="skills-toolbar-actions flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+								{props.scope === "global" ? (
+									<>
+										{/* 白名单总开关：开启后 -e 白名单失效，pi 默认加载全部扩展（防御个别扩展导致启动失败） */}
+										<Button variant={whitelistDisabled ? "default" : "outline"} size="sm" onClick={() => void handleToggleWhitelist()} disabled={props.loading || togglingWhitelist} title={t("config.extensionWhitelistHint")}>
+											{whitelistDisabled ? <ToggleRight size={18} strokeWidth={1.8} className="mr-1.5" aria-hidden="true" /> : <ToggleLeft size={18} strokeWidth={1.8} className="mr-1.5" aria-hidden="true" />}
+											{t(whitelistDisabled ? "config.extensionWhitelistOn" : "config.extensionWhitelistOff")}
+										</Button>
+										{/* 工具栏统一 size=sm，与设置页/会话顶栏控件高度对齐 */}
+										<Button variant="outline" size="sm" onClick={handleUpdateExtensions} disabled={props.loading || Boolean(updating)}>
+											{updating ? t("settings.updating") : t("settings.updateExtensionsAll")}
+										</Button>
+									</>
+								) : null}
+								<Button variant="outline" size="sm" onClick={props.onRefresh} disabled={props.loading}>
+									{t("common.refresh")}
+								</Button>
+							</div>
+						</div>
+						{/* 内置扩展版本 + 热更新：包级版本号（不跟应用版本走），检测走 AtomGit 清单。
+				    只放全局作用域——内置扩展是全局资源，项目视图里给「更新」入口会误导。 */}
+						{props.scope === "global" && <BuiltInExtensionsUpdatePanel onApplied={props.onRefresh} />}
+						<div className="overflow-hidden rounded-lg border border-border-subtle bg-bg-panel">
+							{props.loading ? (
+								<div className="py-12 text-center text-control text-muted-foreground">{t("config.loadingExtensions")}</div>
+							) : visibleExtensions.length === 0 ? (
+								<div className="py-12 text-center text-control text-muted-foreground">{t("config.emptyExtensions")}</div>
+							) : (
+								<Table>
+									<TableHeader>
+										<TableRow>
+											<TableHead>{t("config.extension")}</TableHead>
+											<TableHead>{t("config.extensionVersion")}</TableHead>
+											<TableHead className="w-28 text-right">{t("config.actions")}</TableHead>
+										</TableRow>
+									</TableHeader>
+									<TableBody>
+										{props.scope === "project" && projectExtensions.length > 0 ? (
+											<TableRow>
+												<TableCell colSpan={3} className="bg-bg-hover px-3 py-1.5 text-caption font-semibold text-foreground">
+													{t("config.resourceGroup.project")}
+												</TableCell>
+											</TableRow>
+										) : null}
+										{props.scope === "project" ? renderExtensionRows(projectExtensions, false) : null}
+										{props.scope === "project" && uniqueDiscoveryExtensions.filter((item) => isProjectDiscoverySource(item.sourceId)).map((item) => <DiscoveredExtensionRow key={`discovered:${item.path}`} item={item} />)}
+										{props.scope === "project" && globalExtensions.length > 0 ? (
+											<TableRow>
+												<TableCell colSpan={3} className="bg-bg-hover px-3 py-1.5 text-caption font-semibold text-foreground">
+													{t("config.resourceGroup.global")}
+												</TableCell>
+											</TableRow>
+										) : null}
+										{renderExtensionRows(globalExtensions, props.scope === "project")}
+										{props.scope === "project" && uniqueDiscoveryExtensions.filter((item) => !isProjectDiscoverySource(item.sourceId)).map((item) => <DiscoveredExtensionRow key={`discovered:${item.path}`} item={item} />)}
+									</TableBody>
+								</Table>
+							)}
+						</div>
+					</div>
+				</>
 			)}
 		</div>
 	);

@@ -8,18 +8,7 @@ import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 const require = createRequire(import.meta.url);
 const childProcess = require("node:child_process");
 
-const {
-	hiddenConsoleOptions,
-	installHiddenConsolePatch,
-	installHostHiddenConsole,
-	installRunnerNodeModeEnv,
-	installRunnerPreloadEnv,
-	getHiddenConsoleMode,
-	configureDshRunnerNodeSidecar,
-	getDshRunnerNodeSidecar,
-} = loadTsCommonJs(
-	"src/main/dsh/hideChildConsoles.ts",
-);
+const { hiddenConsoleOptions, installHiddenConsolePatch, installHostHiddenConsole, installRunnerNodeModeEnv, installRunnerPreloadEnv, getHiddenConsoleMode, configureDshRunnerNodeSidecar, getDshRunnerNodeSidecar } = loadTsCommonJs("src/main/dsh/hideChildConsoles.ts");
 
 /** 构造假 koffi：getResults 依次返回 GetConsoleWindow 结果（单元素则恒定返回）。 */
 function makeFfi({ getResults = [0], allocResult = 1, lastErrorResult } = {}) {
@@ -128,11 +117,7 @@ test("installRunnerNodeModeEnv：host 环境标记能穿过 dsh-subprocess 的 s
 	const previous = process.env.ELECTRON_RUN_AS_NODE;
 	installRunnerNodeModeEnv(process.env, "win32");
 	try {
-		assert.equal(
-			scrubbedParentEnv().ELECTRON_RUN_AS_NODE,
-			"1",
-			"host 环境标记必须原样穿过 scrub（否则沙箱 runner 退回 GUI 模式）",
-		);
+		assert.equal(scrubbedParentEnv().ELECTRON_RUN_AS_NODE, "1", "host 环境标记必须原样穿过 scrub（否则沙箱 runner 退回 GUI 模式）");
 	} finally {
 		if (previous === undefined) delete process.env.ELECTRON_RUN_AS_NODE;
 		else process.env.ELECTRON_RUN_AS_NODE = previous;
@@ -145,11 +130,7 @@ test("installRunnerPreloadEnv：win32 把 preload 写进 NODE_OPTIONS（append +
 	const preloadPath = "C:\\app\\out\\main\\runnerConsolePreload.js";
 	const env = { PATH: "x" };
 	const restore = installRunnerPreloadEnv(env, "win32", preloadPath);
-	assert.equal(
-		env.NODE_OPTIONS,
-		`--require="C:\\\\app\\\\out\\\\main\\\\runnerConsolePreload.js"`,
-		"写入 preload（Windows NODE_OPTIONS 反斜杠必须翻倍）",
-	);
+	assert.equal(env.NODE_OPTIONS, `--require="C:\\\\app\\\\out\\\\main\\\\runnerConsolePreload.js"`, "写入 preload（Windows NODE_OPTIONS 反斜杠必须翻倍）");
 	assert.equal(env.PATH, "x", "其余 env 不动");
 	// 幂等：已含同一 preload 时不重复 append（第一级 runner 的 options.env 由 host env
 	// 派生，withRunnerPreload 也不能叠第二份，否则 Node 加载两遍）。
@@ -185,10 +166,7 @@ test("installRunnerPreloadEnv：host env 的 preload 能穿过 dsh-subprocess �
 	installRunnerPreloadEnv(process.env, "win32", "C:\\app\\out\\main\\runnerConsolePreload.js");
 	try {
 		const scrubbed = scrubbedParentEnv().NODE_OPTIONS ?? "";
-		assert.ok(
-			scrubbed.includes("--require=") && scrubbed.includes("runnerConsolePreload"),
-			"preload 必须原样穿过 scrub（否则第二级 runner 无控制台、pwsh 弹黑窗口）",
-		);
+		assert.ok(scrubbed.includes("--require=") && scrubbed.includes("runnerConsolePreload"), "preload 必须原样穿过 scrub（否则第二级 runner 无控制台、pwsh 弹黑窗口）");
 	} finally {
 		if (previous === undefined) delete process.env.NODE_OPTIONS;
 		else process.env.NODE_OPTIONS = previous;
@@ -249,33 +227,17 @@ test("沙箱 runner spawn：注入 NODE_OPTIONS preload（append 语义），普
 	const preloadPath = "C:\\app\\out\\main\\runnerConsolePreload.js";
 	const restore = installHiddenConsolePatch("win32", preloadPath);
 	try {
-		childProcess.spawn(
-			"C:\\app\\electron.exe",
-			["C:\\app\\node_modules\\@deepseek-ai\\dsh-sandbox-windows-acl\\lib\\runner.js", "--workspace", "C:\\work"],
-			{ env: { PATH: "x" } },
-		);
-		childProcess.spawn(
-			"C:\\app\\electron.exe",
-			["C:\\app\\node_modules\\@deepseek-ai\\dsh-sandbox-windows-acl\\lib\\runner.js"],
-			{ env: { NODE_OPTIONS: "--no-warnings" } },
-		);
+		childProcess.spawn("C:\\app\\electron.exe", ["C:\\app\\node_modules\\@deepseek-ai\\dsh-sandbox-windows-acl\\lib\\runner.js", "--workspace", "C:\\work"], { env: { PATH: "x" } });
+		childProcess.spawn("C:\\app\\electron.exe", ["C:\\app\\node_modules\\@deepseek-ai\\dsh-sandbox-windows-acl\\lib\\runner.js"], { env: { NODE_OPTIONS: "--no-warnings" } });
 		childProcess.spawn("pwsh", ["-Command", "x"], { env: { PATH: "y" } });
 	} finally {
 		restore();
 		childProcess.spawn = originalSpawn;
 	}
-	assert.equal(
-		calls[0][2].env.NODE_OPTIONS,
-		`--require="C:\\\\app\\\\out\\\\main\\\\runnerConsolePreload.js"`,
-		"runner spawn：注入 preload（Windows NODE_OPTIONS 反斜杠必须翻倍）",
-	);
+	assert.equal(calls[0][2].env.NODE_OPTIONS, `--require="C:\\\\app\\\\out\\\\main\\\\runnerConsolePreload.js"`, "runner spawn：注入 preload（Windows NODE_OPTIONS 反斜杠必须翻倍）");
 	assert.equal(calls[0][2].env.PATH, "x", "其余 env 保留");
 	assert.equal(calls[0][2].windowsHide, true, "runner spawn 也走 CREATE_NO_WINDOW");
-	assert.equal(
-		calls[1][2].env.NODE_OPTIONS,
-		`--no-warnings --require="C:\\\\app\\\\out\\\\main\\\\runnerConsolePreload.js"`,
-		"已有 NODE_OPTIONS 时 append",
-	);
+	assert.equal(calls[1][2].env.NODE_OPTIONS, `--no-warnings --require="C:\\\\app\\\\out\\\\main\\\\runnerConsolePreload.js"`, "已有 NODE_OPTIONS 时 append");
 	assert.equal("NODE_OPTIONS" in calls[2][2].env, false, "普通 spawn 不注入 preload");
 });
 
@@ -294,21 +256,13 @@ test("runner spawn：host env 已带 preload 时不叠加第二份（installRunn
 	const restoreEnv = installRunnerPreloadEnv(hostEnv, "win32", preloadPath);
 	const restore = installHiddenConsolePatch("win32", preloadPath);
 	try {
-		childProcess.spawn(
-			"C:\\app\\electron.exe",
-			["C:\\app\\node_modules\\@deepseek-ai\\dsh-sandbox-windows-acl\\lib\\runner.js"],
-			{ env: { ...hostEnv } },
-		);
+		childProcess.spawn("C:\\app\\electron.exe", ["C:\\app\\node_modules\\@deepseek-ai\\dsh-sandbox-windows-acl\\lib\\runner.js"], { env: { ...hostEnv } });
 	} finally {
 		restore();
 		restoreEnv();
 		childProcess.spawn = originalSpawn;
 	}
-	assert.equal(
-		calls[0][2].env.NODE_OPTIONS,
-		`--require="C:\\\\app\\\\out\\\\main\\\\runnerConsolePreload.js"`,
-		"preload 恰好一份：不能叠成 --require×2（Node 会加载两遍）",
-	);
+	assert.equal(calls[0][2].env.NODE_OPTIONS, `--require="C:\\\\app\\\\out\\\\main\\\\runnerConsolePreload.js"`, "preload 恰好一份：不能叠成 --require×2（Node 会加载两遍）");
 });
 
 test("兜底模式下 runner spawn：windowsHide 注入与 preload 同时生效", () => {
@@ -321,11 +275,7 @@ test("兜底模式下 runner spawn：windowsHide 注入与 preload 同时生效"
 	};
 	const restore = installHiddenConsolePatch("win32", "C:\\app\\out\\main\\runnerConsolePreload.js");
 	try {
-		childProcess.spawn(
-			"C:\\app\\electron.exe",
-			["C:\\app\\node_modules\\@deepseek-ai\\dsh-sandbox-windows-acl\\lib\\runner.js"],
-			{ env: { PATH: "x" } },
-		);
+		childProcess.spawn("C:\\app\\electron.exe", ["C:\\app\\node_modules\\@deepseek-ai\\dsh-sandbox-windows-acl\\lib\\runner.js"], { env: { PATH: "x" } });
 	} finally {
 		restore();
 		childProcess.spawn = originalSpawn;
@@ -398,20 +348,12 @@ test("runner spawn：不受 pwsh 挂起兜底影响（argv 不含 -Command）", 
 	};
 	const restore = installHiddenConsolePatch("win32", "C:\\app\\out\\main\\runnerConsolePreload.js");
 	try {
-		childProcess.spawn(
-			"C:\\app\\electron.exe",
-			["C:\\app\\node_modules\\@deepseek-ai\\dsh-sandbox-windows-acl\\lib\\runner.js", "--workspace", "C:\\work"],
-			{ env: { PATH: "x" } },
-		);
+		childProcess.spawn("C:\\app\\electron.exe", ["C:\\app\\node_modules\\@deepseek-ai\\dsh-sandbox-windows-acl\\lib\\runner.js", "--workspace", "C:\\work"], { env: { PATH: "x" } });
 	} finally {
 		restore();
 		childProcess.spawn = originalSpawn;
 	}
-	assert.deepEqual(calls[0][1], [
-		"C:\\app\\node_modules\\@deepseek-ai\\dsh-sandbox-windows-acl\\lib\\runner.js",
-		"--workspace",
-		"C:\\work",
-	], "runner argv 原样透传");
+	assert.deepEqual(calls[0][1], ["C:\\app\\node_modules\\@deepseek-ai\\dsh-sandbox-windows-acl\\lib\\runner.js", "--workspace", "C:\\work"], "runner argv 原样透传");
 	assert.equal(calls[0][2].env.NODE_OPTIONS, '--require="C:\\\\app\\\\out\\\\main\\\\runnerConsolePreload.js"');
 });
 
@@ -425,19 +367,11 @@ test("runner spawn：强制注入 ELECTRON_RUN_AS_NODE=1（挂起根治：缺它
 	};
 	const restore = installHiddenConsolePatch("win32", "C:\\app\\out\\main\\runnerConsolePreload.js");
 	try {
-		childProcess.spawn(
-			"C:\\app\\electron.exe",
-			["C:\\app\\node_modules\\@deepseek-ai\\dsh-sandbox-windows-acl\\lib\\runner.js", "--workspace", "C:\\work", "--", "pwsh.exe", "-Command", "$PID"],
-			{ env: { PATH: "x" } },
-		);
+		childProcess.spawn("C:\\app\\electron.exe", ["C:\\app\\node_modules\\@deepseek-ai\\dsh-sandbox-windows-acl\\lib\\runner.js", "--workspace", "C:\\work", "--", "pwsh.exe", "-Command", "$PID"], { env: { PATH: "x" } });
 		// 普通 spawn 不受影响
 		childProcess.spawn("git", ["status"], { env: { PATH: "g" } });
 		// env 已有值时保持（幂等）
-		childProcess.spawn(
-			"C:\\app\\electron.exe",
-			["C:\\app\\node_modules\\@deepseek-ai\\dsh-sandbox-windows-acl\\lib\\runner.js", "--workspace", "C:\\work"],
-			{ env: { PATH: "y", ELECTRON_RUN_AS_NODE: "1" } },
-		);
+		childProcess.spawn("C:\\app\\electron.exe", ["C:\\app\\node_modules\\@deepseek-ai\\dsh-sandbox-windows-acl\\lib\\runner.js", "--workspace", "C:\\work"], { env: { PATH: "y", ELECTRON_RUN_AS_NODE: "1" } });
 	} finally {
 		restore();
 		childProcess.spawn = originalSpawn;
@@ -462,25 +396,9 @@ test("runner spawn：-- 尾部 pwsh -Command 追加 exit（沙箱内 pwsh 不退
 	};
 	const restore = installHiddenConsolePatch("win32", "C:\\app\\out\\main\\runnerConsolePreload.js");
 	try {
-		childProcess.spawn(
-			"C:\\app\\electron.exe",
-			[
-				"C:\\app\\node_modules\\@deepseek-ai\\dsh-sandbox-windows-acl\\lib\\runner.js",
-				"--workspace", "C:\\work",
-				"--", "pwsh.exe", "-NoLogo", "-NonInteractive", "-Command", "Write-Output hi",
-			],
-			{ env: { PATH: "x" }, stdio: ["ignore", "pipe", "pipe"] },
-		);
+		childProcess.spawn("C:\\app\\electron.exe", ["C:\\app\\node_modules\\@deepseek-ai\\dsh-sandbox-windows-acl\\lib\\runner.js", "--workspace", "C:\\work", "--", "pwsh.exe", "-NoLogo", "-NonInteractive", "-Command", "Write-Output hi"], { env: { PATH: "x" }, stdio: ["ignore", "pipe", "pipe"] });
 		// 尾部非 pwsh -Command（git）：argv 原样透传
-		childProcess.spawn(
-			"C:\\app\\electron.exe",
-			[
-				"C:\\app\\node_modules\\@deepseek-ai\\dsh-sandbox-windows-acl\\lib\\runner.js",
-				"--workspace", "C:\\work",
-				"--", "git.exe", "status",
-			],
-			{ env: { PATH: "x" } },
-		);
+		childProcess.spawn("C:\\app\\electron.exe", ["C:\\app\\node_modules\\@deepseek-ai\\dsh-sandbox-windows-acl\\lib\\runner.js", "--workspace", "C:\\work", "--", "git.exe", "status"], { env: { PATH: "x" } });
 	} finally {
 		restore();
 		childProcess.spawn = originalSpawn;
@@ -490,15 +408,7 @@ test("runner spawn：-- 尾部 pwsh -Command 追加 exit（沙箱内 pwsh 不退
 	assert.equal(calls[0][2].stdio[1], "pipe");
 	assert.equal(calls[0][2].env.ELECTRON_RUN_AS_NODE, "1", "ELECTRON_RUN_AS_NODE 注入不受影响");
 	assert.equal(calls[0][2].env.NODE_OPTIONS, '--require="C:\\\\app\\\\out\\\\main\\\\runnerConsolePreload.js"');
-	assert.deepEqual(
-		calls[1][1],
-		[
-			"C:\\app\\node_modules\\@deepseek-ai\\dsh-sandbox-windows-acl\\lib\\runner.js",
-			"--workspace", "C:\\work",
-			"--", "git.exe", "status",
-		],
-		"尾部非 pwsh -Command 时 argv 原样透传",
-	);
+	assert.deepEqual(calls[1][1], ["C:\\app\\node_modules\\@deepseek-ai\\dsh-sandbox-windows-acl\\lib\\runner.js", "--workspace", "C:\\work", "--", "git.exe", "status"], "尾部非 pwsh -Command 时 argv 原样透传");
 });
 
 test("win32 补丁：execFile（带 callback）与 exec 恒注入 windowsHide", () => {
@@ -549,11 +459,7 @@ test("CUI sidecar：把 electron.exe runner 改写成 node.exe，且 windowsHide
 	};
 	const restore = installHiddenConsolePatch("win32", "C:\\app\\out\\main\\runnerConsolePreload.js");
 	try {
-		childProcess.spawn(
-			"C:\\app\\electron.exe",
-			["C:\\app\\node_modules\\@deepseek-ai\\dsh-sandbox-windows-acl\\lib\\runner.js", "--workspace", "C:\\work", "--", "pwsh.exe", "-Command", "$PID"],
-			{ env: { PATH: "x" }, windowsHide: false },
-		);
+		childProcess.spawn("C:\\app\\electron.exe", ["C:\\app\\node_modules\\@deepseek-ai\\dsh-sandbox-windows-acl\\lib\\runner.js", "--workspace", "C:\\work", "--", "pwsh.exe", "-Command", "$PID"], { env: { PATH: "x" }, windowsHide: false });
 		childProcess.spawn("git", ["status"], { env: { PATH: "g" } });
 	} finally {
 		restore();
@@ -562,11 +468,7 @@ test("CUI sidecar：把 electron.exe runner 改写成 node.exe，且 windowsHide
 	}
 	assert.equal(calls[0][0], "C:\\app\\resources\\dsh-runner-node\\node.exe", "runner 可执行文件换成 CUI sidecar");
 	assert.equal(calls[0][2].windowsHide, true, "sidecar 自建无窗口控制台，不依赖 host AllocConsole");
-	assert.equal(
-		calls[0][2].env.NODE_OPTIONS,
-		`--require="C:\\\\app\\\\out\\\\main\\\\runnerConsolePreload.js"`,
-		"sidecar 仍注入 preload：嵌套 runner 改写与兜底 AllocConsole",
-	);
+	assert.equal(calls[0][2].env.NODE_OPTIONS, `--require="C:\\\\app\\\\out\\\\main\\\\runnerConsolePreload.js"`, "sidecar 仍注入 preload：嵌套 runner 改写与兜底 AllocConsole");
 	assert.equal("ELECTRON_RUN_AS_NODE" in calls[0][2].env, false, "node.exe 不需要 RUN_AS_NODE");
 	assert.equal(calls[1][0], "git", "非 runner spawn 不改写");
 });
@@ -582,11 +484,7 @@ test("CUI sidecar：host 无 AllocConsole 时仍改写（靠 CREATE_NO_WINDOW，
 	};
 	const restore = installHiddenConsolePatch("win32", "C:\\app\\out\\main\\runnerConsolePreload.js");
 	try {
-		childProcess.spawn(
-			"C:\\app\\electron.exe",
-			["C:\\app\\node_modules\\@deepseek-ai\\dsh-sandbox-windows-acl\\lib\\runner.js"],
-			{ env: { PATH: "x" } },
-		);
+		childProcess.spawn("C:\\app\\electron.exe", ["C:\\app\\node_modules\\@deepseek-ai\\dsh-sandbox-windows-acl\\lib\\runner.js"], { env: { PATH: "x" } });
 	} finally {
 		restore();
 		configureDshRunnerNodeSidecar(undefined);

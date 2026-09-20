@@ -6,23 +6,7 @@ import { t, type TranslationKey } from "../../../i18n";
  * 用户可能先改外观再改语言，但「常用设置」里的项更容易对上导航。
  */
 
-export type SettingsUnsavedTabId =
-	| "common"
-	| "shortcuts"
-	| "appearance"
-	| "proxy"
-	| "web"
-	| "editors"
-	| "git"
-	| "dev"
-	| "im"
-	| "pet"
-	| "notification"
-	| "storage"
-	| "usage"
-	| "process"
-	| "vision"
-	| "imagegen";
+export type SettingsUnsavedTabId = "common" | "shortcuts" | "appearance" | "proxy" | "web" | "editors" | "git" | "dev" | "im" | "pet" | "notification" | "storage" | "usage" | "process" | "vision" | "imagegen";
 
 /** 单条变更项：tab 名 + 字段名（均为 i18n key，渲染时再翻译）。 */
 export type SettingsUnsavedItem = {
@@ -171,11 +155,7 @@ function itemIdentity(tab: SettingsUnsavedTabId, itemKey: TranslationKey): strin
  * 把 dirty 字段收成关闭确认要用的一条摘要。
  * visionDirty 不是 AppSettings 字段（写 pi-deck-vision.json），单独挂到视觉桥 tab。
  */
-export function summarizeSettingsUnsavedChanges(input: {
-	dirtyFields: Iterable<string>;
-	visionDirty?: boolean;
-	imageGenDirty?: boolean;
-}): SettingsUnsavedSummary | null {
+export function summarizeSettingsUnsavedChanges(input: { dirtyFields: Iterable<string>; visionDirty?: boolean; imageGenDirty?: boolean }): SettingsUnsavedSummary | null {
 	const dirty = new Set(input.dirtyFields);
 	const seen = new Set<string>();
 	const items: Array<{ tab: SettingsUnsavedTabId; itemKey: TranslationKey }> = [];
@@ -217,11 +197,7 @@ export function summarizeSettingsUnsavedChanges(input: {
 }
 
 /** 左侧导航要打黄点的 tab：按字段目录归并，视觉桥草稿单独算 vision。 */
-export function dirtySettingsTabIds(input: {
-	dirtyFields: Iterable<string>;
-	visionDirty?: boolean;
-	imageGenDirty?: boolean;
-}): Set<SettingsUnsavedTabId> {
+export function dirtySettingsTabIds(input: { dirtyFields: Iterable<string>; visionDirty?: boolean; imageGenDirty?: boolean }): Set<SettingsUnsavedTabId> {
 	const dirty = new Set(input.dirtyFields);
 	const tabs = new Set<SettingsUnsavedTabId>();
 	for (const entry of FIELD_CATALOG) {
@@ -232,10 +208,7 @@ export function dirtySettingsTabIds(input: {
 	return tabs;
 }
 
-export function formatSettingsUnsavedMessage(
-	summary: SettingsUnsavedSummary | null,
-	translate: typeof t = t,
-): string {
+export function formatSettingsUnsavedMessage(summary: SettingsUnsavedSummary | null, translate: typeof t = t): string {
 	if (!summary || summary.items.length === 0) return translate("settings.unsavedMessage");
 	const first = summary.items[0];
 	const tab = translate(first.tabKey);

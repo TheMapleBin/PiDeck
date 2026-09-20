@@ -17,15 +17,7 @@ const source = readFileSync("src/renderer/src/pet/PetOverlay.tsx", "utf8");
 
 test("契约: PetOverlay 的 setTimeout 调度器自取 performance.now()（不依赖回调时间戳参数）", () => {
 	// 调度器入口必须是零参签名（setTimeout 不传参）
-	assert.match(
-		source,
-		/const check = \(\) => \{/,
-		"check 不得保留 (now: number) 形参：setTimeout 回调收不到时间戳，NaN 会让动画定格",
-	);
+	assert.match(source, /const check = \(\) => \{/, "check 不得保留 (now: number) 形参：setTimeout 回调收不到时间戳，NaN 会让动画定格");
 	// 时间源必须在回调体内取
-	assert.match(
-		source,
-		/const now = performance\.now\(\);/,
-		"check 体内必须用 performance.now() 取时间",
-	);
+	assert.match(source, /const now = performance\.now\(\);/, "check 体内必须用 performance.now() 取时间");
 });

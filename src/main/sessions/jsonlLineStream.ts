@@ -97,11 +97,7 @@ function defaultYield(): Promise<void> {
  * 逐行扫描 JSONL 文件（流式）。visitor 抛错会终止扫描并向上抛出；
  * 返回 `"stop"` 表示调用方已收够数据，扫描立即收尾（不再读盘）。
  */
-export async function scanJsonlLines(
-	filePath: string,
-	visitor: (line: string, context: JsonlLineContext) => void | "stop" | Promise<void | "stop">,
-	options: JsonlScanOptions = {},
-): Promise<JsonlScanSummary> {
+export async function scanJsonlLines(filePath: string, visitor: (line: string, context: JsonlLineContext) => void | "stop" | Promise<void | "stop">, options: JsonlScanOptions = {}): Promise<JsonlScanSummary> {
 	const chunkBytes = Math.max(4096, Math.floor(options.chunkBytes ?? DEFAULT_JSONL_CHUNK_BYTES));
 	const maxLineBytes = Math.max(1024, Math.floor(options.maxLineBytes ?? MAX_JSONL_LINE_BYTES));
 	const yieldEveryLines = Math.max(1, Math.floor(options.yieldEveryLines ?? DEFAULT_JSONL_YIELD_EVERY_LINES));
@@ -146,9 +142,7 @@ export async function scanJsonlLines(
 			if (pendingBytes > maxLineBytes) {
 				// 越限：把已累积片段转成前缀后释放，后续字节只计数不驻留。
 				oversize = true;
-				oversizePrefix = Buffer.concat(parts)
-					.subarray(0, OVERSIZED_PREFIX_BYTES)
-					.toString("utf8");
+				oversizePrefix = Buffer.concat(parts).subarray(0, OVERSIZED_PREFIX_BYTES).toString("utf8");
 				parts = [];
 			}
 		};
@@ -167,12 +161,8 @@ export async function scanJsonlLines(
 					complete,
 				});
 			} else {
-				const line = parts.length === 0
-					? finalPiece.toString("utf8")
-					: parts.length === 1
-						? parts[0].toString("utf8")
-						: Buffer.concat(parts, byteLength).toString("utf8");
-				if (await visitor(line, { offset, byteLength, complete, index }) === "stop") stopped = true;
+				const line = parts.length === 0 ? finalPiece.toString("utf8") : parts.length === 1 ? parts[0].toString("utf8") : Buffer.concat(parts, byteLength).toString("utf8");
+				if ((await visitor(line, { offset, byteLength, complete, index })) === "stop") stopped = true;
 			}
 			pendingOffset = offset + byteLength + (complete ? 1 : 0);
 			resetLine();
@@ -251,12 +241,7 @@ const REWRITE_FLUSH_BYTES = 256 * 1024;
  * 注：超长行（> maxLineBytes）不 decode，按丢弃处理（`transform(null)` 语义），
  * 调用方无法对其做行变换——会话 JSONL 里出现这种行说明是异常内容，保留原样更危险。
  */
-export async function rewriteJsonlLines(
-	srcPath: string,
-	dstPath: string,
-	transform: (line: string, context: JsonlLineContext | null) => string | null,
-	options: Pick<JsonlScanOptions, "chunkBytes" | "maxLineBytes" | "yieldEveryLines" | "yieldToEventLoop"> = {},
-): Promise<JsonlRewriteResult> {
+export async function rewriteJsonlLines(srcPath: string, dstPath: string, transform: (line: string, context: JsonlLineContext | null) => string | null, options: Pick<JsonlScanOptions, "chunkBytes" | "maxLineBytes" | "yieldEveryLines" | "yieldToEventLoop"> = {}): Promise<JsonlRewriteResult> {
 	const handle = await open(dstPath, "w");
 	let pending: string[] = [];
 	let pendingBytes = 0;
@@ -279,21 +264,25 @@ export async function rewriteJsonlLines(
 	};
 
 	try {
-		const summary = await scanJsonlLines(srcPath, async (line, context) => {
-			const mapped = transform(line, context);
-			if (mapped === null) return;
-			await writeLine(mapped);
-		}, {
-			chunkBytes: options.chunkBytes,
-			maxLineBytes: options.maxLineBytes,
-			yieldEveryLines: options.yieldEveryLines,
-			yieldToEventLoop: options.yieldToEventLoop,
-			onOversizedLine: () => {
-				// 超长行不进内存：按 transform(null) 语义丢弃（调用方无从变换）
-				const mapped = transform("", null);
-				if (mapped !== null) void writeLine(mapped);
+		const summary = await scanJsonlLines(
+			srcPath,
+			async (line, context) => {
+				const mapped = transform(line, context);
+				if (mapped === null) return;
+				await writeLine(mapped);
 			},
-		});
+			{
+				chunkBytes: options.chunkBytes,
+				maxLineBytes: options.maxLineBytes,
+				yieldEveryLines: options.yieldEveryLines,
+				yieldToEventLoop: options.yieldToEventLoop,
+				onOversizedLine: () => {
+					// 超长行不进内存：按 transform(null) 语义丢弃（调用方无从变换）
+					const mapped = transform("", null);
+					if (mapped !== null) void writeLine(mapped);
+				},
+			},
+		);
 		await flush();
 		await handle.sync();
 		await handle.close();

@@ -11,10 +11,7 @@ import test from "node:test";
 const source = readFileSync("src/main/pi/AgentManager.ts", "utf8");
 
 test("settled branch distinguishes abort settled from real completion", () => {
-	assert.match(
-		source,
-		/const isAbortSettled\s*=\s*[\s\S]{0,120}recentlyAborted\.has\(agentId\)[\s\S]{0,120}abortSettledFallbackTimers\.has\(agentId\)/,
-	);
+	assert.match(source, /const isAbortSettled\s*=\s*[\s\S]{0,120}recentlyAborted\.has\(agentId\)[\s\S]{0,120}abortSettledFallbackTimers\.has\(agentId\)/);
 });
 
 test("notifyAgentSettled is only emitted for non-abort settled completions", () => {
@@ -27,8 +24,5 @@ test("notifyAgentSettled has exactly two call sites: settled and get_state fallb
 });
 
 test("markIdle fallback path also notifies settled after confirming no work", () => {
-	assert.match(
-		source,
-		/兜底确认无工作也算成功空闲[\s\S]{0,80}this\.notifyAgentSettled\(agentId, runtime\.tab\.title\);/,
-	);
+	assert.match(source, /兜底确认无工作也算成功空闲[\s\S]{0,80}this\.notifyAgentSettled\(agentId, runtime\.tab\.title\);/);
 });

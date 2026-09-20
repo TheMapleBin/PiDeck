@@ -22,8 +22,7 @@ test("DSH 权限预设切换、plan 模式与配置页分区", async ({ window }
 	const realSettings = join(homedir(), ".dsh", "settings.yaml");
 	if (existsSync(realSettings)) copyFileSync(realSettings, join(dshHome, "settings.yaml"));
 	await window.evaluate(async (dir) => {
-		await (window as unknown as { piDesktop: { settings: { update: (patch: { dshHomeDir?: string }) => Promise<unknown> } } })
-			.piDesktop.settings.update({ dshHomeDir: dir });
+		await (window as unknown as { piDesktop: { settings: { update: (patch: { dshHomeDir?: string }) => Promise<unknown> } } }).piDesktop.settings.update({ dshHomeDir: dir });
 	}, dshHome);
 
 	// ── 2. 新建 DSH 会话草稿（新会话默认 DSH 后端）──────────────────────────
@@ -71,21 +70,24 @@ test("DSH 权限预设切换、plan 模式与配置页分区", async ({ window }
 	await window.keyboard.type("启动会话");
 	await window.keyboard.press("Enter");
 
-	const readDshRuntimeState = () => window.evaluate(async () => {
-		const pi = (window as unknown as {
-			piDesktop: {
-				sessions: {
-					listRuntimes: () => Promise<Array<{ sessionId: string; agentId: string; runtimeGeneration: number }>>;
-					getRuntimeState: (target: unknown) => Promise<{ ok: boolean; value: { value?: { permissionPreset?: string; planModeActive?: boolean; modelId?: string } } }>;
-				};
-			};
-		}).piDesktop;
-		const runtimes = await pi.sessions.listRuntimes();
-		const dsh = runtimes.find((runtime) => runtime.agentId.startsWith("dsh:"));
-		if (!dsh) return null;
-		const result = await pi.sessions.getRuntimeState(dsh);
-		return result.ok ? (result.value.value ?? null) : null;
-	});
+	const readDshRuntimeState = () =>
+		window.evaluate(async () => {
+			const pi = (
+				window as unknown as {
+					piDesktop: {
+						sessions: {
+							listRuntimes: () => Promise<Array<{ sessionId: string; agentId: string; runtimeGeneration: number }>>;
+							getRuntimeState: (target: unknown) => Promise<{ ok: boolean; value: { value?: { permissionPreset?: string; planModeActive?: boolean; modelId?: string } } }>;
+						};
+					};
+				}
+			).piDesktop;
+			const runtimes = await pi.sessions.listRuntimes();
+			const dsh = runtimes.find((runtime) => runtime.agentId.startsWith("dsh:"));
+			if (!dsh) return null;
+			const result = await pi.sessions.getRuntimeState(dsh);
+			return result.ok ? (result.value.value ?? null) : null;
+		});
 	const waitForState = async (predicate: (state: NonNullable<Awaited<ReturnType<typeof readDshRuntimeState>>>) => boolean, attempts = 30) => {
 		for (let i = 0; i < attempts; i += 1) {
 			const state = await readDshRuntimeState();

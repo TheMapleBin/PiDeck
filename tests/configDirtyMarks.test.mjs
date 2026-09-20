@@ -4,11 +4,7 @@ import test from "node:test";
 import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
 // configDirtyMarks.ts 现引入 deepEqual（运行时依赖），用 loadTsCommonJs 走完整依赖图加载。
-const {
-	dirtyKeysClearedByReload,
-	ALL_CONFIG_DIRTY_KEYS,
-	reconcileConfigDirty,
-} = loadTsCommonJs("src/renderer/src/config/configDirtyMarks.ts");
+const { dirtyKeysClearedByReload, ALL_CONFIG_DIRTY_KEYS, reconcileConfigDirty } = loadTsCommonJs("src/renderer/src/config/configDirtyMarks.ts");
 
 // ── dirtyKeysClearedByReload：loadConfig 重载后应清除的脏标记 ──
 
@@ -17,10 +13,7 @@ test("重载 models 清除自身与 raw（rawContent 被重写），不动其他
 });
 
 test("重载 settings 同时清除被顺带重载的 models/auth 脏标记（假脏标记根因）", () => {
-	assert.deepEqual(
-		new Set(dirtyKeysClearedByReload("settings")),
-		new Set(["config:settings", "config:raw", "config:models", "config:auth"]),
-	);
+	assert.deepEqual(new Set(dirtyKeysClearedByReload("settings")), new Set(["config:settings", "config:raw", "config:models", "config:auth"]));
 });
 
 test("重载 auth/trust/mcp 清除自身与 raw", () => {
@@ -34,14 +27,7 @@ test("重载 raw 只清除自身（去重，不产生重复 key）", () => {
 });
 
 test("ALL_CONFIG_DIRTY_KEYS 覆盖全部 config 组文件键（不含 skills/prompts）", () => {
-	assert.deepEqual(Array.from(ALL_CONFIG_DIRTY_KEYS), [
-		"config:models",
-		"config:auth",
-		"config:settings",
-		"config:trust",
-		"config:mcp",
-		"config:raw",
-	]);
+	assert.deepEqual(Array.from(ALL_CONFIG_DIRTY_KEYS), ["config:models", "config:auth", "config:settings", "config:trust", "config:mcp", "config:raw"]);
 });
 
 // ── reconcileConfigDirty：改回原值自动摘掉脏标记 ──
@@ -69,12 +55,31 @@ test("真实差异加入脏标记；再改回又清除（幂等）", () => {
 
 test("嵌套数组按结构比较：内容相同无差异，顺序变化算差异", () => {
 	const keys = new Set();
-	const baseline = [[1, 2], [3, 4]];
+	const baseline = [
+		[1, 2],
+		[3, 4],
+	];
 	// 同内容：无差异
-	reconcileConfigDirty(keys, "config:settings", [[1, 2], [3, 4]], baseline);
+	reconcileConfigDirty(
+		keys,
+		"config:settings",
+		[
+			[1, 2],
+			[3, 4],
+		],
+		baseline,
+	);
 	assert.deepEqual(Array.from(keys), []);
 	// 数组元素顺序变化：真实差异
-	reconcileConfigDirty(keys, "config:settings", [[3, 4], [1, 2]], baseline);
+	reconcileConfigDirty(
+		keys,
+		"config:settings",
+		[
+			[3, 4],
+			[1, 2],
+		],
+		baseline,
+	);
 	assert.deepEqual(Array.from(keys), ["config:settings"]);
 });
 

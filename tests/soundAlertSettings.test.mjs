@@ -10,9 +10,13 @@ function loadSoundAlert() {
 		compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 	});
 	const module = { exports: {} };
-	vm.runInNewContext(outputText, { module, exports: module.exports }, {
-		filename: "soundAlert.ts",
-	});
+	vm.runInNewContext(
+		outputText,
+		{ module, exports: module.exports },
+		{
+			filename: "soundAlert.ts",
+		},
+	);
 	return module.exports;
 }
 

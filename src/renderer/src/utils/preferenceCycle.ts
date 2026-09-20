@@ -25,19 +25,9 @@ export function modelKey(provider: string, id: string): string {
  * 模型被用户单独隐藏（后两者与选择器可见性同规则，DSH 无供应商/模型隐藏概念）。
  * 目录尚未加载完（models 为空）时结果自然为空。
  */
-export function resolveFavoriteCycleCandidates(input: {
-	favorites: readonly string[];
-	models: readonly AvailableModel[];
-	hiddenProviders?: readonly string[];
-	hiddenModels?: readonly string[];
-	backend?: "pi" | "dsh";
-}): AvailableModel[] {
-	const hidden = new Set(
-		(input.backend ?? "pi") === "dsh" ? [] : (input.hiddenProviders ?? []),
-	);
-	const hiddenModels = new Set(
-		(input.backend ?? "pi") === "dsh" ? [] : (input.hiddenModels ?? []),
-	);
+export function resolveFavoriteCycleCandidates(input: { favorites: readonly string[]; models: readonly AvailableModel[]; hiddenProviders?: readonly string[]; hiddenModels?: readonly string[]; backend?: "pi" | "dsh" }): AvailableModel[] {
+	const hidden = new Set((input.backend ?? "pi") === "dsh" ? [] : (input.hiddenProviders ?? []));
+	const hiddenModels = new Set((input.backend ?? "pi") === "dsh" ? [] : (input.hiddenModels ?? []));
 	const byKey = new Map<string, AvailableModel>();
 	for (const model of input.models) {
 		if (!model?.provider || !model.id) continue;
@@ -69,11 +59,7 @@ export function resolveFavoriteCycleCandidates(input: {
  *   pi 在这条路径上会前进到第二个（indexOf = -1 → 0 → 1）；
  * - 候选 <= 1 个时返回 undefined，由调用方给提示（对应 pi 的 "Only one model in scope"）。
  */
-export function pickCycleTarget<T>(
-	items: readonly T[],
-	currentIndex: number,
-	direction: CycleDirection = "forward",
-): T | undefined {
+export function pickCycleTarget<T>(items: readonly T[], currentIndex: number, direction: CycleDirection = "forward"): T | undefined {
 	if (items.length <= 1) return undefined;
 	if (currentIndex < 0) return direction === "forward" ? items[0] : items[items.length - 1];
 	const offset = direction === "forward" ? 1 : -1;
@@ -81,20 +67,13 @@ export function pickCycleTarget<T>(
 }
 
 /** 在候选里找当前项；找不到返回 -1。 */
-export function indexOfModelKey(
-	candidates: readonly AvailableModel[],
-	currentKey: string | undefined,
-): number {
+export function indexOfModelKey(candidates: readonly AvailableModel[], currentKey: string | undefined): number {
 	if (!currentKey) return -1;
 	return candidates.findIndex((model) => modelKey(model.provider, model.id) === currentKey);
 }
 
 /** 模型循环：返回下一个模型（`<= 1` 个候选时返回 undefined）。 */
-export function pickCycleModel(input: {
-	candidates: readonly AvailableModel[];
-	currentKey?: string;
-	direction?: CycleDirection;
-}): AvailableModel | undefined {
+export function pickCycleModel(input: { candidates: readonly AvailableModel[]; currentKey?: string; direction?: CycleDirection }): AvailableModel | undefined {
 	return pickCycleTarget(input.candidates, indexOfModelKey(input.candidates, input.currentKey), input.direction);
 }
 
@@ -102,14 +81,8 @@ export function pickCycleModel(input: {
  * 思考档位循环：在「当前模型可用档位」里环绕（与选择器同一份档位表）。
  * 当前档位不在表内（模型能力变了 / 刚切完模型）时，前进取首档、后退取末档。
  */
-export function pickCycleThinkingLevel(input: {
-	levels: readonly { value: string }[];
-	current?: string;
-	direction?: CycleDirection;
-}): string | undefined {
-	const values = input.levels
-		.map((level) => level.value)
-		.filter((value): value is string => !!value);
+export function pickCycleThinkingLevel(input: { levels: readonly { value: string }[]; current?: string; direction?: CycleDirection }): string | undefined {
+	const values = input.levels.map((level) => level.value).filter((value): value is string => !!value);
 	const currentIndex = input.current ? values.indexOf(input.current) : -1;
 	return pickCycleTarget(values, currentIndex, input.direction);
 }

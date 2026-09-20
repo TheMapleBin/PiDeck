@@ -13,9 +13,13 @@ function loadDragDirection() {
 		},
 	});
 	const module = { exports: {} };
-	vm.runInNewContext(outputText, { module, exports: module.exports }, {
-		filename: "PetDragDirection.ts",
-	});
+	vm.runInNewContext(
+		outputText,
+		{ module, exports: module.exports },
+		{
+			filename: "PetDragDirection.ts",
+		},
+	);
 	return module.exports;
 }
 
@@ -42,8 +46,5 @@ test("drag direction follows left and right movement with hysteresis", () => {
 test("settings preview is cleared when the pet settings tab unmounts", () => {
 	// 设置页拆分后宠物预览清理随 PetTab 走：tab 卸载时真实 Agent 状态重新接管宠物
 	const source = readFileSync("src/renderer/src/components/app/settings/PetTab.tsx", "utf8");
-	assert.match(
-		source,
-		/useEffect\(\(\)\s*=>\s*\(\)\s*=>\s*\{\s*void window\.piDesktop\.pet\.setPreviewMode\(""\);\s*\},\s*\[\]\);/,
-	);
+	assert.match(source, /useEffect\(\s*\(\) => \(\) => \{\s*void window\.piDesktop\.pet\.setPreviewMode\(""\);\s*\},\s*\[\],?\s*\);/);
 });

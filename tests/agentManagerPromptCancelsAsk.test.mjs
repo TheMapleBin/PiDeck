@@ -87,19 +87,12 @@ test("sendPrompt 在存在 pending UI 请求时应自动取消 Ask，解除底�
 	assert.equal(result.accepted, true, "prompt 应被正常接受");
 
 	// 1. 应向 pi 进程发送 extension_ui_response (value: null) 解除 ask 工具等待
-	const cancelRaw = rawSent.find(
-		(r) => r.type === "extension_ui_response" && r.id === "req-ask-1",
-	);
+	const cancelRaw = rawSent.find((r) => r.type === "extension_ui_response" && r.id === "req-ask-1");
 	assert.ok(cancelRaw, "应向 pi 进程发送 extension_ui_response 解除阻塞");
 	assert.equal(cancelRaw.value, null, "取消响应 value 应为 null");
 
 	// 2. 应向渲染层广播 agentsUiRequest 取消事件
-	const uiCancelEvent = emitted.find(
-		(e) =>
-			e.channel === ipcChannels.agentsUiRequest &&
-			e.args[0]?.agentId === "agent-1" &&
-			e.args[0]?.requestId === "req-ask-1",
-	);
+	const uiCancelEvent = emitted.find((e) => e.channel === ipcChannels.agentsUiRequest && e.args[0]?.agentId === "agent-1" && e.args[0]?.requestId === "req-ask-1");
 	assert.ok(uiCancelEvent, "应向渲染层广播 agentsUiRequest 取消事件");
 	assert.equal(uiCancelEvent.args[0].completed, true);
 	assert.equal(uiCancelEvent.args[0].cancelled, true);
@@ -109,11 +102,7 @@ test("sendPrompt 在存在 pending UI 请求时应自动取消 Ask，解除底�
 	assert.equal(pending?.size ?? 0, 0, "pendingUIRequests 应该已被清空");
 
 	// 4. 应标记 abortedDuringAsk 集合，以便工具卡片显示为已取消
-	assert.equal(
-		manager.abortedDuringAsk.has("agent-1"),
-		true,
-		"应记录 abortedDuringAsk 标记",
-	);
+	assert.equal(manager.abortedDuringAsk.has("agent-1"), true, "应记录 abortedDuringAsk 标记");
 
 	// 5. 等待时长应结算并计入 askWaitMsByAgent
 	const waitMs = manager.askWaitMsByAgent.get("agent-1") ?? 0;

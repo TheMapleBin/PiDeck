@@ -1,19 +1,4 @@
-import {
-	Fragment,
-	isValidElement,
-	memo,
-	useCallback,
-	useEffect,
-	useLayoutEffect,
-	useMemo,
-	useRef,
-	useState,
-	type CSSProperties,
-	type RefObject,
-	type WheelEvent as ReactWheelEvent,
-	type PointerEvent as ReactPointerEvent,
-	type ReactNode,
-} from "react";
+import { Fragment, isValidElement, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type RefObject, type WheelEvent as ReactWheelEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { messageEntryId } from "../../utils/sessionCommands";
 import { toBlob } from "html-to-image";
 import { writeClipboardImage } from "../../utils/clipboard";
@@ -56,40 +41,11 @@ function MessageImage(props: {
 		observer.observe(el);
 		return () => observer.disconnect();
 	}, []);
-	return (
-		<img
-			ref={ref}
-			src={inView ? props.src : undefined}
-			alt={props.alt}
-			className={`${props.className}${!inView && props.placeholderClass ? ` ${props.placeholderClass}` : ""}`}
-			loading="lazy"
-			decoding="async"
-			onClick={props.onClick}
-		/>
-	);
+	return <img ref={ref} src={inView ? props.src : undefined} alt={props.alt} className={`${props.className}${!inView && props.placeholderClass ? ` ${props.placeholderClass}` : ""}`} loading="lazy" decoding="async" onClick={props.onClick} />;
 }
-import {
-	summarizeMessage,
-	type RenderMessage,
-	type ComposerSuggestionResult,
-	type ComposerTrigger,
-	groupToolMessages,
-	buildOutline,
-	detectTrigger,
-	applySuggestion,
-	clearSuggestionTrigger,
-	buildSuggestionItems,
-	mergeCommands,
-	matches,
-	displayPath,
-	flattenFiles,
-} from "../app/AppUtils";
+import { summarizeMessage, type RenderMessage, type ComposerSuggestionResult, type ComposerTrigger, groupToolMessages, buildOutline, detectTrigger, applySuggestion, clearSuggestionTrigger, buildSuggestionItems, mergeCommands, matches, displayPath, flattenFiles } from "../app/AppUtils";
 import { Textarea } from "../ui-shadcn/textarea";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "../ui-shadcn/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui-shadcn/tooltip";
 
 // Mermaid 库体积数 MB，仅在真正出现 mermaid 代码块时才动态加载，
 // 避免随渲染进程常驻、放大内存占用并在流式期间抢占主线程。
@@ -144,12 +100,7 @@ import { t } from "../../i18n";
 import { cn } from "../../lib/utils";
 import { showNotice } from "../../utils/notice";
 import { Button } from "../ui-shadcn/button";
-import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuItem,
-	DropdownMenuTrigger,
-} from "../ui-shadcn/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../ui-shadcn/dropdown-menu";
 import type {
 	AgentRuntimeState,
 	AgentTab,
@@ -187,11 +138,7 @@ import { formatDuration, formatTime, stripAnsi, formatPercent } from "./Timeline
 import { extractVisionBridgeBlocks, matchVisionBridgeEvent } from "../../utils/visionBridgeBlocks";
 import { visionImageHashes } from "../../utils/visionImageHash";
 import { ToolCard, ToolGroupCard, type DiffFileHandler } from "./ToolCallComponents";
-import {
-	DiagnosticMessageCard,
-	RespondingIndicator,
-	ThinkingBlock,
-} from "./TimelineEventCards";
+import { DiagnosticMessageCard, RespondingIndicator, ThinkingBlock } from "./TimelineEventCards";
 import { MultiSelectModal } from "./MessageShareModal";
 
 // ============================================================
@@ -220,7 +167,6 @@ type SessionModifiedFile = {
 	content?: string;
 };
 
-
 /**
  * 美元→人民币估算汇率：仅用于费用提示的便捷换算（约合金额），非实时牌价。
  * 如需跟随实时汇率或用户自定义，可升级为设置项（usdToCnyRate）。
@@ -243,16 +189,7 @@ export type SessionStatusDetail = {
  * 纯函数：label/value 已本地化，调用方只负责布局。
  */
 export function buildSessionStatusDetail(
-	state:
-		| Pick<
-				AgentRuntimeState,
-				| "contextPercent" | "contextTokens" | "contextWindow"
-				| "inputTokens" | "outputTokens"
-				| "cacheRead" | "cacheWrite" | "cacheTotal" | "cacheHitPercent"
-				| "ttftMs" | "totalMs" | "tps" | "cost"
-				| "dshSessionStats"
-		  >
-		| undefined,
+	state: Pick<AgentRuntimeState, "contextPercent" | "contextTokens" | "contextWindow" | "inputTokens" | "outputTokens" | "cacheRead" | "cacheWrite" | "cacheTotal" | "cacheHitPercent" | "ttftMs" | "totalMs" | "tps" | "cost" | "dshSessionStats"> | undefined,
 	averageCacheHit: number | undefined,
 	averageCacheHitSampleCount: number,
 ): SessionStatusDetail {
@@ -262,9 +199,7 @@ export function buildSessionStatusDetail(
 	if (!state) return { detailRows, replyPerfRows, sessionStatRows, hasDetail: false };
 	// 美元→人民币估算汇率（仅用于费用提示的便捷换算，非实时牌价；
 	// 如后续需要跟随实时汇率，可升级为设置项 usdToCnyRate）
-	const cnyAmount = state.cost != null
-		? `¥${(state.cost * USD_TO_CNY_RATE).toFixed(2)}`
-		: undefined;
+	const cnyAmount = state.cost != null ? `¥${(state.cost * USD_TO_CNY_RATE).toFixed(2)}` : undefined;
 
 	if (state.contextPercent != null || state.contextTokens != null) {
 		detailRows.push({
@@ -358,42 +293,33 @@ export function SessionStatus(props: {
 	// 会话平均缓存命中率：主进程基于会话文件全部 assistant 消息 usage 算出的
 	// 真实平均优先；渲染层快照历史均值仅作为无文件样本时的降级回退。
 	const history = props.cacheHitHistory ?? [];
-	const averageCacheHit = state.cacheHitAveragePercent ?? (
-		history.length > 0
-			? history.reduce((sum, value) => sum + value, 0) / history.length
-			: undefined
-	);
+	const averageCacheHit = state.cacheHitAveragePercent ?? (history.length > 0 ? history.reduce((sum, value) => sum + value, 0) / history.length : undefined);
 	const averageCacheHitSampleCount = state.cacheHitSampleCount ?? history.length;
-	const { detailRows, replyPerfRows, sessionStatRows, hasDetail } = buildSessionStatusDetail(
-		state,
-		averageCacheHit,
-		averageCacheHitSampleCount,
-	);
+	const { detailRows, replyPerfRows, sessionStatRows, hasDetail } = buildSessionStatusDetail(state, averageCacheHit, averageCacheHitSampleCount);
 	// cost-chip 悬浮提示里的人民币估算（与明细行共用同一汇率常量）
-	const cnyAmount = state.cost != null
-		? `¥${(state.cost * USD_TO_CNY_RATE).toFixed(2)}`
-		: undefined;
+	const cnyAmount = state.cost != null ? `¥${(state.cost * USD_TO_CNY_RATE).toFixed(2)}` : undefined;
 
 	const statusInner = (
 		<div className="session-status">
 			{state.contextPercent != null && (
 				<span className="ctx-chip">
-					{t("app.ctx")}:{" "}
-					{formatPercent(state.contextPercent)}
-					% / {formatCompact(state.contextWindow)}
+					{t("app.ctx")}: {formatPercent(state.contextPercent)}% / {formatCompact(state.contextWindow)}
 				</span>
 			)}
-			{(state.cacheHitPercent != null) && (
+			{state.cacheHitPercent != null && (
 				<span className="cache-chip">
 					{t("app.cacheHit")}: {state.cacheHitPercent?.toFixed?.(0) ?? state.cacheHitPercent}%
 				</span>
 			)}
 			{/* 平均命中率只在悬停明细中展示（ctx.detail.hitAverage），头部不再显示单独 chip */}
 			{state.cost != null && (
-				<span className="cost-chip" title={t("app.totalCostCny", {
-					usd: `$${state.cost.toFixed(3)}`,
-					cny: cnyAmount ?? "-",
-				})}>
+				<span
+					className="cost-chip"
+					title={t("app.totalCostCny", {
+						usd: `$${state.cost.toFixed(3)}`,
+						cny: cnyAmount ?? "-",
+					})}
+				>
 					${state.cost.toFixed(3)}
 				</span>
 			)}
@@ -405,13 +331,7 @@ export function SessionStatus(props: {
 	return (
 		<Tooltip>
 			<TooltipTrigger asChild>{statusInner}</TooltipTrigger>
-			<TooltipContent
-				side="bottom"
-				align="end"
-				sideOffset={8}
-				arrowClassName="!bg-popover !fill-popover"
-				className="ctx-detail-tooltip !w-auto min-w-64 max-w-[min(320px,calc(100vw-24px))] !rounded-md !border !border-border !bg-popover !px-3 !py-2.5 !text-popover-foreground !shadow-lg"
-			>
+			<TooltipContent side="bottom" align="end" sideOffset={8} arrowClassName="!bg-popover !fill-popover" className="ctx-detail-tooltip !w-auto min-w-64 max-w-[min(320px,calc(100vw-24px))] !rounded-md !border !border-border !bg-popover !px-3 !py-2.5 !text-popover-foreground !shadow-lg">
 				<div className="grid gap-2.5">
 					<div className="flex items-center justify-between gap-4 border-b border-border/70 pb-2">
 						<span className="text-caption font-semibold text-popover-foreground">{t("ctx.detail.title")}</span>
@@ -419,10 +339,7 @@ export function SessionStatus(props: {
 					</div>
 					<div className="grid gap-1">
 						{detailRows.map((row) => (
-							<div
-								key={row.label}
-								className={`flex items-baseline justify-between gap-4 px-1 py-0.5 text-caption leading-5${row.emphasis ? " mt-1 border-t border-border/70 pt-1.5" : ""}`}
-							>
+							<div key={row.label} className={`flex items-baseline justify-between gap-4 px-1 py-0.5 text-caption leading-5${row.emphasis ? " mt-1 border-t border-border/70 pt-1.5" : ""}`}>
 								<span className="shrink-0 text-muted-foreground">{row.label}</span>
 								<span className="min-w-0 whitespace-nowrap text-right font-mono font-semibold tabular-nums text-popover-foreground">{row.value}</span>
 							</div>
@@ -430,9 +347,7 @@ export function SessionStatus(props: {
 					</div>
 					{replyPerfRows.length > 0 && (
 						<div className="mt-2.5 grid gap-1 border-t border-border/70 pt-2">
-							<div className="px-1 text-micro font-semibold uppercase tracking-wide text-muted-foreground">
-								{t("ctx.detail.lastReply")}
-							</div>
+							<div className="px-1 text-micro font-semibold uppercase tracking-wide text-muted-foreground">{t("ctx.detail.lastReply")}</div>
 							{replyPerfRows.map((row) => (
 								<div key={row.label} className="flex items-baseline justify-between gap-4 px-1 py-0.5 text-caption leading-5">
 									<span className="shrink-0 text-muted-foreground">{row.label}</span>
@@ -443,9 +358,7 @@ export function SessionStatus(props: {
 					)}
 					{sessionStatRows.length > 0 && (
 						<div className="mt-2.5 grid gap-1 border-t border-border/70 pt-2">
-							<div className="px-1 text-micro font-semibold uppercase tracking-wide text-muted-foreground">
-								{t("ctx.detail.sessionStats")}
-							</div>
+							<div className="px-1 text-micro font-semibold uppercase tracking-wide text-muted-foreground">{t("ctx.detail.sessionStats")}</div>
 							{sessionStatRows.map((row) => (
 								<div key={row.label} className="flex items-baseline justify-between gap-4 px-1 py-0.5 text-caption leading-5">
 									<span className="shrink-0 text-muted-foreground">{row.label}</span>
@@ -469,20 +382,15 @@ function formatCompact(value?: number | null) {
 
 export { LogoMark } from "../app/LogoMark";
 
-
 export function AgentAvatar(props: { status: string }) {
 	const normalizedStatus = props.status === "running" || props.status === "starting" || props.status === "error" ? props.status : "idle";
 	return (
 		<div className={`conversation-avatar agent-avatar avatar-status-${normalizedStatus}`} data-avatar-status={normalizedStatus}>
 			<span className="agent-avatar-mark" aria-hidden="true">
-			<svg viewBox="140 140 520 520" width="28" height="28" aria-hidden="true">
-				<path
-					fill="#fff"
-					fillRule="evenodd"
-					d="M165.29 165.29H517.36V400H400V517.36H282.65V634.72H165.29ZM282.65 282.65V400H400V282.65Z"
-				/>
-				<path fill="#fff" d="M517.36 400H634.72V634.72H517.36Z" />
-			</svg>
+				<svg viewBox="140 140 520 520" width="28" height="28" aria-hidden="true">
+					<path fill="#fff" fillRule="evenodd" d="M165.29 165.29H517.36V400H400V517.36H282.65V634.72H165.29ZM282.65 282.65V400H400V282.65Z" />
+					<path fill="#fff" d="M517.36 400H634.72V634.72H517.36Z" />
+				</svg>
 			</span>
 			<span className="avatar-status-indicator" aria-label={normalizedStatus}>
 				{normalizedStatus === "error" ? <CircleAlert size={8} strokeWidth={2.5} /> : normalizedStatus === "starting" ? <CircleDot size={8} strokeWidth={2.5} /> : normalizedStatus === "running" ? <LoaderCircle size={8} strokeWidth={2.5} className="animate-pideck-spin" /> : <Check size={8} strokeWidth={2.5} />}
@@ -501,19 +409,14 @@ export function EmptyState(props: {
 	/** 可选：章节页眉发丝线右侧的上下文（如当前项目名），帮助用户确认所在工作区 */
 	eyebrow?: ReactNode;
 }) {
-	const description = props.hasProject
-		? t("app.emptyHasProject")
-		: t("app.emptyNoProject");
+	const description = props.hasProject ? t("app.emptyHasProject") : t("app.emptyNoProject");
 
 	return (
 		// Editorial 空态：左对齐章节式排版而非居中对话框，品牌感由衬线斜体的重音词承担。
 		// 重音词固定用拉丁词（zh「Session」/ en「session」）：内置艺术字 Plantin 仅有拉丁字形，
 		// 居中策略：几何居中（justify-center）后用户反馈标题区仍略偏上——
 		// 补 pt-[10vh] 让内容块整体下移，标题重心落到窗口光学中心。
-		<div
-			className="empty-state relative h-full min-h-0 overflow-hidden bg-transparent px-6 text-left"
-			data-empty-state={props.hasProject ? "project" : "no-project"}
-		>
+		<div className="empty-state relative h-full min-h-0 overflow-hidden bg-transparent px-6 text-left" data-empty-state={props.hasProject ? "project" : "no-project"}>
 			<div className="mx-auto flex h-full w-full max-w-2xl animate-in flex-col justify-center pt-[10vh] duration-500 fade-in">
 				{/* 章节页眉：发丝线 + 项目上下文，建立编辑排版的节奏起点 */}
 				<div className="flex items-center gap-4 text-[13px] text-text-secondary">
@@ -523,7 +426,8 @@ export function EmptyState(props: {
 				<h2 className="mt-10 animate-in text-[clamp(2.5rem,5vw,3.25rem)] font-semibold leading-[1.1] tracking-[-0.03em] delay-100 duration-500 fade-in fill-mode-backwards slide-in-from-bottom-2 text-foreground">
 					{props.hasProject ? (
 						<>
-							{t("app.emptyProjectTitleLead")}<br />
+							{t("app.emptyProjectTitleLead")}
+							<br />
 							<span className="font-brand font-medium italic">{t("app.emptyProjectTitleAccent")}</span>
 							{/* 句号用前景色（黑/白实心）而非灰：作为标题的落点强调，视觉上更扎实 */}
 							<span className="text-foreground">{t("app.emptyProjectTitlePunct")}</span>
@@ -534,18 +438,17 @@ export function EmptyState(props: {
 				</h2>
 				<p className="mt-6 max-w-md animate-in text-[15px] leading-7 delay-100 duration-500 fade-in fill-mode-backwards text-text-secondary">{description}</p>
 				{/* actions 是左对齐的主从按钮区，跟随阅读动线而不是居中悬浮 */}
-				<div className="mt-10 animate-in delay-200 duration-500 fade-in fill-mode-backwards slide-in-from-bottom-2">{
-					props.actions ?? (
-						props.hasProject ? (
-							<Button size="lg" className="h-12 rounded-xl bg-foreground px-7 text-background shadow-sm hover:bg-foreground/85" onClick={props.onCreate}>{t("app.createAgent")}</Button>
+				<div className="mt-10 animate-in delay-200 duration-500 fade-in fill-mode-backwards slide-in-from-bottom-2">
+					{props.actions ??
+						(props.hasProject ? (
+							<Button size="lg" className="h-12 rounded-xl bg-foreground px-7 text-background shadow-sm hover:bg-foreground/85" onClick={props.onCreate}>
+								{t("app.createAgent")}
+							</Button>
 						) : (
 							<p className="text-sm text-muted-foreground">{t("app.emptyNoProject")}</p>
-						)
-					)
-				}</div>
-				{props.footer && (
-					<div className="mt-14 animate-in border-t border-border-subtle pt-5 delay-300 duration-500 fade-in fill-mode-backwards">{props.footer}</div>
-				)}
+						))}
+				</div>
+				{props.footer && <div className="mt-14 animate-in border-t border-border-subtle pt-5 delay-300 duration-500 fade-in fill-mode-backwards">{props.footer}</div>}
 			</div>
 		</div>
 	);
@@ -558,8 +461,7 @@ async function copyElementAsPng(element: HTMLElement) {
 	// 避免直接截图导致图片紧贴内容边缘、缺少留白。
 	const clone = element.cloneNode(true) as HTMLElement;
 	clone.style.padding = "24px";
-	clone.style.background =
-		getComputedStyle(document.documentElement).getPropertyValue("--color-bg-panel") || "#fff";
+	clone.style.background = getComputedStyle(document.documentElement).getPropertyValue("--color-bg-panel") || "#fff";
 	// 将 clone 插入到原元素旁边，确保 CSS 样式正确继承（父层选择器、CSS 变量、rem 等）
 	if (element.parentElement) {
 		// 克隆节点不能参与原布局，否则插入时会短暂撑开时间线导致闪动。
@@ -576,13 +478,8 @@ async function copyElementAsPng(element: HTMLElement) {
 		blob = await toBlob(clone, {
 			cacheBust: true,
 			pixelRatio: Math.min(2, window.devicePixelRatio || 1),
-			backgroundColor:
-				getComputedStyle(document.documentElement).getPropertyValue("--color-bg-panel") || undefined,
-			filter: (node) =>
-				!(node instanceof HTMLElement) ||
-				(!node.classList.contains("turn-row-actions") &&
-					!node.classList.contains("user-turn-actions") &&
-					!node.classList.contains("copy-menu-popover")),
+			backgroundColor: getComputedStyle(document.documentElement).getPropertyValue("--color-bg-panel") || undefined,
+			filter: (node) => !(node instanceof HTMLElement) || (!node.classList.contains("turn-row-actions") && !node.classList.contains("user-turn-actions") && !node.classList.contains("copy-menu-popover")),
 		});
 	} finally {
 		clone.remove();
@@ -594,12 +491,7 @@ async function copyElementAsPng(element: HTMLElement) {
 	if (!written) throw new Error("Unable to write PNG to clipboard");
 }
 
-export function CopyMenu(props: {
-	text: string;
-	markdown: string;
-	targetRef: React.RefObject<HTMLElement | null>;
-	className?: string;
-}) {
+export function CopyMenu(props: { text: string; markdown: string; targetRef: React.RefObject<HTMLElement | null>; className?: string }) {
 	const [copied, setCopied] = useState<string | null>(null);
 	const copy = async (kind: "text" | "markdown" | "image") => {
 		try {
@@ -617,9 +509,7 @@ export function CopyMenu(props: {
 			showNotice(t("copy.failed"), 2000, "error");
 			// 下拉菜单失焦后 ClipboardItem 失败原先无 log；图片路径现在统一记 renderer 日志便于排查。
 			if (kind === "image") {
-				void window.piDesktop?.app
-					.rendererLog("warn", "clipboard", "copy as image failed", error)
-					.catch(() => undefined);
+				void window.piDesktop?.app.rendererLog("warn", "clipboard", "copy as image failed", error).catch(() => undefined);
 			}
 		}
 	};
@@ -629,26 +519,12 @@ export function CopyMenu(props: {
 			   右侧小箭头展开完整菜单（复制为 Markdown / 图片）。弹层走 shadcn
 			   DropdownMenu：Radix 定位 + animate-in/out + dropdown-stagger 错峰动画。 */}
 			<div className="flex items-center overflow-hidden rounded-sm border border-transparent hover:border-border">
-				<Button
-					variant="ghost"
-					size="icon-sm"
-					className="copy-menu-trigger size-7 rounded-none text-muted-foreground hover:bg-muted hover:text-foreground"
-					type="button"
-					onClick={() => void copy("text")}
-					title={t("common.copy")}
-				>
+				<Button variant="ghost" size="icon-sm" className="copy-menu-trigger size-7 rounded-none text-muted-foreground hover:bg-muted hover:text-foreground" type="button" onClick={() => void copy("text")} title={t("common.copy")}>
 					{copied ? <Check size={14} /> : <Copy size={14} />}
 				</Button>
 				<DropdownMenu>
 					<DropdownMenuTrigger asChild>
-						<Button
-							variant="ghost"
-							size="icon-sm"
-							className="size-6 rounded-none border-l border-border/60 px-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-							type="button"
-							aria-label={t("copy.moreOptions")}
-							title={t("copy.moreOptions")}
-						>
+						<Button variant="ghost" size="icon-sm" className="size-6 rounded-none border-l border-border/60 px-0.5 text-muted-foreground hover:bg-muted hover:text-foreground" type="button" aria-label={t("copy.moreOptions")} title={t("copy.moreOptions")}>
 							<ChevronDown size={12} />
 						</Button>
 					</DropdownMenuTrigger>
@@ -693,46 +569,24 @@ export const AssistantText = memo(
 		// 统一 Streamdown 引擎（迁移后唯一 markdown 管线）：流式由引擎按 block memo、
 		// 半截 markdown 由 remend 容错补全，不再需要旧管线的流式/静态双路径切换。
 		return (
-			<div
-				className="assistant-text markdown-body"
-				data-settle={props.settle ? "1" : undefined}
-			>
+			<div className="assistant-text markdown-body" data-settle={props.settle ? "1" : undefined}>
 				{props.images && props.images.length > 0 && (
 					<div className="message-images">
 						{props.images.map((img, index) => {
 							// 历史生图图片只带 ref 引用（走 pideck-img:// 协议），无源时不渲染空图
 							const src = imageContentSrc(img);
 							if (!src) return null;
-							return (
-								<MessageImage
-									key={index}
-									src={src}
-									alt={t("app.imageAlt", { index: index + 1 })}
-									className="message-image"
-									placeholderClass="min-h-24"
-									onClick={() => props.onPreviewImage(img)}
-								/>
-							);
+							return <MessageImage key={index} src={src} alt={t("app.imageAlt", { index: index + 1 })} className="message-image" placeholderClass="min-h-24" onClick={() => props.onPreviewImage(img)} />;
 						})}
 					</div>
 				)}
-				<MarkdownStream
-					text={cleanText}
-					isStreaming={Boolean(props.isStreaming)}
-					onOpenExternal={props.onOpenExternal}
-					onOpenFile={props.onOpenFile}
-				/>
+				<MarkdownStream text={cleanText} isStreaming={Boolean(props.isStreaming)} onOpenExternal={props.onOpenExternal} onOpenFile={props.onOpenFile} />
 			</div>
 		);
 	},
 	// 自定义比较：正文文件回调绑定栏级 cwd/project，作用域变化时必须刷新；其余稳定回调仍忽略，
 	// 避免 App 常规渲染让历史消息反复解析 Markdown。
-	(prev, next) =>
-		prev.text === next.text &&
-		prev.isStreaming === next.isStreaming &&
-		prev.settle === next.settle &&
-		prev.images === next.images &&
-		prev.onOpenFile === next.onOpenFile,
+	(prev, next) => prev.text === next.text && prev.isStreaming === next.isStreaming && prev.settle === next.settle && prev.images === next.images && prev.onOpenFile === next.onOpenFile,
 );
 
 /** 视觉桥「请求详情」展开面板：展示最近一次 input 转换的模型/耗时/token/提示词与每张图结果。
@@ -758,15 +612,8 @@ function VisionBridgeDetail(props: { events: VisionEventsInfo | null; loading: b
 						{t("app.visionRequestItem", {
 							index: it.index,
 							duration: it.cached ? "" : `${formatDuration(it.durationMs)} · `,
-							tokens:
-								typeof it.outputTokens === "number"
-									? `${t("app.visionOutputTokens", { count: it.outputTokens })} · `
-									: "",
-							status: it.cached
-								? t("app.visionCacheHit")
-								: it.ok
-									? ""
-									: t("app.visionRequestFailed", { error: it.error ?? "" }),
+							tokens: typeof it.outputTokens === "number" ? `${t("app.visionOutputTokens", { count: it.outputTokens })} · ` : "",
+							status: it.cached ? t("app.visionCacheHit") : it.ok ? "" : t("app.visionRequestFailed", { error: it.error ?? "" }),
 						})}
 					</li>
 				))}
@@ -856,9 +703,7 @@ export const UserBubble = memo(function UserBubble(props: {
 		if (images.length === 0) return;
 		// 视觉桥事件按图片 base64 哈希匹配；历史生图图片只有 ref 引用（无字节），
 		// 不参与匹配——全部无内联字节时直接不发起轮询。
-		const inline = images
-			.map((image) => image.data)
-			.filter((data): data is string => typeof data === "string" && data.length > 0);
+		const inline = images.map((image) => image.data).filter((data): data is string => typeof data === "string" && data.length > 0);
 		if (inline.length === 0) return;
 		let cancelled = false;
 		void visionImageHashes(inline).then((hashes) => {
@@ -898,13 +743,7 @@ export const UserBubble = memo(function UserBubble(props: {
 	// null 表示尚未确认，期间保持静默而不是乐观显示动画。
 	useEffect(() => {
 		const images = message.images ?? [];
-		if (
-			props.visionBridgeExpected === false ||
-			images.length === 0 ||
-			visionBlocks.length > 0 ||
-			!imageHashes ||
-			imageHashes.length === 0
-		) {
+		if (props.visionBridgeExpected === false || images.length === 0 || visionBlocks.length > 0 || !imageHashes || imageHashes.length === 0) {
 			setVisionBridgeEnabled(false);
 			setVisionPolling(false);
 			return;
@@ -915,11 +754,14 @@ export const UserBubble = memo(function UserBubble(props: {
 			return;
 		}
 		let cancelled = false;
-		void window.piDesktop.config.visionGetConfig().then(({ config }) => {
-			if (!cancelled) setVisionBridgeEnabled(config?.enabled === true);
-		}).catch(() => {
-			if (!cancelled) setVisionBridgeEnabled(false);
-		});
+		void window.piDesktop.config
+			.visionGetConfig()
+			.then(({ config }) => {
+				if (!cancelled) setVisionBridgeEnabled(config?.enabled === true);
+			})
+			.catch(() => {
+				if (!cancelled) setVisionBridgeEnabled(false);
+			});
 		return () => {
 			cancelled = true;
 		};
@@ -978,27 +820,21 @@ export const UserBubble = memo(function UserBubble(props: {
 	/** 编辑后重发：放回 composer 输入框，由用户自行修改后发送。 */
 	const handleEditAndResend = () => {
 		document.querySelector<HTMLElement>(".composer-box .rich-input, .composer-box textarea")?.focus();
-		window.dispatchEvent(
-			new CustomEvent("user-message-edit", { detail: { text: message.text } }),
-		);
+		window.dispatchEvent(new CustomEvent("user-message-edit", { detail: { text: message.text } }));
 	};
 	return (
-		<article /* user-turn 为 e2e 选择器锚点 */ ref={rowRef} className={`user-turn group/user mb-4 flex w-full min-w-0 max-w-full flex-col items-end ${props.fresh ? "user-turn--fresh animate-[message-enter_260ms_cubic-bezier(0.22,1,0.36,1)_both]" : ""}${props.topFresh ? " user-turn--top-fresh animate-[top-enter_280ms_cubic-bezier(0.22,1,0.36,1)_both]" : ""}`} data-message-id={message.id}>
+		<article /* user-turn 为 e2e 选择器锚点 */
+			ref={rowRef}
+			className={`user-turn group/user mb-4 flex w-full min-w-0 max-w-full flex-col items-end ${props.fresh ? "user-turn--fresh animate-[message-enter_260ms_cubic-bezier(0.22,1,0.36,1)_both]" : ""}${props.topFresh ? " user-turn--top-fresh animate-[top-enter_280ms_cubic-bezier(0.22,1,0.36,1)_both]" : ""}`}
+			data-message-id={message.id}
+		>
 			{message.images && message.images.length > 0 && (
 				<div className="mb-2 flex max-w-[min(82%,64ch)] flex-wrap justify-end gap-2">
 					{message.images.map((img, index) => {
 						// 参考图在历史里同样是 ref 引用（新图是内联 base64），统一走解析器
 						const src = imageContentSrc(img);
 						if (!src) return null;
-						return (
-							<MessageImage
-								key={index}
-								src={src}
-								alt={t("app.imageAlt", { index: index + 1 })}
-								className="size-16 max-h-40 cursor-pointer rounded-md border border-border object-cover transition-colors duration-150 hover:border-border-strong"
-								onClick={() => props.onPreviewImage(img)}
-							/>
-						);
+						return <MessageImage key={index} src={src} alt={t("app.imageAlt", { index: index + 1 })} className="size-16 max-h-40 cursor-pointer rounded-md border border-border object-cover transition-colors duration-150 hover:border-border-strong" onClick={() => props.onPreviewImage(img)} />;
 					})}
 				</div>
 			)}
@@ -1007,11 +843,7 @@ export const UserBubble = memo(function UserBubble(props: {
 					{visionBlocks.map((block, bi) =>
 						block.kind === "success" ? (
 							// 成功：徽章行（图标 + 视觉桥已查看 + 图片序号）+ 描述正文
-							<div
-								key={bi}
-								className="vision-bridge-card w-full min-w-0 rounded-lg border border-border bg-background/70 p-2.5"
-								title={t("app.visionBridgeSeenDesc")}
-							>
+							<div key={bi} className="vision-bridge-card w-full min-w-0 rounded-lg border border-border bg-background/70 p-2.5" title={t("app.visionBridgeSeenDesc")}>
 								<div className="flex items-center justify-between gap-2">
 									<div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
 										<Eye size={12} className="shrink-0 text-[var(--color-accent)]" />
@@ -1031,33 +863,19 @@ export const UserBubble = memo(function UserBubble(props: {
 										{t("app.visionDetail")}
 									</button>
 								</div>
-								{block.description && (
-									<p className="mt-1.5 text-[13px] leading-[1.6] break-words whitespace-pre-wrap text-text-primary">
-										{block.description}
-									</p>
-								)}
-								{visionDetailOpen && (
-									<VisionBridgeDetail events={visionEvents} loading={visionLoading} />
-								)}
+								{block.description && <p className="mt-1.5 text-[13px] leading-[1.6] break-words whitespace-pre-wrap text-text-primary">{block.description}</p>}
+								{visionDetailOpen && <VisionBridgeDetail events={visionEvents} loading={visionLoading} />}
 							</div>
 						) : (
 							// 失败：红色卡片，原因直出，用户不用去设置页翻日志
-							<div
-								key={bi}
-								className="w-full min-w-0 rounded-lg border border-danger/40 bg-danger-soft/40 p-2.5"
-								title={t("app.visionBridgeFailedDesc")}
-							>
+							<div key={bi} className="w-full min-w-0 rounded-lg border border-danger/40 bg-danger-soft/40 p-2.5" title={t("app.visionBridgeFailedDesc")}>
 								<div className="flex items-center gap-1.5 text-[11px] font-medium text-danger">
 									<AlertTriangle size={12} className="shrink-0" />
 									<span>{t("app.visionBridgeFailed")}</span>
 									<span className="text-danger/60">·</span>
 									<span>{t("app.visionBridgeImageLabel", { index: block.index })}</span>
 								</div>
-								{block.reason && (
-									<p className="mt-1.5 text-[13px] leading-[1.6] break-words text-danger/90">
-										{block.reason}
-									</p>
-								)}
+								{block.reason && <p className="mt-1.5 text-[13px] leading-[1.6] break-words text-danger/90">{block.reason}</p>}
 							</div>
 						),
 					)}
@@ -1077,11 +895,7 @@ export const UserBubble = memo(function UserBubble(props: {
 					{visionMatch.items.map((item) =>
 						item.ok ? (
 							// 成功：徽章行（图标 + 视觉桥已查看 + 图片序号）+ 描述正文（与历史标记卡片同款）
-							<div
-								key={item.index}
-								className="vision-bridge-card w-full min-w-0 rounded-lg border border-border bg-background/70 p-2.5"
-								title={t("app.visionBridgeSeenDesc")}
-							>
+							<div key={item.index} className="vision-bridge-card w-full min-w-0 rounded-lg border border-border bg-background/70 p-2.5" title={t("app.visionBridgeSeenDesc")}>
 								<div className="flex items-center justify-between gap-2">
 									<div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
 										<Eye size={12} className="shrink-0 text-[var(--color-accent)]" />
@@ -1101,33 +915,19 @@ export const UserBubble = memo(function UserBubble(props: {
 										{t("app.visionDetail")}
 									</button>
 								</div>
-								{item.description && (
-									<p className="mt-1.5 text-[13px] leading-[1.6] break-words whitespace-pre-wrap text-text-primary">
-										{item.description}
-									</p>
-								)}
-								{visionDetailOpen && (
-									<VisionBridgeDetail events={visionEvents} loading={visionLoading} />
-								)}
+								{item.description && <p className="mt-1.5 text-[13px] leading-[1.6] break-words whitespace-pre-wrap text-text-primary">{item.description}</p>}
+								{visionDetailOpen && <VisionBridgeDetail events={visionEvents} loading={visionLoading} />}
 							</div>
 						) : (
 							// 失败：红色卡片，原因直出（与历史标记卡片同款）
-							<div
-								key={item.index}
-								className="w-full min-w-0 rounded-lg border border-danger/40 bg-danger-soft/40 p-2.5"
-								title={t("app.visionBridgeFailedDesc")}
-							>
+							<div key={item.index} className="w-full min-w-0 rounded-lg border border-danger/40 bg-danger-soft/40 p-2.5" title={t("app.visionBridgeFailedDesc")}>
 								<div className="flex items-center gap-1.5 text-[11px] font-medium text-danger">
 									<AlertTriangle size={12} className="shrink-0" />
 									<span>{t("app.visionBridgeFailed")}</span>
 									<span className="text-danger/60">·</span>
 									<span>{t("app.visionBridgeImageLabel", { index: item.index })}</span>
 								</div>
-								{item.error && (
-									<p className="mt-1.5 text-[13px] leading-[1.6] break-words text-danger/90">
-										{item.error}
-									</p>
-								)}
+								{item.error && <p className="mt-1.5 text-[13px] leading-[1.6] break-words text-danger/90">{item.error}</p>}
 							</div>
 						),
 					)}
@@ -1147,9 +947,7 @@ export const UserBubble = memo(function UserBubble(props: {
 					{messageOverflowing && (
 						<div className="relative mt-1 flex justify-end">
 							{/* 折叠态底部渐变提示还有内容；展开态不需要 */}
-							{!messageExpanded && (
-								<div className="pointer-events-none absolute inset-x-0 -top-6 h-6 bg-gradient-to-t from-muted/70 to-transparent" aria-hidden="true" />
-							)}
+							{!messageExpanded && <div className="pointer-events-none absolute inset-x-0 -top-6 h-6 bg-gradient-to-t from-muted/70 to-transparent" aria-hidden="true" />}
 							<button
 								type="button"
 								className="inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-micro text-text-tertiary transition-colors duration-150 hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-[var(--focus-ring)]"
@@ -1193,19 +991,8 @@ export const UserBubble = memo(function UserBubble(props: {
 				<time>{formatTime(message.timestamp)}</time>
 			</div>
 			<div className="user-turn-actions flex min-h-6 items-center gap-0.5 opacity-0 transition-opacity group-hover/user:opacity-100 focus-within:opacity-100">
-				<CopyMenu
-					text={stripMarkdown(replaceExpandedRefBlocksWithLabels(cleanText))}
-					markdown={replaceExpandedRefBlocksWithLabels(message.text)}
-					targetRef={rowRef}
-				/>
-				<Button
-					type="button"
-					variant="ghost"
-					size="icon-sm"
-					className="user-turn-action-btn size-7 rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground"
-					onClick={props.onEnterMultiSelect}
-					title={t("app.multiSelectEnter")}
-				>
+				<CopyMenu text={stripMarkdown(replaceExpandedRefBlocksWithLabels(cleanText))} markdown={replaceExpandedRefBlocksWithLabels(message.text)} targetRef={rowRef} />
+				<Button type="button" variant="ghost" size="icon-sm" className="user-turn-action-btn size-7 rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground" onClick={props.onEnterMultiSelect} title={t("app.multiSelectEnter")}>
 					<Share size={14} />
 				</Button>
 				{/* fork 忙碌时也不隐藏、仅禁用：入口稳定可见，避免用户误以为「时有时无」 */}
@@ -1255,37 +1042,16 @@ export const UserBubble = memo(function UserBubble(props: {
 								<SquarePen size={14} />
 							</Button>
 						)}
-						<Button
-							type="button"
-							variant="ghost"
-							size="icon-sm"
-							className="user-turn-action-btn size-7 rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground"
-							onClick={handleEditAndResend}
-							title={t("app.editAndResendTitle")}
-						>
+						<Button type="button" variant="ghost" size="icon-sm" className="user-turn-action-btn size-7 rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground" onClick={handleEditAndResend} title={t("app.editAndResendTitle")}>
 							<UserPen size={14} />
 						</Button>
 						{props.onDeleteMessage && (
-							<Button
-								type="button"
-								variant="ghost"
-								size="icon-sm"
-								className="user-turn-action-btn size-7 rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground"
-								onClick={() => props.onDeleteMessage?.(message.id, messageEntryId(message))}
-								title={t("common.delete")}
-							>
+							<Button type="button" variant="ghost" size="icon-sm" className="user-turn-action-btn size-7 rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground" onClick={() => props.onDeleteMessage?.(message.id, messageEntryId(message))} title={t("common.delete")}>
 								<Trash size={14} />
 							</Button>
 						)}
-						{((props.isLastUserMessage || props.showResendButton) && props.onResendUserMessage) && (
-							<Button
-								type="button"
-								variant="ghost"
-								size="icon-sm"
-								className="user-turn-action-btn size-7 rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground"
-								onClick={() => props.onResendUserMessage?.(message)}
-								title={t("app.resendTitle")}
-							>
+						{(props.isLastUserMessage || props.showResendButton) && props.onResendUserMessage && (
+							<Button type="button" variant="ghost" size="icon-sm" className="user-turn-action-btn size-7 rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground" onClick={() => props.onResendUserMessage?.(message)} title={t("app.resendTitle")}>
 								<Send size={14} />
 							</Button>
 						)}
@@ -1296,26 +1062,15 @@ export const UserBubble = memo(function UserBubble(props: {
 	);
 });
 
-export function ImagePreviewModal(props: {
-	image: ImageContent;
-	onClose: () => void;
-}) {
+export function ImagePreviewModal(props: { image: ImageContent; onClose: () => void }) {
 	const src = imageContentSrc(props.image);
 	if (!src) return null;
 	return (
 		<div className="image-preview-modal" onClick={props.onClose}>
-			<button
-				className="image-preview-close"
-				onClick={props.onClose}
-				aria-label={t("app.imagePreviewClose")}
-			>
+			<button className="image-preview-close" onClick={props.onClose} aria-label={t("app.imagePreviewClose")}>
 				<X size={20} strokeWidth={2.4} />
 			</button>
-			<img
-				src={src}
-				alt={t("app.imagePreviewAlt")}
-				onClick={(event) => event.stopPropagation()}
-			/>
+			<img src={src} alt={t("app.imagePreviewAlt")} onClick={(event) => event.stopPropagation()} />
 		</div>
 	);
 }
@@ -1369,15 +1124,7 @@ function renderBubbleSegments(
 		// 否则每个 chip 独占一行（用户实测截图：「不像行内 chip」）。
 		if (index > 0) nodes.push(" ");
 		if (segment.kind === "text") {
-			nodes.push(
-				...renderChipText(
-					segment.value,
-					props.onOpenFile,
-					props.validCommandNames,
-					props.validFilePaths,
-					`text-${index}-`,
-				),
-			);
+			nodes.push(...renderChipText(segment.value, props.onOpenFile, props.validCommandNames, props.validFilePaths, `text-${index}-`));
 			return;
 		}
 		const { block } = segment;
@@ -1388,12 +1135,7 @@ function renderBubbleSegments(
 		const title = block.kind === "skill" ? `/${label}` : block.text;
 		const Icon = CHIP_ICONS[chipKind] ?? FileText;
 		nodes.push(
-			<span
-				key={`${chipKind}-${block.start}`}
-				className={`input-chip input-chip--${chipKind}`}
-				data-type={chipKind}
-				title={title}
-			>
+			<span key={`${chipKind}-${block.start}`} className={`input-chip input-chip--${chipKind}`} data-type={chipKind} title={title}>
 				{/* inline-block 是必须的：Tailwind preflight 把 svg 设为 display:block，
 				    仅靠 legacy 作用域在气泡外的渲染点会再次被拆行 */}
 				<Icon className="input-chip__icon inline-block shrink-0" width="12" height="12" aria-hidden="true" />
@@ -1406,13 +1148,7 @@ function renderBubbleSegments(
 
 /** 将原始 @path / /command 渲染为行内 chip（聊天区展示用，与输入框视觉一致）。
  * 自包含 XML 块由 renderUserBubbleChipText 先折叠；file chip 保留点击打开能力。 */
-function renderChipText(
-	text: string,
-	onOpenFile?: (path: string) => void,
-	validCommandNames?: Set<string>,
-	validFilePaths?: Set<string>,
-	keyPrefix = "",
-): ReactNode[] {
+function renderChipText(text: string, onOpenFile?: (path: string) => void, validCommandNames?: Set<string>, validFilePaths?: Set<string>, keyPrefix = ""): ReactNode[] {
 	const chips = parseRichInputChips(text, validCommandNames, validFilePaths);
 	if (chips.length === 0) return [text];
 	const nodes: ReactNode[] = [];
@@ -1424,22 +1160,13 @@ function renderChipText(
 		const clickable = onOpenFile && chip.kind === "file";
 		// 目录引用换成文件夹图标（对齐 Proma 的目录 chip）；title 给完整路径便于悬浮确认。
 		const isDirectory = chip.kind === "file" && isDirectoryFileChip(chip.raw);
-		const Icon = isDirectory ? Folder : CHIP_ICONS[chip.kind] ?? FileText;
+		const Icon = isDirectory ? Folder : (CHIP_ICONS[chip.kind] ?? FileText);
 		const title = chip.kind === "file" ? unwrapFileChipPath(chip.raw) : chip.raw;
 		nodes.push(
-			<span
-				key={`${keyPrefix}chip-${chip.start}`}
-				className={`input-chip input-chip--${chip.kind}${clickable ? " clickable" : ""}`}
-				data-type={chip.kind}
-				data-raw={chip.raw}
-				title={title}
-				onClick={clickable ? () => onOpenFile(unwrapFileChipPath(chip.raw)) : undefined}
-			>
+			<span key={`${keyPrefix}chip-${chip.start}`} className={`input-chip input-chip--${chip.kind}${clickable ? " clickable" : ""}`} data-type={chip.kind} data-raw={chip.raw} title={title} onClick={clickable ? () => onOpenFile(unwrapFileChipPath(chip.raw)) : undefined}>
 				<Icon className="input-chip__icon inline-block shrink-0" width="12" height="12" aria-hidden="true" />
 				{/* 展示文本与输入框一致（formatChipDisplayLabel），构成区分信号之一 */}
-				<span className="input-chip__label">
-					{formatChipDisplayLabel(chip.kind, chip.label)}
-				</span>
+				<span className="input-chip__label">{formatChipDisplayLabel(chip.kind, chip.label)}</span>
 			</span>,
 		);
 		cursor = chip.end;
@@ -1451,11 +1178,7 @@ function renderChipText(
 }
 
 export { ToolCard, ToolGroupCard };
-export {
-	DiagnosticMessageCard,
-	RespondingIndicator,
-	ThinkingBlock,
-};
+export { DiagnosticMessageCard, RespondingIndicator, ThinkingBlock };
 export { MultiSelectModal };
 
 /**
@@ -1475,15 +1198,8 @@ type ConversationOutlineProps = {
 	onJump: (id: string) => void;
 };
 
-function areConversationOutlinePropsEqual(
-	previous: ConversationOutlineProps,
-	next: ConversationOutlineProps,
-): boolean {
-	return previous.className === next.className &&
-		previous.timelineRef === next.timelineRef &&
-		previous.onTimelineWheel === next.onTimelineWheel &&
-		previous.onJump === next.onJump &&
-		areOutlineRailItemsEqual(previous.items, next.items);
+function areConversationOutlinePropsEqual(previous: ConversationOutlineProps, next: ConversationOutlineProps): boolean {
+	return previous.className === next.className && previous.timelineRef === next.timelineRef && previous.onTimelineWheel === next.onTimelineWheel && previous.onJump === next.onJump && areOutlineRailItemsEqual(previous.items, next.items);
 }
 
 function ConversationOutlineView(props: ConversationOutlineProps) {
@@ -1502,10 +1218,7 @@ function ConversationOutlineView(props: ConversationOutlineProps) {
 		observer.observe(element);
 		return () => observer.disconnect();
 	}, []);
-	const plan = useMemo(
-		() => planRailTicks(props.items, availableHeight),
-		[props.items, availableHeight],
-	);
+	const plan = useMemo(() => planRailTicks(props.items, availableHeight), [props.items, availableHeight]);
 	const railItems = useMemo<PreviewRailItem[]>(
 		() =>
 			plan.items.map((item) => ({
@@ -1517,10 +1230,7 @@ function ConversationOutlineView(props: ConversationOutlineProps) {
 		[plan.items],
 	);
 	const outlineItemIndex = useMemo(() => createOutlineItemIndex(props.items), [props.items]);
-	const visibleRailActiveId = useMemo(
-		() => resolveVisibleRailActiveId(railActiveId, outlineItemIndex, plan.items),
-		[railActiveId, outlineItemIndex, plan.items],
-	);
+	const visibleRailActiveId = useMemo(() => resolveVisibleRailActiveId(railActiveId, outlineItemIndex, plan.items), [railActiveId, outlineItemIndex, plan.items]);
 
 	const handleTimelineWheel = useCallback(
 		(event: ReactWheelEvent<HTMLDivElement>) => {
@@ -1532,11 +1242,7 @@ function ConversationOutlineView(props: ConversationOutlineProps) {
 	);
 
 	return (
-		<div
-			ref={containerRef}
-			onWheel={handleTimelineWheel}
-			className={cn("outline-hover pointer-events-none", props.className)}
-		>
+		<div ref={containerRef} onWheel={handleTimelineWheel} className={cn("outline-hover pointer-events-none", props.className)}>
 			{railItems.length > 0 && (
 				<PreviewRail
 					orientation="vertical"
@@ -1561,10 +1267,7 @@ function ConversationOutlineView(props: ConversationOutlineProps) {
 	);
 }
 
-export const ConversationOutline = memo(
-	ConversationOutlineView,
-	areConversationOutlinePropsEqual,
-);
+export const ConversationOutline = memo(ConversationOutlineView, areConversationOutlinePropsEqual);
 
 export { DrawerContent, SessionFileSummary, SessionHistoryModal } from "./WorkspaceSurface";
 

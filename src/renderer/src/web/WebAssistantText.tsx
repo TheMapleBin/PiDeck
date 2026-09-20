@@ -26,10 +26,7 @@ function extractText(node: ReactNode): string {
 }
 
 export const WebAssistantText = memo(
-	function WebAssistantText(props: {
-		text: string;
-		isStreaming?: boolean;
-	}) {
+	function WebAssistantText(props: { text: string; isStreaming?: boolean }) {
 		// 清理 ANSI 转义码与 <thinking> 标签，thinking 由调用方折叠渲染
 		const cleanText = stripThinkingTags(stripAnsi(props.text));
 		return (
@@ -46,8 +43,7 @@ export const WebAssistantText = memo(
 		);
 	},
 	// 文本与流式标记一致时跳过重渲染：历史消息在流式期间不重复解析 Markdown
-	(prev, next) =>
-		prev.text === next.text && prev.isStreaming === next.isStreaming,
+	(prev, next) => prev.text === next.text && prev.isStreaming === next.isStreaming,
 );
 
 /** 供调用方复用的文本提取（复制等场景）。 */

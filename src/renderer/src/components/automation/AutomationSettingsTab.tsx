@@ -15,12 +15,8 @@ import { Label } from "../ui-shadcn/label";
 export function AutomationSettingsTab() {
 	const currentSettings = useAtomValue(automationSettingsAtom);
 
-	const [maxConcurrentRuns, setMaxConcurrentRuns] = useState<number>(
-		currentSettings.maxConcurrentRuns ?? 1,
-	);
-	const [historyLimit, setHistoryLimit] = useState<number>(
-		currentSettings.historyLimit ?? 100,
-	);
+	const [maxConcurrentRuns, setMaxConcurrentRuns] = useState<number>(currentSettings.maxConcurrentRuns ?? 1);
+	const [historyLimit, setHistoryLimit] = useState<number>(currentSettings.historyLimit ?? 100);
 	const [isSaving, setIsSaving] = useState(false);
 
 	const handleSave = async (e: React.FormEvent) => {
@@ -33,10 +29,7 @@ export function AutomationSettingsTab() {
 			});
 			showNotice(t("automation.settingsSaved"), 2000);
 		} catch (error) {
-			showNotice(
-				error instanceof Error ? error.message : String(error),
-				3000,
-			);
+			showNotice(error instanceof Error ? error.message : String(error), 3000);
 		} finally {
 			setIsSaving(false);
 		}
@@ -51,37 +44,15 @@ export function AutomationSettingsTab() {
 
 			<div className="flex flex-col gap-3 rounded-lg border border-border/50 bg-bg-panel/30 p-3">
 				<div className="flex flex-col gap-1.5">
-					<Label className="text-xs font-medium">
-						{t("automation.maxConcurrentRuns")}
-					</Label>
-					<Input
-						type="number"
-						min="1"
-						max="10"
-						value={maxConcurrentRuns}
-						onChange={(e) => setMaxConcurrentRuns(Number(e.target.value))}
-						className="h-8 text-xs max-w-[140px]"
-					/>
-					<span className="text-[11px] text-muted-foreground">
-						同时处于启动或运行中的最大自动化会话数（默认 1）。
-					</span>
+					<Label className="text-xs font-medium">{t("automation.maxConcurrentRuns")}</Label>
+					<Input type="number" min="1" max="10" value={maxConcurrentRuns} onChange={(e) => setMaxConcurrentRuns(Number(e.target.value))} className="h-8 text-xs max-w-[140px]" />
+					<span className="text-[11px] text-muted-foreground">同时处于启动或运行中的最大自动化会话数（默认 1）。</span>
 				</div>
 
 				<div className="flex flex-col gap-1.5 border-t border-border/30 pt-3">
-					<Label className="text-xs font-medium">
-						{t("automation.historyLimit")}
-					</Label>
-					<Input
-						type="number"
-						min="10"
-						max="1000"
-						value={historyLimit}
-						onChange={(e) => setHistoryLimit(Number(e.target.value))}
-						className="h-8 text-xs max-w-[140px]"
-					/>
-					<span className="text-[11px] text-muted-foreground">
-						全局持久化保留的最近运行历史记录条数（默认 100）。
-					</span>
+					<Label className="text-xs font-medium">{t("automation.historyLimit")}</Label>
+					<Input type="number" min="10" max="1000" value={historyLimit} onChange={(e) => setHistoryLimit(Number(e.target.value))} className="h-8 text-xs max-w-[140px]" />
+					<span className="text-[11px] text-muted-foreground">全局持久化保留的最近运行历史记录条数（默认 100）。</span>
 				</div>
 			</div>
 

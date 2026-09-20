@@ -1,8 +1,5 @@
 /** Pi models.json thinking-level mapping. null explicitly disables a level. */
-export type ThinkingLevelMap = Partial<Record<
-	"off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max",
-	string | null
->>;
+export type ThinkingLevelMap = Partial<Record<"off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max", string | null>>;
 
 export type ModelSpecSource = "listing" | "pi-ai" | "pi-runtime";
 export type ModelSpecMatchKind = "provider-id" | "model-id" | "id-tail" | "name-alias";

@@ -1,24 +1,12 @@
-import type {
-	SessionCommandError,
-	SessionCommandErrorCode,
-} from "../../shared/types";
+import type { SessionCommandError, SessionCommandErrorCode } from "../../shared/types";
 import type { MainProcessTranslationKey } from "../../shared/i18n/mainProcessCopy";
 
-type SessionCommandCopyKey = Extract<MainProcessTranslationKey,
-	| "sessionCommand.sessionNotFound"
-	| "sessionCommand.messageNotFound"
-	| "sessionCommand.runtimeUnavailable"
-	| "sessionCommand.runtimeChanged"
-	| "sessionCommand.runtimeBusy"
-	| "sessionCommand.commandFailed"
-	| "sessionCommand.modelNotFound"
-	| "sessionCommand.fileTooLarge"
+type SessionCommandCopyKey = Extract<
+	MainProcessTranslationKey,
+	"sessionCommand.sessionNotFound" | "sessionCommand.messageNotFound" | "sessionCommand.runtimeUnavailable" | "sessionCommand.runtimeChanged" | "sessionCommand.runtimeBusy" | "sessionCommand.commandFailed" | "sessionCommand.modelNotFound" | "sessionCommand.fileTooLarge"
 >;
 
-type SessionCommandCopy = (
-	key: SessionCommandCopyKey,
-	params?: Record<string, string | number>,
-) => string;
+type SessionCommandCopy = (key: SessionCommandCopyKey, params?: Record<string, string | number>) => string;
 
 const SESSION_COMMAND_COPY_KEYS: Record<SessionCommandErrorCode, SessionCommandCopyKey> = {
 	SESSION_NOT_FOUND: "sessionCommand.sessionNotFound",

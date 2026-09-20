@@ -39,28 +39,19 @@ export function parseBooster(body: unknown, spec: UsageProbeBooster): ProviderUs
 	const balanceRaw = toNumber(getByPath(body, spec.balancePath));
 	if (balanceRaw === undefined) return undefined;
 	const totalRaw = spec.totalPath ? toNumber(getByPath(body, spec.totalPath)) : undefined;
-	const monthlyUsedRaw = spec.monthlyUsedCentsPath
-		? toNumber(getByPath(body, spec.monthlyUsedCentsPath))
-		: undefined;
-	const monthlyLimitRaw = spec.monthlyChargeLimitCentsPath
-		? toNumber(getByPath(body, spec.monthlyChargeLimitCentsPath))
-		: undefined;
-	const enabledRaw = spec.monthlyChargeLimitEnabledPath
-		? getByPath(body, spec.monthlyChargeLimitEnabledPath)
-		: undefined;
+	const monthlyUsedRaw = spec.monthlyUsedCentsPath ? toNumber(getByPath(body, spec.monthlyUsedCentsPath)) : undefined;
+	const monthlyLimitRaw = spec.monthlyChargeLimitCentsPath ? toNumber(getByPath(body, spec.monthlyChargeLimitCentsPath)) : undefined;
+	const enabledRaw = spec.monthlyChargeLimitEnabledPath ? getByPath(body, spec.monthlyChargeLimitEnabledPath) : undefined;
 	// 显式 false = 服务端声明月限额不封顶（unlimited）；true/缺省则展示限额数值（有的话）。
 	const unlimitedMonthly = enabledRaw === false;
 	const currencyRaw = spec.currencyPath ? getByPath(body, spec.currencyPath) : undefined;
-	const currency =
-		typeof currencyRaw === "string" && currencyRaw.trim() !== "" ? currencyRaw.trim() : undefined;
+	const currency = typeof currencyRaw === "string" && currencyRaw.trim() !== "" ? currencyRaw.trim() : undefined;
 	return {
 		balance: toMajor(balanceRaw),
 		...(totalRaw !== undefined ? { total: toMajor(totalRaw) } : {}),
 		...(currency ? { currency } : {}),
 		...(monthlyUsedRaw !== undefined ? { monthlyUsed: monthlyUsedRaw / 100 } : {}),
-		...(monthlyLimitRaw !== undefined && !unlimitedMonthly
-			? { monthlyChargeLimit: monthlyLimitRaw / 100 }
-			: {}),
+		...(monthlyLimitRaw !== undefined && !unlimitedMonthly ? { monthlyChargeLimit: monthlyLimitRaw / 100 } : {}),
 		...(unlimitedMonthly ? { unlimitedMonthly: true } : {}),
 	};
 }

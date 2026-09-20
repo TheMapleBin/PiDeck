@@ -16,13 +16,7 @@
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type {
-	UsageProbeBoosterConfig,
-	UsageProbeConfig,
-	UsageProbeParseConfig,
-	UsageProbeProviderConfig,
-	UsageProbeWindowConfig,
-} from "../../shared/types/providerUsage";
+import type { UsageProbeBoosterConfig, UsageProbeConfig, UsageProbeParseConfig, UsageProbeProviderConfig, UsageProbeWindowConfig } from "../../shared/types/providerUsage";
 import type { UsageProbeCandidate } from "./providerUsageProbe";
 import { USAGE_PROBE_CATEGORY_BY_TEMPLATE_ID } from "./usageProbeTemplates";
 
@@ -47,8 +41,7 @@ export type UsageProbeSettingsLoadResult = {
 /** 文件名（放在 pi 全局配置目录下）。 */
 export const USER_USAGE_PROBES_FILE = "usage-probes.json";
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-	typeof value === "object" && value !== null && !Array.isArray(value);
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
 const asStringArray = (value: unknown): string[] | undefined => {
 	if (!Array.isArray(value)) return undefined;
@@ -114,23 +107,14 @@ function normalizeBooster(input: unknown): UsageProbeBoosterConfig | undefined {
 	const balancePath = optionalPath(input.balancePath);
 	if (!balancePath) return undefined;
 	const fixedPointRaw = input.fixedPointPerCent;
-	const fixedPointPerCent =
-		typeof fixedPointRaw === "number" && Number.isFinite(fixedPointRaw) && fixedPointRaw > 0
-			? fixedPointRaw
-			: undefined;
+	const fixedPointPerCent = typeof fixedPointRaw === "number" && Number.isFinite(fixedPointRaw) && fixedPointRaw > 0 ? fixedPointRaw : undefined;
 	return {
 		balancePath,
 		...(optionalPath(input.totalPath) ? { totalPath: optionalPath(input.totalPath) } : {}),
 		...(optionalPath(input.currencyPath) ? { currencyPath: optionalPath(input.currencyPath) } : {}),
-		...(optionalPath(input.monthlyUsedCentsPath)
-			? { monthlyUsedCentsPath: optionalPath(input.monthlyUsedCentsPath) }
-			: {}),
-		...(optionalPath(input.monthlyChargeLimitCentsPath)
-			? { monthlyChargeLimitCentsPath: optionalPath(input.monthlyChargeLimitCentsPath) }
-			: {}),
-		...(optionalPath(input.monthlyChargeLimitEnabledPath)
-			? { monthlyChargeLimitEnabledPath: optionalPath(input.monthlyChargeLimitEnabledPath) }
-			: {}),
+		...(optionalPath(input.monthlyUsedCentsPath) ? { monthlyUsedCentsPath: optionalPath(input.monthlyUsedCentsPath) } : {}),
+		...(optionalPath(input.monthlyChargeLimitCentsPath) ? { monthlyChargeLimitCentsPath: optionalPath(input.monthlyChargeLimitCentsPath) } : {}),
+		...(optionalPath(input.monthlyChargeLimitEnabledPath) ? { monthlyChargeLimitEnabledPath: optionalPath(input.monthlyChargeLimitEnabledPath) } : {}),
 		...(fixedPointPerCent !== undefined ? { fixedPointPerCent } : {}),
 	};
 }
@@ -156,8 +140,7 @@ function normalizeParse(input: unknown): UsageProbeParseConfig | undefined {
 		const remainingPath = optionalPath(input.remainingPath);
 		// scale（原始积分 → 主单位，如 New API quota / 500000）：正有限数才收，其余视作未填。
 		const scaleRaw = input.scale;
-		const scale =
-			typeof scaleRaw === "number" && Number.isFinite(scaleRaw) && scaleRaw > 0 ? scaleRaw : undefined;
+		const scale = typeof scaleRaw === "number" && Number.isFinite(scaleRaw) && scaleRaw > 0 ? scaleRaw : undefined;
 		const windows: UsageProbeWindowConfig[] = [];
 		if (Array.isArray(input.windows)) {
 			for (const item of input.windows) {
@@ -182,10 +165,7 @@ function normalizeParse(input: unknown): UsageProbeParseConfig | undefined {
 }
 
 /** 校验并转换单条旧探针。返回 null 表示非法（调用方记录错误）。 */
-function normalizeProbe(
-	probe: unknown,
-	index: number,
-): { candidate: UsageProbeCandidate; probe: UserUsageProbe } | { error: string } {
+function normalizeProbe(probe: unknown, index: number): { candidate: UsageProbeCandidate; probe: UserUsageProbe } | { error: string } {
 	if (!isRecord(probe)) return { error: `第 ${index + 1} 条探针不是对象` };
 
 	// kind:"custom" 是专用解析器（xAI/Codex 等代码内置），不接受用户配置——
@@ -267,11 +247,7 @@ export function normalizeUserUsageProbes(input: unknown): {
 	candidates: UsageProbeCandidate[];
 	errors: string[];
 } {
-	const list = Array.isArray(input)
-		? input
-		: isRecord(input) && Array.isArray(input.probes)
-			? input.probes
-			: null;
+	const list = Array.isArray(input) ? input : isRecord(input) && Array.isArray(input.probes) ? input.probes : null;
 	if (!list) {
 		return { probes: [], candidates: [], errors: ["缺少 probes 数组"] };
 	}
@@ -333,9 +309,7 @@ async function readUserUsageProbesNormalized(configDir: string): Promise<{
 		return {
 			probes: [],
 			candidates: [],
-			errors: [
-				`${USER_USAGE_PROBES_FILE} 不是合法 JSON：${error instanceof Error ? error.message : String(error)}`,
-			],
+			errors: [`${USER_USAGE_PROBES_FILE} 不是合法 JSON：${error instanceof Error ? error.message : String(error)}`],
 		};
 	}
 
@@ -424,12 +398,7 @@ export function normalizeProviderConfig(input: unknown): { config: UsageProbePro
 	}
 
 	if (input.intervalMinutes !== undefined) {
-		if (
-			typeof input.intervalMinutes !== "number" ||
-			!Number.isInteger(input.intervalMinutes) ||
-			input.intervalMinutes < 0 ||
-			input.intervalMinutes > 1440
-		) {
+		if (typeof input.intervalMinutes !== "number" || !Number.isInteger(input.intervalMinutes) || input.intervalMinutes < 0 || input.intervalMinutes > 1440) {
 			return { error: "intervalMinutes 必须是 0-1440 的整数（0 = 不自动查询）" };
 		}
 		config.intervalMinutes = input.intervalMinutes;
@@ -457,9 +426,7 @@ async function readUsageProbeProviders(configDir: string): Promise<{
 	} catch (error) {
 		return {
 			providers: {},
-			errors: [
-				`${USER_USAGE_PROBES_FILE} 不是合法 JSON：${error instanceof Error ? error.message : String(error)}`,
-			],
+			errors: [`${USER_USAGE_PROBES_FILE} 不是合法 JSON：${error instanceof Error ? error.message : String(error)}`],
 		};
 	}
 
@@ -485,10 +452,7 @@ async function readUsageProbeProviders(configDir: string): Promise<{
  * 读取单个 provider 的用量查询配置（弹窗打开时拉取）。
  * 合并两类错误：provider 条目校验错误 + 旧 probes 数组校验错误（后者仅提示用）。
  */
-export async function loadUsageProbeSettings(
-	configDir: string,
-	provider: string,
-): Promise<UsageProbeSettingsLoadResult> {
+export async function loadUsageProbeSettings(configDir: string, provider: string): Promise<UsageProbeSettingsLoadResult> {
 	const providers = await readUsageProbeProviders(configDir);
 	const legacy = await readUserUsageProbesNormalized(configDir);
 	return {
@@ -513,11 +477,7 @@ export async function loadUsageProbeProviderConfigs(configDir: string): Promise<
  * 写入前重新校验（渲染层数据不可信），零错误才落盘。
  * 保存 enabled=false 的条目同样落盘——「用户显式关闭」必须持久化。
  */
-export async function saveUsageProbeForProvider(
-	configDir: string,
-	provider: string,
-	config: UsageProbeProviderConfig,
-): Promise<{ ok: boolean; error?: string }> {
+export async function saveUsageProbeForProvider(configDir: string, provider: string, config: UsageProbeProviderConfig): Promise<{ ok: boolean; error?: string }> {
 	if (!provider || provider.length > 128) {
 		return { ok: false, error: "Invalid provider name" };
 	}
@@ -540,11 +500,7 @@ export async function saveUsageProbeForProvider(
 
 	try {
 		await mkdir(configDir, { recursive: true });
-		await writeFile(
-			join(configDir, USER_USAGE_PROBES_FILE),
-			JSON.stringify(nextFile, null, 2),
-			"utf8",
-		);
+		await writeFile(join(configDir, USER_USAGE_PROBES_FILE), JSON.stringify(nextFile, null, 2), "utf8");
 		return { ok: true };
 	} catch (error) {
 		return { ok: false, error: error instanceof Error ? error.message : String(error) };

@@ -1,14 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-	FILE_PATH_RE,
-	extractFileLinkLocation,
-	isAbsoluteFilePath,
-	isFilePathInsideRoot,
-	matchPlainFilePaths,
-	normalizeFileLinkPath,
-	resolveFileLinkPath,
-} from "../src/renderer/src/utils/filePathLinks.ts";
+import { FILE_PATH_RE, extractFileLinkLocation, isAbsoluteFilePath, isFilePathInsideRoot, matchPlainFilePaths, normalizeFileLinkPath, resolveFileLinkPath } from "../src/renderer/src/utils/filePathLinks.ts";
 
 // matchPlainFilePaths：markdown 文本 → 纯文本文件路径候选（带区间）。
 // 这是「模型给的路径可能不存在」场景的第一道闸：只负责识别候选，
@@ -70,29 +62,14 @@ test("extractFileLinkLocation splits path and line/column markers", () => {
 		line: 9,
 	});
 	// normalizeFileLinkPath 与 extract 的 path 永远一致
-	assert.equal(
-		normalizeFileLinkPath("/C:/Users/Test/a.ts:42"),
-		extractFileLinkLocation("/C:/Users/Test/a.ts:42").path,
-	);
+	assert.equal(normalizeFileLinkPath("/C:/Users/Test/a.ts:42"), extractFileLinkLocation("/C:/Users/Test/a.ts:42").path);
 });
 
 test("normalizes Markdown Windows file URLs and strips line locations", () => {
-	assert.equal(
-		normalizeFileLinkPath("/C:/Users/Test/project/src/App.tsx:392"),
-		"C:/Users/Test/project/src/App.tsx",
-	);
-	assert.equal(
-		normalizeFileLinkPath("/home/user/project/src/app.py:12:4"),
-		"/home/user/project/src/app.py",
-	);
-	assert.equal(
-		normalizeFileLinkPath("C%3A%2FUsers%2FTest%2FMy%20File.ts%3A9"),
-		"C:/Users/Test/My File.ts",
-	);
-	assert.equal(
-		resolveFileLinkPath("/C:/Users/Test/project/src/App.tsx:392"),
-		"C:\\Users\\Test\\project\\src\\App.tsx",
-	);
+	assert.equal(normalizeFileLinkPath("/C:/Users/Test/project/src/App.tsx:392"), "C:/Users/Test/project/src/App.tsx");
+	assert.equal(normalizeFileLinkPath("/home/user/project/src/app.py:12:4"), "/home/user/project/src/app.py");
+	assert.equal(normalizeFileLinkPath("C%3A%2FUsers%2FTest%2FMy%20File.ts%3A9"), "C:/Users/Test/My File.ts");
+	assert.equal(resolveFileLinkPath("/C:/Users/Test/project/src/App.tsx:392"), "C:\\Users\\Test\\project\\src\\App.tsx");
 });
 
 test("resolveFileLinkPath joins relatives against base with matching separator and passes absolutes through", () => {
@@ -108,69 +85,33 @@ test("resolveFileLinkPath joins relatives against base with matching separator a
 });
 
 test("two session panes resolve the same relative tool path against their own cwd", () => {
-	assert.equal(
-		resolveFileLinkPath("src/index.ts", "D:\\work\\left", "D:\\work\\left"),
-		"D:\\work\\left\\src\\index.ts",
-	);
-	assert.equal(
-		resolveFileLinkPath("src/index.ts", "D:\\work\\right", "D:\\work\\right"),
-		"D:\\work\\right\\src\\index.ts",
-	);
+	assert.equal(resolveFileLinkPath("src/index.ts", "D:\\work\\left", "D:\\work\\left"), "D:\\work\\left\\src\\index.ts");
+	assert.equal(resolveFileLinkPath("src/index.ts", "D:\\work\\right", "D:\\work\\right"), "D:\\work\\right\\src\\index.ts");
 });
 
 test("project-scoped resolution normalizes dot segments and rejects traversal or foreign absolutes", () => {
-	assert.equal(
-		resolveFileLinkPath("src/./feature/../index.ts", "D:\\work\\app", "D:\\work\\app"),
-		"D:\\work\\app\\src\\index.ts",
-	);
-	assert.equal(
-		resolveFileLinkPath("../secret.txt", "D:\\work\\app", "D:\\work\\app"),
-		null,
-	);
-	assert.equal(
-		resolveFileLinkPath("D:\\work\\other\\secret.txt", "D:\\work\\app", "D:\\work\\app"),
-		null,
-	);
+	assert.equal(resolveFileLinkPath("src/./feature/../index.ts", "D:\\work\\app", "D:\\work\\app"), "D:\\work\\app\\src\\index.ts");
+	assert.equal(resolveFileLinkPath("../secret.txt", "D:\\work\\app", "D:\\work\\app"), null);
+	assert.equal(resolveFileLinkPath("D:\\work\\other\\secret.txt", "D:\\work\\app", "D:\\work\\app"), null);
 	// 前缀相同不等于位于根内；Windows 比较按平台语义忽略大小写。
 	assert.equal(isFilePathInsideRoot("D:\\work\\application\\a.ts", "D:\\work\\app"), false);
 	assert.equal(isFilePathInsideRoot("d:\\WORK\\APP\\src\\a.ts", "D:\\work\\app"), true);
-	assert.equal(
-		resolveFileLinkPath("\\\\server\\share\\src\\a.ts", undefined, "\\\\server\\share"),
-		"\\\\server\\share\\src\\a.ts",
-	);
+	assert.equal(resolveFileLinkPath("\\\\server\\share\\src\\a.ts", undefined, "\\\\server\\share"), "\\\\server\\share\\src\\a.ts");
 	// POSIX 项目仍区分大小写。
 	assert.equal(isFilePathInsideRoot("/work/App/a.ts", "/work/app"), false);
 });
 
 test("WSL runtime paths align with the ProjectStore UNC root before containment checks", () => {
 	const root = "\\\\wsl.localhost\\Ubuntu-24.04\\root\\Repo";
-	assert.equal(
-		resolveFileLinkPath("src/index.ts", "/root/Repo", root),
-		"\\\\wsl.localhost\\Ubuntu-24.04\\root\\Repo\\src\\index.ts",
-	);
-	assert.equal(
-		resolveFileLinkPath("/root/Repo/src/index.ts", undefined, root),
-		"\\\\wsl.localhost\\Ubuntu-24.04\\root\\Repo\\src\\index.ts",
-	);
-	assert.equal(
-		resolveFileLinkPath("//wsl$/ubuntu-24.04/root/Repo/src/index.ts", undefined, root),
-		"\\\\wsl.localhost\\Ubuntu-24.04\\root\\Repo\\src\\index.ts",
-	);
+	assert.equal(resolveFileLinkPath("src/index.ts", "/root/Repo", root), "\\\\wsl.localhost\\Ubuntu-24.04\\root\\Repo\\src\\index.ts");
+	assert.equal(resolveFileLinkPath("/root/Repo/src/index.ts", undefined, root), "\\\\wsl.localhost\\Ubuntu-24.04\\root\\Repo\\src\\index.ts");
+	assert.equal(resolveFileLinkPath("//wsl$/ubuntu-24.04/root/Repo/src/index.ts", undefined, root), "\\\\wsl.localhost\\Ubuntu-24.04\\root\\Repo\\src\\index.ts");
 	assert.equal(resolveFileLinkPath("/root/other/secret.txt", undefined, root), null);
-	assert.equal(
-		resolveFileLinkPath("//wsl.localhost/Debian/root/Repo/src/index.ts", undefined, root),
-		null,
-	);
+	assert.equal(resolveFileLinkPath("//wsl.localhost/Debian/root/Repo/src/index.ts", undefined, root), null);
 });
 
 test("WSL containment ignores host and distro case but preserves Linux path case", () => {
 	const root = "\\\\wsl.localhost\\Ubuntu-24.04\\root\\Repo";
-	assert.equal(
-		isFilePathInsideRoot("//WSL$/ubuntu-24.04/root/Repo/src/a.ts", root),
-		true,
-	);
-	assert.equal(
-		isFilePathInsideRoot("//wsl$/ubuntu-24.04/root/repo/src/a.ts", root),
-		false,
-	);
+	assert.equal(isFilePathInsideRoot("//WSL$/ubuntu-24.04/root/Repo/src/a.ts", root), true);
+	assert.equal(isFilePathInsideRoot("//wsl$/ubuntu-24.04/root/repo/src/a.ts", root), false);
 });

@@ -13,34 +13,11 @@
  * 不依赖 electron，可被 node --test 直接加载。
  */
 
-import {
-	copyFileSync,
-	existsSync,
-	mkdirSync,
-	readFileSync,
-	renameSync,
-	rmSync,
-	writeFileSync,
-} from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import {
-	PI_AI_CATALOG_FILE_NAME,
-	PI_AI_CATALOG_MANIFEST_FILE_NAME,
-	invalidatePiAiCatalogIndex,
-	parsePiAiCatalogArtifact,
-	resolveBuiltinPiAiCatalogArtifactPaths,
-} from "./piAiBuiltinCatalog";
-import {
-	compareSemver,
-	generatePiAiCatalogFromFiles,
-	type CatalogSourceFile,
-} from "./piAiCatalogGenerate";
-import type {
-	CatalogArtifactSourceStatus,
-	CatalogCheckResult,
-	CatalogUpdateResult,
-	CatalogUpdateStatus,
-} from "../../shared/types/catalog";
+import { PI_AI_CATALOG_FILE_NAME, PI_AI_CATALOG_MANIFEST_FILE_NAME, invalidatePiAiCatalogIndex, parsePiAiCatalogArtifact, resolveBuiltinPiAiCatalogArtifactPaths } from "./piAiBuiltinCatalog";
+import { compareSemver, generatePiAiCatalogFromFiles, type CatalogSourceFile } from "./piAiCatalogGenerate";
+import type { CatalogArtifactSourceStatus, CatalogCheckResult, CatalogUpdateResult, CatalogUpdateStatus } from "../../shared/types/catalog";
 import type { UpdateSourceId } from "../../shared/types/settings";
 import { normalizeCustomMirrorHost, UPDATE_SOURCE_MIRRORS } from "../../shared/updateSources";
 
@@ -52,16 +29,11 @@ export const CATALOG_UPDATE_ALLOWED_BRANCHES = ["main", "dev"] as const;
 /** 上游 npm 包名（与生成器/内置校验一致，来源即 @earendil-works/pi-ai）。 */
 export const CATALOG_SOURCE_PACKAGE = "@earendil-works/pi-ai";
 /** npm 版本解析源（中国镜像优先，官方兜底）：只取 latest 版本号。 */
-export const CATALOG_NPM_LATEST_URLS = [
-	"https://registry.npmmirror.com/@earendil-works/pi-ai/latest",
-	"https://registry.npmjs.org/@earendil-works/pi-ai/latest",
-] as const;
+export const CATALOG_NPM_LATEST_URLS = ["https://registry.npmmirror.com/@earendil-works/pi-ai/latest", "https://registry.npmjs.org/@earendil-works/pi-ai/latest"] as const;
 /** jsDelivr 文件列表 API（枚举 dist/providers/data/*.json），取 flat 列表。 */
-export const CATALOG_JSDELIVR_FLAT_PREFIX =
-	"https://data.jsdelivr.com/v1/package/npm/@earendil-works/pi-ai@";
+export const CATALOG_JSDELIVR_FLAT_PREFIX = "https://data.jsdelivr.com/v1/package/npm/@earendil-works/pi-ai@";
 /** jsDelivr 单文件 CDN 前缀（按版本取 dist/providers/data/<file>）。 */
-export const CATALOG_JSDELIVR_FILE_PREFIX =
-	"https://cdn.jsdelivr.net/npm/@earendil-works/pi-ai@";
+export const CATALOG_JSDELIVR_FILE_PREFIX = "https://cdn.jsdelivr.net/npm/@earendil-works/pi-ai@";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return value != null && typeof value === "object" && !Array.isArray(value);
@@ -74,10 +46,7 @@ function nonEmptyString(value: unknown): string | undefined {
 /**
  * 下载源（按顺序尝试）：若配置了 AtomGit 则优先从 AtomGit raw 下载，随后回退 GitHub raw。
  */
-function sourceBaseUrls(
-	branch: string,
-	mirrorHost?: string | null,
-): { catalog: string; manifest: string }[] {
+function sourceBaseUrls(branch: string, mirrorHost?: string | null): { catalog: string; manifest: string }[] {
 	const rawCatalog = `https://raw.githubusercontent.com/ayuayue/PiDeck/${branch}/resources/${PI_AI_CATALOG_FILE_NAME}`;
 	const rawManifest = `https://raw.githubusercontent.com/ayuayue/PiDeck/${branch}/resources/${PI_AI_CATALOG_MANIFEST_FILE_NAME}`;
 	const sources: { catalog: string; manifest: string }[] = [];
@@ -113,10 +82,7 @@ function manifestPackageVersion(manifestRaw: string): string | null {
 }
 
 /** 目录来源摘要：校验通过才有值，否则 null（未生效）。直接传 catalog/manifest 文件路径。 */
-function sourceStatusFromFiles(
-	catalogPath: string,
-	manifestPath: string,
-): CatalogArtifactSourceStatus | null {
+function sourceStatusFromFiles(catalogPath: string, manifestPath: string): CatalogArtifactSourceStatus | null {
 	try {
 		if (!existsSync(catalogPath) || !existsSync(manifestPath)) return null;
 		const catalogRaw = readFileSync(catalogPath, "utf8");
@@ -212,9 +178,7 @@ export class PiAiCatalogUpdater {
 	getStatus(): CatalogUpdateStatus {
 		const builtinPaths = resolveBuiltinPiAiCatalogArtifactPaths();
 		return {
-			builtin: builtinPaths
-				? sourceStatusFromFiles(builtinPaths.catalogPath, builtinPaths.manifestPath)
-				: null,
+			builtin: builtinPaths ? sourceStatusFromFiles(builtinPaths.catalogPath, builtinPaths.manifestPath) : null,
 			overlay: sourceStatusFromDir(this.userDataDir),
 			hasOverlayFiles: existsSync(this.catalogPath()) || existsSync(this.manifestPath()),
 			hasBackup: existsSync(`${this.catalogPath()}.bak`),
@@ -287,11 +251,7 @@ export class PiAiCatalogUpdater {
 			// 下载内容与 manifest 不匹配（或被篡改）：拒绝写入，防止坏数据上盘
 			return { ok: false, code: "validation", message: "downloaded artifact failed manifest validation" };
 		}
-		return this.writeWithVersionGuard(
-			pair.catalogRaw,
-			pair.manifestRaw,
-			manifestPackageVersion(pair.manifestRaw),
-		);
+		return this.writeWithVersionGuard(pair.catalogRaw, pair.manifestRaw, manifestPackageVersion(pair.manifestRaw));
 	}
 
 	/**
@@ -299,11 +259,7 @@ export class PiAiCatalogUpdater {
 	 * 返回 { ok: true, updated: false }（已是最新，不覆盖）。
 	 * 写入失败返回 write 码，成功返回 { ok: true, updated: true }。
 	 */
-	private writeWithVersionGuard(
-		catalogRaw: string,
-		manifestRaw: string,
-		newVersion: string | null,
-	): CatalogUpdateResult {
+	private writeWithVersionGuard(catalogRaw: string, manifestRaw: string, newVersion: string | null): CatalogUpdateResult {
 		const current = this.getEffectiveVersion();
 		if (current && newVersion && compareSemver(newVersion, current) <= 0) {
 			return { ok: true, updated: false };
@@ -353,21 +309,11 @@ export class PiAiCatalogUpdater {
 		const flatText = await this.downloadText(flatUrl, this.maxCatalogBytes);
 		const flat: unknown = JSON.parse(flatText);
 		const files = isRecord(flat) && Array.isArray(flat.files) ? flat.files : [];
-		const names = files
-			.map((entry) => (isRecord(entry) && typeof entry.name === "string" ? entry.name.replace(/^\//, "") : ""))
-			.filter(
-				(name) =>
-					name.startsWith("dist/providers/data/") &&
-					name.endsWith(".json") &&
-					!name.endsWith(".manifest.json"),
-			);
+		const names = files.map((entry) => (isRecord(entry) && typeof entry.name === "string" ? entry.name.replace(/^\//, "") : "")).filter((name) => name.startsWith("dist/providers/data/") && name.endsWith(".json") && !name.endsWith(".manifest.json"));
 		if (names.length === 0) return [];
 		return Promise.all(
 			names.map(async (name) => {
-				const content = await this.downloadText(
-					`${CATALOG_JSDELIVR_FILE_PREFIX}${version}/${name}`,
-					this.maxCatalogBytes,
-				);
+				const content = await this.downloadText(`${CATALOG_JSDELIVR_FILE_PREFIX}${version}/${name}`, this.maxCatalogBytes);
 				return { name: name.slice("dist/providers/data/".length), content };
 			}),
 		);
@@ -462,10 +408,7 @@ export class PiAiCatalogUpdater {
 	 * 源内任一文件失败（网络/超时/HTTP 错误/超大小）即换下一个源。
 	 * 全部失败抛错，由调用方归为 network。
 	 */
-	private async downloadFromAnySource(
-		branch: string,
-		mirrorHost?: string | null,
-	): Promise<{ catalogRaw: string; manifestRaw: string }> {
+	private async downloadFromAnySource(branch: string, mirrorHost?: string | null): Promise<{ catalogRaw: string; manifestRaw: string }> {
 		let lastError: unknown;
 		for (const source of sourceBaseUrls(branch, mirrorHost)) {
 			try {
@@ -480,10 +423,7 @@ export class PiAiCatalogUpdater {
 	}
 
 	/** 只下载 manifest（checkRemote 用），源列表同 update，全部失败抛错。 */
-	private async downloadManifestFromAnySource(
-		branch: string,
-		mirrorHost?: string | null,
-	): Promise<string> {
+	private async downloadManifestFromAnySource(branch: string, mirrorHost?: string | null): Promise<string> {
 		let lastError: unknown;
 		for (const source of sourceBaseUrls(branch, mirrorHost)) {
 			try {

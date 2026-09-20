@@ -208,8 +208,7 @@ while ((match = callRe.exec(source)) !== null) {
 	const dynamic = match[3] ?? null;
 	const afterComma = match.index + match[0].length;
 	const literalStart = source.indexOf("{", afterComma);
-	const literal =
-		literalStart >= 0 && literalStart - afterComma < 30 ? extractObjectLiteral(source, literalStart) : undefined;
+	const literal = literalStart >= 0 && literalStart - afterComma < 30 ? extractObjectLiteral(source, literalStart) : undefined;
 	callSites.push({ endpoint, dynamic, literal, line: source.slice(0, match.index).split("\n").length });
 }
 

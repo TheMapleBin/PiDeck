@@ -17,19 +17,23 @@ function compileExtension({ enabled = true, completeSimple }) {
 		fileName: extensionPath,
 	}).outputText;
 	const module = { exports: {} };
-	vm.runInNewContext(output, {
-		module,
-		exports: module.exports,
-		require: (specifier) => {
-			if (specifier === "@earendil-works/pi-ai/compat") return { completeSimple };
-			return {};
+	vm.runInNewContext(
+		output,
+		{
+			module,
+			exports: module.exports,
+			require: (specifier) => {
+				if (specifier === "@earendil-works/pi-ai/compat") return { completeSimple };
+				return {};
+			},
+			process: { env: { PIDECK_AUTO_SESSION_TITLE: enabled ? "1" : "0" } },
+			console,
+			AbortController,
+			setTimeout,
+			clearTimeout,
 		},
-		process: { env: { PIDECK_AUTO_SESSION_TITLE: enabled ? "1" : "0" } },
-		console,
-		AbortController,
-		setTimeout,
-		clearTimeout,
-	}, { filename: extensionPath });
+		{ filename: extensionPath },
+	);
 	return module.exports;
 }
 
@@ -60,20 +64,11 @@ function messageEntry(message, index) {
 	};
 }
 
-function createHarness({
-	enabled = true,
-	entries = [],
-	titleName,
-	authBaseUrl,
-	hasModel = true,
-	authResolver,
-} = {}) {
+function createHarness({ enabled = true, entries = [], titleName, authBaseUrl, hasModel = true, authResolver } = {}) {
 	let branch = entries;
 	let sessionId = "session-1";
 	let currentName = titleName;
-	let nextCompletion = () => Promise.resolve(assistantMessage([
-		{ type: "text", text: "Title: 修复登录流程！" },
-	]));
+	let nextCompletion = () => Promise.resolve(assistantMessage([{ type: "text", text: "Title: 修复登录流程！" }]));
 	const handlers = new Map();
 	const completeCalls = [];
 	const setNames = [];
@@ -88,13 +83,15 @@ function createHarness({
 		sessionManager,
 		model: hasModel ? { provider: "test-provider", id: "test-model" } : undefined,
 		modelRegistry: {
-			getApiKeyAndHeaders: authResolver ?? (async () => ({
-				ok: true,
-				apiKey: "test-key",
-				headers: {},
-				env: {},
-				...(authBaseUrl ? { baseUrl: authBaseUrl } : {}),
-			})),
+			getApiKeyAndHeaders:
+				authResolver ??
+				(async () => ({
+					ok: true,
+					apiKey: "test-key",
+					headers: {},
+					env: {},
+					...(authBaseUrl ? { baseUrl: authBaseUrl } : {}),
+				})),
 		},
 	};
 	const completeSimple = (model, titleContext, options) => {
@@ -154,7 +151,13 @@ async function startFresh(harness, entries, reason = "new") {
 function freshBranch({ user = "请修复登录页面", assistant = "我会先检查登录流程" } = {}) {
 	return [
 		messageEntry(userMessage(user), 0),
-		messageEntry(assistantMessage([{ type: "thinking", thinking: "不要泄露这段思考" }, { type: "text", text: assistant }]), 1),
+		messageEntry(
+			assistantMessage([
+				{ type: "thinking", thinking: "不要泄露这段思考" },
+				{ type: "text", text: assistant },
+			]),
+			1,
+		),
 	];
 }
 
@@ -194,7 +197,10 @@ test("推理模型吃光输出预算时升级预算重发一次并完成命名",
 	await flushAsyncWork();
 	await flushAsyncWork();
 
-	assert.deepEqual(harness.completeCalls.map((call) => call.options.maxTokens), [512, 2048]);
+	assert.deepEqual(
+		harness.completeCalls.map((call) => call.options.maxTokens),
+		[512, 2048],
+	);
 	assert.deepEqual(harness.setNames, ["越界 bug 排查"]);
 });
 
@@ -298,21 +304,12 @@ test("cleans model formatting, removes emoji, and enforces the short title contr
 	assert.doesNotMatch(redactSensitiveText('password="my secret phrase"'), /my secret phrase/);
 	assert.equal(cleanTitle("x"), undefined);
 	// 不再硬截断：模型输出由提示词约束长度，超长时不切碎词、原样保留（2026 现场："issue" → "issu"）。
-	assert.equal(
-		cleanTitle("一个非常非常非常非常非常非常长的标题"),
-		"一个非常非常非常非常非常非常长的标题",
-	);
-	assert.equal(
-		cleanTitle("Fix: DSH session files not removed from the workspace"),
-		"Fix: DSH session files not removed from the workspace",
-	);
+	assert.equal(cleanTitle("一个非常非常非常非常非常非常长的标题"), "一个非常非常非常非常非常非常长的标题");
+	assert.equal(cleanTitle("Fix: DSH session files not removed from the workspace"), "Fix: DSH session files not removed from the workspace");
 });
 
 test("names an interrupted first run from the user request", async () => {
-	const entries = [
-		messageEntry(userMessage("修复构建失败"), 0),
-		messageEntry(assistantMessage([{ type: "text", text: "检索尚未完成" }], "aborted"), 1),
-	];
+	const entries = [messageEntry(userMessage("修复构建失败"), 0), messageEntry(assistantMessage([{ type: "text", text: "检索尚未完成" }], "aborted"), 1)];
 	const harness = createHarness({ entries });
 	await startFresh(harness, entries);
 	await harness.emit("agent_settled");
@@ -324,10 +321,7 @@ test("names an interrupted first run from the user request", async () => {
 });
 
 test("names an errored first run from the user request", async () => {
-	const entries = [
-		messageEntry(userMessage("修复启动报错"), 0),
-		messageEntry(assistantMessage([], "error"), 1),
-	];
+	const entries = [messageEntry(userMessage("修复启动报错"), 0), messageEntry(assistantMessage([], "error"), 1)];
 	const harness = createHarness({ entries });
 	await startFresh(harness, entries);
 	await harness.emit("agent_settled");
@@ -339,12 +333,11 @@ test("names an errored first run from the user request", async () => {
 
 test("prewarms credentials before an interrupted run settles", async () => {
 	let resolveAuth;
-	const authReady = new Promise((resolve) => { resolveAuth = resolve; });
+	const authReady = new Promise((resolve) => {
+		resolveAuth = resolve;
+	});
 	let authCalls = 0;
-	const entries = [
-		messageEntry(userMessage("中断后仍应生成标题"), 0),
-		messageEntry(assistantMessage([], "aborted"), 1),
-	];
+	const entries = [messageEntry(userMessage("中断后仍应生成标题"), 0), messageEntry(assistantMessage([], "aborted"), 1)];
 	const harness = createHarness({ entries });
 	harness.context.modelRegistry.getApiKeyAndHeaders = async () => {
 		authCalls += 1;
@@ -389,7 +382,9 @@ test("retries a failed title request only on a later agent run", async () => {
 
 test("manual rename wins and aborts the pending title request", async () => {
 	let resolveCompletion;
-	const completion = new Promise((resolve) => { resolveCompletion = resolve; });
+	const completion = new Promise((resolve) => {
+		resolveCompletion = resolve;
+	});
 	const entries = freshBranch();
 	const harness = createHarness({ entries });
 	harness.setCompletion(() => completion);
@@ -407,7 +402,9 @@ test("manual rename wins and aborts the pending title request", async () => {
 
 test("shutdown cancels only the title side request, while an ordinary session switch event does not", async () => {
 	let resolveCompletion;
-	const completion = new Promise((resolve) => { resolveCompletion = resolve; });
+	const completion = new Promise((resolve) => {
+		resolveCompletion = resolve;
+	});
 	const entries = freshBranch();
 	const harness = createHarness({ entries });
 	harness.setCompletion(() => completion);
@@ -423,7 +420,9 @@ test("shutdown cancels only the title side request, while an ordinary session sw
 
 	// A real Pi runtime replacement emits session_shutdown; it must abort the side request.
 	let resolveSecond;
-	const secondCompletion = new Promise((resolve) => { resolveSecond = resolve; });
+	const secondCompletion = new Promise((resolve) => {
+		resolveSecond = resolve;
+	});
 	harness.setCompletion(() => secondCompletion);
 	harness.clearName();
 	const secondEntries = freshBranch({ user: "第二个会话", assistant: "完成" });
@@ -452,7 +451,9 @@ test("fork/resume sessions and duplicate settled events are not auto-named", asy
 	assert.equal(resumeHarness.completeCalls.length, 0);
 
 	let resolveCompletion;
-	const completion = new Promise((resolve) => { resolveCompletion = resolve; });
+	const completion = new Promise((resolve) => {
+		resolveCompletion = resolve;
+	});
 	const duplicateEntries = freshBranch();
 	const duplicateHarness = createHarness({ entries: duplicateEntries });
 	duplicateHarness.setCompletion(() => completion);

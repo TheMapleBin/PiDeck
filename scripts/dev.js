@@ -8,25 +8,14 @@ const path = require("node:path");
 const { spawn } = require("node:child_process");
 
 const ELECTRON_VITE_BIN = path.join(__dirname, "..", "node_modules", "electron-vite", "bin", "electron-vite.js");
-const STALE_ELECTRON_VITE_ENV_KEYS = [
-	"ELECTRON_RENDERER_URL",
-	"ELECTRON_CLI_ARGS",
-	"ELECTRON_EXEC_PATH",
-	"ELECTRON_MAJOR_VER",
-	"NODE_ENV_ELECTRON_VITE",
-	"VITE_DEV_SERVER_URL",
-];
+const STALE_ELECTRON_VITE_ENV_KEYS = ["ELECTRON_RENDERER_URL", "ELECTRON_CLI_ARGS", "ELECTRON_EXEC_PATH", "ELECTRON_MAJOR_VER", "NODE_ENV_ELECTRON_VITE", "VITE_DEV_SERVER_URL"];
 
 function createDevEnvironment({ platform = process.platform, env = process.env, nodeExecPath = process.execPath } = {}) {
 	const nextEnv = { ...env };
 	for (const key of STALE_ELECTRON_VITE_ENV_KEYS) {
 		delete nextEnv[key];
 	}
-	if (
-		platform === "linux" &&
-		nextEnv.PIDECK_DEV_ENABLE_SANDBOX !== "1" &&
-		nextEnv.ELECTRON_DISABLE_SANDBOX == null
-	) {
+	if (platform === "linux" && nextEnv.PIDECK_DEV_ENABLE_SANDBOX !== "1" && nextEnv.ELECTRON_DISABLE_SANDBOX == null) {
 		nextEnv.ELECTRON_DISABLE_SANDBOX = "1";
 	}
 	// Windows DSH 沙箱 runner 的 CUI sidecar：dev 直接用本机 node.exe，不必先下载随包副本。
@@ -38,12 +27,17 @@ function createDevEnvironment({ platform = process.platform, env = process.env, 
 
 function isLinuxWaylandWithXDisplay({ platform = process.platform, env = process.env } = {}) {
 	if (platform !== "linux") return false;
-	if (String(env.PIDECK_LINUX_DISPLAY_BACKEND ?? "").trim().toLowerCase() === "wayland") {
+	if (
+		String(env.PIDECK_LINUX_DISPLAY_BACKEND ?? "")
+			.trim()
+			.toLowerCase() === "wayland"
+	) {
 		return false;
 	}
 	const isWaylandSession =
-		String(env.XDG_SESSION_TYPE ?? "").trim().toLowerCase() === "wayland" ||
-		Boolean(env.WAYLAND_DISPLAY);
+		String(env.XDG_SESSION_TYPE ?? "")
+			.trim()
+			.toLowerCase() === "wayland" || Boolean(env.WAYLAND_DISPLAY);
 	return isWaylandSession && Boolean(env.DISPLAY);
 }
 
@@ -54,16 +48,11 @@ function hasElectronArg(electronArgs, name) {
 function withDefaultElectronArgs(args, input = {}) {
 	const nextArgs = [...args];
 	const separatorIndex = nextArgs.indexOf("--");
-	const electronArgs =
-		separatorIndex === -1 ? [] : nextArgs.slice(separatorIndex + 1);
+	const electronArgs = separatorIndex === -1 ? [] : nextArgs.slice(separatorIndex + 1);
 	if (separatorIndex === -1) {
 		nextArgs.push("--");
 	}
-	if (
-		isLinuxWaylandWithXDisplay(input) &&
-		!hasElectronArg(electronArgs, "--ozone-platform") &&
-		!hasElectronArg(electronArgs, "--ozone-platform-hint")
-	) {
+	if (isLinuxWaylandWithXDisplay(input) && !hasElectronArg(electronArgs, "--ozone-platform") && !hasElectronArg(electronArgs, "--ozone-platform-hint")) {
 		nextArgs.push("--ozone-platform=x11");
 	}
 	if (!hasElectronArg(electronArgs, "--log-level")) {
@@ -72,20 +61,10 @@ function withDefaultElectronArgs(args, input = {}) {
 	return nextArgs;
 }
 
-function getElectronViteInvocation({
-	nodeExecPath = process.execPath,
-	electronViteBinPath = ELECTRON_VITE_BIN,
-	args = process.argv.slice(2),
-	platform = process.platform,
-	env = process.env,
-} = {}) {
+function getElectronViteInvocation({ nodeExecPath = process.execPath, electronViteBinPath = ELECTRON_VITE_BIN, args = process.argv.slice(2), platform = process.platform, env = process.env } = {}) {
 	return {
 		command: nodeExecPath,
-		args: [
-			electronViteBinPath,
-			"dev",
-			...withDefaultElectronArgs(args, { platform, env }),
-		],
+		args: [electronViteBinPath, "dev", ...withDefaultElectronArgs(args, { platform, env })],
 	};
 }
 

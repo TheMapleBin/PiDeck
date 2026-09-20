@@ -4,17 +4,9 @@ import { createReadStream } from "node:fs";
 import { mkdir, open, readdir, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { createInterface } from "node:readline";
-import type {
-	CodexImportReport,
-	CodexImportResult,
-	CodexImportStatus,
-	CodexSessionSummary,
-} from "../../shared/types";
+import type { CodexImportReport, CodexImportResult, CodexImportStatus, CodexSessionSummary } from "../../shared/types";
 import { getCodexSessionThreadInfo } from "../../shared/codexSessionMeta";
-import {
-	defaultSessionImportCopy,
-	type SessionImportCopy,
-} from "./SessionImportCopy";
+import { defaultSessionImportCopy, type SessionImportCopy } from "./SessionImportCopy";
 import { normalizeImportedToolArguments } from "./importToolArguments";
 import { readImportMetaHead } from "./importMetaHead";
 import { normalizeImportedStopReason, tryImportedImageBlock } from "./importNormalize";
@@ -54,9 +46,7 @@ export class CodexSessionImporter {
 		const candidates: string[] = [];
 		for (let i = 0; i < files.length; i += SCAN_CONCURRENCY) {
 			const chunk = files.slice(i, i + SCAN_CONCURRENCY);
-			const metas = await Promise.all(
-				chunk.map((file) => this.readCodexMetaOnly(file).catch(() => null)),
-			);
+			const metas = await Promise.all(chunk.map((file) => this.readCodexMetaOnly(file).catch(() => null)));
 			metas.forEach((meta, index) => {
 				if (meta && this.normalize(meta.meta.cwd) === normalizedProject) {
 					candidates.push(chunk[index]);
@@ -69,29 +59,19 @@ export class CodexSessionImporter {
 		const sessions: Array<ParsedCodexSession | null> = [];
 		for (let i = 0; i < candidates.length; i += SCAN_CONCURRENCY) {
 			const chunk = candidates.slice(i, i + SCAN_CONCURRENCY);
-			const results = await Promise.all(
-				chunk.map((file) => this.readCodexSession(file).catch(() => null)),
-			);
+			const results = await Promise.all(chunk.map((file) => this.readCodexSession(file).catch(() => null)));
 			sessions.push(...results);
 		}
 
-		const summaries = await Promise.all(
-			sessions
-				.filter((session): session is ParsedCodexSession => Boolean(session))
-				.map((session) => this.toSummary(session, projectPath).catch(() => null)),
-		);
-		return summaries
-			.filter((summary): summary is CodexSessionSummary => Boolean(summary))
-			.sort((a, b) => b.updatedAt - a.updatedAt);
+		const summaries = await Promise.all(sessions.filter((session): session is ParsedCodexSession => Boolean(session)).map((session) => this.toSummary(session, projectPath).catch(() => null)));
+		return summaries.filter((summary): summary is CodexSessionSummary => Boolean(summary)).sort((a, b) => b.updatedAt - a.updatedAt);
 	}
 
 	/**
 	 * 只读文件头部提取完整 session_meta（codex 会话第一行即 session_meta）用于项目预过滤
 	 * 与导入元信息；坏行/截断容忍。头部没有 meta 视为不可扫描（返回 null）。
 	 */
-	private async readCodexMetaOnly(
-		filePath: string,
-	): Promise<ParsedCodexSession | null> {
+	private async readCodexMetaOnly(filePath: string): Promise<ParsedCodexSession | null> {
 		this.assertCodexSourcePath(filePath);
 		const info = await stat(filePath);
 		const raw = await this.readFileHead(filePath, META_HEAD_LIMIT);
@@ -126,10 +106,7 @@ export class CodexSessionImporter {
 		};
 	}
 
-	private async importOne(
-		projectPath: string,
-		sourcePath: string,
-	): Promise<CodexImportResult> {
+	private async importOne(projectPath: string, sourcePath: string): Promise<CodexImportResult> {
 		try {
 			// 轻量读 meta（只读头部 64KB + stat），不加载正文——巨型会话（几百 MB~1GB）
 			// 全量解析会 OOM 导致应用被系统静默杀死，导入改为流式转换（见 convertToPiSessionStreaming）
@@ -164,19 +141,11 @@ export class CodexSessionImporter {
 		}
 	}
 
-	private async toSummary(
-		session: ParsedCodexSession,
-		projectPath: string,
-	): Promise<CodexSessionSummary> {
+	private async toSummary(session: ParsedCodexSession, projectPath: string): Promise<CodexSessionSummary> {
 		const targetPath = this.getTargetPath(projectPath, session);
 		const importMeta = await this.readImportMeta(targetPath);
 		const converted = this.convertToPiSession(projectPath, session);
-		const status: CodexImportStatus = !importMeta
-			? "new"
-			: importMeta.sourceMtime === session.sourceMtime &&
-				  importMeta.sourceSize === session.sourceSize
-				? "current"
-				: "outdated";
+		const status: CodexImportStatus = !importMeta ? "new" : importMeta.sourceMtime === session.sourceMtime && importMeta.sourceSize === session.sourceSize ? "current" : "outdated";
 
 		const originalTimestamp = Date.parse(String(session.meta.timestamp ?? "")) || session.sourceMtime;
 		const threadInfo = getCodexSessionThreadInfo(session.meta);
@@ -203,9 +172,7 @@ export class CodexSessionImporter {
 	private convertToPiSession(projectPath: string, session: ParsedCodexSession) {
 		const sessionId = String(session.meta.id ?? this.hash(session.sourcePath));
 		const threadInfo = getCodexSessionThreadInfo(session.meta);
-		const timestamp = new Date(
-			Date.parse(String(session.meta.timestamp ?? "")) || session.sourceMtime,
-		).toISOString();
+		const timestamp = new Date(Date.parse(String(session.meta.timestamp ?? "")) || session.sourceMtime).toISOString();
 		const titleState = { title: "", preview: "" };
 		const toolNames = new Map<string, string>();
 		const toolStartedAt = new Map<string, number>();
@@ -218,16 +185,10 @@ export class CodexSessionImporter {
 		const pushEntry = (entry: Record<string, unknown>) => {
 			lines.push(JSON.stringify(entry));
 		};
-		const pushMessage = (
-			role: "user" | "assistant" | "toolResult",
-			content: unknown[],
-			extra: Record<string, unknown> = {},
-			timestampValue?: unknown,
-		) => {
+		const pushMessage = (role: "user" | "assistant" | "toolResult", content: unknown[], extra: Record<string, unknown> = {}, timestampValue?: unknown) => {
 			if (content.length === 0) return;
 			const id = this.makeId(sessionId, sequence++);
-			const messageTimestamp =
-				this.parseTimestamp(timestampValue) ?? session.sourceMtime + sequence;
+			const messageTimestamp = this.parseTimestamp(timestampValue) ?? session.sourceMtime + sequence;
 			const ts = new Date(messageTimestamp).toISOString();
 			pushEntry({
 				type: "message",
@@ -302,13 +263,7 @@ export class CodexSessionImporter {
 
 			if (payload.type === "message" && payload.role === "assistant") {
 				const text = this.extractCodexText(payload).trim();
-				const content = [
-					...(pendingThinking
-						? [{ type: "thinking", thinking: pendingThinking, thinkingSignature: "codex_reasoning" }]
-						: []),
-					...(text ? [{ type: "text", text }] : []),
-					...this.extractCodexImportedImages(payload),
-				];
+				const content = [...(pendingThinking ? [{ type: "thinking", thinking: pendingThinking, thinkingSignature: "codex_reasoning" }] : []), ...(text ? [{ type: "text", text }] : []), ...this.extractCodexImportedImages(payload)];
 				pendingThinking = "";
 				pushMessage(
 					"assistant",
@@ -331,12 +286,7 @@ export class CodexSessionImporter {
 				const callStartedAt = this.parseTimestamp(entry.timestamp);
 				if (callStartedAt !== undefined) toolStartedAt.set(callId, callStartedAt);
 				const args = this.parseArguments(payload.arguments);
-				const content = [
-					...(pendingThinking
-						? [{ type: "thinking", thinking: pendingThinking, thinkingSignature: "codex_reasoning" }]
-						: []),
-					{ type: "toolCall", id: callId, name: toolName, arguments: args },
-				];
+				const content = [...(pendingThinking ? [{ type: "thinking", thinking: pendingThinking, thinkingSignature: "codex_reasoning" }] : []), { type: "toolCall", id: callId, name: toolName, arguments: args }];
 				pendingThinking = "";
 				pushMessage(
 					"assistant",
@@ -367,9 +317,7 @@ export class CodexSessionImporter {
 						// Codex 历史只有 function_call / output 时间戳，导入时保存派生耗时，
 						// 让桌面端工具卡片与原生 pi 会话保持一致。
 						...(startedAt !== undefined ? { startedAt } : {}),
-						...(startedAt !== undefined && completedAt !== undefined
-							? { durationMs: Math.max(0, completedAt - startedAt) }
-							: {}),
+						...(startedAt !== undefined && completedAt !== undefined ? { durationMs: Math.max(0, completedAt - startedAt) } : {}),
 					},
 					entry.timestamp,
 				);
@@ -377,24 +325,23 @@ export class CodexSessionImporter {
 		}
 
 		if (pendingThinking) {
-			pushMessage("assistant", [
-				{ type: "thinking", thinking: pendingThinking, thinkingSignature: "codex_reasoning" },
-			]);
+			pushMessage("assistant", [{ type: "thinking", thinking: pendingThinking, thinkingSignature: "codex_reasoning" }]);
 		}
 
-		const title = titleState.title || this.cleanTitle(basename(session.sourcePath)) ||
-			this.translate("session.importedTitle", { source: "Codex" });
+		const title = titleState.title || this.cleanTitle(basename(session.sourcePath)) || this.translate("session.importedTitle", { source: "Codex" });
 		// 使用 pi 原生 session_info 格式追加在末尾，避免旧版 sessionName 行（无 type 字段）
 		// 在文件头破坏 pi 的首行校验导致会话无法加载（见 #114）。
 		const sessionInfoId = randomUUID().slice(0, 8);
-		lines.push(JSON.stringify({
-			type: "session_info",
-			id: sessionInfoId,
-			parentId,
-			timestamp: new Date().toISOString(),
-			name: title,
-			cwd: projectPath,
-		}));
+		lines.push(
+			JSON.stringify({
+				type: "session_info",
+				id: sessionInfoId,
+				parentId,
+				timestamp: new Date().toISOString(),
+				name: title,
+				cwd: projectPath,
+			}),
+		);
 
 		return {
 			raw: `${lines.join("\n")}\n`,
@@ -410,16 +357,10 @@ export class CodexSessionImporter {
 	 * 状态机（title/preview/messageCount/parentId/sequence/pendingThinking）与
 	 * convertToPiSession 保持一致——scan 预览与 import 结果必须等价。
 	 */
-	private async convertToPiSessionStreaming(
-		projectPath: string,
-		session: ParsedCodexSession,
-		targetPath: string,
-	): Promise<{ title: string; preview: string; messageCount: number }> {
+	private async convertToPiSessionStreaming(projectPath: string, session: ParsedCodexSession, targetPath: string): Promise<{ title: string; preview: string; messageCount: number }> {
 		const sessionId = String(session.meta.id ?? this.hash(session.sourcePath));
 		const threadInfo = getCodexSessionThreadInfo(session.meta);
-		const timestamp = new Date(
-			Date.parse(String(session.meta.timestamp ?? "")) || session.sourceMtime,
-		).toISOString();
+		const timestamp = new Date(Date.parse(String(session.meta.timestamp ?? "")) || session.sourceMtime).toISOString();
 		const titleState = { title: "", preview: "" };
 		const toolNames = new Map<string, string>();
 		const toolStartedAt = new Map<string, number>();
@@ -442,16 +383,10 @@ export class CodexSessionImporter {
 			writeBuffer += `${JSON.stringify(entry)}\n`;
 			if (writeBuffer.length >= 1024 * 1024) await flushBuffer();
 		};
-		const pushMessage = async (
-			role: "user" | "assistant" | "toolResult",
-			content: unknown[],
-			extra: Record<string, unknown> = {},
-			timestampValue?: unknown,
-		) => {
+		const pushMessage = async (role: "user" | "assistant" | "toolResult", content: unknown[], extra: Record<string, unknown> = {}, timestampValue?: unknown) => {
 			if (content.length === 0) return;
 			const id = this.makeId(sessionId, sequence++);
-			const messageTimestamp =
-				this.parseTimestamp(timestampValue) ?? session.sourceMtime + sequence;
+			const messageTimestamp = this.parseTimestamp(timestampValue) ?? session.sourceMtime + sequence;
 			const ts = new Date(messageTimestamp).toISOString();
 			await pushEntry({
 				type: "message",
@@ -520,9 +455,7 @@ export class CodexSessionImporter {
 					entry = JSON.parse(line) as Record<string, any>;
 				} catch (error) {
 					// 导入严格语义：坏行即失败（与旧全量实现一致）；错误信息截断行前缀防刷屏
-					throw new Error(
-						`Invalid line in Codex session: ${line.slice(0, 120)} (${error instanceof Error ? error.message : String(error)})`,
-					);
+					throw new Error(`Invalid line in Codex session: ${line.slice(0, 120)} (${error instanceof Error ? error.message : String(error)})`);
 				}
 
 				if (entry.type === "event_msg" && entry.payload?.type === "user_message") {
@@ -542,13 +475,7 @@ export class CodexSessionImporter {
 
 				if (payload.type === "message" && payload.role === "assistant") {
 					const text = this.extractCodexText(payload).trim();
-					const content = [
-						...(pendingThinking
-							? [{ type: "thinking", thinking: pendingThinking, thinkingSignature: "codex_reasoning" }]
-							: []),
-						...(text ? [{ type: "text", text }] : []),
-						...this.extractCodexImportedImages(payload),
-					];
+					const content = [...(pendingThinking ? [{ type: "thinking", thinking: pendingThinking, thinkingSignature: "codex_reasoning" }] : []), ...(text ? [{ type: "text", text }] : []), ...this.extractCodexImportedImages(payload)];
 					pendingThinking = "";
 					await pushMessage(
 						"assistant",
@@ -571,12 +498,7 @@ export class CodexSessionImporter {
 					const callStartedAt = this.parseTimestamp(entry.timestamp);
 					if (callStartedAt !== undefined) toolStartedAt.set(callId, callStartedAt);
 					const args = this.parseArguments(payload.arguments);
-					const content = [
-						...(pendingThinking
-							? [{ type: "thinking", thinking: pendingThinking, thinkingSignature: "codex_reasoning" }]
-							: []),
-						{ type: "toolCall", id: callId, name: toolName, arguments: args },
-					];
+					const content = [...(pendingThinking ? [{ type: "thinking", thinking: pendingThinking, thinkingSignature: "codex_reasoning" }] : []), { type: "toolCall", id: callId, name: toolName, arguments: args }];
 					pendingThinking = "";
 					await pushMessage(
 						"assistant",
@@ -607,9 +529,7 @@ export class CodexSessionImporter {
 							// Codex 历史只有 function_call / output 时间戳，导入时保存派生耗时，
 							// 让桌面端工具卡片与原生 pi 会话保持一致。
 							...(startedAt !== undefined ? { startedAt } : {}),
-							...(startedAt !== undefined && completedAt !== undefined
-								? { durationMs: Math.max(0, completedAt - startedAt) }
-								: {}),
+							...(startedAt !== undefined && completedAt !== undefined ? { durationMs: Math.max(0, completedAt - startedAt) } : {}),
 						},
 						entry.timestamp,
 					);
@@ -617,15 +537,10 @@ export class CodexSessionImporter {
 			}
 
 			if (pendingThinking) {
-				await pushMessage("assistant", [
-					{ type: "thinking", thinking: pendingThinking, thinkingSignature: "codex_reasoning" },
-				]);
+				await pushMessage("assistant", [{ type: "thinking", thinking: pendingThinking, thinkingSignature: "codex_reasoning" }]);
 			}
 
-			const title =
-				titleState.title ||
-				this.cleanTitle(basename(session.sourcePath)) ||
-				this.translate("session.importedTitle", { source: "Codex" });
+			const title = titleState.title || this.cleanTitle(basename(session.sourcePath)) || this.translate("session.importedTitle", { source: "Codex" });
 			// 使用 pi 原生 session_info 格式追加在末尾，避免旧版 sessionName 行（无 type 字段）
 			// 在文件头破坏 pi 的首行校验导致会话无法加载（见 #114）。
 			const sessionInfoId = randomUUID().slice(0, 8);
@@ -724,10 +639,7 @@ export class CodexSessionImporter {
 		return files;
 	}
 
-	private getTargetPath(
-		projectPath: string,
-		session: Pick<ParsedCodexSession, "meta" | "sourcePath">,
-	) {
+	private getTargetPath(projectPath: string, session: Pick<ParsedCodexSession, "meta" | "sourcePath">) {
 		const id = String(session.meta.id ?? this.hash(session.sourcePath)).replace(/[^a-zA-Z0-9_-]/g, "-");
 		return join(this.getProjectSessionDir(projectPath), `codex_${id}.jsonl`);
 	}

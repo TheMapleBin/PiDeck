@@ -9,10 +9,7 @@ import { useEffect, useState } from "react";
 import type { SessionTodoSnapshot } from "../../../shared/types";
 import { desktopApi } from "../desktopApi";
 
-export function useSessionTodoSnapshot(
-	sessionId: string,
-	enabled: boolean,
-): SessionTodoSnapshot | undefined {
+export function useSessionTodoSnapshot(sessionId: string, enabled: boolean): SessionTodoSnapshot | undefined {
 	const [snapshot, setSnapshot] = useState<SessionTodoSnapshot | undefined>(undefined);
 
 	useEffect(() => {

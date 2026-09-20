@@ -28,9 +28,7 @@ const DSH_CACHE_PREFIX = "dsh:";
  * 这里反解回「原始 provider 名 + backend」交给查询链路——主进程只认原始名。
  * 顺序固定（pi 在前、各自按名字排序），让每次启动的请求顺序可预期、便于排查。
  */
-export function selectWarmupProviders(
-	states: Record<string, UsageProbeProviderState>,
-): ProviderUsageWarmupTarget[] {
+export function selectWarmupProviders(states: Record<string, UsageProbeProviderState>): ProviderUsageWarmupTarget[] {
 	const targets: ProviderUsageWarmupTarget[] = [];
 	for (const [cacheKey, state] of Object.entries(states)) {
 		if (!state?.enabled) continue;

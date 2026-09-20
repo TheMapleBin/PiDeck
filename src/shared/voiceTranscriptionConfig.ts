@@ -19,9 +19,7 @@ export type SanitizedVoiceTranscriptionConfig = {
 };
 
 /** Validate the renderer-owned, non-secret part of the transcription config. */
-export function sanitizeVoiceTranscriptionConfig(
-	input: unknown,
-): SanitizedVoiceTranscriptionConfig | null {
+export function sanitizeVoiceTranscriptionConfig(input: unknown): SanitizedVoiceTranscriptionConfig | null {
 	if (!isRecord(input)) return null;
 	const rawBaseUrl = Reflect.get(input, "baseUrl");
 	const rawModel = Reflect.get(input, "model");
@@ -29,14 +27,7 @@ export function sanitizeVoiceTranscriptionConfig(
 	const baseUrl = typeof rawBaseUrl === "string" ? rawBaseUrl.trim() : "";
 	const model = typeof rawModel === "string" ? rawModel.trim() : "";
 	const language = typeof rawLanguage === "string" ? rawLanguage.trim() : "";
-	if (
-		!baseUrl ||
-		baseUrl.length > MAX_BASE_URL_LENGTH ||
-		!model ||
-		model.length > MAX_MODEL_LENGTH ||
-		language.length > MAX_LANGUAGE_LENGTH ||
-		!normalizeVoiceTranscriptionUrl(baseUrl)
-	) {
+	if (!baseUrl || baseUrl.length > MAX_BASE_URL_LENGTH || !model || model.length > MAX_MODEL_LENGTH || language.length > MAX_LANGUAGE_LENGTH || !normalizeVoiceTranscriptionUrl(baseUrl)) {
 		return null;
 	}
 	return { baseUrl, model, language };

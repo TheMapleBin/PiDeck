@@ -5,10 +5,7 @@ import { t } from "../../i18n";
 import { isLanWeb } from "../../desktopApi";
 import { showNotice } from "../../utils/notice";
 import { StackTrace } from "../ui-shadcn/stack-trace";
-import {
-	CRASH_AUTO_RELOAD_KEY,
-	computeCrashReloadPlan,
-} from "../../utils/autoReloadPolicy";
+import { CRASH_AUTO_RELOAD_KEY, computeCrashReloadPlan } from "../../utils/autoReloadPolicy";
 import { AutoReloadTimer } from "../../utils/crashAutoReloadTimer";
 
 type AppErrorBoundaryProps = {
@@ -34,10 +31,7 @@ const AUTO_RELOAD_SECONDS = 5;
  * 全局/局部 React 错误边界。
  * 捕获子树渲染异常，避免整页白屏；同时通过 notice toast 提示用户。
  */
-export class AppErrorBoundary extends Component<
-	AppErrorBoundaryProps,
-	AppErrorBoundaryState
-> {
+export class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorBoundaryState> {
 	override state: AppErrorBoundaryState = {
 		error: null,
 		autoReloadSeconds: null,
@@ -66,9 +60,7 @@ export class AppErrorBoundary extends Component<
 		// 初次挂载（无 error）或局部边界（scheduleAutoReload 已直接返回、
 		// autoReloadSeconds 仍为 null）时 ensure 不会启动 timer。
 		if (this.state.error) {
-			this.autoReloadTimer.ensure(
-				this.state.autoReloadSeconds ?? AUTO_RELOAD_SECONDS,
-			);
+			this.autoReloadTimer.ensure(this.state.autoReloadSeconds ?? AUTO_RELOAD_SECONDS);
 		}
 	}
 
@@ -84,11 +76,7 @@ export class AppErrorBoundary extends Component<
 
 	override componentDidCatch(error: Error, info: ErrorInfo) {
 		// 渲染异常时 toast 提示；即使主界面损坏，也尽量让用户看到反馈。
-		showNotice(
-			`${t("app.renderErrorToast")}: ${error.message}`,
-			6000,
-			"error",
-		);
+		showNotice(`${t("app.renderErrorToast")}: ${error.message}`, 6000, "error");
 		void window.piDesktop?.app
 			.rendererLog("error", "renderer", "React render error boundary caught", {
 				message: error.message,
@@ -114,10 +102,7 @@ export class AppErrorBoundary extends Component<
 			const raw = window.sessionStorage.getItem(CRASH_AUTO_RELOAD_KEY);
 			if (raw) {
 				const parsed = JSON.parse(raw) as { count?: unknown; at?: unknown };
-				if (
-					typeof parsed.count === "number" &&
-					typeof parsed.at === "number"
-				) {
+				if (typeof parsed.count === "number" && typeof parsed.at === "number") {
 					stored = { count: parsed.count, at: parsed.at };
 				}
 			}
@@ -128,10 +113,7 @@ export class AppErrorBoundary extends Component<
 
 		const plan = computeCrashReloadPlan({ stored, now: Date.now() });
 		try {
-			window.sessionStorage.setItem(
-				CRASH_AUTO_RELOAD_KEY,
-				JSON.stringify({ count: plan.count, at: Date.now() }),
-			);
+			window.sessionStorage.setItem(CRASH_AUTO_RELOAD_KEY, JSON.stringify({ count: plan.count, at: Date.now() }));
 		} catch {
 			// 写入失败不影响本次展示；下次崩溃重新计数（最多再多自动刷新一轮）。
 		}
@@ -198,26 +180,14 @@ export class AppErrorBoundary extends Component<
 						<StackTrace trace={this.state.error.stack ?? this.state.error.message} defaultOpen />
 					</div>
 					<div className="app-error-boundary-actions">
-						<Button
-							type="button"
-							variant="outline"
-							onClick={this.handleReset}
-						>
+						<Button type="button" variant="outline" onClick={this.handleReset}>
 							{t("app.renderErrorRetry")}
 						</Button>
-						<Button
-							type="button"
-							variant="default"
-							onClick={this.handleReload}
-						>
+						<Button type="button" variant="default" onClick={this.handleReload}>
 							{t("app.renderErrorReload")}
 						</Button>
 						{canQuitApp ? (
-							<Button
-								type="button"
-								variant="outline"
-								onClick={this.handleQuit}
-							>
+							<Button type="button" variant="outline" onClick={this.handleQuit}>
 								{t("app.quit")}
 							</Button>
 						) : null}
@@ -230,13 +200,7 @@ export class AppErrorBoundary extends Component<
 									seconds: this.state.autoReloadSeconds,
 								})}
 							</span>
-							<Button
-								type="button"
-								variant="ghost"
-								size="sm"
-								className="app-error-boundary-autoreload-cancel"
-								onClick={this.handleCancelAutoReload}
-							>
+							<Button type="button" variant="ghost" size="sm" className="app-error-boundary-autoreload-cancel" onClick={this.handleCancelAutoReload}>
 								{t("app.renderErrorAutoReloadCancel")}
 							</Button>
 						</div>
@@ -246,9 +210,7 @@ export class AppErrorBoundary extends Component<
 							<span>{t("app.renderErrorAutoReloadExhausted")}</span>
 						</div>
 					)}
-					<small className="app-error-boundary-help">
-						{t("app.renderErrorHelp")}
-					</small>
+					<small className="app-error-boundary-help">{t("app.renderErrorHelp")}</small>
 				</div>
 			</div>
 		);

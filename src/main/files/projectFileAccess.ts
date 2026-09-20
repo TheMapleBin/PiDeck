@@ -9,11 +9,7 @@ export const FILE_OUTSIDE_PROJECT_ERROR = "FILE_OUTSIDE_PROJECT";
  * 这一层会折叠 `..`，用于在触碰文件系统前快速拒绝明显越界或相对路径。
  */
 export function assertProjectFilePathInsideRoot(projectRoot: string, targetPath: string): void {
-	if (
-		!isAbsolute(projectRoot) ||
-		!isAbsolute(targetPath) ||
-		!isPathInsideProject(projectRoot, targetPath)
-	) {
+	if (!isAbsolute(projectRoot) || !isAbsolute(targetPath) || !isPathInsideProject(projectRoot, targetPath)) {
 		throw new Error(FILE_OUTSIDE_PROJECT_ERROR);
 	}
 }
@@ -24,9 +20,7 @@ export type ProjectFileReadBoundary = Readonly<{
 }>;
 
 /** 解析一批读取共用的可信项目根；批量 stat 时只触碰一次项目根 realpath。 */
-export async function createProjectFileReadBoundary(
-	projectRoot: string,
-): Promise<ProjectFileReadBoundary> {
+export async function createProjectFileReadBoundary(projectRoot: string): Promise<ProjectFileReadBoundary> {
 	if (!isAbsolute(projectRoot)) throw new Error(FILE_OUTSIDE_PROJECT_ERROR);
 	return {
 		projectRoot,
@@ -34,10 +28,7 @@ export async function createProjectFileReadBoundary(
 	};
 }
 
-function assertBoundaryTargetPath(
-	boundary: ProjectFileReadBoundary,
-	targetPath: string,
-): void {
+function assertBoundaryTargetPath(boundary: ProjectFileReadBoundary, targetPath: string): void {
 	try {
 		assertProjectFilePathInsideRoot(boundary.projectRoot, targetPath);
 	} catch {
@@ -48,10 +39,7 @@ function assertBoundaryTargetPath(
 }
 
 /** 在已解析的项目根内校验一个真实文件，并返回其 canonical path。 */
-export async function resolveProjectFileReadPath(
-	boundary: ProjectFileReadBoundary,
-	targetPath: string,
-): Promise<string> {
+export async function resolveProjectFileReadPath(boundary: ProjectFileReadBoundary, targetPath: string): Promise<string> {
 	assertBoundaryTargetPath(boundary, targetPath);
 	const canonicalTarget = await realpath(targetPath);
 	if (!isPathInsideProject(boundary.canonicalRoot, canonicalTarget)) {
@@ -65,21 +53,13 @@ export async function resolveProjectFileReadPath(
  * 校验真实文件边界。
  * 仅做 resolve 比较会被「项目内 symlink 指向项目外」绕过，因此读取前必须比较 realpath。
  */
-export async function assertProjectFileReadPath(
-	projectRoot: string,
-	targetPath: string,
-): Promise<string> {
+export async function assertProjectFileReadPath(projectRoot: string, targetPath: string): Promise<string> {
 	const boundary = await createProjectFileReadBoundary(projectRoot);
 	return resolveProjectFileReadPath(boundary, targetPath);
 }
 
 function isMissingPathError(error: unknown): boolean {
-	return (
-		typeof error === "object" &&
-		error !== null &&
-		"code" in error &&
-		error.code === "ENOENT"
-	);
+	return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
 }
 
 async function assertMissingPathIsNotLink(path: string): Promise<void> {
@@ -99,10 +79,7 @@ async function assertMissingPathIsNotLink(path: string): Promise<void> {
  * real path; new targets inherit the canonical parent, so project-local symlinks cannot redirect
  * writes, renames, or trash operations outside the registered project.
  */
-export async function resolveProjectFileWritePath(
-	boundary: ProjectFileReadBoundary,
-	targetPath: string,
-): Promise<string> {
+export async function resolveProjectFileWritePath(boundary: ProjectFileReadBoundary, targetPath: string): Promise<string> {
 	assertBoundaryTargetPath(boundary, targetPath);
 	try {
 		return await resolveProjectFileReadPath(boundary, targetPath);

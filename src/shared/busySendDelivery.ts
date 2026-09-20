@@ -26,10 +26,7 @@ export function parseBusySendDelivery(value: unknown): BusySendDelivery {
  * - 忙碌 → 按设置返回 "steer" | "followUp"。
  * 渲染层的入队快捷路径与 flush 投递都消费该结果。
  */
-export function resolveBusySendDelivery(
-	busy: boolean,
-	configured: unknown,
-): BusySendDelivery | undefined {
+export function resolveBusySendDelivery(busy: boolean, configured: unknown): BusySendDelivery | undefined {
 	if (!busy) return undefined;
 	return parseBusySendDelivery(configured);
 }

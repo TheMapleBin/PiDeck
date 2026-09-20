@@ -84,8 +84,8 @@ test("probe script replaces the ephemeral fnm multishell path with the stable in
 
 test("probe script emits machine readable keys and always exits zero", () => {
 	const script = probe.buildWslPiProbeScript();
-	assert.ok(script.includes('printf \'PIDECK_PI=%s\\n\' "$1"'));
-	assert.ok(script.includes('printf \'PIDECK_NODE_BIN=%s\\n\''));
+	assert.ok(script.includes("printf 'PIDECK_PI=%s\\n' \"$1\""));
+	assert.ok(script.includes("printf 'PIDECK_NODE_BIN=%s\\n'"));
 	// node bin 缺省时由 pi 所在目录推导，不依赖调用方传第二参
 	assert.ok(script.includes('_bin=$(dirname "$1")'));
 	// 未命中也 exit 0：调用端要能区分「确实没装」与「bash 不存在 / spawn 失败」
@@ -100,10 +100,7 @@ test("probe script appends caller supplied candidate dirs", () => {
 // ── 探测输出解析 ──────────────────────────────────────────────────────
 
 test("parses pi path and node bin dir from probe output", () => {
-	const result = probe.parseWslPiProbeOutput(
-		"PIDECK_PI=/home/u/.local/share/fnm/node-versions/v24.20.0/installation/bin/pi\n" +
-			"PIDECK_NODE_BIN=/home/u/.local/share/fnm/node-versions/v24.20.0/installation/bin\n",
-	);
+	const result = probe.parseWslPiProbeOutput("PIDECK_PI=/home/u/.local/share/fnm/node-versions/v24.20.0/installation/bin/pi\n" + "PIDECK_NODE_BIN=/home/u/.local/share/fnm/node-versions/v24.20.0/installation/bin\n");
 	eqDeep(result, {
 		piPath: "/home/u/.local/share/fnm/node-versions/v24.20.0/installation/bin/pi",
 		nodeBinDir: "/home/u/.local/share/fnm/node-versions/v24.20.0/installation/bin",
@@ -111,38 +108,20 @@ test("parses pi path and node bin dir from probe output", () => {
 });
 
 test("ignores shell rc noise printed before the probe keys", () => {
-	const result = probe.parseWslPiProbeOutput(
-		[
-			"\x1b]0;/home/u\x07Welcome to Ubuntu",
-			"PIDECK_MISS=1",
-			"PIDECK_PI=/usr/local/bin/pi",
-			"PIDECK_NODE_BIN=/usr/local/bin",
-		].join("\n"),
-	);
+	const result = probe.parseWslPiProbeOutput(["\x1b]0;/home/u\x07Welcome to Ubuntu", "PIDECK_MISS=1", "PIDECK_PI=/usr/local/bin/pi", "PIDECK_NODE_BIN=/usr/local/bin"].join("\n"));
 	assert.equal(result.piPath, "/usr/local/bin/pi");
 	assert.equal(result.nodeBinDir, "/usr/local/bin");
 });
 
 test("falls back to the pi directory when node bin dir is missing or unusable", () => {
-	assert.equal(
-		probe.parseWslPiProbeOutput("PIDECK_PI=/home/u/.nvm/versions/node/v22/bin/pi\nPIDECK_NODE_BIN=\n").nodeBinDir,
-		"/home/u/.nvm/versions/node/v22/bin",
-	);
-	assert.equal(
-		probe.parseWslPiProbeOutput("PIDECK_PI=/home/u/.volta/bin/pi\nPIDECK_NODE_BIN=relative/path\n").nodeBinDir,
-		"/home/u/.volta/bin",
-	);
+	assert.equal(probe.parseWslPiProbeOutput("PIDECK_PI=/home/u/.nvm/versions/node/v22/bin/pi\nPIDECK_NODE_BIN=\n").nodeBinDir, "/home/u/.nvm/versions/node/v22/bin");
+	assert.equal(probe.parseWslPiProbeOutput("PIDECK_PI=/home/u/.volta/bin/pi\nPIDECK_NODE_BIN=relative/path\n").nodeBinDir, "/home/u/.volta/bin");
 });
 
 test("treats a windows interop pi path as not installed", () => {
 	assert.equal(probe.parseWslPiProbeOutput("PIDECK_PI=/mnt/c/Users/dev/AppData/Roaming/npm/pi\n"), null);
 	// node bin 落在 /mnt 时同样不可信，回退到 pi 自身目录
-	assert.equal(
-		probe.parseWslPiProbeOutput(
-			"PIDECK_PI=/usr/local/bin/pi\nPIDECK_NODE_BIN=/mnt/c/Program Files/nodejs\n",
-		).nodeBinDir,
-		"/usr/local/bin",
-	);
+	assert.equal(probe.parseWslPiProbeOutput("PIDECK_PI=/usr/local/bin/pi\nPIDECK_NODE_BIN=/mnt/c/Program Files/nodejs\n").nodeBinDir, "/usr/local/bin");
 });
 
 test("returns null when nothing was found", () => {

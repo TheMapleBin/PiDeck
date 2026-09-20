@@ -4,14 +4,7 @@ import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
 const { allocHiddenConsole } = loadTsCommonJs("src/main/dsh/allocHiddenConsole.ts");
 
-function makeFfi({
-	consoleCp = 0,
-	hwnd = 0,
-	allocResult = 1,
-	lastError = 0,
-	stationOk = true,
-	throwStation = false,
-} = {}) {
+function makeFfi({ consoleCp = 0, hwnd = 0, allocResult = 1, lastError = 0, stationOk = true, throwStation = false } = {}) {
 	const calls = { load: [], allocConsole: 0, showWindow: [], createStation: 0 };
 	let currentHwnd = hwnd;
 	const koffi = {
@@ -35,13 +28,7 @@ function makeFfi({
 							return 1;
 						};
 					}
-					if (
-						signature.includes("CreateWindowStationW") ||
-						signature.includes("OpenWindowStationW") ||
-						signature.includes("SetProcessWindowStation") ||
-						signature.includes("CreateDesktopW") ||
-						signature.includes("SetThreadDesktop")
-					) {
+					if (signature.includes("CreateWindowStationW") || signature.includes("OpenWindowStationW") || signature.includes("SetProcessWindowStation") || signature.includes("CreateDesktopW") || signature.includes("SetThreadDesktop")) {
 						if (throwStation) throw new Error("unexpected station api");
 						if (signature.includes("CreateWindowStationW")) calls.createStation += 1;
 						return () => (stationOk ? 0xabc : 0);

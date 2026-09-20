@@ -274,6 +274,13 @@ export const ipcChannels = {
 	workbuddySessionsImport: "workbuddy-sessions:import",
 	cursorSessionsScan: "cursor-sessions:scan",
 	cursorSessionsImport: "cursor-sessions:import",
+	/**
+	 * 外置目录会话导入（项目目录移动/改名后找回历史）：扫描用户选定的目录
+	 * （旧项目目录 / pi sessions 根 / 某个 encoded 分组目录）里的会话。
+	 */
+	directorySessionsScan: "directory-sessions:scan",
+	/** 把选定目录里的会话挂到当前项目（只建 catalog 引用，不复制原文件）。 */
+	directorySessionsImport: "directory-sessions:import",
 	settingsGet: "settings:get",
 	settingsUpdate: "settings:update",
 	/** 重启当前已启用的 Web 服务，不修改 Web 设置 */
@@ -794,5 +801,4 @@ export const ipcChannels = {
 	shellMenuGetState: "shell-menu:get-state",
 	/** 渲染层 → 主进程：启用/取消资源管理器右键菜单注册 */
 	shellMenuSetEnabled: "shell-menu:set-enabled",
-
 } as const;

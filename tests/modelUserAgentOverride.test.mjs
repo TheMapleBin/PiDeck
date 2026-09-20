@@ -9,12 +9,7 @@ import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
 // providerHeaders.ts 经 ../i18n（目录 import）依赖时，裸 node --test 会报
 // ERR_UNSUPPORTED_DIR_IMPORT，因此走完整依赖图加载 helper。
-const {
-	getModelUserAgentOverride,
-	getProviderHeaders,
-	setModelUserAgentOverride,
-	setHeaderValue,
-} = loadTsCommonJs("src/renderer/src/config/providerHeaders.ts");
+const { getModelUserAgentOverride, getProviderHeaders, setModelUserAgentOverride, setHeaderValue } = loadTsCommonJs("src/renderer/src/config/providerHeaders.ts");
 
 test("getModelUserAgentOverride: 未配置 / 空壳都返回空串（语义=继承供应商 UA）", () => {
 	assert.equal(getModelUserAgentOverride(undefined, "gpt-5"), "");
@@ -22,10 +17,7 @@ test("getModelUserAgentOverride: 未配置 / 空壳都返回空串（语义=继�
 	// 模型存在但没有 headers 字段
 	assert.equal(getModelUserAgentOverride({ "gpt-5": { maxTokens: 4096 } }, "gpt-5"), "");
 	// headers 存在但没写 UA
-	assert.equal(
-		getModelUserAgentOverride({ "gpt-5": { headers: { "x-foo": "1" } } }, "gpt-5"),
-		"",
-	);
+	assert.equal(getModelUserAgentOverride({ "gpt-5": { headers: { "x-foo": "1" } } }, "gpt-5"), "");
 	// headers 不是对象（脏数据）也不能抛
 	assert.equal(getModelUserAgentOverride({ "gpt-5": { headers: "bad" } }, "gpt-5"), "");
 });
@@ -36,11 +28,7 @@ test("getModelUserAgentOverride: 命中且大小写不敏感", () => {
 });
 
 test("setModelUserAgentOverride: 写入保留同模型其它覆盖字段", () => {
-	const next = setModelUserAgentOverride(
-		{ "gpt-5": { maxTokens: 4096 } },
-		"gpt-5",
-		"claude-cli/2.1.161",
-	);
+	const next = setModelUserAgentOverride({ "gpt-5": { maxTokens: 4096 } }, "gpt-5", "claude-cli/2.1.161");
 	assert.deepEqual(next, {
 		"gpt-5": { maxTokens: 4096, headers: { "User-Agent": "claude-cli/2.1.161" } },
 	});
@@ -53,11 +41,7 @@ test("setModelUserAgentOverride: 写入不改动入参（不可变）", () => {
 });
 
 test("setModelUserAgentOverride: 清空=删除 UA 键，模型其它字段保留", () => {
-	const next = setModelUserAgentOverride(
-		{ "gpt-5": { maxTokens: 4096, headers: { "User-Agent": "ua" } } },
-		"gpt-5",
-		"   ",
-	);
+	const next = setModelUserAgentOverride({ "gpt-5": { maxTokens: 4096, headers: { "User-Agent": "ua" } } }, "gpt-5", "   ");
 	// 只剩 maxTokens —— modelOverrides 条目本身要留着，整块删掉会丢用户的其它配置
 	assert.deepEqual(next, { "gpt-5": { maxTokens: 4096 } });
 });
@@ -68,11 +52,7 @@ test("setModelUserAgentOverride: 清空后模型变空壳则整条删除，不�
 });
 
 test("setModelUserAgentOverride: 覆盖已有 UA 且不产生重复键", () => {
-	const next = setModelUserAgentOverride(
-		{ "gpt-5": { headers: { "user-agent": "old", "x-keep": "1" } } },
-		"gpt-5",
-		"new",
-	);
+	const next = setModelUserAgentOverride({ "gpt-5": { headers: { "user-agent": "old", "x-keep": "1" } } }, "gpt-5", "new");
 	assert.deepEqual(next, { "gpt-5": { headers: { "x-keep": "1", "User-Agent": "new" } } });
 });
 
@@ -81,11 +61,7 @@ test("setModelUserAgentOverride: 空 modelId 直接原样返回，不写空键",
 });
 
 test("setModelUserAgentOverride: 多模型互不干扰", () => {
-	const next = setModelUserAgentOverride(
-		{ "gpt-5": { headers: { "User-Agent": "a" } } },
-		"gpt-6",
-		"b",
-	);
+	const next = setModelUserAgentOverride({ "gpt-5": { headers: { "User-Agent": "a" } } }, "gpt-6", "b");
 	assert.deepEqual(next, {
 		"gpt-5": { headers: { "User-Agent": "a" } },
 		"gpt-6": { headers: { "User-Agent": "b" } },

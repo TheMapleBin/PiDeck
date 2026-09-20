@@ -76,9 +76,7 @@ export type PiCompactionOwnershipInput = {
 };
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
-	return typeof value === "object" && value !== null && !Array.isArray(value)
-		? value as Record<string, unknown>
-		: undefined;
+	return typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 }
 
 function nonEmptyString(value: unknown): string | undefined {
@@ -148,17 +146,9 @@ function historianModelConfigured(config: unknown): boolean {
  * 纯函数：由「已安装包 + 各自配置 + 会话命令」推出接管状态。
  * 不碰文件系统，便于对配置矩阵做穷举测试。
  */
-export function resolvePiCompactionOwnership(
-	input: PiCompactionOwnershipInput,
-): PiCompactionOwnership {
-	const installed = new Set(
-		(input.installedPackageNames ?? collectPackageNames(input.packages)).map((name) => name.trim()),
-	);
-	const disabled = new Set(
-		(Array.isArray(input.disabledExtensions) ? input.disabledExtensions : [])
-			.filter((entry): entry is string => typeof entry === "string")
-			.map((entry) => entry.trim()),
-	);
+export function resolvePiCompactionOwnership(input: PiCompactionOwnershipInput): PiCompactionOwnership {
+	const installed = new Set((input.installedPackageNames ?? collectPackageNames(input.packages)).map((name) => name.trim()));
+	const disabled = new Set((Array.isArray(input.disabledExtensions) ? input.disabledExtensions : []).filter((entry): entry is string => typeof entry === "string").map((entry) => entry.trim()));
 	const hasPackage = (id: PiCompactionOwnerId) => {
 		const name = OWNER_PACKAGE_NAMES[id];
 		return installed.has(name) && !disabled.has(name);
@@ -166,40 +156,29 @@ export function resolvePiCompactionOwnership(
 
 	const magicConfig = asRecord(input.magicContextConfig);
 	const magicGloballyEnabled = magicConfig?.enabled !== false;
-	const magicOwnsCompaction = magicConfig?.compaction == null
-		? true
-		: asRecord(magicConfig.compaction)?.enabled !== false;
+	const magicOwnsCompaction = magicConfig?.compaction == null ? true : asRecord(magicConfig.compaction)?.enabled !== false;
 	// loadedOwnerNames（会话实际加载名单）优先于磁盘 packages：扩展管理里禁用的
 	// 扩展不会出现在加载名单里，此时不能按「装了=接管」判定。
-	const magicInstalled = input.loadedOwnerNames !== undefined
-		? input.loadedOwnerNames.includes("magic-context")
-		: hasPackage("magic-context");
+	const magicInstalled = input.loadedOwnerNames !== undefined ? input.loadedOwnerNames.includes("magic-context") : hasPackage("magic-context");
 	const magicActive = magicInstalled && magicGloballyEnabled && magicOwnsCompaction;
 
 	const billionConfig = asRecord(input.billionContextConfig);
-	const billionInstalled = input.loadedOwnerNames !== undefined
-		? input.loadedOwnerNames.includes("billion-context")
-		: hasPackage("billion-context");
+	const billionInstalled = input.loadedOwnerNames !== undefined ? input.loadedOwnerNames.includes("billion-context") : hasPackage("billion-context");
 	const billionActive = billionInstalled && billionConfig?.enabled !== false;
 
 	const owners: PiCompactionOwnerId[] = [];
 	if (magicActive) owners.push("magic-context");
 	if (billionActive) owners.push("billion-context");
 
-	const sessionCommands = input.sessionCommandNames
-		? new Set(input.sessionCommandNames.map((name) => name.replace(/^\//, "").trim()))
-		: undefined;
-	const manualCommandAvailable = magicActive &&
-		(sessionCommands === undefined || sessionCommands.has(MAGIC_CONTEXT_WRAPUP_COMMAND.slice(1)));
+	const sessionCommands = input.sessionCommandNames ? new Set(input.sessionCommandNames.map((name) => name.replace(/^\//, "").trim())) : undefined;
+	const manualCommandAvailable = magicActive && (sessionCommands === undefined || sessionCommands.has(MAGIC_CONTEXT_WRAPUP_COMMAND.slice(1)));
 
 	const historianReady = historianModelConfigured(magicConfig);
 	const piAutoCompactionEnabled = asRecord(input.piCompaction)?.enabled !== false;
 
 	const notes: string[] = [];
 	if (magicActive && !historianReady) {
-		notes.push(
-			"Magic Context 接管了上下文窗口，但没有配置 historian 模型：它既会取消 pi 的压缩，自己也无法压缩（上下文只增不减）",
-		);
+		notes.push("Magic Context 接管了上下文窗口，但没有配置 historian 模型：它既会取消 pi 的压缩，自己也无法压缩（上下文只增不减）");
 	}
 	if (magicActive && !manualCommandAvailable) {
 		notes.push("本次会话未注册 /ctx-wrapup，无法改用它压缩");
@@ -216,9 +195,7 @@ export function resolvePiCompactionOwnership(
 		conflicted: owners.length > 1,
 		piAutoCompactionEnabled,
 		manualCommand: manualCommandAvailable ? MAGIC_CONTEXT_WRAPUP_COMMAND : undefined,
-		ownerReady: owners.length === 0
-			? true
-			: owners.every((id) => id === "magic-context" ? historianReady : true),
+		ownerReady: owners.length === 0 ? true : owners.every((id) => (id === "magic-context" ? historianReady : true)),
 		notes,
 	};
 }
@@ -266,12 +243,12 @@ function stripJsonComments(text: string): string {
 			if (char === "\\") {
 				result += next ?? "";
 				index += 1;
-			} else if (char === "\"") {
+			} else if (char === '"') {
 				inString = false;
 			}
 			continue;
 		}
-		if (char === "\"") {
+		if (char === '"') {
 			inString = true;
 			result += char;
 			continue;
@@ -356,38 +333,19 @@ export function invalidatePiCompactionOwnershipCache(): void {
  *   PiDeck 扩展管理里禁用的扩展不会误判成接管者。
  * @param projectCwd 项目根（project 级 settings.json 也能加包；MC 的 compaction.enabled 项目级仍被忽略）。
  */
-export function readPiCompactionOwnership(options: {
-	agentHomeDir?: string;
-	projectCwd?: string;
-	sessionCommandNames?: string[];
-	loadedExtensionPaths?: string[] | null;
-} = {}): PiCompactionOwnership {
+export function readPiCompactionOwnership(options: { agentHomeDir?: string; projectCwd?: string; sessionCommandNames?: string[]; loadedExtensionPaths?: string[] | null } = {}): PiCompactionOwnership {
 	const paths = resolvePiCompactionOwnershipPaths(options.agentHomeDir);
 	const agentSettings = asRecord(readCached(paths.agentSettingsFile, readJsonFile)) ?? {};
-	const projectSettings = options.projectCwd
-		? asRecord(readCached(join(options.projectCwd, ".pi", "settings.json"), readJsonFile)) ?? {}
-		: {};
-	const packages = [
-		...collectPackageNames(agentSettings.packages),
-		...collectPackageNames(projectSettings.packages),
-	];
-	const disabledExtensions = [
-		...readStringArray(agentSettings, "disabledExtensions"),
-		...readStringArray(projectSettings, "disabledExtensions"),
-	];
+	const projectSettings = options.projectCwd ? (asRecord(readCached(join(options.projectCwd, ".pi", "settings.json"), readJsonFile)) ?? {}) : {};
+	const packages = [...collectPackageNames(agentSettings.packages), ...collectPackageNames(projectSettings.packages)];
+	const disabledExtensions = [...readStringArray(agentSettings, "disabledExtensions"), ...readStringArray(projectSettings, "disabledExtensions")];
 	return resolvePiCompactionOwnership({
 		installedPackageNames: packages,
-		loadedOwnerNames: options.loadedExtensionPaths === undefined
-			? undefined
-			: ownerNamesLoadedInPaths(options.loadedExtensionPaths ?? null),
+		loadedOwnerNames: options.loadedExtensionPaths === undefined ? undefined : ownerNamesLoadedInPaths(options.loadedExtensionPaths ?? null),
 		disabledExtensions,
 		piCompaction: agentSettings.compaction ?? projectSettings.compaction,
-		magicContextConfig: existsSync(paths.magicContextConfigFile)
-			? readCached(paths.magicContextConfigFile, readJsoncFile)
-			: null,
-		billionContextConfig: existsSync(paths.billionContextConfigFile)
-			? readCached(paths.billionContextConfigFile, readJsonFile)
-			: null,
+		magicContextConfig: existsSync(paths.magicContextConfigFile) ? readCached(paths.magicContextConfigFile, readJsoncFile) : null,
+		billionContextConfig: existsSync(paths.billionContextConfigFile) ? readCached(paths.billionContextConfigFile, readJsonFile) : null,
 		sessionCommandNames: options.sessionCommandNames,
 	});
 }

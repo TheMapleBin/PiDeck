@@ -1,11 +1,5 @@
 import { randomUUID } from "node:crypto";
-import {
-	marshalFetchRequest,
-	marshalStreamOpen,
-	parseDshFetchMessage,
-	type DshFetchMessage,
-	type DshStreamFailure,
-} from "./dshHostBridge";
+import { marshalFetchRequest, marshalStreamOpen, parseDshFetchMessage, type DshFetchMessage, type DshStreamFailure } from "./dshHostBridge";
 
 /**
  * DSH v2 传输（utilityProcess 桥）的 fetch 抽象：
@@ -39,9 +33,7 @@ type PendingFetch = {
 };
 
 /** Connection RPC 统一结果（对齐官方 ConnectionRpcResult 形状）。 */
-export type DshRpcResult<T = unknown> =
-	| { ok: true; value: T }
-	| { ok: false; error: { code: string; message: string; details: object } };
+export type DshRpcResult<T = unknown> = { ok: true; value: T } | { ok: false; error: { code: string; message: string; details: object } };
 
 /** Connection RPC 线上信封（对齐官方 ClientRequest/ServerResponse）。 */
 type ClientRequestEnvelope = {
@@ -109,11 +101,7 @@ export class DshApiClient {
 	 * gateway/internal 拒绝），handler 侧拿到的是解包后的 args——调用点因此保持
 	 * 「直接传领域参数对象」的写法，不需要各自记得包一层。
 	 */
-	async call(
-		endpoint: string,
-		payload: unknown,
-		signal?: AbortSignal,
-	): Promise<DshRpcResult> {
+	async call(endpoint: string, payload: unknown, signal?: AbortSignal): Promise<DshRpcResult> {
 		const rpcId = randomUUID();
 		const envelope: ClientRequestEnvelope = {
 			type: "client-request",
@@ -151,12 +139,7 @@ export class DshApiClient {
 	 * 应答一个 Gateway 事件瀑布（approval/request、user-questions/request）。
 	 * value 为领域应答（ApprovalOutcome 字符串或 AskUserQuestionAnswer）。
 	 */
-	respondRemoteEvent(
-		clientId: string,
-		eventId: string,
-		outcome: { kind: "next" } | { kind: "result"; value?: unknown } | { kind: "rejected"; error: { name: string; message: string } },
-		signal?: AbortSignal,
-	): Promise<DshRpcResult> {
+	respondRemoteEvent(clientId: string, eventId: string, outcome: { kind: "next" } | { kind: "result"; value?: unknown } | { kind: "rejected"; error: { name: string; message: string } }, signal?: AbortSignal): Promise<DshRpcResult> {
 		return this.call(REMOTE_EVENT_RESULT_ENDPOINT, { clientId, eventId, outcome }, signal);
 	}
 
@@ -192,19 +175,13 @@ export class DshApiClient {
 	// ── 原始 fetch（插件管理桥等非 Connection 路径用）───────────────────────────
 
 	/** 桥接原始 fetch（任意 dsh.internal URL，unary SSE 流式通用）。 */
-	rawFetch(
-		input: URL | string,
-		init?: { method?: string; headers?: Record<string, string>; body?: string; signal?: AbortSignal },
-	): Promise<Response> {
+	rawFetch(input: URL | string, init?: { method?: string; headers?: Record<string, string>; body?: string; signal?: AbortSignal }): Promise<Response> {
 		const url = input instanceof URL ? input : new URL(input, INTERNAL_ORIGIN);
 		return this.bridgedFetch(url, init);
 	}
 
 	/** 真正的桥接 fetch：发 fetch-request，等 unary 响应或组装流式响应。 */
-	private bridgedFetch(
-		input: URL,
-		init?: { method?: string; headers?: Record<string, string>; body?: string; signal?: AbortSignal },
-	): Promise<Response> {
+	private bridgedFetch(input: URL, init?: { method?: string; headers?: Record<string, string>; body?: string; signal?: AbortSignal }): Promise<Response> {
 		// host 已 dispose：不再向桥发消息（transport.send 已静默丢弃，这里直接拒绝
 		// 更快暴露问题，且不产生悬挂的 pending）。
 		if (this.disposed) {
@@ -295,10 +272,12 @@ export class DshApiClient {
 				this.pending.delete(message.id);
 				this.cleanupPending(pending);
 				const headers = new Headers(message.headers);
-				pending.resolve(new Response(message.body ?? "", {
-					status: message.status,
-					headers,
-				}));
+				pending.resolve(
+					new Response(message.body ?? "", {
+						status: message.status,
+						headers,
+					}),
+				);
 				return;
 			}
 			case "fetch-stream-start": {
@@ -476,11 +455,7 @@ function failureResult(message: string): DshRpcResult {
  * 校验报出可读错误，而不是在这里静默吞掉。
  */
 function wrapRemoteArgs(endpoint: string, payload: unknown): Record<string, unknown> {
-	if (
-		isRecord(payload) &&
-		Object.hasOwn(payload, "args") &&
-		Reflect.ownKeys(payload).length === 1
-	) {
+	if (isRecord(payload) && Object.hasOwn(payload, "args") && Reflect.ownKeys(payload).length === 1) {
 		// 防御已包装的载荷被二次包装（{args:{args:...}} host 侧 zod 很难读出原因）。
 		throw new Error(`dsh rpc: payload for ${endpoint} is already args-wrapped; pass bare domain args`);
 	}

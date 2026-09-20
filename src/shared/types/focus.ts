@@ -4,7 +4,4 @@
  * - projectId：文件夹右键打开且路径已收录，直接选中该项目（selectProjectCommand）；
  * - projectPath：文件夹右键打开但路径未收录，渲染层弹确认框走新增项目流程。
  */
-export type FocusTargetPayload =
-  | { sessionId: string }
-  | { projectId: string }
-  | { projectPath: string };
+export type FocusTargetPayload = { sessionId: string } | { projectId: string } | { projectPath: string };

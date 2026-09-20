@@ -45,17 +45,9 @@ export function ResourceScopeSelector({ value, projects, selectedProjectId, disa
 				}
 			}}
 		>
-			<SelectTrigger
-				className="h-8 w-auto min-w-[9rem] max-w-full gap-1.5 px-2.5 text-control"
-				aria-label={t("config.resourceScope.label")}
-				title={disabled ? t("config.resourceScope.saveMcpFirst") : undefined}
-			>
+			<SelectTrigger className="h-8 w-auto min-w-[9rem] max-w-full gap-1.5 px-2.5 text-control" aria-label={t("config.resourceScope.label")} title={disabled ? t("config.resourceScope.saveMcpFirst") : undefined}>
 				<span className="flex min-w-0 items-center gap-1.5">
-					{effectiveValue === "project" ? (
-						<FolderOpen className="size-3.5 shrink-0" aria-hidden="true" />
-					) : (
-						<Globe2 className="size-3.5 shrink-0" aria-hidden="true" />
-					)}
+					{effectiveValue === "project" ? <FolderOpen className="size-3.5 shrink-0" aria-hidden="true" /> : <Globe2 className="size-3.5 shrink-0" aria-hidden="true" />}
 					<span className="truncate">{effectiveValue === "project" ? projectLabel : t("config.resourceScope.global")}</span>
 				</span>
 			</SelectTrigger>

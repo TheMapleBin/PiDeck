@@ -46,20 +46,7 @@ test("dshWebAgentPlaneDisableRows: 对齐 dsh-web-app 的 agent-plan 禁用清�
 	// dsh-web-app/cordis.patch.yml 的「agent plane moves behind agent presets」段共 23 行。
 	assert.equal(rows.length, 23);
 	const ids = new Set(rows.map((row) => row.id));
-	for (const id of [
-		"tool-bash",
-		"tool-pwsh",
-		"tool-fs",
-		"tool-fs-search",
-		"tool-goal",
-		"tool-todo",
-		"tool-web",
-		"tool-subagent",
-		"tool-subagent-fork",
-		"tool-workflow",
-		"tool-ralph",
-		"agent-instructions",
-	]) {
+	for (const id of ["tool-bash", "tool-pwsh", "tool-fs", "tool-fs-search", "tool-goal", "tool-todo", "tool-web", "tool-subagent", "tool-subagent-fork", "tool-workflow", "tool-ralph", "agent-instructions"]) {
 		assert.ok(ids.has(id), `缺少基础层禁用行: ${id}`);
 	}
 	assert.ok(rows.every((row) => row.disabled === true));
@@ -72,9 +59,7 @@ test("dshSubagentModelSelectionSettingsRow: 与 dsh-web-app host 行同源，且
 	// 与官方 web 部署的 host 插入行逐字一致（防两端漂移：漏挂或改名都会先红在这里）。
 	const patchPath = nodeRequire.resolve("@deepseek-ai/dsh-web-app/cordis.patch.yml");
 	const patch = readFileSync(patchPath, "utf8");
-	const officialRow = patch.match(
-		/\n\s+- id: (subagent-model-selection-settings)\n\s+name: '([^']+)'/,
-	);
+	const officialRow = patch.match(/\n\s+- id: (subagent-model-selection-settings)\n\s+name: '([^']+)'/);
 	assert.ok(officialRow, `dsh-web-app/cordis.patch.yml 缺少 subagent-model-selection-settings 行`);
 	assert.equal(row.id, officialRow[1]);
 	assert.equal(row.name, officialRow[2]);

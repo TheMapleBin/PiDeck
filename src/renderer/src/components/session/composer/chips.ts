@@ -30,10 +30,7 @@ export const CHIP_PREFIX: Record<ComposerChip["kind"], string> = {
  * 对齐 Proma：只有文件引用保留 `@`（用户敲进去的引用语法），`/`、`&`、`❝` 一律交给图标
  * 表达，避免图标与字符双前缀；pi 的 `/skill:名称` 是 wire 细节，展示层只留技能名。
  */
-export function formatChipDisplayLabel(
-	kind: ComposerChip["kind"],
-	label: string,
-): string {
+export function formatChipDisplayLabel(kind: ComposerChip["kind"], label: string): string {
 	if (kind === "file") return `@${label}`;
 	if (kind === "skill") return label.replace(/^skill:/, "");
 	return label;
@@ -46,10 +43,7 @@ export function formatChipDisplayLabel(
  * session/quote 的 label 可能本身就以 `&`、`/`、`@`、`❝` 开头（例如引用一段 `/src/foo` 路径），
  * 旧实现统一 `replace(/^[@/&❝]/)` 会把 label 的首字符吃掉。
  */
-export function stripChipDisplayPrefix(
-	kind: ComposerChip["kind"],
-	text: string,
-): string {
+export function stripChipDisplayPrefix(kind: ComposerChip["kind"], text: string): string {
 	if (kind === "file") return text.replace(/^@/, "");
 	if (kind === "skill") return text.replace(/^\/(?:skill:)?/, "");
 	return text;
@@ -86,11 +80,7 @@ function findUrlSpans(text: string): { start: number; end: number }[] {
 }
 
 /** 判断区间是否与任一 URL 区间重叠（含部分重叠）。 */
-function overlapsUrl(
-	start: number,
-	end: number,
-	urlSpans: { start: number; end: number }[],
-): boolean {
+function overlapsUrl(start: number, end: number, urlSpans: { start: number; end: number }[]): boolean {
 	return urlSpans.some((s) => start < s.end && end > s.start);
 }
 
@@ -101,10 +91,7 @@ function overlapsUrl(
  */
 export function unwrapFileChipPath(raw: string): string {
 	const body = raw.startsWith("@") ? raw.slice(1) : raw;
-	let path =
-		body.length >= 2 && body.startsWith('"') && body.endsWith('"')
-			? body.slice(1, -1)
-			: body;
+	let path = body.length >= 2 && body.startsWith('"') && body.endsWith('"') ? body.slice(1, -1) : body;
 	// 统一去掉目录标记尾斜杠（含 Windows 反斜杠），避免 FS API 拿到 "src/"
 	path = path.replace(/[/\\]+$/, "");
 	return path;
@@ -115,10 +102,7 @@ export function unwrapFileChipPath(raw: string): string {
  * 目录必须带尾斜杠（@src/），否则 chip 规则要求路径含 /\. 时，
  * 裸名 @src 不会渲染为文件 chip，模型也容易当成「智能体/人」mention。
  */
-export function formatFilePathRef(
-	path: string,
-	options?: { isDirectory?: boolean },
-): string {
+export function formatFilePathRef(path: string, options?: { isDirectory?: boolean }): string {
 	// 先规范化：去掉已有尾分隔符，再按 isDirectory 统一追加 /
 	let normalized = path.replace(/[/\\]+$/, "");
 	if (options?.isDirectory) {
@@ -177,20 +161,13 @@ function isAbsoluteLocalPath(body: string): boolean {
  *
  * URL 中的路径段（如 https://example.com/foo）不会被识别为 chip。
  */
-export function parseRichInputChips(
-	text: string,
-	validCommandNames?: Set<string>,
-	validFilePaths?: Set<string>,
-	validSessionRefs?: Set<string>,
-	validQuotes?: Map<string, string>,
-): ComposerChip[] {
+export function parseRichInputChips(text: string, validCommandNames?: Set<string>, validFilePaths?: Set<string>, validSessionRefs?: Set<string>, validQuotes?: Map<string, string>): ComposerChip[] {
 	const chips: ComposerChip[] = [];
 	const urlSpans = findUrlSpans(text);
 
 	// /skill：前置排除 : / 和 \w；slash 命令 = 命令名 + 可选 :参数名。
 	// 后一字符若为 /，说明是路径（如 /usr/bin），不当作 skill。
-	const slashRe =
-		/(?<![:/.\w#!~])(\/[\p{L}][\p{L}\p{N}_-]*(?::[\p{L}][\p{L}\p{N}_-]*)?)/gu;
+	const slashRe = /(?<![:/.\w#!~])(\/[\p{L}][\p{L}\p{N}_-]*(?::[\p{L}][\p{L}\p{N}_-]*)?)/gu;
 	let m: RegExpExecArray | null;
 	while ((m = slashRe.exec(text)) !== null) {
 		const start = m.index;
@@ -203,12 +180,7 @@ export function parseRichInputChips(
 			// /skill:foo 仍能还原为 chip，而未知普通 /command 继续保持纯文本。
 			const isPiSkillInvocation = /^skill:[\p{L}\p{N}_-]+$/u.test(label);
 			const baseCommand = label.split(":", 1)[0] ?? label;
-			if (
-				!validCommandNames ||
-				validCommandNames.has(label) ||
-				validCommandNames.has(baseCommand) ||
-				isPiSkillInvocation
-			) {
+			if (!validCommandNames || validCommandNames.has(label) || validCommandNames.has(baseCommand) || isPiSkillInvocation) {
 				chips.push({ start, end, raw: m[1], kind: "skill", label });
 			}
 		}
@@ -249,13 +221,10 @@ export function parseRichInputChips(
 			const seg = unwrapFileChipPath(rawToken);
 			const normalized = seg.replace(/\\/g, "/");
 			const pathKey = normalized.startsWith("./") ? normalized.slice(2) : normalized;
-			const isAbsPath =
-				/^[a-zA-Z]:[\\/]/.test(pathKey) || /^\/[^/]+\//.test(pathKey);
+			const isAbsPath = /^[a-zA-Z]:[\\/]/.test(pathKey) || /^\/[^/]+\//.test(pathKey);
 			if (!isAbsPath && validFilePaths && !validFilePaths.has(pathKey)) continue;
 			const baseLabel = pathKey || normalized || seg;
-			const fullLabel = isDirectoryRef
-				? `${baseLabel.replace(/[/\\]+$/, "")}/`
-				: baseLabel;
+			const fullLabel = isDirectoryRef ? `${baseLabel.replace(/[/\\]+$/, "")}/` : baseLabel;
 			// 只展示文件名（Proma 同款），全路径仍在 raw 里，不影响偏移、打开或发送内容。
 			const label = formatFileChipLabel(fullLabel);
 			// 保留用户实际输入的 raw，不在解析阶段改写成 @"…"：原始 token 的

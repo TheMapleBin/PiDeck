@@ -26,13 +26,7 @@ import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
  * 用 fs 替身统计真实读取的字节量，字节上界一旦失效立即失败。
  */
 
-const importerFiles = [
-	"src/main/sessions/ClaudeSessionImporter.ts",
-	"src/main/sessions/CursorSessionImporter.ts",
-	"src/main/sessions/WorkBuddySessionImporter.ts",
-	"src/main/sessions/cursorSessionSource.ts",
-	"src/main/sessions/workbuddySessionSource.ts",
-];
+const importerFiles = ["src/main/sessions/ClaudeSessionImporter.ts", "src/main/sessions/CursorSessionImporter.ts", "src/main/sessions/WorkBuddySessionImporter.ts", "src/main/sessions/cursorSessionSource.ts", "src/main/sessions/workbuddySessionSource.ts"];
 
 /** 剥掉注释与字符串字面量：守卫断言要针对代码，而不是解释性文字。 */
 function stripCommentsAndStrings(source) {
@@ -46,11 +40,7 @@ test("三个导入器的 scan 都不得整读源文件，也不得用 Promise.al
 	for (const file of importerFiles) {
 		const source = stripCommentsAndStrings(readFileSyncUtf8(file));
 		// readFile(...utf8) 是整读特征；导入器里只允许头部/流式读取
-		assert.doesNotMatch(
-			source,
-			/readFile\s*\(/,
-			`${file} 仍在整读源文件（大文件会 abort 主进程）`,
-		);
+		assert.doesNotMatch(source, /readFile\s*\(/, `${file} 仍在整读源文件（大文件会 abort 主进程）`);
 	}
 });
 
@@ -63,11 +53,7 @@ test("scan 使用有界并发 + 头部读取；导入使用流式读取", () => 
 		}
 	}
 	// 导入路径必须是逐行流式（readJsonlObjects）+ 批量写（createBufferedLineSink）
-	for (const file of [
-		"src/main/sessions/ClaudeSessionImporter.ts",
-		"src/main/sessions/CursorSessionImporter.ts",
-		"src/main/sessions/WorkBuddySessionImporter.ts",
-	]) {
+	for (const file of ["src/main/sessions/ClaudeSessionImporter.ts", "src/main/sessions/CursorSessionImporter.ts", "src/main/sessions/WorkBuddySessionImporter.ts"]) {
 		const source = stripCommentsAndStrings(readFileSyncUtf8(file));
 		assert.match(source, /readJsonlObjects\(/, `${file} 的导入必须逐行流式读取`);
 		assert.match(source, /createBufferedLineSink\(/, `${file} 的导入必须批量写盘`);
@@ -80,9 +66,7 @@ function readFileSyncUtf8(path) {
 }
 
 test("readSessionSourceHead 只读头部固定字节：文件再大读取量也不变", async () => {
-	const { readSessionSourceHead, SESSION_SCAN_HEAD_BYTES } = loadTsCommonJs(
-		"src/main/sessions/sessionSourceHead.ts",
-	);
+	const { readSessionSourceHead, SESSION_SCAN_HEAD_BYTES } = loadTsCommonJs("src/main/sessions/sessionSourceHead.ts");
 	const dir = await mkdtemp(join(tmpdir(), "pideck-scanhead-"));
 	try {
 		// 造一个「头部 + 大尾部」的文件；用 fs 替身统计真实读取字节
@@ -112,10 +96,7 @@ test("readSessionSourceHead 只读头部固定字节：文件再大读取量也�
 			},
 		});
 		const result = await patched.readSessionSourceHead(file);
-		assert.ok(
-			maxRead <= SESSION_SCAN_HEAD_BYTES,
-			`单次读取不得超过头部上限（实际 ${maxRead}，上限 ${SESSION_SCAN_HEAD_BYTES}）`,
-		);
+		assert.ok(maxRead <= SESSION_SCAN_HEAD_BYTES, `单次读取不得超过头部上限（实际 ${maxRead}，上限 ${SESSION_SCAN_HEAD_BYTES}）`);
 		assert.ok(Buffer.byteLength(result.head) <= SESSION_SCAN_HEAD_BYTES);
 		// size 是真实文件大小（摘要/状态判定要用），与读取量无关
 		assert.equal(result.size, (await stat(file)).size);
@@ -162,13 +143,7 @@ test("readJsonlObjects 逐行产出对象，且坏行即抛错（导入要严格
 	const dir = await mkdtemp(join(tmpdir(), "pideck-jsonlobj-"));
 	try {
 		const good = join(dir, "good.jsonl");
-		await writeFile(good, [
-			JSON.stringify({ type: "a", n: 1 }),
-			"",
-			JSON.stringify({ type: "b", n: 2 }),
-			"   ",
-			JSON.stringify({ type: "c", n: 3 }),
-		].join("\n") + "\n");
+		await writeFile(good, [JSON.stringify({ type: "a", n: 1 }), "", JSON.stringify({ type: "b", n: 2 }), "   ", JSON.stringify({ type: "c", n: 3 })].join("\n") + "\n");
 		const seen = [];
 		for await (const obj of readJsonlObjects(good)) seen.push(obj.type);
 		assert.equal(seen.join(","), "a,b,c", "空行跳过，其余按序产出");
@@ -187,17 +162,12 @@ test("readJsonlObjects 逐行产出对象，且坏行即抛错（导入要严格
 });
 
 test("三个导入器的 head-only 读取能从头部取出元数据（大文件也是）", async () => {
-	const { readSessionSourceHead, SESSION_SCAN_HEAD_BYTES } = loadTsCommonJs(
-		"src/main/sessions/sessionSourceHead.ts",
-	);
+	const { readSessionSourceHead, SESSION_SCAN_HEAD_BYTES } = loadTsCommonJs("src/main/sessions/sessionSourceHead.ts");
 	const dir = await mkdtemp(join(tmpdir(), "pideck-headmeta-"));
 	try {
 		// 模拟真实形态：元数据在前两行，随后是大量正文
 		const file = join(dir, "sess.jsonl");
-		await writeFile(file, [
-			JSON.stringify({ type: "message", role: "user", sessionId: "sess_1", cwd: "C:/proj", timestamp: 1756800000000, content: [{ type: "input_text", text: "首条提问" }] }),
-			JSON.stringify({ type: "ai-title", aiTitle: "标题" }),
-		].join("\n") + "\n");
+		await writeFile(file, [JSON.stringify({ type: "message", role: "user", sessionId: "sess_1", cwd: "C:/proj", timestamp: 1756800000000, content: [{ type: "input_text", text: "首条提问" }] }), JSON.stringify({ type: "ai-title", aiTitle: "标题" })].join("\n") + "\n");
 		const h = await open(file, "a");
 		const filler = `${JSON.stringify({ type: "message", role: "assistant", content: [{ type: "output_text", text: "正文".repeat(50) }] })}\n`;
 		for (let i = 0; i < 20000; i += 1) await h.write(filler, null, "utf8");
@@ -217,11 +187,7 @@ test("三个导入器的 head-only 读取能从头部取出元数据（大文件
 });
 
 test("导入产物写入临时文件后原子改名，失败时不留残留", async () => {
-	for (const file of [
-		"src/main/sessions/ClaudeSessionImporter.ts",
-		"src/main/sessions/CursorSessionImporter.ts",
-		"src/main/sessions/WorkBuddySessionImporter.ts",
-	]) {
+	for (const file of ["src/main/sessions/ClaudeSessionImporter.ts", "src/main/sessions/CursorSessionImporter.ts", "src/main/sessions/WorkBuddySessionImporter.ts"]) {
 		const source = stripCommentsAndStrings(readFileSyncUtf8(file));
 		// 直接写目标文件会在失败时留下半截会话（污染列表）；必须 tmp + rename
 		assert.match(source, /renameWithRetry\(/, `${file} 必须用临时文件 + 原子改名`);
@@ -233,23 +199,16 @@ test("共享 helper 的并发/头部常量在合理区间", async () => {
 	const mod = loadTsCommonJs("src/main/sessions/sessionSourceHead.ts");
 	assert.ok(mod.SESSION_SCAN_HEAD_BYTES >= 4096, "头部上限过小读不到元数据");
 	assert.ok(mod.SESSION_SCAN_HEAD_BYTES <= 1024 * 1024, "头部上限不应超过 1MB");
-	assert.ok(mod.SESSION_SCAN_CONCURRENCY >= 1 && mod.SESSION_SCAN_CONCURRENCY <= 16,
-		"并发上限应在 1..16（内存峰值 = 并发 × 头部缓冲）");
+	assert.ok(mod.SESSION_SCAN_CONCURRENCY >= 1 && mod.SESSION_SCAN_CONCURRENCY <= 16, "并发上限应在 1..16（内存峰值 = 并发 × 头部缓冲）");
 });
 
 test("readFile 不再出现在导入器的导入语句里（防止回退整读）", async () => {
 	const { readFile } = await import("node:fs/promises");
 	for (const file of importerFiles) {
-		const source = (await readFile(file, "utf8"))
-			.replace(/\/\*[\s\S]*?\*\//g, "")
-			.replace(/^\s*\/\/.*$/gm, "");
+		const source = (await readFile(file, "utf8")).replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
 		const importLines = source.split("\n").filter((l) => l.trim().startsWith("import"));
 		for (const line of importLines) {
-			assert.doesNotMatch(
-				line,
-				/\breadFile\b/,
-				`${file} 的 import 里仍带 readFile：${line.trim()}`,
-			);
+			assert.doesNotMatch(line, /\breadFile\b/, `${file} 的 import 里仍带 readFile：${line.trim()}`);
 		}
 	}
 });

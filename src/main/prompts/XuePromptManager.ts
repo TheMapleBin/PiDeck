@@ -5,13 +5,7 @@ import { app } from "electron";
 import initSqlJs from "sql.js";
 import { PromptManager } from "./PromptManager";
 import type { WslEnvironment } from "../wsl/WslPaths";
-import type {
-	YaoPromptCategory,
-	YaoPromptItem,
-	YaoPromptListResult,
-	YaoPromptDetailResult,
-	PiPromptTemplateSummary,
-} from "../../shared/types";
+import type { YaoPromptCategory, YaoPromptItem, YaoPromptListResult, YaoPromptDetailResult, PiPromptTemplateSummary } from "../../shared/types";
 
 /** 覆盖层模板条目（官方模板热更新 md，正文为明文、无需解压）。 */
 type OverlayPrompt = {
@@ -40,9 +34,7 @@ export class XuePromptManager {
 	private readonly overlayDirProvider: () => string | null;
 
 	constructor(home?: string, overlayDirProvider: () => string | null = () => null) {
-		const base = app.isPackaged
-			? process.resourcesPath
-			: join(app.getAppPath(), "resources");
+		const base = app.isPackaged ? process.resourcesPath : join(app.getAppPath(), "resources");
 		this.dbPath = join(base, "xueprompts.db");
 		this.promptManager = new PromptManager(home);
 		this.overlayDirProvider = overlayDirProvider;
@@ -62,14 +54,7 @@ export class XuePromptManager {
 			this.sqlPromise = initSqlJs({
 				locateFile: (file: string) => {
 					if (app.isPackaged) {
-						return join(
-							process.resourcesPath,
-							"app.asar.unpacked",
-							"node_modules",
-							"sql.js",
-							"dist",
-							file
-						);
+						return join(process.resourcesPath, "app.asar.unpacked", "node_modules", "sql.js", "dist", file);
 					}
 					return join(app.getAppPath(), "node_modules", "sql.js", "dist", file);
 				},
@@ -88,9 +73,7 @@ export class XuePromptManager {
 	private blobToString(blob: any): string {
 		if (!blob) return "";
 		// sql.js 返回 BLOB 为 Uint8Array
-		const buf = blob instanceof Uint8Array || ArrayBuffer.isView(blob)
-			? Buffer.from(blob as Uint8Array)
-			: Buffer.from(blob as number[]);
+		const buf = blob instanceof Uint8Array || ArrayBuffer.isView(blob) ? Buffer.from(blob as Uint8Array) : Buffer.from(blob as number[]);
 		try {
 			return gunzipSync(buf).toString("utf8");
 		} catch {
@@ -139,14 +122,16 @@ export class XuePromptManager {
 			const index = line.indexOf(":");
 			if (index === -1) continue;
 			const key = line.slice(0, index).trim();
-			const value = line.slice(index + 1).trim().replace(/^['"]|['"]$/g, "");
+			const value = line
+				.slice(index + 1)
+				.trim()
+				.replace(/^['"]|['"]$/g, "");
 			if (key === "title" || key === "description" || key === "category") {
 				(result as Record<string, string>)[key] = value;
 			}
 		}
 		return result;
 	}
-
 
 	/**
 	 * 把 SELECT slug, url, title, category, content, description 的一行映射为商店条目。
@@ -184,21 +169,12 @@ export class XuePromptManager {
 	 * 传 opts 时支持分页查询：categories 始终返回全部分类，
 	 * prompts 按 category/search 过滤并分页，同时返回 total 总数。
 	 */
-	async list(opts?: {
-		category?: string;
-		search?: string;
-		page?: number;
-		pageSize?: number;
-	}): Promise<YaoPromptListResult> {
+	async list(opts?: { category?: string; search?: string; page?: number; pageSize?: number }): Promise<YaoPromptListResult> {
 		const db = await this.getDb();
 		try {
 			// 始终查询全部分类（数据量小，分类栏需要）
-			const catRows = db.exec(
-				"SELECT slug, name, count FROM xueprompt_categories ORDER BY count DESC"
-			);
-			const categories: YaoPromptCategory[] = (
-				catRows[0]?.values ?? []
-			).map((row: any[]) => ({
+			const catRows = db.exec("SELECT slug, name, count FROM xueprompt_categories ORDER BY count DESC");
+			const categories: YaoPromptCategory[] = (catRows[0]?.values ?? []).map((row: any[]) => ({
 				slug: String(row[0] ?? ""),
 				name: String(row[1] ?? ""),
 				count: Number(row[2] ?? 0),
@@ -219,10 +195,7 @@ export class XuePromptManager {
 				params.push(opts.category, opts.category);
 			}
 			const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-			const rows = db.exec(
-				`SELECT slug, url, title, category, content, description FROM xueprompts ${whereClause} ORDER BY category, title`,
-				params
-			);
+			const rows = db.exec(`SELECT slug, url, title, category, content, description FROM xueprompts ${whereClause} ORDER BY category, title`, params);
 
 			// slug → 条目 合并表：overlay 优先（title/category 缺省时回退 db 同名值，
 			// 保证商店表格显示仍是友好中文标题而非文件名）
@@ -252,14 +225,10 @@ export class XuePromptManager {
 			}
 
 			// category 过滤：overlay 条目用「分类名或 slug」宽容匹配
-			const categoryName = opts?.category
-				? categories.find((c) => c.slug === opts.category)?.name ?? opts.category
-				: null;
+			const categoryName = opts?.category ? (categories.find((c) => c.slug === opts.category)?.name ?? opts.category) : null;
 			let all = Array.from(bySlug.values());
 			if (categoryName) {
-				all = all.filter((e) =>
-					e.item.category === categoryName || e.item.category === opts!.category
-				);
+				all = all.filter((e) => e.item.category === categoryName || e.item.category === opts!.category);
 			}
 
 			// 搜索：应用层明文匹配（overlay 内容本来就是明文；db 的 BLOB 解压后匹配）
@@ -283,7 +252,10 @@ export class XuePromptManager {
 			});
 
 			// 分类栏：db 分类 + overlay 新增分类，count 按合并后可见条数重算
-			const mergedCategories = this.mergeCategories(categories, all.map((e) => e.item.category));
+			const mergedCategories = this.mergeCategories(
+				categories,
+				all.map((e) => e.item.category),
+			);
 
 			if (!opts) {
 				return { categories: mergedCategories, prompts: all.map((e) => e.item), repoPath: this.dbPath };
@@ -302,16 +274,10 @@ export class XuePromptManager {
 	/**
 	 * 无覆盖层时的原 db 查询路径（保持历史行为与性能，分页走 SQL LIMIT/OFFSET）。
 	 */
-	private async listFromDbOnly(
-		db: import("sql.js").Database,
-		categories: YaoPromptCategory[],
-		opts?: { category?: string; search?: string; page?: number; pageSize?: number }
-	): Promise<YaoPromptListResult> {
+	private async listFromDbOnly(db: import("sql.js").Database, categories: YaoPromptCategory[], opts?: { category?: string; search?: string; page?: number; pageSize?: number }): Promise<YaoPromptListResult> {
 		if (!opts) {
 			// 向后兼容：全量查询
-			const promptRows = db.exec(
-				"SELECT slug, url, title, category, content, description FROM xueprompts ORDER BY category, title"
-			);
+			const promptRows = db.exec("SELECT slug, url, title, category, content, description FROM xueprompts ORDER BY category, title");
 			const prompts: YaoPromptItem[] = (promptRows[0]?.values ?? []).map((row: any[]) => this.rowToYaoPromptItem(row));
 			return { categories, prompts, repoPath: this.dbPath };
 		}
@@ -333,10 +299,7 @@ export class XuePromptManager {
 		const keyword = opts.search?.trim();
 		if (keyword) {
 			const categoryClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-			const rows = db.exec(
-				`SELECT slug, url, title, category, content, description FROM xueprompts ${categoryClause} ORDER BY category, title`,
-				params
-			);
+			const rows = db.exec(`SELECT slug, url, title, category, content, description FROM xueprompts ${categoryClause} ORDER BY category, title`, params);
 			const needle = keyword.toLowerCase();
 			const matched = (rows[0]?.values ?? []).filter((row: any[]) => {
 				const title = String(row[2] ?? "");
@@ -350,22 +313,14 @@ export class XuePromptManager {
 			return { categories, prompts, repoPath: this.dbPath, total: matched.length, page, pageSize };
 		}
 
-		const whereClause = conditions.length > 0
-			? `WHERE ${conditions.join(" AND ")}`
-			: "";
+		const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
-		const countResult = db.exec(
-			`SELECT COUNT(*) FROM xueprompts ${whereClause}`,
-			params
-		);
+		const countResult = db.exec(`SELECT COUNT(*) FROM xueprompts ${whereClause}`, params);
 		const total = Number(countResult[0]?.values?.[0]?.[0] ?? 0);
 
 		const offset = (page - 1) * pageSize;
 
-		const promptRows = db.exec(
-			`SELECT slug, url, title, category, content, description FROM xueprompts ${whereClause} ORDER BY category, title LIMIT ? OFFSET ?`,
-			[...params, pageSize, offset]
-		);
+		const promptRows = db.exec(`SELECT slug, url, title, category, content, description FROM xueprompts ${whereClause} ORDER BY category, title LIMIT ? OFFSET ?`, [...params, pageSize, offset]);
 		const prompts: YaoPromptItem[] = (promptRows[0]?.values ?? []).map((row: any[]) => this.rowToYaoPromptItem(row));
 
 		return { categories, prompts, repoPath: this.dbPath, total, page, pageSize };
@@ -402,35 +357,20 @@ export class XuePromptManager {
 	/**
 	 * 获取单条提示词详情（覆盖层模板优先：官方模板热更新后，商店详情立即显示新正文）
 	 */
-	async detail(
-		slug: string,
-		category: string
-	): Promise<YaoPromptDetailResult | null> {
+	async detail(slug: string, category: string): Promise<YaoPromptDetailResult | null> {
 		const overlay = this.readOverlayPrompts().get(slug);
 		if (overlay) {
 			const db = await this.getDb();
 			try {
 				// 标题/描述缺省时回退 db 同名条目，保持商店观感一致
-				const rows = db.exec(
-					"SELECT title, description, url FROM xueprompts WHERE slug = ?",
-				[slug]
-			);
+				const rows = db.exec("SELECT title, description, url FROM xueprompts WHERE slug = ?", [slug]);
 				const dbRow = rows[0]?.values?.[0];
 				const dbTitle = dbRow ? String(dbRow[0] ?? "") : "";
 				const dbDescription = dbRow ? this.blobToString(dbRow[1]) : "";
 				const dbUrl = dbRow ? String(dbRow[2] ?? "") : "";
 				const title = overlay.title ?? dbTitle ?? slug;
 				const description = overlay.description ?? dbDescription ?? "";
-				const fullContent = [
-					"---",
-					`title: ${title}`,
-					`description: ${description}`,
-					`source: xueprompt-overlay`,
-					`url: ${dbUrl}`,
-					"---",
-					"",
-					overlay.content,
-				].join("\n");
+				const fullContent = ["---", `title: ${title}`, `description: ${description}`, `source: xueprompt-overlay`, `url: ${dbUrl}`, "---", "", overlay.content].join("\n");
 				return { title, description, promptContent: overlay.content, fullContent };
 			} finally {
 				db.close();
@@ -439,10 +379,7 @@ export class XuePromptManager {
 
 		const db = await this.getDb();
 		try {
-			const rows = db.exec(
-				"SELECT title, content, description, url FROM xueprompts WHERE slug = ?",
-				[slug]
-			);
+			const rows = db.exec("SELECT title, content, description, url FROM xueprompts WHERE slug = ?", [slug]);
 			if (!rows[0]?.values?.length) return null;
 
 			const row = rows[0].values[0];
@@ -452,16 +389,7 @@ export class XuePromptManager {
 			const url = String(row[3] ?? "");
 
 			// 拼接完整内容（含类 frontmatter 头）
-			const fullContent = [
-				"---",
-				`title: ${title}`,
-				`description: ${description}`,
-				`source: xueprompt`,
-				`url: ${url}`,
-				"---",
-				"",
-				content,
-			].join("\n");
+			const fullContent = ["---", `title: ${title}`, `description: ${description}`, `source: xueprompt`, `url: ${url}`, "---", "", content].join("\n");
 
 			return {
 				title,
@@ -478,11 +406,7 @@ export class XuePromptManager {
 	/**
 	 * 导入到 pi 模板
 	 */
-	async importToPi(
-		slug: string,
-		category: string,
-		projectPath?: string,
-	): Promise<PiPromptTemplateSummary> {
+	async importToPi(slug: string, category: string, projectPath?: string): Promise<PiPromptTemplateSummary> {
 		const detail = await this.detail(slug, category);
 		if (!detail) throw new Error(`未找到提示词: ${slug}`);
 
@@ -492,23 +416,17 @@ export class XuePromptManager {
 			.replace(/^-|-$/g, "")
 			.toLowerCase();
 
-		const tryCreate = async (
-			tryName: string
-		): Promise<PiPromptTemplateSummary> => {
+		const tryCreate = async (tryName: string): Promise<PiPromptTemplateSummary> => {
 			try {
 				const input = {
 					name: tryName,
 					description: detail.description || detail.title,
 				};
-				return projectPath
-					? await this.promptManager.createInProject(projectPath, input)
-					: await this.promptManager.create(input);
+				return projectPath ? await this.promptManager.createInProject(projectPath, input) : await this.promptManager.create(input);
 			} catch {
 				const match = tryName.match(/-(\d+)$/);
 				const nextNum = match ? parseInt(match[1], 10) + 1 : 2;
-				return tryCreate(
-					tryName.replace(/-\d+$/, "") + "-" + nextNum
-				);
+				return tryCreate(tryName.replace(/-\d+$/, "") + "-" + nextNum);
 			}
 		};
 

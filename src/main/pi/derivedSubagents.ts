@@ -41,9 +41,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-const TERMINAL_STATUSES = new Set<PiSubagentStatus>([
-	"completed", "error", "stopped", "aborted", "steered",
-]);
+const TERMINAL_STATUSES = new Set<PiSubagentStatus>(["completed", "error", "stopped", "aborted", "steered"]);
 
 /** content 归一化为纯文本（string 直返；数组只拼接 text 项，工具调用/思考块忽略）。 */
 export function extractEntryText(content: unknown): string {
@@ -96,9 +94,7 @@ export function extractAcpErrorExcerpt(text: string): string | undefined {
  * 纯函数：不关心分支/压缩等索引概念，按文件顺序扫（委托审计语义与 record 读取
  * 一致：不随对话分支回退丢失）。损坏条目由调用方过滤；字段缺失的条目跳过。
  */
-export function deriveAcpDelegateEntries(
-	rawEntries: readonly unknown[],
-): PiSubagentEntry[] {
+export function deriveAcpDelegateEntries(rawEntries: readonly unknown[]): PiSubagentEntry[] {
 	const byId = new Map<string, PiSubagentEntry>();
 	// runId → 派发 toolCallId：终态通知/取消只带 runId，需要这层反查
 	const entryIdByRunId = new Map<string, string>();
@@ -141,8 +137,7 @@ export function deriveAcpDelegateEntries(
 			continue;
 		}
 
-		if (role === "toolResult" && message.toolName === ACP_DELEGATE_TOOL
-			&& typeof message.toolCallId === "string") {
+		if (role === "toolResult" && message.toolName === ACP_DELEGATE_TOOL && typeof message.toolCallId === "string") {
 			// 派发确认（后台运行，非终态）：只登记 runId 关联
 			const runId = extractAcpRunId(extractEntryText(message.content));
 			if (runId) entryIdByRunId.set(runId, message.toolCallId);
@@ -181,9 +176,7 @@ export function deriveAcpDelegateEntries(
  * widget 条目补充（widget 快照只有 agent 名）。action 管理查询（list/status 等）
  * 与工作流脚本派发不是单次运行，不推导。
  */
-export function deriveSubagentToolEntries(
-	rawEntries: readonly unknown[],
-): PiSubagentEntry[] {
+export function deriveSubagentToolEntries(rawEntries: readonly unknown[]): PiSubagentEntry[] {
 	const byId = new Map<string, PiSubagentEntry>();
 	// toolCallId → 条目：派发初始以 toolCallId 为键；异步回执到达后重键为 asyncId。
 	// 两张表共享同一 entry 对象，重键时同步增删 byId，byToolCallId 保留原键供后续
@@ -221,8 +214,7 @@ export function deriveSubagentToolEntries(
 			continue;
 		}
 
-		if (role === "toolResult" && message.toolName === SUBAGENT_TOOL
-			&& typeof message.toolCallId === "string") {
+		if (role === "toolResult" && message.toolName === SUBAGENT_TOOL && typeof message.toolCallId === "string") {
 			const entry = byToolCallId.get(message.toolCallId);
 			if (!entry || TERMINAL_STATUSES.has(entry.status)) continue;
 			const text = extractEntryText(message.content);
@@ -254,10 +246,7 @@ export function deriveSubagentToolEntries(
  * （call_xxx）天然不相交，直接拼接后统一按 startedAt 降序。
  */
 export function deriveToolSubagentEntries(rawEntries: readonly unknown[]): PiSubagentEntry[] {
-	return mergeSubagentSources(
-		[],
-		[...deriveAcpDelegateEntries(rawEntries), ...deriveSubagentToolEntries(rawEntries)],
-	);
+	return mergeSubagentSources([], [...deriveAcpDelegateEntries(rawEntries), ...deriveSubagentToolEntries(rawEntries)]);
 }
 
 /**
@@ -268,10 +257,7 @@ export function deriveToolSubagentEntries(rawEntries: readonly unknown[]): PiSub
  * ——即读取侧由残留 start 锚点合成的空壳——而推导条目已从终态信号拿到真实结局时，
  * 推导更准确，以推导为准。
  */
-export function mergeSubagentSources(
-	records: PiSubagentEntry[],
-	derived: PiSubagentEntry[],
-): PiSubagentEntry[] {
+export function mergeSubagentSources(records: PiSubagentEntry[], derived: PiSubagentEntry[]): PiSubagentEntry[] {
 	const byId = new Map(records.map((record) => [record.id, record]));
 	for (const entry of derived) {
 		const existing = byId.get(entry.id);
@@ -279,8 +265,7 @@ export function mergeSubagentSources(
 			byId.set(entry.id, entry);
 			continue;
 		}
-		const isBareStoppedShell = existing.status === "stopped"
-			&& existing.result == null && existing.error == null;
+		const isBareStoppedShell = existing.status === "stopped" && existing.result == null && existing.error == null;
 		if (isBareStoppedShell && TERMINAL_STATUSES.has(entry.status)) {
 			byId.set(entry.id, entry);
 		}
@@ -322,17 +307,10 @@ export function downgradeStaleRunning(entries: PiSubagentEntry[]): PiSubagentEnt
  * 无法判定，保守保留原状。对 record 与 toolcall 两源统一生效（record 的
  * running 残留同样来自已消亡的旧 runtime）。
  */
-export function downgradeRunningStartedBefore(
-	entries: PiSubagentEntry[],
-	startedBeforeMs: number,
-): PiSubagentEntry[] {
+export function downgradeRunningStartedBefore(entries: PiSubagentEntry[], startedBeforeMs: number): PiSubagentEntry[] {
 	let changed = false;
 	const next = entries.map((entry) => {
-		if (
-			(entry.status === "running" || entry.status === "queued")
-			&& typeof entry.startedAt === "number"
-			&& entry.startedAt < startedBeforeMs
-		) {
+		if ((entry.status === "running" || entry.status === "queued") && typeof entry.startedAt === "number" && entry.startedAt < startedBeforeMs) {
 			changed = true;
 			return { ...entry, status: "stopped" as const };
 		}

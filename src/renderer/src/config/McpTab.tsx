@@ -14,37 +14,22 @@ import { Label } from "../components/ui-shadcn/label";
 import { Textarea } from "../components/ui-shadcn/textarea";
 import { ConfigSelect, openDocsInSystemBrowser } from "./ConfigShared";
 import { ResourceScopeSelector, type ResourceScope } from "./ResourceScopeSelector";
-import {
-	inferMcpTransport,
-	isMcpServerDisabled,
-	McpAdapterGuide,
-	McpServerListPane,
-} from "./McpResourceViews";
-import {
-	argsToText,
-	buildMcpDisplayServers,
-	isMcpServerName,
-	recordToText,
-	textToArgs,
-	textToRecord,
-} from "./mcpForm";
-import type {
-	McpConfigFile,
-	McpConfigSnapshot,
-	McpProbeResult,
-	McpServerDefinition,
-	McpServerListItem,
-	McpServerTransport,
-} from "../../../shared/types/mcp";
+import { inferMcpTransport, isMcpServerDisabled, McpAdapterGuide, McpServerListPane } from "./McpResourceViews";
+import { argsToText, buildMcpDisplayServers, isMcpServerName, recordToText, textToArgs, textToRecord } from "./mcpForm";
+import type { McpConfigFile, McpConfigSnapshot, McpProbeResult, McpServerDefinition, McpServerListItem, McpServerTransport } from "../../../shared/types/mcp";
 import { ResourceImportDialog } from "./ResourceImportDialog";
 
-const api = (window as unknown as { piDesktop: {
-	config: {
-		getMcp: (projectId?: string) => Promise<McpConfigSnapshot>;
-		saveMcp: (data: McpConfigFile) => Promise<{ valid: boolean; error?: string }>;
-		probeMcp: (definition: McpServerDefinition) => Promise<McpProbeResult>;
-	};
-} }).piDesktop;
+const api = (
+	window as unknown as {
+		piDesktop: {
+			config: {
+				getMcp: (projectId?: string) => Promise<McpConfigSnapshot>;
+				saveMcp: (data: McpConfigFile) => Promise<{ valid: boolean; error?: string }>;
+				probeMcp: (definition: McpServerDefinition) => Promise<McpProbeResult>;
+			};
+		};
+	}
+).piDesktop;
 
 const MCP_DOCS = "https://nicobailon-pi-mcp-adapter.mintlify.app/configuration/server-setup";
 const EMPTY_FILE: McpConfigFile = { mcpServers: {} };
@@ -75,13 +60,16 @@ function blankDefinition(transport: McpServerTransport): McpServerDefinition {
 	return { command: "npx", args: ["-y"], lifecycle: "lazy" };
 }
 
-export const McpTab = forwardRef<McpTabHandle, {
-	/** PiDeck 已加载项目（项目作用域下拉数据源）；Chat 项目由选择器过滤。 */
-	projects?: Array<{ id: string; name: string; kind?: string }>;
-	/** 当前激活项目 id：项目作用域默认选中并跟随激活项目变化。 */
-	activeProjectId?: string;
-	onDirtyChange: (dirty: boolean) => void;
-}>(function McpTab(props, ref) {
+export const McpTab = forwardRef<
+	McpTabHandle,
+	{
+		/** PiDeck 已加载项目（项目作用域下拉数据源）；Chat 项目由选择器过滤。 */
+		projects?: Array<{ id: string; name: string; kind?: string }>;
+		/** 当前激活项目 id：项目作用域默认选中并跟随激活项目变化。 */
+		activeProjectId?: string;
+		onDirtyChange: (dirty: boolean) => void;
+	}
+>(function McpTab(props, ref) {
 	const { projects = [], activeProjectId, onDirtyChange } = props;
 	/**
 	 * MCP 页自持作用域：项目级 mcp.json 只有这里能管理（项目右键的资源弹窗不含 MCP），
@@ -106,10 +94,13 @@ export const McpTab = forwardRef<McpTabHandle, {
 	/** 有未保存草稿时禁用作用域切换：切作用域会整页重载并丢弃草稿。 */
 	const [dirty, setDirty] = useState(false);
 	/** 脏状态同步：既上报父层（标题栏保存按钮/关闭确认），也留在本地控制下拉禁用。 */
-	const syncDirty = useCallback((next: boolean) => {
-		setDirty(next);
-		onDirtyChange(next);
-	}, [onDirtyChange]);
+	const syncDirty = useCallback(
+		(next: boolean) => {
+			setDirty(next);
+			onDirtyChange(next);
+		},
+		[onDirtyChange],
+	);
 
 	useEffect(() => {
 		// 跟随激活项目：侧栏切换项目时下拉选中项同步（仅影响 project 作用域的目标项目）。
@@ -117,12 +108,7 @@ export const McpTab = forwardRef<McpTabHandle, {
 	}, [activeProjectId]);
 
 	/** 项目作用域实际使用的项目 id：过滤 Chat 项目（无项目级 mcp.json）；全局作用域为 undefined。 */
-	const effectiveProjectId = useMemo(
-		() => scope === "project"
-			? projects.find((item) => item.id === scopeProjectId && item.kind !== "chat")?.id
-			: undefined,
-		[scope, projects, scopeProjectId],
-	);
+	const effectiveProjectId = useMemo(() => (scope === "project" ? projects.find((item) => item.id === scopeProjectId && item.kind !== "chat")?.id : undefined), [scope, projects, scopeProjectId]);
 	/** 无可用项目时不允许停留在 project 作用域（与旧全局选择器的自动回退行为一致）。 */
 	const effectiveScope: ResourceScope = scope === "project" && effectiveProjectId ? "project" : "global";
 
@@ -178,7 +164,7 @@ export const McpTab = forwardRef<McpTabHandle, {
 			syncDirty(false);
 			setCreating(null);
 			const names = next.servers.map((item) => item.name);
-			setSelected((current) => (current && names.includes(current) ? current : names[0] ?? null));
+			setSelected((current) => (current && names.includes(current) ? current : (names[0] ?? null)));
 		} catch (caught) {
 			if (generation === loadGenerationRef.current) {
 				setError(caught instanceof Error ? caught.message : String(caught));
@@ -196,29 +182,30 @@ export const McpTab = forwardRef<McpTabHandle, {
 		};
 	}, [load]);
 
-	const displayServers = useMemo(
-		() => snapshot ? buildMcpDisplayServers(snapshot, writable, effectiveScope) : [],
-		[effectiveScope, snapshot, writable],
-	);
+	const displayServers = useMemo(() => (snapshot ? buildMcpDisplayServers(snapshot, writable, effectiveScope) : []), [effectiveScope, snapshot, writable]);
 
 	const selectedItem = displayServers.find((item) => item.name === selected) ?? null;
-	const editingDef: McpServerDefinition = creating
-		? creating.definition
-		: (selectedItem?.definition ?? blankDefinition("stdio"));
+	const editingDef: McpServerDefinition = creating ? creating.definition : (selectedItem?.definition ?? blankDefinition("stdio"));
 	const transport = inferMcpTransport(editingDef);
 
-	const applyWritable = useCallback((next: McpConfigFile) => {
-		if (effectiveScope === "project") return;
-		setWritable(next);
-		markDirty();
-	}, [markDirty, effectiveScope]);
+	const applyWritable = useCallback(
+		(next: McpConfigFile) => {
+			if (effectiveScope === "project") return;
+			setWritable(next);
+			markDirty();
+		},
+		[markDirty, effectiveScope],
+	);
 
-	const upsert = useCallback((name: string, definition: McpServerDefinition) => {
-		applyWritable({
-			...writable,
-			mcpServers: { ...(writable.mcpServers ?? {}), [name]: definition },
-		});
-	}, [applyWritable, writable]);
+	const upsert = useCallback(
+		(name: string, definition: McpServerDefinition) => {
+			applyWritable({
+				...writable,
+				mcpServers: { ...(writable.mcpServers ?? {}), [name]: definition },
+			});
+		},
+		[applyWritable, writable],
+	);
 
 	const startCreate = () => {
 		if (effectiveScope === "project") return;
@@ -352,14 +339,17 @@ export const McpTab = forwardRef<McpTabHandle, {
 
 	useImperativeHandle(ref, () => ({ save, reload: load }), [save, load]);
 
-	const layerLabel = useMemo(() => ({
-		"user-config": t("config.mcp.layer.userConfig"),
-		agents: t("config.mcp.layer.agents"),
-		"agents-dir": t("config.mcp.layer.agentsDir"),
-		"pi-agent": t("config.mcp.layer.piAgent"),
-		project: t("config.mcp.layer.project"),
-		"project-pi": t("config.mcp.layer.projectPi"),
-	}), []);
+	const layerLabel = useMemo(
+		() => ({
+			"user-config": t("config.mcp.layer.userConfig"),
+			agents: t("config.mcp.layer.agents"),
+			"agents-dir": t("config.mcp.layer.agentsDir"),
+			"pi-agent": t("config.mcp.layer.piAgent"),
+			project: t("config.mcp.layer.project"),
+			"project-pi": t("config.mcp.layer.projectPi"),
+		}),
+		[],
+	);
 
 	const showAdapterGuide = adapterInstalled === false && effectiveScope === "global";
 
@@ -374,11 +364,7 @@ export const McpTab = forwardRef<McpTabHandle, {
 					<strong>{t("config.nav.mcp")}</strong>
 					<p className="mt-1 text-micro text-muted-foreground">{t("config.mcp.hint")}</p>
 					<p className="mt-1 text-micro text-muted-foreground">{t("config.restartHint")}</p>
-					<a
-						href={MCP_DOCS}
-						className="mt-1 inline-block text-micro text-primary hover:underline"
-						onClick={openDocsInSystemBrowser(MCP_DOCS)}
-					>
+					<a href={MCP_DOCS} className="mt-1 inline-block text-micro text-primary hover:underline" onClick={openDocsInSystemBrowser(MCP_DOCS)}>
 						{t("config.mcp.docs")}
 					</a>
 				</div>
@@ -388,13 +374,7 @@ export const McpTab = forwardRef<McpTabHandle, {
 						<RefreshCw size={14} />
 						{t("common.refresh")}
 					</Button>
-					<ResourceImportDialog
-						kind="mcp"
-						sourceProjectId={activeProjectId}
-						projects={projects}
-						triggerLabel={t("config.import.button")}
-						onImported={() => void load()}
-					/>
+					<ResourceImportDialog kind="mcp" sourceProjectId={activeProjectId} projects={projects} triggerLabel={t("config.import.button")} onImported={() => void load()} />
 					{adapterInstalled !== false && effectiveScope === "global" ? (
 						<Button size="sm" onClick={startCreate} disabled={saving || Boolean(creating)}>
 							<Plus size={14} />
@@ -404,14 +384,8 @@ export const McpTab = forwardRef<McpTabHandle, {
 				</div>
 			</div>
 
-			{error ? (
-				<div className="rounded-sm border border-danger/20 bg-danger-soft px-3 py-2 text-control text-danger">{error}</div>
-			) : null}
-			{snapshot?.writableError ? (
-				<div className="rounded-sm border border-danger/20 bg-danger-soft px-3 py-2 text-control text-danger">
-					{t("config.mcp.writableBroken")}
-				</div>
-			) : null}
+			{error ? <div className="rounded-sm border border-danger/20 bg-danger-soft px-3 py-2 text-control text-danger">{error}</div> : null}
+			{snapshot?.writableError ? <div className="rounded-sm border border-danger/20 bg-danger-soft px-3 py-2 text-control text-danger">{t("config.mcp.writableBroken")}</div> : null}
 
 			{showAdapterGuide ? (
 				<McpAdapterGuide onInstalled={load} />
@@ -419,11 +393,7 @@ export const McpTab = forwardRef<McpTabHandle, {
 				<>
 					<div className="flex flex-wrap gap-1.5">
 						{(snapshot?.layers ?? []).map((layer) => (
-							<span
-								key={layer.kind}
-								className={`rounded-sm border px-1.5 py-0.5 font-mono text-micro ${layer.exists ? "border-border-subtle text-text-secondary" : "border-dashed border-border-subtle text-muted-foreground"}`}
-								title={layer.path}
-							>
+							<span key={layer.kind} className={`rounded-sm border px-1.5 py-0.5 font-mono text-micro ${layer.exists ? "border-border-subtle text-text-secondary" : "border-dashed border-border-subtle text-muted-foreground"}`} title={layer.path}>
 								{layerLabel[layer.kind]}
 								{effectiveScope === "global" && layer.writable ? ` · ${t("config.mcp.writable")}` : ""}
 								{layer.exists ? "" : ` · ${t("config.mcp.missing")}`}
@@ -440,173 +410,128 @@ export const McpTab = forwardRef<McpTabHandle, {
 
 			{showAdapterGuide ? null : (
 				<div className="grid min-h-0 flex-1 grid-cols-[minmax(220px,280px)_minmax(0,1fr)] gap-3 max-[820px]:grid-cols-1">
-				<McpServerListPane
-					scope={effectiveScope}
-					projectLayerPaths={(snapshot?.layers ?? [])
-						.filter((layer) => layer.kind === "project" || layer.kind === "project-pi")
-						.map((layer) => layer.path)}
-					servers={displayServers}
-					selected={selected}
-					creating={Boolean(creating)}
-					onSelect={(name) => {
-						setSelected(name);
-						setProbe(null);
-					}}
-				/>
+					<McpServerListPane
+						scope={effectiveScope}
+						projectLayerPaths={(snapshot?.layers ?? []).filter((layer) => layer.kind === "project" || layer.kind === "project-pi").map((layer) => layer.path)}
+						servers={displayServers}
+						selected={selected}
+						creating={Boolean(creating)}
+						onSelect={(name) => {
+							setSelected(name);
+							setProbe(null);
+						}}
+					/>
 
-				<div className="flex min-h-0 flex-col gap-3 overflow-auto rounded-md border border-border-subtle bg-bg-panel p-3">
-					{!selected && !creating ? (
-						<div className="py-8 text-center text-micro text-muted-foreground">{t("config.mcp.selectHint")}</div>
-					) : (
-						<fieldset disabled={effectiveScope === "project"} className="contents">
-							<div className="grid gap-2">
-								<Label>{t("config.mcp.field.name")}</Label>
-								<Input
-									value={creating ? creating.name : selected ?? ""}
-									onChange={(event) => {
-										if (!creating) return;
-										setCreating({ ...creating, name: event.target.value });
-										markDirty();
-									}}
-									disabled={!creating || saving}
-									placeholder="chrome-devtools"
-									className="h-8 font-mono"
-								/>
-							</div>
-							<div className="grid gap-2">
-								<Label>{t("config.mcp.field.transport")}</Label>
-								<ConfigSelect
-									value={transport}
-									options={TRANSPORT_OPTIONS.map((option) => ({ value: option.value, label: t(option.labelKey) }))}
-									onChange={(value) => switchTransport(value as McpServerTransport)}
-								/>
-							</div>
-							{transport === "stdio" ? (
-								<>
-									<div className="grid gap-2">
-										<Label>{t("config.mcp.field.command")}</Label>
-										<Input
-											value={editingDef.command ?? ""}
-											onChange={(event) => patchEditing({ command: event.target.value, url: undefined, socket: undefined })}
-											className="h-8 font-mono"
-											placeholder="npx"
-										/>
-									</div>
-									<div className="grid gap-2">
-										<Label>{t("config.mcp.field.args")}</Label>
-										<Input
-											value={argsToText(editingDef.args)}
-											onChange={(event) => patchEditing({ args: textToArgs(event.target.value) })}
-											className="h-8 font-mono"
-											placeholder="-y chrome-devtools-mcp@1.6.0"
-										/>
-									</div>
-									<div className="grid gap-2">
-										<Label>{t("config.mcp.field.cwd")}</Label>
-										<Input
-											value={editingDef.cwd ?? ""}
-											onChange={(event) => patchEditing({ cwd: event.target.value || undefined })}
-											className="h-8 font-mono"
-										/>
-									</div>
-								</>
-							) : null}
-							{transport === "http" ? (
+					<div className="flex min-h-0 flex-col gap-3 overflow-auto rounded-md border border-border-subtle bg-bg-panel p-3">
+						{!selected && !creating ? (
+							<div className="py-8 text-center text-micro text-muted-foreground">{t("config.mcp.selectHint")}</div>
+						) : (
+							<fieldset disabled={effectiveScope === "project"} className="contents">
 								<div className="grid gap-2">
-									<Label>{t("config.mcp.field.url")}</Label>
+									<Label>{t("config.mcp.field.name")}</Label>
 									<Input
-										value={editingDef.url ?? ""}
-										onChange={(event) => patchEditing({ url: event.target.value, command: undefined, args: undefined, socket: undefined })}
-										className="h-8 font-mono"
-										placeholder="https://mcp.example.com/mcp"
-									/>
-								</div>
-							) : null}
-							{transport === "socket" ? (
-								<div className="grid gap-2">
-									<Label>{t("config.mcp.field.socket")}</Label>
-									<Input
-										value={editingDef.socket ?? ""}
-										onChange={(event) => patchEditing({ socket: event.target.value, command: undefined, url: undefined })}
+										value={creating ? creating.name : (selected ?? "")}
+										onChange={(event) => {
+											if (!creating) return;
+											setCreating({ ...creating, name: event.target.value });
+											markDirty();
+										}}
+										disabled={!creating || saving}
+										placeholder="chrome-devtools"
 										className="h-8 font-mono"
 									/>
 								</div>
-							) : null}
-							<div className="grid gap-2">
-								<Label>{t("config.mcp.field.lifecycle")}</Label>
-								<ConfigSelect
-									value={editingDef.lifecycle ?? "lazy"}
-									options={LIFECYCLE_OPTIONS.map((option) => ({ value: option.value, label: t(option.labelKey) }))}
-									onChange={(value) => patchEditing({ lifecycle: value as McpServerDefinition["lifecycle"] })}
-								/>
-							</div>
-							{transport === "stdio" ? (
 								<div className="grid gap-2">
-									<Label>{t("config.mcp.field.env")}</Label>
-									<Textarea
-										value={recordToText(editingDef.env)}
-										onChange={(event) => patchEditing({ env: textToRecord(event.target.value) })}
-										placeholder={t("config.mcp.field.envPlaceholder")}
-										className="min-h-20 font-mono text-control"
+									<Label>{t("config.mcp.field.transport")}</Label>
+									<ConfigSelect value={transport} options={TRANSPORT_OPTIONS.map((option) => ({ value: option.value, label: t(option.labelKey) }))} onChange={(value) => switchTransport(value as McpServerTransport)} />
+								</div>
+								{transport === "stdio" ? (
+									<>
+										<div className="grid gap-2">
+											<Label>{t("config.mcp.field.command")}</Label>
+											<Input value={editingDef.command ?? ""} onChange={(event) => patchEditing({ command: event.target.value, url: undefined, socket: undefined })} className="h-8 font-mono" placeholder="npx" />
+										</div>
+										<div className="grid gap-2">
+											<Label>{t("config.mcp.field.args")}</Label>
+											<Input value={argsToText(editingDef.args)} onChange={(event) => patchEditing({ args: textToArgs(event.target.value) })} className="h-8 font-mono" placeholder="-y chrome-devtools-mcp@1.6.0" />
+										</div>
+										<div className="grid gap-2">
+											<Label>{t("config.mcp.field.cwd")}</Label>
+											<Input value={editingDef.cwd ?? ""} onChange={(event) => patchEditing({ cwd: event.target.value || undefined })} className="h-8 font-mono" />
+										</div>
+									</>
+								) : null}
+								{transport === "http" ? (
+									<div className="grid gap-2">
+										<Label>{t("config.mcp.field.url")}</Label>
+										<Input value={editingDef.url ?? ""} onChange={(event) => patchEditing({ url: event.target.value, command: undefined, args: undefined, socket: undefined })} className="h-8 font-mono" placeholder="https://mcp.example.com/mcp" />
+									</div>
+								) : null}
+								{transport === "socket" ? (
+									<div className="grid gap-2">
+										<Label>{t("config.mcp.field.socket")}</Label>
+										<Input value={editingDef.socket ?? ""} onChange={(event) => patchEditing({ socket: event.target.value, command: undefined, url: undefined })} className="h-8 font-mono" />
+									</div>
+								) : null}
+								<div className="grid gap-2">
+									<Label>{t("config.mcp.field.lifecycle")}</Label>
+									<ConfigSelect value={editingDef.lifecycle ?? "lazy"} options={LIFECYCLE_OPTIONS.map((option) => ({ value: option.value, label: t(option.labelKey) }))} onChange={(value) => patchEditing({ lifecycle: value as McpServerDefinition["lifecycle"] })} />
+								</div>
+								{transport === "stdio" ? (
+									<div className="grid gap-2">
+										<Label>{t("config.mcp.field.env")}</Label>
+										<Textarea value={recordToText(editingDef.env)} onChange={(event) => patchEditing({ env: textToRecord(event.target.value) })} placeholder={t("config.mcp.field.envPlaceholder")} className="min-h-20 font-mono text-control" />
+									</div>
+								) : null}
+								{transport === "http" ? (
+									<div className="grid gap-2">
+										<Label>{t("config.mcp.field.headers")}</Label>
+										<Textarea value={recordToText(editingDef.headers)} onChange={(event) => patchEditing({ headers: textToRecord(event.target.value) })} placeholder={t("config.mcp.field.headersPlaceholder")} className="min-h-20 font-mono text-control" />
+									</div>
+								) : null}
+								<div className="flex items-center justify-between gap-3 rounded-sm border border-border-subtle px-2.5 py-2">
+									<div>
+										<div className="text-control font-medium">{t("config.mcp.field.enabled")}</div>
+										<div className="text-micro text-muted-foreground">{t("config.mcp.field.enabledHint")}</div>
+									</div>
+									<Switch
+										checked={!isMcpServerDisabled(editingDef)}
+										onCheckedChange={(checked) => {
+											if (creating) {
+												patchEditing({ disabled: checked ? undefined : true });
+												return;
+											}
+											if (selectedItem) toggleDisabled(selectedItem, !checked);
+										}}
 									/>
 								</div>
-							) : null}
-							{transport === "http" ? (
-								<div className="grid gap-2">
-									<Label>{t("config.mcp.field.headers")}</Label>
-									<Textarea
-										value={recordToText(editingDef.headers)}
-										onChange={(event) => patchEditing({ headers: textToRecord(event.target.value) })}
-										placeholder={t("config.mcp.field.headersPlaceholder")}
-										className="min-h-20 font-mono text-control"
-									/>
-								</div>
-							) : null}
-							<div className="flex items-center justify-between gap-3 rounded-sm border border-border-subtle px-2.5 py-2">
-								<div>
-									<div className="text-control font-medium">{t("config.mcp.field.enabled")}</div>
-									<div className="text-micro text-muted-foreground">{t("config.mcp.field.enabledHint")}</div>
-								</div>
-								<Switch
-									checked={!isMcpServerDisabled(editingDef)}
-									onCheckedChange={(checked) => {
-										if (creating) {
-											patchEditing({ disabled: checked ? undefined : true });
-											return;
-										}
-										if (selectedItem) toggleDisabled(selectedItem, !checked);
-									}}
-								/>
-							</div>
-							{selectedItem && !creating ? (
-								<p className="text-micro text-muted-foreground" title={selectedItem.originPath}>
-									{t("config.mcp.origin")}: {selectedItem.originPath}
-									{selectedItem.ownedByWritable ? "" : ` · ${t("config.mcp.overlayHint")}`}
-								</p>
-							) : null}
-							<div className="flex flex-wrap items-center gap-1.5">
-								<Button variant="outline" size="sm" onClick={() => void runProbe()} disabled={probing || saving}>
-									<PlugZap size={14} />
-									{probing ? t("config.mcp.probing") : t("config.mcp.probe")}
-								</Button>
-								{creating ? (
-									<Button variant="ghost" size="sm" onClick={cancelCreate}>{t("common.cancel")}</Button>
-								) : (
-									<Button variant="outline" size="sm" className="text-destructive" onClick={removeSelected} disabled={saving}>
-										<Trash2 size={13} />
-										{selectedItem?.ownedByWritable ? t("common.delete") : t("config.mcp.disableInstead")}
+								{selectedItem && !creating ? (
+									<p className="text-micro text-muted-foreground" title={selectedItem.originPath}>
+										{t("config.mcp.origin")}: {selectedItem.originPath}
+										{selectedItem.ownedByWritable ? "" : ` · ${t("config.mcp.overlayHint")}`}
+									</p>
+								) : null}
+								<div className="flex flex-wrap items-center gap-1.5">
+									<Button variant="outline" size="sm" onClick={() => void runProbe()} disabled={probing || saving}>
+										<PlugZap size={14} />
+										{probing ? t("config.mcp.probing") : t("config.mcp.probe")}
 									</Button>
-								)}
-							</div>
-							{probe ? (
-								<div className={`rounded-sm border px-2.5 py-2 text-micro ${probe.ok ? "border-[var(--color-success)]/30 text-[var(--color-success)]" : "border-danger/20 text-danger"}`}>
-									{probe.ok ? `${t("config.mcp.probeOk")} · ${probe.detail}` : `${t("config.mcp.probeFail")} · ${probe.error}`}
+									{creating ? (
+										<Button variant="ghost" size="sm" onClick={cancelCreate}>
+											{t("common.cancel")}
+										</Button>
+									) : (
+										<Button variant="outline" size="sm" className="text-destructive" onClick={removeSelected} disabled={saving}>
+											<Trash2 size={13} />
+											{selectedItem?.ownedByWritable ? t("common.delete") : t("config.mcp.disableInstead")}
+										</Button>
+									)}
 								</div>
-							) : null}
-						</fieldset>
-					)}
+								{probe ? <div className={`rounded-sm border px-2.5 py-2 text-micro ${probe.ok ? "border-[var(--color-success)]/30 text-[var(--color-success)]" : "border-danger/20 text-danger"}`}>{probe.ok ? `${t("config.mcp.probeOk")} · ${probe.detail}` : `${t("config.mcp.probeFail")} · ${probe.error}`}</div> : null}
+							</fieldset>
+						)}
+					</div>
 				</div>
-			</div>
 			)}
 		</div>
 	);

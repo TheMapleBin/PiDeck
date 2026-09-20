@@ -18,12 +18,7 @@ export function readLastWindowBounds(dir: string): LastWindowBounds | null {
 	try {
 		const raw = readFileSync(join(dir, "last-window-bounds.json"), "utf8");
 		const data = JSON.parse(raw) as Partial<LastWindowBounds>;
-		if (
-			typeof data.width === "number" &&
-			typeof data.height === "number" &&
-			data.width >= 880 &&
-			data.height >= 640
-		) {
+		if (typeof data.width === "number" && typeof data.height === "number" && data.width >= 880 && data.height >= 640) {
 			return { width: Math.round(data.width), height: Math.round(data.height) };
 		}
 	} catch {
@@ -36,11 +31,7 @@ export function readLastWindowBounds(dir: string): LastWindowBounds | null {
 export function saveLastWindowBounds(dir: string, bounds: LastWindowBounds): void {
 	try {
 		mkdirSync(dir, { recursive: true });
-		writeFileSync(
-			join(dir, "last-window-bounds.json"),
-			JSON.stringify({ width: Math.round(bounds.width), height: Math.round(bounds.height) }),
-			"utf8",
-		);
+		writeFileSync(join(dir, "last-window-bounds.json"), JSON.stringify({ width: Math.round(bounds.width), height: Math.round(bounds.height) }), "utf8");
 	} catch {
 		// 磁盘/权限失败静默：窗口记忆是可选的体验增强，不影响主流程
 	}

@@ -1,11 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type {
-	AutomationRun,
-	AutomationRunStatus,
-	AutomationTask,
-	SessionRuntimeEvent,
-	SessionRuntimeTarget,
-} from "../../shared/types";
+import type { AutomationRun, AutomationRunStatus, AutomationTask, SessionRuntimeEvent, SessionRuntimeTarget } from "../../shared/types";
 import { isAutomationRunTerminal } from "../../shared/types";
 /**
  * 复用渲染层发送链路的模式标记构造函数，让「普通/计划/目标」的隐藏标记格式只有一份
@@ -110,30 +104,31 @@ export class AutomationRunCoordinator {
 		this.notifySessionCatalogChanged = deps.notifySessionCatalogChanged;
 	}
 
-	async enqueueRun(
-		task: AutomationTask,
-		scheduledFor?: number,
-		trigger: AutomationRun["trigger"] = "schedule",
-		now = Date.now(),
-	): Promise<AutomationRun> {
+	async enqueueRun(task: AutomationTask, scheduledFor?: number, trigger: AutomationRun["trigger"] = "schedule", now = Date.now()): Promise<AutomationRun> {
 		const runs = this.store.listRuns();
 		if (hasActiveAutomationRun(runs, task.id)) {
-			return this.store.createRun({
+			return this.store.createRun(
+				{
+					task,
+					trigger,
+					scheduledFor,
+					status: "skipped",
+					skippedReason: "task-already-running",
+					error: "Task already has an active run",
+				},
+				now,
+			);
+		}
+
+		const run = await this.store.createRun(
+			{
 				task,
 				trigger,
 				scheduledFor,
-				status: "skipped",
-				skippedReason: "task-already-running",
-				error: "Task already has an active run",
-			}, now);
-		}
-
-		const run = await this.store.createRun({
-			task,
-			trigger,
-			scheduledFor,
-			status: "queued",
-		}, now);
+				status: "queued",
+			},
+			now,
+		);
 
 		this.detach("drainQueue", this.drainQueue());
 		return run;
@@ -189,9 +184,7 @@ export class AutomationRunCoordinator {
 			const availableSlots = Math.max(0, maxConcurrent - runningCount);
 			if (availableSlots <= 0) return;
 
-			const queuedRuns = snapshot.runs
-				.filter((r) => r.status === "queued")
-				.sort(compareQueuedAutomationRuns);
+			const queuedRuns = snapshot.runs.filter((r) => r.status === "queued").sort(compareQueuedAutomationRuns);
 
 			for (const run of queuedRuns) {
 				if (this.activeTrackers.size >= maxConcurrent) break;
@@ -267,11 +260,15 @@ export class AutomationRunCoordinator {
 		// dispose 后不再落库（见 disposed 字段注释）。
 		if (this.disposed) return;
 
-		await this.store.updateRun(runId, {
-			status: "starting",
-			startedAt: now,
-			updatedAt: now,
-		}, { type: "starting", at: now });
+		await this.store.updateRun(
+			runId,
+			{
+				status: "starting",
+				startedAt: now,
+				updatedAt: now,
+			},
+			{ type: "starting", at: now },
+		);
 
 		const project = this.projectStore.get(task.projectId);
 		if (!project) {
@@ -308,10 +305,14 @@ export class AutomationRunCoordinator {
 		// 新 draft 已落 catalog：广播刷新让侧栏立即出现会话行（catalog 无内部广播机制，
 		// 不广播的话渲染层要等下一次交互才会拉到，且期间 DSH agent 行会先落成孤儿条目）。
 		this.notifySessionCatalogChanged?.(project.id);
-		await this.store.updateRun(runId, {
-			sessionId,
-			updatedAt: Date.now(),
-		}, { type: "session-created", message: `Session ${sessionId} created`, at: Date.now() });
+		await this.store.updateRun(
+			runId,
+			{
+				sessionId,
+				updatedAt: Date.now(),
+			},
+			{ type: "session-created", message: `Session ${sessionId} created`, at: Date.now() },
+		);
 
 		// Setup timeout watch：timeoutMs 缺省（留空不限）时不挂 watch——
 		// 若对 undefined 直接 setTimeout，事件循环按 0ms 立即触发，会把运行误杀成 timed-out。
@@ -353,9 +354,11 @@ export class AutomationRunCoordinator {
 				description: `Automation: ${task.name}`,
 				// 顺序即优先级：宿主指令置顶（模式标记不能在首行，否则被指令挡住），
 				// 其次是对应模式的隐藏载荷，最后是任务提示词原文。
-				...(isDsh ? {} : {
-					agentMessage: `${agentInstruction}\n\n${submission.agentMessage ?? submission.message}`,
-				}),
+				...(isDsh
+					? {}
+					: {
+							agentMessage: `${agentInstruction}\n\n${submission.agentMessage ?? submission.message}`,
+						}),
 			});
 
 			if (!result.accepted) {
@@ -373,12 +376,16 @@ export class AutomationRunCoordinator {
 				// dispatch 已接受、attachRuntime 在 sendOnce 内异步回写 dshSessionId：
 				// 再广播一次，让渲染层重拉到 promoteToActive 后的会话状态。
 				this.notifySessionCatalogChanged?.(project.id);
-				await this.store.updateRun(runId, {
-					status: "running",
-					agentId: result.agentId,
-					runtimeGeneration: result.runtimeGeneration,
-					updatedAt: Date.now(),
-				}, { type: "prompt-accepted", at: Date.now() });
+				await this.store.updateRun(
+					runId,
+					{
+						status: "running",
+						agentId: result.agentId,
+						runtimeGeneration: result.runtimeGeneration,
+						updatedAt: Date.now(),
+					},
+					{ type: "prompt-accepted", at: Date.now() },
+				);
 			} else {
 				// Query target if omitted from result
 				const target = this.sessionRuntimeCoordinator.getTarget(sessionId);
@@ -386,12 +393,16 @@ export class AutomationRunCoordinator {
 					tracker.target = target;
 					if (this.disposed) return;
 					this.notifySessionCatalogChanged?.(project.id);
-					await this.store.updateRun(runId, {
-						status: "running",
-						agentId: target.agentId,
-						runtimeGeneration: target.runtimeGeneration,
-						updatedAt: Date.now(),
-					}, { type: "prompt-accepted", at: Date.now() });
+					await this.store.updateRun(
+						runId,
+						{
+							status: "running",
+							agentId: target.agentId,
+							runtimeGeneration: target.runtimeGeneration,
+							updatedAt: Date.now(),
+						},
+						{ type: "prompt-accepted", at: Date.now() },
+					);
 				}
 			}
 		} catch (err) {
@@ -503,13 +514,16 @@ export class AutomationRunCoordinator {
 		if (now - tracker.lastMetricUpdate >= RUNTIME_METRIC_THROTTLE_MS && (hasMetrics || stepChanged)) {
 			tracker.lastMetricUpdate = now;
 			tracker.persistedStepCount = tracker.stepCount;
-			this.detach("persist-run-metrics", this.store.updateRun(runId, {
-				...(inputTokens !== undefined ? { inputTokens } : {}),
-				...(outputTokens !== undefined ? { outputTokens } : {}),
-				...(costUsd !== undefined ? { costUsd } : {}),
-				stepCount: tracker.stepCount,
-				updatedAt: now,
-			}));
+			this.detach(
+				"persist-run-metrics",
+				this.store.updateRun(runId, {
+					...(inputTokens !== undefined ? { inputTokens } : {}),
+					...(outputTokens !== undefined ? { outputTokens } : {}),
+					...(costUsd !== undefined ? { costUsd } : {}),
+					stepCount: tracker.stepCount,
+					updatedAt: now,
+				}),
+			);
 		}
 	}
 
@@ -637,24 +651,28 @@ export class AutomationRunCoordinator {
 				}
 			}
 
-			const updatedRun = await this.store.updateRun(runId, {
-				status,
-				endedAt,
-				durationMs,
-				updatedAt: endedAt,
-				...(error ? { error } : {}),
-				...(extra?.budgetReason ? { budgetReason: extra.budgetReason } : {}),
-				...(extra?.skippedReason ? { skippedReason: extra.skippedReason } : {}),
-				...(extra?.inputTokens !== undefined ? { inputTokens: extra.inputTokens } : {}),
-				...(extra?.outputTokens !== undefined ? { outputTokens: extra.outputTokens } : {}),
-				...(extra?.costUsd !== undefined ? { costUsd: extra.costUsd } : {}),
-				...(extra?.stepCount !== undefined ? { stepCount: extra.stepCount } : {}),
-				...(changedFiles !== undefined ? { changedFiles } : {}),
-			}, {
-				type: statusToEventType(status),
-				at: endedAt,
-				message: error || (status === "succeeded" ? "Run completed successfully" : undefined),
-			});
+			const updatedRun = await this.store.updateRun(
+				runId,
+				{
+					status,
+					endedAt,
+					durationMs,
+					updatedAt: endedAt,
+					...(error ? { error } : {}),
+					...(extra?.budgetReason ? { budgetReason: extra.budgetReason } : {}),
+					...(extra?.skippedReason ? { skippedReason: extra.skippedReason } : {}),
+					...(extra?.inputTokens !== undefined ? { inputTokens: extra.inputTokens } : {}),
+					...(extra?.outputTokens !== undefined ? { outputTokens: extra.outputTokens } : {}),
+					...(extra?.costUsd !== undefined ? { costUsd: extra.costUsd } : {}),
+					...(extra?.stepCount !== undefined ? { stepCount: extra.stepCount } : {}),
+					...(changedFiles !== undefined ? { changedFiles } : {}),
+				},
+				{
+					type: statusToEventType(status),
+					at: endedAt,
+					message: error || (status === "succeeded" ? "Run completed successfully" : undefined),
+				},
+			);
 
 			// Trigger desktop notification when configured
 			if (this.notifyRunFinished && updatedRun) {

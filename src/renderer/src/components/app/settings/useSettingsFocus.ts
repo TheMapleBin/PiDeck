@@ -28,11 +28,7 @@ function flashAnchor(el: HTMLElement): void {
  * （如 git / dsh-runner-node），也覆盖**单个设置项**（命令面板 Ctrl+P 搜到某一行就跳过去，
  * 见 utils/settingsFieldAnchors.ts）。落点会闪一下描边，长 tab 里才看得出落在哪。
  */
-export function useSettingsFocus(
-	activeTab: SettingsTabId,
-	setActiveTab: (tab: SettingsTabId) => void,
-	persistTab: (tab: SettingsTabId) => void,
-): void {
+export function useSettingsFocus(activeTab: SettingsTabId, setActiveTab: (tab: SettingsTabId) => void, persistTab: (tab: SettingsTabId) => void): void {
 	const [focusTarget, setFocusTarget] = useAtom(settingsFocusAtom);
 
 	useEffect(() => {

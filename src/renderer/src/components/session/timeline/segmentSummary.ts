@@ -31,9 +31,5 @@ export function buildProcessSummary(items: TurnDisplayItem[]): ProcessSummary {
 }
 
 export function isEmptySummary(summary: ProcessSummary): boolean {
-	return (
-		summary.toolCount === 0 &&
-		summary.thinkingCount === 0 &&
-		summary.interimCount === 0
-	);
+	return summary.toolCount === 0 && summary.thinkingCount === 0 && summary.interimCount === 0;
 }

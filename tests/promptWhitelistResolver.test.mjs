@@ -39,11 +39,7 @@ function same(actual, expected) {
 
 function promptMd(dir, name) {
 	mkdirSync(dir, { recursive: true });
-	writeFileSync(
-		join(dir, name),
-		`---\ndescription: ${name} prompt\n---\n\n# ${name}\n`,
-		"utf8",
-	);
+	writeFileSync(join(dir, name), `---\ndescription: ${name} prompt\n---\n\n# ${name}\n`, "utf8");
 }
 
 test("无禁用项时关闭白名单（返回 null）", () => {
@@ -76,11 +72,7 @@ test("有禁用项时仅枚举全局/项目 prompts 目录的顶层 .md（无 ag
 			disabledNames: ["disabled"],
 		});
 		assert.ok(result, "有禁用项时必须启用白名单");
-		same(result, [
-			join(agentDir, "prompts", "review.md"),
-			join(agentDir, "prompts", "hidden.d.md"),
-			join(cwd, ".pi", "prompts", "project-prompt.md"),
-		]);
+		same(result, [join(agentDir, "prompts", "review.md"), join(agentDir, "prompts", "hidden.d.md"), join(cwd, ".pi", "prompts", "project-prompt.md")]);
 	} finally {
 		rmSync(root, { recursive: true, force: true });
 	}
@@ -131,10 +123,7 @@ test("settings.prompts 数组：显式路径 + override patterns 过滤", () => 
 		const result = resolveEnabledPromptPaths({ agentHomeDir: home, cwd, disabledNames: ["nonexistent"] });
 		assert.ok(result);
 		// beta.md 被 ! 排除；显式目录 external 递归枚举
-		same(result, [
-			join(agentDir, "prompts", "kept.md"),
-			join(root, "explicit", "external.md"),
-		]);
+		same(result, [join(agentDir, "prompts", "kept.md"), join(root, "explicit", "external.md")]);
 	} finally {
 		rmSync(root, { recursive: true, force: true });
 	}
@@ -148,20 +137,14 @@ test("packages 对象条目 prompts 空数组 = 该包全部模板禁用；非�
 		promptMd(join(pkgDir, "prompts"), "alpha.md");
 		promptMd(join(pkgDir, "prompts"), "beta.md");
 		writeFileSync(join(pkgDir, "package.json"), JSON.stringify({ name: "prompt-pack" }), "utf8");
-		put(
-			".pi/agent/settings.json",
-			JSON.stringify({ packages: [{ source: "npm:prompt-pack", prompts: ["alpha*"] }] }),
-		);
+		put(".pi/agent/settings.json", JSON.stringify({ packages: [{ source: "npm:prompt-pack", prompts: ["alpha*"] }] }));
 
 		const result = resolveEnabledPromptPaths({ agentHomeDir: home, cwd, disabledNames: ["nonexistent"] });
 		assert.ok(result);
 		same(result, [join(pkgDir, "prompts", "alpha.md")]);
 
 		// 空数组 = 全禁
-		put(
-			".pi/agent/settings.json",
-			JSON.stringify({ packages: [{ source: "npm:prompt-pack", prompts: [] }] }),
-		);
+		put(".pi/agent/settings.json", JSON.stringify({ packages: [{ source: "npm:prompt-pack", prompts: [] }] }));
 		const disabledAll = resolveEnabledPromptPaths({ agentHomeDir: home, cwd, disabledNames: ["nonexistent"] });
 		assert.ok(disabledAll);
 		same(disabledAll, []);
@@ -177,11 +160,7 @@ test("manifest pi.prompts 声明的 patterns 过滤生效（! 排除）", () => 
 		const pkgDir = mkdir(".pi/agent/npm/node_modules/prompt-pack");
 		promptMd(join(pkgDir, "custom"), "alpha.md");
 		promptMd(join(pkgDir, "custom"), "beta.md");
-		writeFileSync(
-			join(pkgDir, "package.json"),
-			JSON.stringify({ name: "prompt-pack", pi: { prompts: ["custom/alpha.md", "!custom/beta.md"] } }),
-			"utf8",
-		);
+		writeFileSync(join(pkgDir, "package.json"), JSON.stringify({ name: "prompt-pack", pi: { prompts: ["custom/alpha.md", "!custom/beta.md"] } }), "utf8");
 		put(".pi/agent/settings.json", JSON.stringify({ packages: ["npm:prompt-pack"] }));
 
 		const result = resolveEnabledPromptPaths({ agentHomeDir: home, cwd, disabledNames: ["nonexistent"] });
@@ -213,9 +192,12 @@ test("项目继承覆盖只禁用全局模板，保留项目同名模板", () =>
 		promptMd(join(agentDir, "prompts"), "shared.md");
 		const projectPrompt = join(cwd, ".pi", "prompts", "shared.md");
 		promptMd(join(cwd, ".pi", "prompts"), "shared.md");
-		put("project/.pi/settings.json", JSON.stringify({
-			pideckDisabledGlobalPrompts: ["shared"],
-		}));
+		put(
+			"project/.pi/settings.json",
+			JSON.stringify({
+				pideckDisabledGlobalPrompts: ["shared"],
+			}),
+		);
 		const result = resolveEnabledPromptPaths({ agentHomeDir: home, cwd, disabledNames: [] });
 		assert.ok(result);
 		same(result, [projectPrompt]);

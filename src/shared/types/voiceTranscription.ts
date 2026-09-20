@@ -13,14 +13,9 @@ export type VoiceTranscriptionSaveInput = {
 	clearApiKey?: boolean;
 };
 
-export type VoiceTranscriptionConfigErrorCode =
-	| "invalidConfig"
-	| "secureStorageUnavailable"
-	| "saveFailed";
+export type VoiceTranscriptionConfigErrorCode = "invalidConfig" | "secureStorageUnavailable" | "saveFailed";
 
-export type VoiceTranscriptionSaveResult =
-	| { ok: true; config: VoiceTranscriptionPublicConfig }
-	| { ok: false; error: VoiceTranscriptionConfigErrorCode };
+export type VoiceTranscriptionSaveResult = { ok: true; config: VoiceTranscriptionPublicConfig } | { ok: false; error: VoiceTranscriptionConfigErrorCode };
 
 export type VoiceTranscriptionRequest = {
 	requestId: string;
@@ -28,17 +23,6 @@ export type VoiceTranscriptionRequest = {
 	mimeType: string;
 };
 
-export type VoiceTranscriptionErrorCode =
-	| "invalidRequest"
-	| "notConfigured"
-	| "invalidKey"
-	| "badBaseUrl"
-	| "network"
-	| "timeout"
-	| "cancelled"
-	| "http"
-	| "empty";
+export type VoiceTranscriptionErrorCode = "invalidRequest" | "notConfigured" | "invalidKey" | "badBaseUrl" | "network" | "timeout" | "cancelled" | "http" | "empty";
 
-export type VoiceTranscriptionResult =
-	| { ok: true; text: string }
-	| { ok: false; error: VoiceTranscriptionErrorCode };
+export type VoiceTranscriptionResult = { ok: true; text: string } | { ok: false; error: VoiceTranscriptionErrorCode };

@@ -1,20 +1,6 @@
 import type { PiDesktopApi } from "../../preload";
-import {
-	createDefaultExternalEditorSettings,
-	createDefaultSecurityConfig,
-	createDefaultSoundAlertSettings,
-	DEFAULT_PET_SCALE,
-} from "../../shared/types";
-import type {
-	AppSettings,
-	FileTreeNode,
-	Project,
-	SessionRecord,
-	SessionSummary,
-	TerminalDataEvent,
-	TerminalExitEvent,
-	TerminalTab,
-} from "../../shared/types";
+import { createDefaultExternalEditorSettings, createDefaultSecurityConfig, createDefaultSoundAlertSettings, DEFAULT_PET_SCALE } from "../../shared/types";
+import type { AppSettings, FileTreeNode, Project, SessionRecord, SessionSummary, TerminalDataEvent, TerminalExitEvent, TerminalTab } from "../../shared/types";
 import type { ResourceImportKind } from "../../shared/types/resourceImport";
 import { t } from "./i18n";
 
@@ -62,10 +48,7 @@ const files: FileTreeNode[] = [
 	},
 ];
 
-function findPreviewDirectory(
-	nodes: FileTreeNode[],
-	directory: string,
-): FileTreeNode | undefined {
+function findPreviewDirectory(nodes: FileTreeNode[], directory: string): FileTreeNode | undefined {
 	for (const node of nodes) {
 		if (node.type === "directory" && node.path === directory) return node;
 		if (node.children) {
@@ -387,12 +370,9 @@ export function createPreviewApi(): PiDesktopApi {
 			deleteExtension: async () => undefined,
 			toggleExtension: async () => undefined,
 			toggleInherited: async (input) => ({
-				disabledGlobalExtensions:
-					input.kind === "extension" && !input.enabled ? [input.key] : [],
-				disabledGlobalSkills:
-					input.kind === "skill" && !input.enabled ? [input.key] : [],
-				disabledGlobalPrompts:
-					input.kind === "prompt" && !input.enabled ? [input.key] : [],
+				disabledGlobalExtensions: input.kind === "extension" && !input.enabled ? [input.key] : [],
+				disabledGlobalSkills: input.kind === "skill" && !input.enabled ? [input.key] : [],
+				disabledGlobalPrompts: input.kind === "prompt" && !input.enabled ? [input.key] : [],
 			}),
 			renameSkill: async (_projectId, _skillPath, newName) => ({
 				id: `project-pi:${newName}`,
@@ -407,7 +387,7 @@ export function createPreviewApi(): PiDesktopApi {
 				valid: true,
 				warnings: [],
 			}),
-		toggleSkill: async (_projectId, _skillPath, enabled) => ({
+			toggleSkill: async (_projectId, _skillPath, enabled) => ({
 				id: "project-pi:preview-toggle",
 				name: "preview-skill",
 				description: "",
@@ -420,7 +400,7 @@ export function createPreviewApi(): PiDesktopApi {
 				valid: true,
 				warnings: [],
 			}),
-		discovery: async () => ({ skills: [], prompts: [], extensions: [] }),
+			discovery: async () => ({ skills: [], prompts: [], extensions: [] }),
 		},
 		files: {
 			list: async (_projectId, options) => {
@@ -501,22 +481,23 @@ export function createPreviewApi(): PiDesktopApi {
 			runDshPlugin: async () => undefined,
 			stopDshPlugin: async () => undefined,
 			uninstallDshPlugin: async () => undefined,
-			listCatalog: async (projectId, _options?: { scan?: boolean }): Promise<SessionRecord[]> => getSessions().map((session) => ({
-				id: `preview-record:${session.id}`,
-				projectId,
-				title: session.name || "Preview session",
-				source: session.source || "pi",
-				environment: session.wsl ? "wsl" : "native",
-				filePath: session.filePath,
-				parentSessionPath: session.parentSessionPath,
-				projectPath: session.projectPath,
-				preview: session.preview,
-				messageCount: session.messageCount,
-				status: "active",
-				createdAt: session.updatedAt,
-				updatedAt: session.updatedAt,
-				wsl: session.wsl,
-			})),
+			listCatalog: async (projectId, _options?: { scan?: boolean }): Promise<SessionRecord[]> =>
+				getSessions().map((session) => ({
+					id: `preview-record:${session.id}`,
+					projectId,
+					title: session.name || "Preview session",
+					source: session.source || "pi",
+					environment: session.wsl ? "wsl" : "native",
+					filePath: session.filePath,
+					parentSessionPath: session.parentSessionPath,
+					projectPath: session.projectPath,
+					preview: session.preview,
+					messageCount: session.messageCount,
+					status: "active",
+					createdAt: session.updatedAt,
+					updatedAt: session.updatedAt,
+					wsl: session.wsl,
+				})),
 			// 预览模式无后台扫描推送：返回空退订函数满足接口契约
 			onCatalogRefreshed: () => () => undefined,
 			createDraft: async (input): Promise<SessionRecord> => ({
@@ -790,6 +771,10 @@ export function createPreviewApi(): PiDesktopApi {
 			scan: async () => [],
 			import: async () => ({ results: [], imported: 0, failed: 0 }),
 		},
+		directorySessions: {
+			scan: async () => [],
+			import: async () => ({ results: [], imported: 0, failed: 0 }),
+		},
 		git: {
 			listRepos: async () => [],
 			branches: async () => ({ current: "main", branches: ["main", "dev"] }),
@@ -809,26 +794,26 @@ export function createPreviewApi(): PiDesktopApi {
 				branch: branchName,
 			}),
 			worktreeRemove: async () => true,
-				commitLog: async () => [],
-				commitCount: async () => 0,
-				refs: async () => [],
-				branchCompare: async () => ({ files: [], ahead: 0, behind: 0 }),
-				commitDetail: async () => null,
-				commitFileDiff: async () => null,
-				diffFileBetween: async () => "",
-				status: async () => ({ merge: [], index: [], workingTree: [], untracked: [] }),
-				workspaceFileDiff: async () => null,
-				stage: async () => {},
-				unstage: async () => {},
-				discard: async () => {},
-				discardFiles: async () => {},
-				commit: async () => {},
-				cherryPick: async () => {},
-				revert: async () => {},
-				reset: async () => {},
-				dropCommit: async () => {},
-				generateCommitMessage: async () => ({ ok: true, message: "" }),
-				init: async () => {},
+			commitLog: async () => [],
+			commitCount: async () => 0,
+			refs: async () => [],
+			branchCompare: async () => ({ files: [], ahead: 0, behind: 0 }),
+			commitDetail: async () => null,
+			commitFileDiff: async () => null,
+			diffFileBetween: async () => "",
+			status: async () => ({ merge: [], index: [], workingTree: [], untracked: [] }),
+			workspaceFileDiff: async () => null,
+			stage: async () => {},
+			unstage: async () => {},
+			discard: async () => {},
+			discardFiles: async () => {},
+			commit: async () => {},
+			cherryPick: async () => {},
+			revert: async () => {},
+			reset: async () => {},
+			dropCommit: async () => {},
+			generateCommitMessage: async () => ({ ok: true, message: "" }),
+			init: async () => {},
 			pull: async () => {},
 			push: async () => {},
 			fetch: async () => undefined,
@@ -934,7 +919,7 @@ export function createPreviewApi(): PiDesktopApi {
 				homeDir: "C:/Users/preview",
 				userDataDir: "C:/Users/preview/AppData/Roaming/pi-desktop",
 			}),
-			preferredSystemLanguages: async () => navigator.languages?.length ? [...navigator.languages] : [navigator.language],
+			preferredSystemLanguages: async () => (navigator.languages?.length ? [...navigator.languages] : [navigator.language]),
 			networkAddresses: async () => [{ address: "192.168.1.100", interfaceName: "Wi-Fi", cidr: "192.168.1.100/24", isPrivate: true }],
 			checkUpdate: async () => undefined,
 			onUpdateStatus: () => () => undefined,
@@ -946,9 +931,7 @@ export function createPreviewApi(): PiDesktopApi {
 			skipUpdateVersion: async () => undefined,
 			downloadUpdate: async () => undefined,
 			installUpdate: async () => undefined,
-			checkUpdateMirrors: async () => [
-				{ id: "atomgit", status: "ok", latencyMs: 320, speedKBps: 2560, checkedAt: Date.now() },
-			],
+			checkUpdateMirrors: async () => [{ id: "atomgit", status: "ok", latencyMs: 320, speedKBps: 2560, checkedAt: Date.now() }],
 			onOpenInBrowser: () => () => undefined,
 			feedbackEnvironment: async () => ({
 				appVersion: "preview",
@@ -986,10 +969,7 @@ export function createPreviewApi(): PiDesktopApi {
 			quit: async () => undefined,
 			openDataDir: async () => ({ ok: true }),
 			rendererLog: async (level, scope, message, detail) => {
-				console[level === "error" ? "error" : level === "warn" ? "warn" : "debug"](
-					`[${scope}] ${message}`,
-					detail,
-				);
+				console[level === "error" ? "error" : level === "warn" ? "warn" : "debug"](`[${scope}] ${message}`, detail);
 			},
 			minimizeWindow: async () => undefined,
 			toggleMaximizeWindow: async () => false,
@@ -1353,7 +1333,7 @@ export function createPreviewApi(): PiDesktopApi {
 			getMcp: async () => ({
 				writablePath: "",
 				writableFile: { mcpServers: {} },
-				writableRaw: "{\n  \"mcpServers\": {}\n}\n",
+				writableRaw: '{\n  "mcpServers": {}\n}\n',
 				layers: [],
 				servers: [],
 			}),
@@ -1426,9 +1406,7 @@ export function createPreviewApi(): PiDesktopApi {
 		},
 		pet: {
 			onState: noop,
-			list: async () => [
-			{ id: "clawd", displayName: "Clawd", source: "builtin", spritesheetUrl: "" },
-		],
+			list: async () => [{ id: "clawd", displayName: "Clawd", source: "builtin", spritesheetUrl: "" }],
 			setEnabled: async () => undefined,
 			setId: async () => undefined,
 			moveWindow: async () => undefined,
@@ -1466,8 +1444,7 @@ export function createPreviewApi(): PiDesktopApi {
 		},
 		terminal: {
 			// 预览模式只按归属键过滤：agent 目标用 agentId，project 目标用项目 id
-			list: async (target) =>
-				terminalTabs.filter((tab) => tab.agentId === (target.kind === "agent" ? target.agentId : target.projectId)),
+			list: async (target) => terminalTabs.filter((tab) => tab.agentId === (target.kind === "agent" ? target.agentId : target.projectId)),
 			ensure: async (target) => {
 				const key = target.kind === "agent" ? target.agentId : target.projectId;
 				const existing = terminalTabs.filter((tab) => tab.agentId === key);

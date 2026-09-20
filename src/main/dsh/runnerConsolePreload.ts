@@ -69,19 +69,18 @@ function patchNestedRunnerWindowsHide(): void {
 			spawnSync: childProcess.spawnSync,
 		};
 		const sidecar = process.env[DSH_RUNNER_NODE_ENV]?.trim();
-		const wrap = (orig: (...args: unknown[]) => unknown) =>
-			(command: unknown, argsOrOptions?: unknown, maybeOptions?: unknown) => {
-				if (isRunnerArgs(argsOrOptions)) {
-					const nextCommand = sidecar && isElectronCommand(command) ? sidecar : command;
-					const useSidecarConsole = Boolean(sidecar) && !isElectronCommand(nextCommand);
-					const nextOptions = {
-						...((maybeOptions && typeof maybeOptions === "object" ? maybeOptions : {}) as object),
-						windowsHide: useSidecarConsole ? true : false,
-					};
-					return orig(nextCommand, argsOrOptions, nextOptions);
-				}
-				return orig(command, argsOrOptions, maybeOptions);
-			};
+		const wrap = (orig: (...args: unknown[]) => unknown) => (command: unknown, argsOrOptions?: unknown, maybeOptions?: unknown) => {
+			if (isRunnerArgs(argsOrOptions)) {
+				const nextCommand = sidecar && isElectronCommand(command) ? sidecar : command;
+				const useSidecarConsole = Boolean(sidecar) && !isElectronCommand(nextCommand);
+				const nextOptions = {
+					...((maybeOptions && typeof maybeOptions === "object" ? maybeOptions : {}) as object),
+					windowsHide: useSidecarConsole ? true : false,
+				};
+				return orig(nextCommand, argsOrOptions, nextOptions);
+			}
+			return orig(command, argsOrOptions, maybeOptions);
+		};
 		Object.defineProperty(childProcess, "spawn", {
 			value: wrap(originals.spawn),
 			writable: true,

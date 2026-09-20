@@ -3,21 +3,32 @@
  * Phase 4: 从 FeishuBridge.ts 中提取，管理 LarkClient + WebSocket 的创建/启停/测试。
  */
 
-import type {
-	FeishuBotConfig,
-	FeishuTestResult,
-} from "../../shared/types";
-import type {
-	LarkSDK,
-	LarkClient,
-	FeishuCardActionEvent,
-} from "./types";
+import type { FeishuBotConfig, FeishuTestResult } from "../../shared/types";
+import type { LarkSDK, LarkClient, FeishuCardActionEvent } from "./types";
 import { feishuT, type FeishuLocale } from "./FeishuI18n";
 import { getDecryptedBotAppSecret } from "./FeishuConfig";
 
-const log = (...args: unknown[]) => { try { console.log(...args); } catch { /* EPIPE */ } };
-const warn = (...args: unknown[]) => { try { console.warn(...args); } catch { /* EPIPE */ } };
-const logErr = (...args: unknown[]) => { try { console.error(...args); } catch { /* EPIPE */ } };
+const log = (...args: unknown[]) => {
+	try {
+		console.log(...args);
+	} catch {
+		/* EPIPE */
+	}
+};
+const warn = (...args: unknown[]) => {
+	try {
+		console.warn(...args);
+	} catch {
+		/* EPIPE */
+	}
+};
+const logErr = (...args: unknown[]) => {
+	try {
+		console.error(...args);
+	} catch {
+		/* EPIPE */
+	}
+};
 
 export class FeishuConnection {
 	private wsClient: unknown = null;
@@ -30,10 +41,7 @@ export class FeishuConnection {
 	) {}
 
 	/** 创建 LarkClient + WebSocket，返回事件处理函数引用。 */
-	async start(
-		onRawMessage: (data: Record<string, unknown>) => Promise<void>,
-		onCardAction: (event: FeishuCardActionEvent) => Promise<void>,
-	): Promise<{ botOpenId: string | null }> {
+	async start(onRawMessage: (data: Record<string, unknown>) => Promise<void>, onCardAction: (event: FeishuCardActionEvent) => Promise<void>): Promise<{ botOpenId: string | null }> {
 		const { appId } = this.botConfig;
 		const plainSecret = this.plainAppSecret ?? getDecryptedBotAppSecret(this.botConfig.id);
 		if (!appId || !plainSecret) throw new Error(feishuT(this.locale, "bridge.configRequired"));
@@ -41,15 +49,18 @@ export class FeishuConnection {
 		try {
 			const lark = (await import("@larksuiteoapi/node-sdk")) as unknown as LarkSDK;
 			this.client = new lark.Client({
-				appId, appSecret: plainSecret,
-				appType: lark.AppType.SelfBuild, domain: lark.Domain.Feishu,
+				appId,
+				appSecret: plainSecret,
+				appType: lark.AppType.SelfBuild,
+				domain: lark.Domain.Feishu,
 				loggerLevel: lark.LoggerLevel.error,
 			} as Record<string, unknown>) as LarkClient;
 
 			let botOpenId: string | null = null;
 			try {
 				const botInfoResp = await this.client.request<{
-					code?: number; bot?: { open_id?: string; app_name?: string };
+					code?: number;
+					bot?: { open_id?: string; app_name?: string };
 					data?: { bot?: { open_id?: string; app_name?: string } };
 				}>({ method: "GET", url: "https://open.feishu.cn/open-apis/bot/v3/info/" });
 				botOpenId = botInfoResp?.bot?.open_id ?? botInfoResp?.data?.bot?.open_id ?? null;
@@ -60,12 +71,13 @@ export class FeishuConnection {
 						warn(`[飞书 Bridge] 💡 请在飞书中给 Bot 发送 /whoami 获取你的真实 open_id，然后填入配置`);
 					}
 				}
-			} catch (e) { warn("[飞书 Bridge] 获取 Bot info 失败（非致命）:", e); }
+			} catch (e) {
+				warn("[飞书 Bridge] 获取 Bot info 失败（非致命）:", e);
+			}
 
 			const dispatcher = new lark.EventDispatcher({ loggerLevel: lark.LoggerLevel.error }).register({
 				"im.message.receive_v1": async (data: unknown) => {
-					await onRawMessage(data as Record<string, unknown>).catch((err) =>
-						logErr("[飞书 Bridge] handleRawMessage 异常:", err));
+					await onRawMessage(data as Record<string, unknown>).catch((err) => logErr("[飞书 Bridge] handleRawMessage 异常:", err));
 				},
 				"card.action.trigger": async (data: unknown) => {
 					const event = lark.normalizeCardAction(data as Record<string, unknown>, { includeRaw: true });
@@ -76,7 +88,10 @@ export class FeishuConnection {
 			});
 
 			const ws = new lark.WSClient({
-				appId, appSecret: plainSecret, domain: lark.Domain.Feishu, loggerLevel: lark.LoggerLevel.error,
+				appId,
+				appSecret: plainSecret,
+				domain: lark.Domain.Feishu,
+				loggerLevel: lark.LoggerLevel.error,
 				onError: (wsErr: unknown) => {
 					logErr("[飞书 Bridge] WSClient 连接异常:", wsErr);
 				},
@@ -96,7 +111,10 @@ export class FeishuConnection {
 
 	stop(): void {
 		const ws = this.wsClient as { stop?: () => void } | null;
-		if (ws?.stop) try { ws.stop(); } catch {}
+		if (ws?.stop)
+			try {
+				ws.stop();
+			} catch {}
 		this.wsClient = null;
 		this.client = null;
 		log("[Feishu Bridge] stopped");

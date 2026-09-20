@@ -43,8 +43,5 @@ test("App.tsx synchronizes branch changes to branchByProject", () => {
 	// 解构 setBranchByProject
 	assert.match(src, /const\s*\{[^}]*setBranchByProject[^}]*\}\s*=\s*useProjectSync/);
 	// handleProjectGitChanged 回写 setBranchByProject
-	assert.match(
-		src,
-		/setBranchByProject\(\(prev\)\s*=>\s*\(prev\[projectId\]\s*===\s*info\.current\s*\?\s*prev\s*:\s*\{\s*\.\.\.prev,\s*\[projectId\]:\s*info\.current\s*\}\)\)/,
-	);
+	assert.match(src, /setBranchByProject\(\(prev\)\s*=>\s*\(prev\[projectId\]\s*===\s*info\.current\s*\?\s*prev\s*:\s*\{\s*\.\.\.prev,\s*\[projectId\]:\s*info\.current\s*\}\)\)/);
 });

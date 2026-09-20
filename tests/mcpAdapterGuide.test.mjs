@@ -39,15 +39,7 @@ test("未安装时仅全局页显示引导卡，项目页仍保留只读资源�
 test("i18n 双语文案齐全（desc/install/installing/failed/cmd/copied/restartHint）", () => {
 	const zh = read("src/renderer/src/i18n/rendererCopy.zh-CN.ts");
 	const en = read("src/renderer/src/i18n/rendererCopy.en-US.ts");
-	for (const key of [
-		"config.mcp.notInstalled.desc",
-		"config.mcp.notInstalled.install",
-		"config.mcp.notInstalled.installing",
-		"config.mcp.notInstalled.installFailed",
-		"config.mcp.notInstalled.copyCmd",
-		"config.mcp.notInstalled.copied",
-		"config.mcp.notInstalled.restartHint",
-	]) {
+	for (const key of ["config.mcp.notInstalled.desc", "config.mcp.notInstalled.install", "config.mcp.notInstalled.installing", "config.mcp.notInstalled.installFailed", "config.mcp.notInstalled.copyCmd", "config.mcp.notInstalled.copied", "config.mcp.notInstalled.restartHint"]) {
 		assert.ok(zh.includes(`"${key}"`), `zh-CN missing ${key}`);
 		assert.ok(en.includes(`"${key}"`), `en-US missing ${key}`);
 	}

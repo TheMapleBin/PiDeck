@@ -5,10 +5,7 @@ import ts from "typescript";
 import vm from "node:vm";
 
 function loadModule() {
-	const source = readFileSync(
-		"src/renderer/src/components/session/trajectory/buildTrajectory.ts",
-		"utf8",
-	);
+	const source = readFileSync("src/renderer/src/components/session/trajectory/buildTrajectory.ts", "utf8");
 	const { outputText } = ts.transpileModule(source, {
 		compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 	});
@@ -20,12 +17,7 @@ function loadModule() {
 
 /** buildTrajectory 依赖的 dsh 工具视图助手（独立纯模块，vm 内编译加载）。 */
 function loadTrajectoryDep(specifier) {
-	const file =
-		specifier === "./dshToolView"
-			? "src/renderer/src/components/session/trajectory/dshToolView.ts"
-			: specifier === "./trajectoryOrder"
-				? "src/renderer/src/components/session/trajectory/trajectoryOrder.ts"
-				: undefined;
+	const file = specifier === "./dshToolView" ? "src/renderer/src/components/session/trajectory/dshToolView.ts" : specifier === "./trajectoryOrder" ? "src/renderer/src/components/session/trajectory/trajectoryOrder.ts" : undefined;
 	if (!file) throw new Error(`unexpected require: ${specifier}`);
 	const source = readFileSync(file, "utf8");
 	const { outputText } = ts.transpileModule(source, {
@@ -35,7 +27,7 @@ function loadTrajectoryDep(specifier) {
 		exports: {},
 		module: { exports: {} },
 		require: (inner) => {
-			if (inner === "./buildTrajectory") return { };
+			if (inner === "./buildTrajectory") return {};
 			throw new Error(`unexpected nested require: ${inner}`);
 		},
 	};
@@ -195,20 +187,13 @@ test("trajectory source concatenates runtime history prefix with the live window
 
 test("first user message is the initial prompt; process events join the ledger", () => {
 	const { buildTrajectory } = loadModule();
-	const model = buildTrajectory(
-		[
-			msg({ id: "u1", role: "user", text: "first ask", timestamp: 2000 }),
-			msg({ id: "u2", role: "user", text: "follow up", timestamp: 4000 }),
+	const model = buildTrajectory([msg({ id: "u1", role: "user", text: "first ask", timestamp: 2000 }), msg({ id: "u2", role: "user", text: "follow up", timestamp: 4000 })], 5000, {
+		processEvents: [
+			{ id: "s1", kind: "session", timestamp: 1000, summary: "cwd /repo", cwd: "/repo" },
+			{ id: "m1", kind: "modelChange", timestamp: 2500, summary: "openai/gpt", provider: "openai", modelId: "gpt" },
 		],
-		5000,
-		{
-			processEvents: [
-				{ id: "s1", kind: "session", timestamp: 1000, summary: "cwd /repo", cwd: "/repo" },
-				{ id: "m1", kind: "modelChange", timestamp: 2500, summary: "openai/gpt", provider: "openai", modelId: "gpt" },
-			],
-			systemPrompt: "You are pi.",
-		},
-	);
+		systemPrompt: "You are pi.",
+	});
 	assert.equal(model.records[0].kind, "systemPrompt");
 	assert.equal(model.records.find((r) => r.id === "u1")?.isInitialPrompt, true);
 	assert.equal(model.records.find((r) => r.id === "u2")?.isInitialPrompt, undefined);
@@ -242,47 +227,33 @@ test("assistant message usage lands on the trajectory record (DSH adapter report
 
 test("assistant message without usage leaves record.usage undefined (pi path)", () => {
 	const { buildTrajectory } = loadModule();
-	const model = buildTrajectory([
-		msg({ id: "u1", role: "user", text: "go", timestamp: 1000 }),
-		msg({ id: "a1", role: "assistant", text: "done", timestamp: 2000, stopReason: "stop" }),
-	]);
+	const model = buildTrajectory([msg({ id: "u1", role: "user", text: "go", timestamp: 1000 }), msg({ id: "a1", role: "assistant", text: "done", timestamp: 2000, stopReason: "stop" })]);
 	assert.equal(model.records.find((r) => r.kind === "assistant")?.usage, undefined);
 });
 
 test("ledger orders by seq, not array order (dsh-web layoutEntryOrder)", () => {
 	const { buildTrajectory } = loadModule();
-	const model = buildTrajectory([
-		msg({ id: "dsh:30", role: "assistant", text: "later", timestamp: 3000, stopReason: "stop" }),
-		msg({ id: "dsh:10", role: "user", text: "first", timestamp: 1000 }),
-		msg({ id: "dsh:20", role: "tool", text: "read", timestamp: 2000, meta: { toolName: "read", status: "done" } }),
-	]);
+	const model = buildTrajectory([msg({ id: "dsh:30", role: "assistant", text: "later", timestamp: 3000, stopReason: "stop" }), msg({ id: "dsh:10", role: "user", text: "first", timestamp: 1000 }), msg({ id: "dsh:20", role: "tool", text: "read", timestamp: 2000, meta: { toolName: "read", status: "done" } })]);
 	assert.equal(model.records.map((r) => r.kind).join(","), "user,tool,assistant");
 	assert.equal(model.records.map((r) => r.seq).join(","), "10,20,30");
 });
 
 test("retry process event stays after the user that opened the turn", () => {
 	const { buildTrajectory } = loadModule();
-	const model = buildTrajectory(
-		[
-			msg({ id: "dsh:10", role: "user", text: "go", timestamp: 2000 }),
-			msg({ id: "dsh:40", role: "assistant", text: "ok", timestamp: 4000, stopReason: "stop" }),
+	const model = buildTrajectory([msg({ id: "dsh:10", role: "user", text: "go", timestamp: 2000 }), msg({ id: "dsh:40", role: "assistant", text: "ok", timestamp: 4000, stopReason: "stop" })], 5000, {
+		processEvents: [
+			{
+				id: "retry-1",
+				kind: "retry",
+				timestamp: 2500,
+				seq: 25,
+				summary: "retry 1/3: overloaded",
+				retry: 1,
+				maxRetries: 3,
+				retryDelayMs: 800,
+			},
 		],
-		5000,
-		{
-			processEvents: [
-				{
-					id: "retry-1",
-					kind: "retry",
-					timestamp: 2500,
-					seq: 25,
-					summary: "retry 1/3: overloaded",
-					retry: 1,
-					maxRetries: 3,
-					retryDelayMs: 800,
-				},
-			],
-		},
-	);
+	});
 	assert.equal(model.records.map((r) => r.kind).join(","), "user,process,assistant");
 	const retry = model.records.find((r) => r.processKind === "retry");
 	assert.equal(retry?.retry, 1);

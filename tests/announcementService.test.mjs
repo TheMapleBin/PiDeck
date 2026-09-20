@@ -27,28 +27,28 @@ function loadTsModule(filePath, deps) {
 		fileName: filePath,
 	}).outputText;
 	const module = { exports: {} };
-	vm.runInNewContext(
-		output,
-		{
-			module,
-			exports: module.exports,
-			require: (name) =>
-				deps[name] ?? (() => { throw new Error(`unexpected require: ${name}`); })(),
-			console,
-			// 沙箱默认缺这些全局：定时调度与时间源都从注入取，这里兜底真实实现
-			setTimeout,
-			clearTimeout,
-			setInterval,
-			clearInterval,
-			TextDecoder,
-			TextEncoder,
-			AbortController,
-			Buffer, // unwrapAtomgitContents 的 base64 解码依赖
-			Date,
-			JSON,
-			Error,
-		},
-	);
+	vm.runInNewContext(output, {
+		module,
+		exports: module.exports,
+		require: (name) =>
+			deps[name] ??
+			(() => {
+				throw new Error(`unexpected require: ${name}`);
+			})(),
+		console,
+		// 沙箱默认缺这些全局：定时调度与时间源都从注入取，这里兜底真实实现
+		setTimeout,
+		clearTimeout,
+		setInterval,
+		clearInterval,
+		TextDecoder,
+		TextEncoder,
+		AbortController,
+		Buffer, // unwrapAtomgitContents 的 base64 解码依赖
+		Date,
+		JSON,
+		Error,
+	});
 	return module.exports;
 }
 
@@ -103,8 +103,7 @@ function fetchStub(routes) {
 		return Promise.resolve({
 			ok: status < 400,
 			status,
-			arrayBuffer: async () =>
-				new TextEncoder().encode(route.body ?? "").buffer,
+			arrayBuffer: async () => new TextEncoder().encode(route.body ?? "").buffer,
 		});
 	};
 }
@@ -128,9 +127,7 @@ test("unwrapAtomgitContents：非包裹结构 / 编码异常 / JSON 损坏 → n
 // ── feed 解析 ──
 
 test("parseAnnouncementFeed：合法条目保留并按发布时间倒序", () => {
-	const items = svcMod.parseAnnouncementFeed(
-		feedJson([item({ id: "old", publishedAt: "2026-08-01T00:00:00Z" }), item({ id: "new", publishedAt: "2026-09-01T00:00:00Z" })]),
-	);
+	const items = svcMod.parseAnnouncementFeed(feedJson([item({ id: "old", publishedAt: "2026-08-01T00:00:00Z" }), item({ id: "new", publishedAt: "2026-09-01T00:00:00Z" })]));
 	assert.ok(Array.isArray(items));
 	assert.equal(items.length, 2);
 	assert.equal(items[0].id, "new"); // 新公告在前
@@ -138,12 +135,7 @@ test("parseAnnouncementFeed：合法条目保留并按发布时间倒序", () =>
 
 test("parseAnnouncementFeed：坏条目丢弃、好条目保留", () => {
 	const items = svcMod.parseAnnouncementFeed(
-		feedJson([
-			item({ id: "ok" }),
-			{ id: "bad-level", title: "t", body: "b", level: "urgent", publishedAt: "2026-09-01T00:00:00Z", effectiveUntil: "2099-01-01T00:00:00Z" },
-			{ id: "bad-date", title: "t", body: "b", level: "info", publishedAt: "not-a-date", effectiveUntil: "2099-01-01T00:00:00Z" },
-			"not-an-object",
-		]),
+		feedJson([item({ id: "ok" }), { id: "bad-level", title: "t", body: "b", level: "urgent", publishedAt: "2026-09-01T00:00:00Z", effectiveUntil: "2099-01-01T00:00:00Z" }, { id: "bad-date", title: "t", body: "b", level: "info", publishedAt: "not-a-date", effectiveUntil: "2099-01-01T00:00:00Z" }, "not-an-object"]),
 	);
 	assert.equal(items.length, 1);
 	assert.equal(items[0].id, "ok");
@@ -192,7 +184,10 @@ test("filterEffectiveItems：过期条目丢弃（until <= now），未过期保
 		item({ id: "alive", effectiveUntil: "2026-09-08T00:00:00Z" }),
 	];
 	const kept = svcMod.filterEffectiveItems(items, now, "0.6.6");
-	assert.deepEqual(kept.map((x) => x.id), ["alive"]);
+	assert.deepEqual(
+		kept.map((x) => x.id),
+		["alive"],
+	);
 });
 
 test("shouldShowForVersion：minVersion 门控（引导升级语义，升级后不再展示）", () => {
@@ -317,12 +312,7 @@ test("缓存重载：重启后 source=cache，过期条目在加载时被再过�
 					match: "api.atomgit.com",
 					body: JSON.stringify({
 						encoding: "base64",
-						content: Buffer.from(
-							feedJson([
-								item({ id: "fresh", effectiveUntil: "2099-01-01T00:00:00Z" }),
-								item({ id: "stale", effectiveUntil: "2026-01-01T00:00:00Z" }),
-							]),
-						).toString("base64"),
+						content: Buffer.from(feedJson([item({ id: "fresh", effectiveUntil: "2099-01-01T00:00:00Z" }), item({ id: "stale", effectiveUntil: "2026-01-01T00:00:00Z" })])).toString("base64"),
 					}),
 				},
 			]),
@@ -342,7 +332,10 @@ test("缓存重载：重启后 source=cache，过期条目在加载时被再过�
 		try {
 			const state = second.getState();
 			assert.equal(state.source, "cache");
-			assert.deepEqual(state.items.map((x) => x.id), ["fresh"]); // 过期条目消失
+			assert.deepEqual(
+				state.items.map((x) => x.id),
+				["fresh"],
+			); // 过期条目消失
 		} finally {
 			second.stop(); // 清掉启动定时器，避免挂起句柄
 		}

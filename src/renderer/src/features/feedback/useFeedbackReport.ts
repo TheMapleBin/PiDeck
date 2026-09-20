@@ -1,11 +1,5 @@
 import { useCallback, useState } from "react";
-import type {
-	FeedbackProjectContext,
-	HealthExportResult,
-	HealthReport,
-	HealthReportContext,
-	HealthReportFormat,
-} from "../../../../shared/types";
+import type { FeedbackProjectContext, HealthExportResult, HealthReport, HealthReportContext, HealthReportFormat } from "../../../../shared/types";
 import { formatReport } from "./reportFormat";
 import { desktopApi } from "../../desktopApi";
 
@@ -23,9 +17,7 @@ import { desktopApi } from "../../desktopApi";
  */
 export type HealthCheckState = "idle" | "running" | "done" | "error";
 
-export function useFeedbackReport(
-	initialContext?: Partial<HealthReportContext> & { projectId?: string },
-) {
+export function useFeedbackReport(initialContext?: Partial<HealthReportContext> & { projectId?: string }) {
 	const [report, setReport] = useState<HealthReport | null>(null);
 	const [state, setState] = useState<HealthCheckState>("idle");
 	const [error, setError] = useState("");
@@ -43,14 +35,7 @@ export function useFeedbackReport(
 		setState("running");
 		setError("");
 		try {
-			const [next, ctx] = await Promise.all([
-				desktopApi.system.healthCheck(),
-				initialContext?.projectId
-					? desktopApi.app
-							.getFeedbackProjectContext(initialContext.projectId)
-							.catch(() => null)
-					: Promise.resolve(null),
-			]);
+			const [next, ctx] = await Promise.all([desktopApi.system.healthCheck(), initialContext?.projectId ? desktopApi.app.getFeedbackProjectContext(initialContext.projectId).catch(() => null) : Promise.resolve(null)]);
 			setReport(next);
 			if (ctx) setProjectContext(ctx);
 			setState("done");
@@ -64,9 +49,7 @@ export function useFeedbackReport(
 	const text = report ? formatReport(report, context, format) : "";
 
 	/** AI 分析提示词：固定 prompt 形态（不随 format 状态漂移），附带项目上下文。 */
-	const promptText = report
-		? formatReport(report, context, "prompt", projectContext ?? undefined)
-		: "";
+	const promptText = report ? formatReport(report, context, "prompt", projectContext ?? undefined) : "";
 
 	/** 复制当前报告到剪贴板（走主进程，大文本可靠）。 */
 	const copyText = useCallback(async (): Promise<boolean> => {

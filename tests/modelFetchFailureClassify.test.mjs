@@ -59,8 +59,7 @@ function compile() {
 		}
 		if (specifier === "./parseProviderModels") {
 			return {
-				parseProviderModelsResponse: (body) =>
-					Array.isArray(body?.data) ? body.data.map((m) => ({ id: m.id })) : [],
+				parseProviderModelsResponse: (body) => (Array.isArray(body?.data) ? body.data.map((m) => ({ id: m.id })) : []),
 			};
 		}
 		if (specifier === "./mcpConfig") {
@@ -110,7 +109,7 @@ function makeManager() {
 	return new ConfigManager(undefined, (key) => key);
 }
 
-function htmlResponse(body = "<html><meta name=\"aliyun_waf_aa\"></html>") {
+function htmlResponse(body = '<html><meta name="aliyun_waf_aa"></html>') {
 	return {
 		ok: true,
 		status: 200,
@@ -125,11 +124,7 @@ function htmlResponse(body = "<html><meta name=\"aliyun_waf_aa\"></html>") {
 
 test("HTTP 200 + text/html（WAF 挑战页）→ 专用「被拦截」文案，而非笼统失败", async () => {
 	responder = htmlResponse();
-	const result = await makeManager().fetchProviderModels(
-		"https://agentrouter.org/v1",
-		"sk-test",
-		"openai-completions",
-	);
+	const result = await makeManager().fetchProviderModels("https://agentrouter.org/v1", "sk-test", "openai-completions");
 	assert.equal(result.success, false);
 	assert.equal(result.error, "mainConfig.fetchBlockedByHtml");
 	// 关键：不能只给笼统的 fetchModelsFailed，否则用户会被引去改 baseUrl / API Key
@@ -146,11 +141,7 @@ test("content-type 声称 JSON 但正文不是 → 同样归入「被拦截」",
 			throw new SyntaxError("Unexpected token '<'");
 		},
 	};
-	const result = await makeManager().fetchProviderModels(
-		"https://agentrouter.org/v1",
-		"sk-test",
-		"openai-completions",
-	);
+	const result = await makeManager().fetchProviderModels("https://agentrouter.org/v1", "sk-test", "openai-completions");
 	assert.equal(result.success, false);
 	assert.equal(result.error, "mainConfig.fetchBlockedByHtml");
 });
@@ -158,28 +149,15 @@ test("content-type 声称 JSON 但正文不是 → 同样归入「被拦截」",
 test("网络错误分类：TLS / SSL 相关 → fetchTlsBlocked", async () => {
 	// 国内直连 anyrouter.top 的真实形态：TLS 被中间设备干扰，开代理才能通
 	responder = Object.assign(new Error("ERR_SSL_VERSION_OR_CIPHER_MISMATCH"), { name: "Error" });
-	const result = await makeManager().fetchProviderModels(
-		"https://anyrouter.top/v1",
-		"sk-test",
-		"openai-completions",
-	);
+	const result = await makeManager().fetchProviderModels("https://anyrouter.top/v1", "sk-test", "openai-completions");
 	assert.equal(result.success, false);
 	assert.equal(result.error, "mainConfig.fetchTlsBlocked");
 });
 
 test("网络错误分类：连接超时 / 不可达 → fetchUnreachable", async () => {
-	for (const message of [
-		"ERR_CONNECTION_TIMED_OUT",
-		"ERR_CONNECTION_REFUSED",
-		"ENOTFOUND",
-		"EAI_AGAIN",
-	]) {
+	for (const message of ["ERR_CONNECTION_TIMED_OUT", "ERR_CONNECTION_REFUSED", "ENOTFOUND", "EAI_AGAIN"]) {
 		responder = Object.assign(new Error(message), { name: "Error" });
-		const result = await makeManager().fetchProviderModels(
-			"https://agentrouter.org/v1",
-			"sk-test",
-			"openai-completions",
-		);
+		const result = await makeManager().fetchProviderModels("https://agentrouter.org/v1", "sk-test", "openai-completions");
 		assert.equal(result.success, false, `${message} 应判定为失败`);
 		assert.equal(result.error, "mainConfig.fetchUnreachable", `${message} 应给出不可达提示`);
 	}
@@ -187,11 +165,7 @@ test("网络错误分类：连接超时 / 不可达 → fetchUnreachable", async
 
 test("未知网络错误 → 回落默认文案（不误报为 TLS/不可达）", async () => {
 	responder = Object.assign(new Error("some totally unknown failure"), { name: "Error" });
-	const result = await makeManager().fetchProviderModels(
-		"https://example.com/v1",
-		"sk-test",
-		"openai-completions",
-	);
+	const result = await makeManager().fetchProviderModels("https://example.com/v1", "sk-test", "openai-completions");
 	assert.equal(result.success, false);
 	assert.equal(result.error, "mainConfig.fetchModelsFailed");
 });

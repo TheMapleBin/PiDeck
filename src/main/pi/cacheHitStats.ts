@@ -58,22 +58,12 @@ export function hitRateFromUsage(usage: UsageLike | undefined): number | undefin
 
 /** 从消息对象提取文本字符数：兼容 content 数组（[{type:"text",text}]）与裸 text 字段。
  *  估算用途，无需精确 token 级解析。 */
-function messageTextChars(message: {
-	role?: unknown;
-	usage?: unknown;
-	text?: unknown;
-	content?: unknown;
-}): number {
+function messageTextChars(message: { role?: unknown; usage?: unknown; text?: unknown; content?: unknown }): number {
 	let chars = 0;
 	if (typeof message.text === "string") chars += message.text.length;
 	if (Array.isArray(message.content)) {
 		for (const part of message.content) {
-			if (
-				part &&
-				typeof part === "object" &&
-				(part as { type?: unknown }).type === "text" &&
-				typeof (part as { text?: unknown }).text === "string"
-			) {
+			if (part && typeof part === "object" && (part as { type?: unknown }).type === "text" && typeof (part as { text?: unknown }).text === "string") {
 				chars += (part as { text: string }).text.length;
 			}
 		}
@@ -106,9 +96,7 @@ export function consumeCacheHitLine(state: CacheHitAccumulator, line: string): v
 	if (!trimmed) return;
 	try {
 		const entry = JSON.parse(trimmed) as Record<string, unknown>;
-		const message = entry?.message as
-			| { role?: unknown; usage?: unknown; text?: unknown; content?: unknown }
-			| undefined;
+		const message = entry?.message as { role?: unknown; usage?: unknown; text?: unknown; content?: unknown } | undefined;
 		if (!message) return;
 		state.messageChars += messageTextChars(message);
 		if (message.role !== "assistant" || !message.usage) return;
@@ -162,11 +150,7 @@ type CacheHitStatsReaderInput = {
 	 * 「上次消费到哪个字节」；接收方可用不到-完整上下文的实现（仅限测试），
 	 * 此时不做增量（每次整扫）。
 	 */
-	scanLines: (
-		filePath: string,
-		visitor: (line: string, context?: JsonlLineContextLike) => void,
-		options: { start: number },
-	) => Promise<void>;
+	scanLines: (filePath: string, visitor: (line: string, context?: JsonlLineContextLike) => void, options: { start: number }) => Promise<void>;
 	stat: (path: string) => Promise<FileMeta>;
 	/** 缓存条目上限，超出时整体清空（会话数远小于该值，防御性上限） */
 	maxEntries?: number;
@@ -248,19 +232,19 @@ export function createCacheHitStatsReader(input: CacheHitStatsReaderInput): Cach
 	const cache = new Map<string, CacheEntry>();
 
 	/** 扫描 [start, end) 区间，把结果并进给定累加器；返回实际消费到的字节偏移。 */
-	const scanRange = async (
-		sessionPath: string,
-		accumulator: CacheHitAccumulator,
-		start: number,
-	): Promise<number> => {
+	const scanRange = async (sessionPath: string, accumulator: CacheHitAccumulator, start: number): Promise<number> => {
 		let consumed = start;
-		await scanLines(sessionPath, (line, context) => {
-			consumeCacheHitLine(accumulator, line);
-			// 残行（末尾未以 \n 结束）不计入已消费：pi 可能正在追加，下次要重扫它。
-			// 缺上下文（测试替身）时不做增量，返回 start，调用方下次整扫。
-			if (!context) return;
-			if (context.complete) consumed = context.offset + context.byteLength + 1;
-		}, { start });
+		await scanLines(
+			sessionPath,
+			(line, context) => {
+				consumeCacheHitLine(accumulator, line);
+				// 残行（末尾未以 \n 结束）不计入已消费：pi 可能正在追加，下次要重扫它。
+				// 缺上下文（测试替身）时不做增量，返回 start，调用方下次整扫。
+				if (!context) return;
+				if (context.complete) consumed = context.offset + context.byteLength + 1;
+			},
+			{ start },
+		);
 		return consumed;
 	};
 

@@ -1,10 +1,6 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import type { PanelImperativeHandle } from "react-resizable-panels";
-import {
-	ResizableHandle,
-	ResizablePanel,
-	ResizablePanelGroup,
-} from "../ui-shadcn/resizable";
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "../ui-shadcn/resizable";
 import type { WorkspaceContentOpenMode } from "../../../../shared/types";
 
 export type WorkbenchStageProps = {
@@ -42,11 +38,7 @@ export function WorkbenchStage(props: WorkbenchStageProps) {
 		const element = contentFrameRef.current;
 		if (!element) return;
 		const update = () => {
-			props.onContentWidthChange?.(
-				props.hasContent && props.layout !== "maximize"
-					? Math.round(element.getBoundingClientRect().width)
-					: 0,
-			);
+			props.onContentWidthChange?.(props.hasContent && props.layout !== "maximize" ? Math.round(element.getBoundingClientRect().width) : 0);
 		};
 		update();
 		const observer = new ResizeObserver(update);
@@ -74,34 +66,18 @@ export function WorkbenchStage(props: WorkbenchStageProps) {
 		!props.hasContent || !props.content ? (
 			props.session
 		) : (
-			<ResizablePanelGroup
-				orientation="horizontal"
-				className="workbench-stage-split"
-			>
+			<ResizablePanelGroup orientation="horizontal" className="workbench-stage-split">
 				{/* 尺寸统一用字符串百分比（"48%"）而非数字：react-resizable-panels v4 的
 				   约束派生把数字按 px 解析（minSize={20} → 20px → 占 2%），而初始化布局
 				   把数字当 %（defaultSize={48} → 48%），同值两处解析不一致；
 				   maximize↔split 切换后 expand() 恢复宽度依赖该约束，数字会缩成一条窄缝。
 				   defaultSize 固定不变（挂载时生效一次），避免 Panel 重注册丢失 expandToSize
 				   （折叠前宽度），后续展开/收起全由下方 effect 的 collapse()/expand() 驱动。 */}
-				<ResizablePanel
-					id="workbench-session"
-					panelRef={sessionPanelRef}
-					collapsible
-					collapsedSize="0%"
-					minSize="20%"
-					defaultSize="48%"
-					className="workbench-session-pane"
-				>
+				<ResizablePanel id="workbench-session" panelRef={sessionPanelRef} collapsible collapsedSize="0%" minSize="20%" defaultSize="48%" className="workbench-session-pane">
 					{props.session}
 				</ResizablePanel>
 				<ResizableHandle withHandle className="workbench-stage-sash" />
-				<ResizablePanel
-					id="workbench-content"
-					minSize="25%"
-					defaultSize="52%"
-					className="workbench-content-pane"
-				>
+				<ResizablePanel id="workbench-content" minSize="25%" defaultSize="52%" className="workbench-content-pane">
 					<div ref={contentFrameRef} className="workbench-content-frame">
 						{props.content}
 					</div>
@@ -110,13 +86,7 @@ export function WorkbenchStage(props: WorkbenchStageProps) {
 		);
 
 	return (
-		<div
-			className={
-				!props.hasContent || !props.content
-					? "workbench-stage workbench-stage-solo"
-					: "workbench-stage workbench-stage-with-content"
-			}
-		>
+		<div className={!props.hasContent || !props.content ? "workbench-stage workbench-stage-solo" : "workbench-stage workbench-stage-with-content"}>
 			{props.chrome}
 			<div className="workbench-stage-body">{body}</div>
 		</div>

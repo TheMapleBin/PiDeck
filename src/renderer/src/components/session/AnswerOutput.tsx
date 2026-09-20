@@ -57,32 +57,13 @@ export const AnswerOutput = memo(function AnswerOutput(props: {
 	onOpenFile?: (path: string) => void;
 }) {
 	if (props.mode === "live") {
-		return (
-			<LiveAnswerBody
-				sessionId={props.sessionId ?? ""}
-				hidden={props.hidden}
-				isStreaming={props.isStreaming}
-				onOpenExternal={props.onOpenExternal}
-				onOpenFile={props.onOpenFile}
-			/>
-		);
+		return <LiveAnswerBody sessionId={props.sessionId ?? ""} hidden={props.hidden} isStreaming={props.isStreaming} onOpenExternal={props.onOpenExternal} onOpenFile={props.onOpenFile} />;
 	}
 	const cleanText = stripThinkingTags(stripAnsi(props.text ?? ""));
 	if (!cleanText.trim()) return null;
 	return (
-		<div
-			className={answerOutputClassName(props.variant ?? "process")}
-			data-is-streaming="0"
-			data-variant={props.variant ?? "process"}
-			data-settle={props.settle ? "1" : undefined}
-			style={{ display: props.hidden ? "none" : undefined }}
-		>
-			<MarkdownStream
-				text={cleanText}
-				isStreaming={false}
-				onOpenExternal={props.onOpenExternal}
-				onOpenFile={props.onOpenFile}
-			/>
+		<div className={answerOutputClassName(props.variant ?? "process")} data-is-streaming="0" data-variant={props.variant ?? "process"} data-settle={props.settle ? "1" : undefined} style={{ display: props.hidden ? "none" : undefined }}>
+			<MarkdownStream text={cleanText} isStreaming={false} onOpenExternal={props.onOpenExternal} onOpenFile={props.onOpenFile} />
 		</div>
 	);
 });
@@ -91,29 +72,13 @@ export const AnswerOutput = memo(function AnswerOutput(props: {
  * Live 正文：atom → MarkdownStream（打字机在 MarkdownStream 内部，
  * 不再自持打字机，避免双重逐字；流式轻量渲染与思考同构）。
  */
-const LiveAnswerBody = memo(function LiveAnswerBody(props: {
-	sessionId: string;
-	hidden?: boolean;
-	isStreaming?: boolean;
-	onOpenExternal: (url: string, forceSystem?: boolean) => void;
-	onOpenFile?: (path: string) => void;
-}) {
+const LiveAnswerBody = memo(function LiveAnswerBody(props: { sessionId: string; hidden?: boolean; isStreaming?: boolean; onOpenExternal: (url: string, forceSystem?: boolean) => void; onOpenFile?: (path: string) => void }) {
 	const streaming = useAtomValue(streamingTextBySessionIdAtomFamily(props.sessionId));
 	const sourceText = streaming?.content ?? "";
 	const text = stripThinkingTags(stripAnsi(sourceText));
 	return (
-		<div
-			className={answerOutputClassName("answer")}
-			data-is-streaming={props.isStreaming ? "1" : "0"}
-			data-variant="answer"
-			style={{ display: props.hidden ? "none" : undefined }}
-		>
-			<MarkdownStream
-				text={text}
-				isStreaming={Boolean(props.isStreaming)}
-				onOpenExternal={props.onOpenExternal}
-				onOpenFile={props.onOpenFile}
-			/>
+		<div className={answerOutputClassName("answer")} data-is-streaming={props.isStreaming ? "1" : "0"} data-variant="answer" style={{ display: props.hidden ? "none" : undefined }}>
+			<MarkdownStream text={text} isStreaming={Boolean(props.isStreaming)} onOpenExternal={props.onOpenExternal} onOpenFile={props.onOpenFile} />
 		</div>
 	);
 });

@@ -20,28 +20,12 @@ function transpile(filePath) {
 
 function loadModule() {
 	const sandbox = { exports: {} };
-	vm.runInNewContext(
-		transpile("src/main/dsh/dshProcessEvents.ts"),
-		sandbox,
-		{ filename: "dshProcessEvents.ts" },
-	);
+	vm.runInNewContext(transpile("src/main/dsh/dshProcessEvents.ts"), sandbox, { filename: "dshProcessEvents.ts" });
 	return sandbox.exports;
 }
 
-const {
-	collectDshProcessEvent,
-	collectDshProcessEvents,
-	pushDshProcessEvent,
-	estimateContextTokens,
-	parseContextPressureProjection,
-	parseContextBreakdownProjection,
-	parseTokenUsageProjection,
-	parseSessionStatsProjection,
-	deriveDshSessionStats,
-	deriveSessionStatsFallback,
-	cacheHitPercentOf,
-	DSH_PROCESS_EVENTS_LIMIT,
-} = loadModule();
+const { collectDshProcessEvent, collectDshProcessEvents, pushDshProcessEvent, estimateContextTokens, parseContextPressureProjection, parseContextBreakdownProjection, parseTokenUsageProjection, parseSessionStatsProjection, deriveDshSessionStats, deriveSessionStatsFallback, cacheHitPercentOf, DSH_PROCESS_EVENTS_LIMIT } =
+	loadModule();
 
 function event(type, data = {}, seq = 1, time = 1_000_000) {
 	return { type, data, seq, time };
@@ -113,13 +97,21 @@ test("unknown event types are ignored", () => {
 });
 
 test("llm/retry yields a retry process record with seq and delay", () => {
-	const record = collectDshProcessEvent([], event("llm/retry", {
-		retry: 2,
-		maxRetries: 5,
-		delayMs: 1200,
-		provider: "deepseek",
-		failure: { code: "OVERLOADED", message: "provider overloaded" },
-	}, 42, 2500));
+	const record = collectDshProcessEvent(
+		[],
+		event(
+			"llm/retry",
+			{
+				retry: 2,
+				maxRetries: 5,
+				delayMs: 1200,
+				provider: "deepseek",
+				failure: { code: "OVERLOADED", message: "provider overloaded" },
+			},
+			42,
+			2500,
+		),
+	);
 	assert.ok(record);
 	assert.equal(record.kind, "retry");
 	assert.equal(record.seq, 42);
@@ -132,11 +124,19 @@ test("llm/retry yields a retry process record with seq and delay", () => {
 });
 
 test("llm/retry AUTH failure does not leak credential text", () => {
-	const record = collectDshProcessEvent([], event("llm/retry", {
-		retry: 1,
-		delayMs: 0,
-		failure: { code: "AUTH", message: "sk-secret-key is invalid" },
-	}, 7, 1100));
+	const record = collectDshProcessEvent(
+		[],
+		event(
+			"llm/retry",
+			{
+				retry: 1,
+				delayMs: 0,
+				failure: { code: "AUTH", message: "sk-secret-key is invalid" },
+			},
+			7,
+			1100,
+		),
+	);
 	assert.equal(record?.kind, "retry");
 	assert.equal(record?.detail, "API key is invalid");
 	assert.doesNotMatch(record?.summary ?? "", /sk-secret/);
@@ -181,11 +181,7 @@ test("pushDshProcessEvent dedupes by id (follow snapshot replay)", () => {
 });
 
 test("collectDshProcessEvents replaying the same journal tail is a no-op", () => {
-	const journal = [
-		event("permission/preset", { preset: "workspace-write" }, 0, 1000),
-		event("request/context", { provider: "tokendance", model: "glm-5.2" }, 13, 2000),
-		event("request/context", { provider: "tokendance", model: "kimi-k2.5" }, 40, 3000),
-	];
+	const journal = [event("permission/preset", { preset: "workspace-write" }, 0, 1000), event("request/context", { provider: "tokendance", model: "glm-5.2" }, 13, 2000), event("request/context", { provider: "tokendance", model: "kimi-k2.5" }, 40, 3000)];
 	const firstPass = collectDshProcessEvents([], journal);
 	assert.equal(firstPass.length, 3);
 	const secondPass = collectDshProcessEvents(firstPass, journal);
@@ -248,22 +244,24 @@ test("parseContextBreakdownProjection tolerates partial fields", () => {
 
 test("estimateContextTokens counts text chars / 4 across messages", () => {
 	// 与 pi 的 contextMessageTokens 同规则（字符数 ÷ 4）
-	assert.equal(estimateContextTokens([
-		{ role: "user", text: "abcd" },
-		{ role: "assistant", text: "efgh" },
-	]), 2);
-	assert.equal(estimateContextTokens([
-		{ role: "user", text: "你好世界" },
-		{ role: "tool", text: "abcd" },
-	]), 2);
+	assert.equal(
+		estimateContextTokens([
+			{ role: "user", text: "abcd" },
+			{ role: "assistant", text: "efgh" },
+		]),
+		2,
+	);
+	assert.equal(
+		estimateContextTokens([
+			{ role: "user", text: "你好世界" },
+			{ role: "tool", text: "abcd" },
+		]),
+		2,
+	);
 });
 
 test("estimateContextTokens skips empty and missing text", () => {
-	assert.equal(estimateContextTokens([
-		{ role: "user", text: "" },
-		{ role: "assistant" },
-		{ role: "user", text: "abcdefgh" },
-	]), 2);
+	assert.equal(estimateContextTokens([{ role: "user", text: "" }, { role: "assistant" }, { role: "user", text: "abcdefgh" }]), 2);
 	assert.equal(estimateContextTokens([]), 0);
 	// 不足 4 字符按 0 处理（floor）
 	assert.equal(estimateContextTokens([{ role: "user", text: "abc" }]), 0);
@@ -329,21 +327,11 @@ test("deriveSessionStatsFallback counts turns with model product, mirroring dsh-
 	assert.equal(deriveSessionStatsFallback([{ role: "user" }]), undefined);
 	// 未回复的连发 user：无模型产物，兜底不出数字（与完成轮口径一致）。
 	assert.equal(deriveSessionStatsFallback([{ role: "user" }, { role: "user" }]), undefined);
-	const one = deriveSessionStatsFallback([
-		{ role: "user" },
-		{ role: "assistant" },
-		{ role: "tool" },
-	]);
+	const one = deriveSessionStatsFallback([{ role: "user" }, { role: "assistant" }, { role: "tool" }]);
 	assert.equal(one.turns, 1);
 	assert.equal(one.steps, 1);
 	assert.equal(one.llmMs, 0);
-	const two = deriveSessionStatsFallback([
-		{ role: "user" },
-		{ role: "assistant" },
-		{ role: "user" },
-		{ role: "assistant" },
-		{ role: "assistant" },
-	]);
+	const two = deriveSessionStatsFallback([{ role: "user" }, { role: "assistant" }, { role: "user" }, { role: "assistant" }, { role: "assistant" }]);
 	assert.equal(two.turns, 2);
 	assert.equal(two.steps, 3);
 	// 纯工具执行轮（投影无 assistant 气泡但已有 tool 卡片）：算完成轮、step 保持 0。

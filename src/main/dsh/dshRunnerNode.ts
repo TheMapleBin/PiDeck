@@ -3,17 +3,8 @@ import { existsSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import type {
-	DshRunnerNodeInfo,
-	DshRunnerNodeProbe,
-	DshRunnerNodeSystemProbe,
-} from "../../shared/types/dshRunnerNode";
-import {
-	DSH_RUNNER_NODE_ENV,
-	dshRunnerNodeFileName,
-	resolveDshRunnerNodeSidecar,
-	resolveInstalledDshRunnerNodeSidecar,
-} from "./dshRunnerNodeSidecar";
+import type { DshRunnerNodeInfo, DshRunnerNodeProbe, DshRunnerNodeSystemProbe } from "../../shared/types/dshRunnerNode";
+import { DSH_RUNNER_NODE_ENV, dshRunnerNodeFileName, resolveDshRunnerNodeSidecar, resolveInstalledDshRunnerNodeSidecar } from "./dshRunnerNodeSidecar";
 
 /**
  * Windows DSH 沙箱 runner 的 CUI node 探测（可单测）。
@@ -45,10 +36,7 @@ function listChildDirs(parent: string): string[] {
  * PATH 上的 `node` 经常是 22/25 的 current，但 nvm/fnm/mise 目录里仍可能装着 24。
  * 只扫磁盘、不改 PATH，其它项目继续用它们自己的版本。
  */
-export function versionManagerNodeCandidates(
-	platform: NodeJS.Platform = process.platform,
-	env: NodeJS.ProcessEnv = process.env,
-): string[] {
+export function versionManagerNodeCandidates(platform: NodeJS.Platform = process.platform, env: NodeJS.ProcessEnv = process.env): string[] {
 	const fileName = dshRunnerNodeFileName(platform);
 	const home = env.HOME || env.USERPROFILE || homedir();
 	const localAppData = env.LOCALAPPDATA;
@@ -78,9 +66,7 @@ export function versionManagerNodeCandidates(
 	}
 
 	// mise：%LOCALAPPDATA%\mise\installs\node\<ver>\node.exe
-	const miseDataDir =
-		env.MISE_DATA_DIR ||
-		(platform === "win32" && localAppData ? join(localAppData, "mise") : join(home, ".local", "share", "mise"));
+	const miseDataDir = env.MISE_DATA_DIR || (platform === "win32" && localAppData ? join(localAppData, "mise") : join(home, ".local", "share", "mise"));
 	const miseInstalls = env.MISE_INSTALL_PATH || join(miseDataDir, "installs", "node");
 	for (const dir of listChildDirs(miseInstalls)) {
 		push(dir);
@@ -103,9 +89,7 @@ export function versionManagerNodeCandidates(
 	}
 
 	// volta 工具链：bin\node.exe 是垫片，真实版本在 tools\image\node\<ver>\
-	const voltaHome = env.VOLTA_HOME || (platform === "win32" && localAppData
-		? join(localAppData, "Volta")
-		: join(home, ".volta"));
+	const voltaHome = env.VOLTA_HOME || (platform === "win32" && localAppData ? join(localAppData, "Volta") : join(home, ".volta"));
 	for (const dir of listChildDirs(join(voltaHome, "tools", "image", "node"))) {
 		push(dir);
 		push(dir, "bin");
@@ -114,10 +98,7 @@ export function versionManagerNodeCandidates(
 	return [...new Set(out)];
 }
 
-export function nodePathCandidates(
-	platform: NodeJS.Platform = process.platform,
-	env: NodeJS.ProcessEnv = process.env,
-): string[] {
+export function nodePathCandidates(platform: NodeJS.Platform = process.platform, env: NodeJS.ProcessEnv = process.env): string[] {
 	const fileName = dshRunnerNodeFileName(platform);
 	const official: string[] = [];
 	if (platform === "win32") {
@@ -165,16 +146,19 @@ export function resolveConfiguredNodePath(configuredPath?: string | null): strin
 	return typeof configuredPath === "string" ? configuredPath.trim() : "";
 }
 
-async function resolvePathLocation(
-	platform: NodeJS.Platform = process.platform,
-): Promise<string> {
+async function resolvePathLocation(platform: NodeJS.Platform = process.platform): Promise<string> {
 	try {
 		const command = platform === "win32" ? "where" : "which";
 		const { stdout } = await execFileAsync(command, ["node"], {
 			timeout: NODE_PROBE_TIMEOUT_MS,
 			windowsHide: true,
 		});
-		return stdout.split(/\r?\n/).map((line) => line.trim()).find(Boolean) ?? "";
+		return (
+			stdout
+				.split(/\r?\n/)
+				.map((line) => line.trim())
+				.find(Boolean) ?? ""
+		);
 	} catch {
 		return "";
 	}
@@ -188,8 +172,7 @@ async function probeExecutable(executable: string): Promise<DshRunnerNodeProbe |
 		});
 		const version = parseNodeVersion(stdout);
 		if (!version) return null;
-		const resolvedPath =
-			executable === "node" ? (await resolvePathLocation()) || executable : executable;
+		const resolvedPath = executable === "node" ? (await resolvePathLocation()) || executable : executable;
 		return { resolvedPath, version };
 	} catch {
 		return null;
@@ -204,14 +187,8 @@ export type DetectSystemNodeInput = {
 };
 
 /** 忽略用户配置：PATH → 专用 sidecar → 官方目录 / nvm/fnm/mise。 */
-export async function detectSystemNode(
-	platformOrInput: NodeJS.Platform | DetectSystemNodeInput = process.platform,
-	envArg?: NodeJS.ProcessEnv,
-): Promise<DshRunnerNodeSystemProbe | null> {
-	const input: DetectSystemNodeInput =
-		typeof platformOrInput === "string"
-			? { platform: platformOrInput, env: envArg }
-			: platformOrInput;
+export async function detectSystemNode(platformOrInput: NodeJS.Platform | DetectSystemNodeInput = process.platform, envArg?: NodeJS.ProcessEnv): Promise<DshRunnerNodeSystemProbe | null> {
+	const input: DetectSystemNodeInput = typeof platformOrInput === "string" ? { platform: platformOrInput, env: envArg } : platformOrInput;
 	const platform = input.platform ?? process.platform;
 	const env = input.env ?? process.env;
 
@@ -259,9 +236,7 @@ function incompatibleError(version: string): string {
 /**
  * 探测当前应给 DSH runner 用的 node：env 覆盖 > 用户配置 > 系统自动探测。
  */
-export async function detectDshRunnerNode(
-	input: DetectDshRunnerNodeInput = {},
-): Promise<DshRunnerNodeInfo> {
+export async function detectDshRunnerNode(input: DetectDshRunnerNodeInput = {}): Promise<DshRunnerNodeInfo> {
 	const platform = input.platform ?? process.platform;
 	const env = input.env ?? process.env;
 	const sidecarPath = resolveInstalledDshRunnerNodeSidecar({
@@ -322,18 +297,10 @@ export async function detectDshRunnerNode(
 		};
 	}
 
-	return notFound(
-		`未检测到 Node ${DSH_RUNNER_NODE_MAJOR}。可在开发设置里一键下载 PiDeck 专用副本（走应用更新源，不改系统 PATH），或手动指定本机 node.exe。`,
-		null,
-		"",
-	);
+	return notFound(`未检测到 Node ${DSH_RUNNER_NODE_MAJOR}。可在开发设置里一键下载 PiDeck 专用副本（走应用更新源，不改系统 PATH），或手动指定本机 node.exe。`, null, "");
 }
 
-function notFound(
-	error: string,
-	system: DshRunnerNodeSystemProbe | null,
-	executable: string,
-): DshRunnerNodeInfo {
+function notFound(error: string, system: DshRunnerNodeSystemProbe | null, executable: string): DshRunnerNodeInfo {
 	return {
 		source: "not-found",
 		executable,
@@ -346,9 +313,7 @@ function notFound(
 }
 
 /** host fork 用：只返回可 spawn 的兼容绝对路径。 */
-export async function resolveDshRunnerNodePath(
-	input: DetectDshRunnerNodeInput = {},
-): Promise<string | undefined> {
+export async function resolveDshRunnerNodePath(input: DetectDshRunnerNodeInput = {}): Promise<string | undefined> {
 	if ((input.platform ?? process.platform) !== "win32") return undefined;
 	const info = await detectDshRunnerNode(input);
 	if (info.compatible && info.resolvedPath) return info.resolvedPath;

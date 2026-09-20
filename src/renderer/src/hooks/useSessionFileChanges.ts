@@ -17,10 +17,7 @@ import { collectRunFileChanges } from "../components/session/TimelineFormat";
 import { mergeRunFileChanges } from "../components/session/turn/fileChangesMerge";
 import { desktopApi } from "../desktopApi";
 
-export function useSessionFileChanges(
-	sessionId: string,
-	run?: AgentRunItem,
-): { entries: SessionFileChange[]; loading: boolean } {
+export function useSessionFileChanges(sessionId: string, run?: AgentRunItem): { entries: SessionFileChange[]; loading: boolean } {
 	const [full, setFull] = useState<SessionFileChange[]>([]);
 	const [loading, setLoading] = useState(false);
 

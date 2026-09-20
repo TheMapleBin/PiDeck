@@ -25,10 +25,7 @@ const GENERIC_ALL = 0x10000000;
 const HIDDEN_STATION = "pideck-hidden";
 const HIDDEN_DESKTOP = "default";
 
-function hideVisibleConsole(
-	getConsoleWindow: () => unknown,
-	showWindow: (hWnd: unknown, nCmdShow: number) => unknown,
-): void {
+function hideVisibleConsole(getConsoleWindow: () => unknown, showWindow: (hWnd: unknown, nCmdShow: number) => unknown): void {
 	const hide = () => {
 		const hwnd = getConsoleWindow();
 		if (hwnd) showWindow(hwnd, 0);
@@ -48,31 +45,12 @@ function hideVisibleConsole(
 }
 
 /** 把当前进程切到非交互窗口站。失败返回 false，调用方退回 SW_HIDE。 */
-function attachPrivateWindowStation(user32: {
-	func(signature: string): (...args: unknown[]) => unknown;
-}): boolean {
-	const createWindowStation = user32.func(
-		"void* CreateWindowStationW(str16 lpwinsta, uint32 dwFlags, uint32 dwDesiredAccess, void* lpsa)",
-	) as (name: string, flags: number, access: number, sa: number) => unknown;
-	const openWindowStation = user32.func(
-		"void* OpenWindowStationW(str16 lpszWinSta, int fInherit, uint32 dwDesiredAccess)",
-	) as (name: string, inherit: number, access: number) => unknown;
-	const setProcessWindowStation = user32.func("int SetProcessWindowStation(void* hWinSta)") as (
-		hWinSta: unknown,
-	) => number;
-	const createDesktop = user32.func(
-		"void* CreateDesktopW(str16 lpszDesktop, void* lpszDevice, void* pDevmode, uint32 dwFlags, uint32 dwDesiredAccess, void* lpsa)",
-	) as (
-		name: string,
-		device: number,
-		devmode: number,
-		flags: number,
-		access: number,
-		sa: number,
-	) => unknown;
-	const setThreadDesktop = user32.func("int SetThreadDesktop(void* hDesktop)") as (
-		hDesktop: unknown,
-	) => number;
+function attachPrivateWindowStation(user32: { func(signature: string): (...args: unknown[]) => unknown }): boolean {
+	const createWindowStation = user32.func("void* CreateWindowStationW(str16 lpwinsta, uint32 dwFlags, uint32 dwDesiredAccess, void* lpsa)") as (name: string, flags: number, access: number, sa: number) => unknown;
+	const openWindowStation = user32.func("void* OpenWindowStationW(str16 lpszWinSta, int fInherit, uint32 dwDesiredAccess)") as (name: string, inherit: number, access: number) => unknown;
+	const setProcessWindowStation = user32.func("int SetProcessWindowStation(void* hWinSta)") as (hWinSta: unknown) => number;
+	const createDesktop = user32.func("void* CreateDesktopW(str16 lpszDesktop, void* lpszDevice, void* pDevmode, uint32 dwFlags, uint32 dwDesiredAccess, void* lpsa)") as (name: string, device: number, devmode: number, flags: number, access: number, sa: number) => unknown;
+	const setThreadDesktop = user32.func("int SetThreadDesktop(void* hDesktop)") as (hDesktop: unknown) => number;
 
 	let station = createWindowStation(HIDDEN_STATION, 0, WINSTA_ALL_ACCESS, 0);
 	if (!station) station = openWindowStation(HIDDEN_STATION, 0, WINSTA_ALL_ACCESS);
@@ -87,10 +65,7 @@ function attachPrivateWindowStation(user32: {
  * 确保当前进程持有控制台，且尽量不弹出可见窗口。
  * @returns 是否已持有可用控制台（继承或新分配）。
  */
-export function allocHiddenConsole(
-	platform: NodeJS.Platform = process.platform,
-	ffi?: HiddenConsoleFfi,
-): boolean {
+export function allocHiddenConsole(platform: NodeJS.Platform = process.platform, ffi?: HiddenConsoleFfi): boolean {
 	if (platform !== "win32") return false;
 	try {
 		const koffi = ffi ?? (createRequire(__filename)("koffi") as HiddenConsoleFfi);
@@ -100,10 +75,7 @@ export function allocHiddenConsole(
 		const getConsoleCP = kernel32.func("uint32 GetConsoleCP(void)") as () => number;
 		const allocConsole = kernel32.func("int AllocConsole(void)") as () => number;
 		const getLastError = kernel32.func("uint32 GetLastError(void)") as () => number;
-		const showWindow = user32.func("int ShowWindow(void* hWnd, int nCmdShow)") as (
-			hWnd: unknown,
-			nCmdShow: number,
-		) => number;
+		const showWindow = user32.func("int ShowWindow(void* hWnd, int nCmdShow)") as (hWnd: unknown, nCmdShow: number) => number;
 
 		// 已有控制台（含 CREATE_NO_WINDOW 无窗口控制台）：不要再 AllocConsole。
 		if (getConsoleCP() !== 0) {

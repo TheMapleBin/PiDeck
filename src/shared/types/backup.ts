@@ -11,12 +11,7 @@
  * pre-restore（恢复前保护）；upgrade / on-save 为旧版本自动备份模式的遗留原因，
  * 只可能出现在历史备份元数据中，类型保留以兼容旧备份文件。
  */
-export type ConfigBackupReason =
-	| "first-run"
-	| "upgrade"
-	| "on-save"
-	| "manual"
-	| "pre-restore";
+export type ConfigBackupReason = "first-run" | "upgrade" | "on-save" | "manual" | "pre-restore";
 
 /** 备份列表条目元数据（不含文件内容；列表页只读元数据，避免加载全文）。 */
 export type ConfigBackupMeta = {
@@ -58,16 +53,10 @@ export type ConfigBackupDetail = {
 };
 
 /** 备份列表结果（主进程返回；错误不抛裸异常跨 IPC）。 */
-export type ConfigBackupListResult =
-	| { ok: true; backups: ConfigBackupMeta[] }
-	| { ok: false; error: string };
+export type ConfigBackupListResult = { ok: true; backups: ConfigBackupMeta[] } | { ok: false; error: string };
 
 /** 备份操作结果（创建 / 恢复 / 删除）。 */
-export type ConfigBackupActionResult =
-	| { ok: true; id?: string }
-	| { ok: false; error: string };
+export type ConfigBackupActionResult = { ok: true; id?: string } | { ok: false; error: string };
 
 /** 批量删除结果：ok 时返回实际删除的备份数（部分成功亦 ok）。 */
-export type ConfigBackupDeleteManyResult =
-	| { ok: true; deleted: number }
-	| { ok: false; error: string };
+export type ConfigBackupDeleteManyResult = { ok: true; deleted: number } | { ok: false; error: string };

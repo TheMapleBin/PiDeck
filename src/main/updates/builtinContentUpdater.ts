@@ -21,25 +21,12 @@
  * 「远端新增文件」（技能是文档不注入代码，允许新增；提示词同为内容也允许）。
  */
 
-import {
-	copyFileSync,
-	existsSync,
-	mkdirSync,
-	readFileSync,
-	readdirSync,
-	renameSync,
-	rmSync,
-	writeFileSync,
-} from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { ATOMGIT_API_HOST, UPDATE_REPO, UPDATE_REPO_OWNER } from "../../shared/updateSources";
 import type { UpdateSourceId } from "../../shared/types/settings";
-import type {
-	BuiltinContentCheckResult,
-	BuiltinContentUpdateResult,
-	BuiltinContentUpdateStatus,
-} from "../../shared/types/contentUpdate";
+import type { BuiltinContentCheckResult, BuiltinContentUpdateResult, BuiltinContentUpdateStatus } from "../../shared/types/contentUpdate";
 
 /** 清单所在分支：main（发行分支，与内置扩展更新一致）。 */
 export const BUILTIN_CONTENT_UPDATE_DEFAULT_BRANCH = "main";
@@ -330,9 +317,7 @@ export class BuiltinContentUpdater {
 		return {
 			schemaVersion: 1,
 			version,
-			bundleSha256: typeof bundleSha256 === "string" && SHA256_PATTERN.test(bundleSha256)
-				? bundleSha256.toLowerCase()
-				: "",
+			bundleSha256: typeof bundleSha256 === "string" && SHA256_PATTERN.test(bundleSha256) ? bundleSha256.toLowerCase() : "",
 			fileCount: files.length,
 			files,
 		};
@@ -432,11 +417,7 @@ export class BuiltinContentUpdater {
 	 * 写覆盖层：tmp 目录组装 → 整体校验 → 原子替换。
 	 * 覆盖层清单只声明实际落盘的文件，保证 readVerifiedArtifact 能通过。
 	 */
-	private async writeOverlay(
-		remote: BuiltinContentManifest,
-		changedFiles: string[],
-		branch: string,
-	): Promise<number> {
+	private async writeOverlay(remote: BuiltinContentManifest, changedFiles: string[], branch: string): Promise<number> {
 		const overlayDir = this.resolveOverlayDir();
 		const tmpDir = `${overlayDir}.tmp`;
 		const localShas = this.localFileShas();
@@ -473,11 +454,7 @@ export class BuiltinContentUpdater {
 				fileCount: written.length,
 				files: written,
 			};
-			writeFileSync(
-				join(tmpDir, this.manifestFileName),
-				`${JSON.stringify(overlayManifest, null, 2)}\n`,
-				"utf8",
-			);
+			writeFileSync(join(tmpDir, this.manifestFileName), `${JSON.stringify(overlayManifest, null, 2)}\n`, "utf8");
 			if (!this.readVerifiedArtifact(tmpDir)) throw new Error("overlay failed verification after write");
 			this.swapOverlay(tmpDir);
 			return written.length;
@@ -520,7 +497,10 @@ export class BuiltinContentUpdater {
 	/** 源顺序：GitHub 源时 raw 直连优先，否则 AtomGit OpenAPI 优先（国内直连更稳）。 */
 	private sourceEntries(relPath: string, branch: string): SourceEntry[] {
 		const repoPath = `${UPDATE_REPO_OWNER}/${UPDATE_REPO}`;
-		const encoded = relPath.split("/").map((part) => encodeURIComponent(part)).join("/");
+		const encoded = relPath
+			.split("/")
+			.map((part) => encodeURIComponent(part))
+			.join("/");
 		const atomgit: SourceEntry = {
 			id: "atomgit",
 			url: `${ATOMGIT_API_HOST}/api/v5/repos/${repoPath}/contents/${encoded}?ref=${encodeURIComponent(branch)}`,

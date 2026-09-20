@@ -10,14 +10,7 @@ import { ipcChannels } from "../../shared/ipc";
 import type { SoundAlertKind } from "../../shared/types/soundAlert";
 import type { AgentManager } from "../pi/AgentManager";
 import type { SettingsStore } from "../settings/SettingsStore";
-import {
-	createSoundAlertTrackerState,
-	resolveSoundPlayback,
-	trackAgentSettled,
-	trackAgentTabs,
-	trackUiRequest,
-	type SoundAlertTrackerState,
-} from "./soundAlertTracker";
+import { createSoundAlertTrackerState, resolveSoundPlayback, trackAgentSettled, trackAgentTabs, trackUiRequest, type SoundAlertTrackerState } from "./soundAlertTracker";
 
 export type SoundAlertServiceDeps = {
 	agentManager: AgentManager;
@@ -52,11 +45,7 @@ export class SoundAlertService {
 		// waiting：复用主进程输出订阅，只消费已规范化的 agents:ui-request
 		this.offOutput = this.deps.agentManager.onOutput((channel, payload) => {
 			if (channel !== ipcChannels.agentsUiRequest || !payload || typeof payload !== "object") return;
-			const event = trackUiRequest(
-				this.state,
-				payload as Parameters<typeof trackUiRequest>[1],
-				Date.now(),
-			);
+			const event = trackUiRequest(this.state, payload as Parameters<typeof trackUiRequest>[1], Date.now());
 			if (event) this.maybePlay(event.kind, event.title);
 		});
 	}
@@ -65,9 +54,12 @@ export class SoundAlertService {
 	detach(): void {
 		if (!this.attached) return;
 		this.attached = false;
-		this.offSettled?.(); this.offSettled = null;
-		this.offState?.(); this.offState = null;
-		this.offOutput?.(); this.offOutput = null;
+		this.offSettled?.();
+		this.offSettled = null;
+		this.offState?.();
+		this.offState = null;
+		this.offOutput?.();
+		this.offOutput = null;
 		this.state = createSoundAlertTrackerState();
 	}
 

@@ -1,11 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { FolderOpen, RefreshCw, RotateCcw, Undo2, UploadCloud } from "lucide-react";
 import { Button } from "../components/ui-shadcn/button";
-import type {
-	BuiltInExtensionsCheckResult,
-	BuiltInExtensionsUpdateResult,
-	BuiltInExtensionsUpdateStatus,
-} from "../../../shared/types/extensionsUpdate";
+import type { BuiltInExtensionsCheckResult, BuiltInExtensionsUpdateResult, BuiltInExtensionsUpdateStatus } from "../../../shared/types/extensionsUpdate";
 import { t } from "../i18n";
 import { showNotice } from "../utils/notice";
 
@@ -22,8 +18,7 @@ type BuiltInExtensionsApi = {
 type Busy = "check" | "update" | "restore" | "restorePrevious" | null;
 
 function getBuiltInApi(): BuiltInExtensionsApi {
-	const api = (window as unknown as { piDesktop?: { extensions?: BuiltInExtensionsApi } })
-		.piDesktop?.extensions;
+	const api = (window as unknown as { piDesktop?: { extensions?: BuiltInExtensionsApi } }).piDesktop?.extensions;
 	if (!api?.builtInStatus) throw new Error("PiDeck built-in extensions API is not available");
 	return api;
 }
@@ -128,12 +123,7 @@ export function BuiltInExtensionsUpdatePanel(props: { onApplied: () => void }) {
 			} else if (!result.updated) {
 				showNotice(t("config.builtInExt.nothingToRestoreToast"), 3500);
 			} else {
-				showNotice(
-					previous
-						? t("config.builtInExt.restoredPreviousToast")
-						: t("config.builtInExt.restoredToast"),
-					4500,
-				);
+				showNotice(previous ? t("config.builtInExt.restoredPreviousToast") : t("config.builtInExt.restoredToast"), 4500);
 			}
 			setCheck(null);
 			props.onApplied();
@@ -163,20 +153,10 @@ export function BuiltInExtensionsUpdatePanel(props: { onApplied: () => void }) {
 			<div className="flex flex-wrap items-start justify-between gap-2">
 				<div className="min-w-0">
 					<div className="flex flex-wrap items-center gap-2">
-						<strong className="text-control font-semibold text-foreground">
-							{t("config.builtInExt.title")}
-						</strong>
-						<span className="font-mono text-caption tabular-nums text-muted-foreground">
-							{effectiveVersion
-								? t("config.builtInExt.version", { version: effectiveVersion })
-								: t("config.builtInExt.versionUnknown")}
-						</span>
+						<strong className="text-control font-semibold text-foreground">{t("config.builtInExt.title")}</strong>
+						<span className="font-mono text-caption tabular-nums text-muted-foreground">{effectiveVersion ? t("config.builtInExt.version", { version: effectiveVersion }) : t("config.builtInExt.versionUnknown")}</span>
 						{/* 覆盖层生效标识：版本号相同时用户需知道自己跑的是热补丁而非随包版本 */}
-						{overlayActive && (
-							<span className="text-micro text-text-primary">
-								{t("config.builtInExt.overlayActive")}
-							</span>
-						)}
+						{overlayActive && <span className="text-micro text-text-primary">{t("config.builtInExt.overlayActive")}</span>}
 						{hasUpdate && (
 							<span className="text-caption text-text-primary">
 								{t("config.builtInExt.hasUpdate", {
@@ -186,19 +166,9 @@ export function BuiltInExtensionsUpdatePanel(props: { onApplied: () => void }) {
 							</span>
 						)}
 					</div>
-					<small className="mt-1 block text-caption leading-4 text-muted-foreground">
-						{t("config.builtInExt.description")}
-					</small>
-					{check?.ok && !check.hasUpdate && (
-						<small className="block text-caption text-muted-foreground">
-							{t("config.builtInExt.upToDate", { version: check.remoteVersion ?? "?" })}
-						</small>
-					)}
-					{overlayActive && (
-						<small className="block text-caption text-muted-foreground">
-							{t("config.builtInExt.restartHint")}
-						</small>
-					)}
+					<small className="mt-1 block text-caption leading-4 text-muted-foreground">{t("config.builtInExt.description")}</small>
+					{check?.ok && !check.hasUpdate && <small className="block text-caption text-muted-foreground">{t("config.builtInExt.upToDate", { version: check.remoteVersion ?? "?" })}</small>}
+					{overlayActive && <small className="block text-caption text-muted-foreground">{t("config.builtInExt.restartHint")}</small>}
 				</div>
 				{/* shrink-0 + flex-wrap + justify-end：窄窗口下按钮换行到第二行而不是溢出被裁 */}
 				<div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
@@ -223,13 +193,7 @@ export function BuiltInExtensionsUpdatePanel(props: { onApplied: () => void }) {
 							{t("config.builtInExt.restorePrevious")}
 						</Button>
 					)}
-					<Button
-						variant="ghost"
-						size="icon-sm"
-						className="size-7"
-						onClick={() => void handleOpenDir()}
-						title={t("config.builtInExt.openDir")}
-					>
+					<Button variant="ghost" size="icon-sm" className="size-7" onClick={() => void handleOpenDir()} title={t("config.builtInExt.openDir")}>
 						<FolderOpen size={14} strokeWidth={1.8} />
 					</Button>
 				</div>

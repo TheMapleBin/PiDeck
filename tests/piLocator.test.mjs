@@ -44,13 +44,7 @@ function loadTsFile(filePath, sandboxExtra = {}) {
 	return sandbox.exports;
 }
 
-function loadPiLocatorModule(
-	platform = process.platform,
-	envOverrides = {},
-	homePath = tmpdir(),
-	moduleOverrides = {},
-	sandboxExtra = {},
-) {
+function loadPiLocatorModule(platform = process.platform, envOverrides = {}, homePath = tmpdir(), moduleOverrides = {}, sandboxExtra = {}) {
 	const filePath = join(PI_LOCATOR_DIR, "PiLocator.ts");
 	const { outputText } = ts.transpileModule(readFileSync(filePath, "utf8"), {
 		compilerOptions: {
@@ -124,7 +118,7 @@ test("uses the pi cmd shim bin directory as PATH prefix on Windows when node.exe
 	const binDir = join(root, "nvm", "v22.22.1");
 	mkdirSync(binDir, { recursive: true });
 	const piPath = join(binDir, "pi.cmd");
-	writeFileSync(piPath, "@echo off\r\nnode \"%~dp0\\node_modules\\pi\\bin.js\" %*\r\n", "utf8");
+	writeFileSync(piPath, '@echo off\r\nnode "%~dp0\\node_modules\\pi\\bin.js" %*\r\n', "utf8");
 	writeFileSync(join(binDir, "node.exe"), "", "utf8");
 
 	try {
@@ -252,11 +246,7 @@ test("getSearchDirs honors MISE_DATA_DIR and MISE_INSTALL_PATH on Windows", () =
 test("getSearchDirs falls back to %LOCALAPPDATA%\\mise without MISE_DATA_DIR (Windows)", () => {
 	const root = join(tmpdir(), `pi-desktop-locator-mise-default-${process.pid}-${Date.now()}`);
 	try {
-		const { PiLocator } = loadPiLocatorModule(
-			"win32",
-			{ LOCALAPPDATA: join(root, "Local"), APPDATA: join(root, "Roaming") },
-			root,
-		);
+		const { PiLocator } = loadPiLocatorModule("win32", { LOCALAPPDATA: join(root, "Local"), APPDATA: join(root, "Roaming") }, root);
 		const dirs = new PiLocator().getSearchDirs();
 		assert.ok(dirs.includes(join(root, "Local", "mise", "shims")));
 	} finally {
@@ -269,11 +259,7 @@ test("getSearchDirs scans fnm node-versions and scoop dirs on Windows", () => {
 	const fnmInstall = join(root, "Local", "fnm", "node-versions", "v22.0.0", "installation");
 	mkdirSync(fnmInstall, { recursive: true });
 	try {
-		const { PiLocator } = loadPiLocatorModule(
-			"win32",
-			{ LOCALAPPDATA: join(root, "Local"), APPDATA: join(root, "Roaming") },
-			root,
-		);
+		const { PiLocator } = loadPiLocatorModule("win32", { LOCALAPPDATA: join(root, "Local"), APPDATA: join(root, "Roaming") }, root);
 		const dirs = new PiLocator().getSearchDirs();
 		assert.ok(dirs.includes(fnmInstall));
 		assert.ok(dirs.includes(join(root, "scoop", "shims")));
@@ -289,10 +275,7 @@ test("getSearchDirs uses ~/.local/share/mise on darwin and linux", () => {
 		try {
 			const { PiLocator } = loadPiLocatorModule(platform, {}, root);
 			const dirs = new PiLocator().getSearchDirs();
-			assert.ok(
-				dirs.includes(join(root, ".local", "share", "mise", "shims")),
-				`${platform} should scan ~/.local/share/mise`,
-			);
+			assert.ok(dirs.includes(join(root, ".local", "share", "mise", "shims")), `${platform} should scan ~/.local/share/mise`);
 		} finally {
 			rmSync(root, { recursive: true, force: true });
 		}
@@ -302,11 +285,7 @@ test("getSearchDirs uses ~/.local/share/mise on darwin and linux", () => {
 test("createProcessEnv prepends search dirs to PATH/Path without pathPrefix (npm check path)", () => {
 	const root = join(tmpdir(), `pi-desktop-locator-npm-env-${process.pid}-${Date.now()}`);
 	try {
-		const { PiLocator } = loadPiLocatorModule(
-			"win32",
-			{ LOCALAPPDATA: join(root, "Local"), APPDATA: join(root, "Roaming") },
-			root,
-		);
+		const { PiLocator } = loadPiLocatorModule("win32", { LOCALAPPDATA: join(root, "Local"), APPDATA: join(root, "Roaming") }, root);
 		const env = new PiLocator().createProcessEnv();
 		// npm 检测（piCheckNpm）直接复用该 env 执行 npm --version
 		// 模块可能在 Linux 宿主上模拟 win32，不断言宿主分隔符。
@@ -325,12 +304,7 @@ const FNM_PROBE_OUTPUT = `PIDECK_PI=${FNM_PI}\nPIDECK_NODE_BIN=${FNM_NODE_BIN}\n
 
 /** 探测调用的特征：-e <shell> -lic <script>，脚本里带 PIDECK_PI= 输出键。 */
 function isWslProbeArgs(args) {
-	return (
-		Array.isArray(args) &&
-		args.includes("-lic") &&
-		typeof args[args.length - 1] === "string" &&
-		args[args.length - 1].includes("PIDECK_PI=")
-	);
+	return Array.isArray(args) && args.includes("-lic") && typeof args[args.length - 1] === "string" && args[args.length - 1].includes("PIDECK_PI=");
 }
 
 /** 统计探测次数的 mock：TTL 用例要区分「命中缓存」与「真的又打了一次」。 */
@@ -360,37 +334,22 @@ function mockWslProbe({ probeOutput, version = "0.85.1" }) {
 
 test("places an explicit WSL cwd before the pi command", () => {
 	const { PiLocator } = loadPiLocatorModule("win32");
-	const invocation = new PiLocator().createInvocation(
-		"wsl://Ubuntu-24.04/root/pi",
-		["--mode", "rpc"],
-		{ wslCwd: "/root/ba cli" },
-	);
+	const invocation = new PiLocator().createInvocation("wsl://Ubuntu-24.04/root/pi", ["--mode", "rpc"], { wslCwd: "/root/ba cli" });
 
-	assert.deepEqual(
-		Array.from(invocation.args),
-		["-d", "Ubuntu-24.04", "-u", "root", "--cd", "/root/ba cli", "pi", "--mode", "rpc"],
-	);
+	assert.deepEqual(Array.from(invocation.args), ["-d", "Ubuntu-24.04", "-u", "root", "--cd", "/root/ba cli", "pi", "--mode", "rpc"]);
 	assert.equal(invocation.wsl.distro, "Ubuntu-24.04");
 });
 
 test("keeps a validated Linux custom path as the persisted WSL setting", async () => {
-	const { PiLocator } = loadPiLocatorModule(
-		"win32",
-		{},
-		tmpdir(),
-		{
-			"node:child_process": {
-				execFile: (_command, _args, _options, callback) => callback(null, "0.80.0\n", ""),
-				execFileSync: () => "",
-			},
+	const { PiLocator } = loadPiLocatorModule("win32", {}, tmpdir(), {
+		"node:child_process": {
+			execFile: (_command, _args, _options, callback) => callback(null, "0.80.0\n", ""),
+			execFileSync: () => "",
 		},
-	);
+	});
 	const locator = new PiLocator();
 
-	assert.equal(
-		locator.resolveCommand("/opt/pi", true, "Ubuntu-24.04", "dev"),
-		"wsl://Ubuntu-24.04/dev//opt/pi",
-	);
+	assert.equal(locator.resolveCommand("/opt/pi", true, "Ubuntu-24.04", "dev"), "wsl://Ubuntu-24.04/dev//opt/pi");
 	const result = await locator.validateCustomPath("/opt/pi", true, "Ubuntu-24.04", "dev");
 
 	assert.equal(result.installed, true);
@@ -443,10 +402,7 @@ test("resolveCommand keeps a valid customPiPath (still takes priority)", () => {
 test("normalizeCustomPath keeps wsl:// markers intact (not treated as local files)", () => {
 	const { PiLocator } = loadPiLocatorModule("win32", { PATH: "" }, tmpdir());
 	// wsl:// 是标记串而非文件路径：Windows 补全 .cmd/.exe 必须跳过它，existsSync 检查也不得误伤
-	assert.equal(
-		new PiLocator().normalizeCustomPath("wsl://Ubuntu-24.04/root/pi"),
-		"wsl://Ubuntu-24.04/root/pi",
-	);
+	assert.equal(new PiLocator().normalizeCustomPath("wsl://Ubuntu-24.04/root/pi"), "wsl://Ubuntu-24.04/root/pi");
 });
 
 test("resolveCommand falls back for unsupported .ps1 shims even when the file exists", () => {
@@ -455,11 +411,7 @@ test("resolveCommand falls back for unsupported .ps1 shims even when the file ex
 	mkdirSync(pathDir, { recursive: true });
 	writeFileSync(join(pathDir, "pi.cmd"), "@echo off\r\n", "utf8");
 	try {
-		const { PiLocator } = loadPiLocatorModule(
-			"win32",
-			{ PATH: pathDir, LOCALAPPDATA: join(root, "Local"), APPDATA: join(root, "Roaming") },
-			root,
-		);
+		const { PiLocator } = loadPiLocatorModule("win32", { PATH: pathDir, LOCALAPPDATA: join(root, "Local"), APPDATA: join(root, "Roaming") }, root);
 		const ps1 = join(root, "pi.ps1");
 		writeFileSync(ps1, "# shim\n", "utf8");
 		const resolved = new PiLocator().resolveCommand(ps1, false, undefined, undefined);
@@ -473,20 +425,15 @@ test("resolveCommand falls back for unsupported .ps1 shims even when the file ex
 
 test("resolveCommand never calls execFileSync to probe WSL which pi", () => {
 	let syncCalls = 0;
-	const { PiLocator, resetWslCommandCache } = loadPiLocatorModule(
-		"win32",
-		{ PATH: "", Path: "" },
-		tmpdir(),
-		{
-			"node:child_process": {
-				execFile: (_command, _args, _options, callback) => callback(null, "/usr/bin/pi\n", ""),
-				execFileSync: () => {
-					syncCalls += 1;
-					return "";
-				},
+	const { PiLocator, resetWslCommandCache } = loadPiLocatorModule("win32", { PATH: "", Path: "" }, tmpdir(), {
+		"node:child_process": {
+			execFile: (_command, _args, _options, callback) => callback(null, "/usr/bin/pi\n", ""),
+			execFileSync: () => {
+				syncCalls += 1;
+				return "";
 			},
 		},
-	);
+	});
 	resetWslCommandCache();
 	const resolved = new PiLocator().resolveCommand(undefined, true, "Ubuntu-24.04", "dev");
 	assert.equal(syncCalls, 0);
@@ -497,27 +444,22 @@ test("resolveCommand never calls execFileSync to probe WSL which pi", () => {
 test("warmWslCommand caches the absolute linux pi path reported by the probe", async () => {
 	let syncCalls = 0;
 	let probeCalls = 0;
-	const { PiLocator, resetWslCommandCache } = loadPiLocatorModule(
-		"win32",
-		{},
-		tmpdir(),
-		{
-			"node:child_process": {
-				execFile: (_command, args, _options, callback) => {
-					if (isWslProbeArgs(args)) {
-						probeCalls += 1;
-						callback(null, FNM_PROBE_OUTPUT, "");
-						return;
-					}
-					callback(null, "0.80.0\n", "");
-				},
-				execFileSync: () => {
-					syncCalls += 1;
-					return "";
-				},
+	const { PiLocator, resetWslCommandCache } = loadPiLocatorModule("win32", {}, tmpdir(), {
+		"node:child_process": {
+			execFile: (_command, args, _options, callback) => {
+				if (isWslProbeArgs(args)) {
+					probeCalls += 1;
+					callback(null, FNM_PROBE_OUTPUT, "");
+					return;
+				}
+				callback(null, "0.80.0\n", "");
+			},
+			execFileSync: () => {
+				syncCalls += 1;
+				return "";
 			},
 		},
-	);
+	});
 	resetWslCommandCache();
 	const locator = new PiLocator();
 	const warmed = await locator.warmWslCommand("Ubuntu-24.04", "dev");
@@ -530,12 +472,7 @@ test("warmWslCommand caches the absolute linux pi path reported by the probe", a
 });
 
 test("wsl invocation execs the absolute pi path with node bin injected into PATH", async () => {
-	const { PiLocator, resetWslCommandCache } = loadPiLocatorModule(
-		"win32",
-		{},
-		tmpdir(),
-		{ "node:child_process": mockWslProbe({ probeOutput: FNM_PROBE_OUTPUT }) },
-	);
+	const { PiLocator, resetWslCommandCache } = loadPiLocatorModule("win32", {}, tmpdir(), { "node:child_process": mockWslProbe({ probeOutput: FNM_PROBE_OUTPUT }) });
 	resetWslCommandCache();
 	const locator = new PiLocator();
 	const command = await locator.warmWslCommand("Ubuntu-24.04", "dev");
@@ -547,42 +484,26 @@ test("wsl invocation execs the absolute pi path with node bin injected into PATH
 	const execIndex = invocation.args.indexOf("-e");
 	assert.ok(execIndex > 0, "缺少 -e exec 分隔符");
 	eqDeep(invocation.args.slice(execIndex, execIndex + 2), ["-e", "/usr/bin/env"]);
-	assert.ok(
-		invocation.args[execIndex + 2].startsWith(`PATH=${FNM_NODE_BIN}:`),
-		`PATH 注入缺失：${invocation.args[execIndex + 2]}`,
-	);
+	assert.ok(invocation.args[execIndex + 2].startsWith(`PATH=${FNM_NODE_BIN}:`), `PATH 注入缺失：${invocation.args[execIndex + 2]}`);
 	eqDeep(invocation.args.slice(-3), [FNM_PI, "--mode", "rpc"]);
-	eqDeep(invocation.args.slice(0, 7), [
-		"-d",
-		"Ubuntu-24.04",
-		"-u",
-		"dev",
-		"--cd",
-		"/home/dev/my project",
-		"-e",
-	]);
+	eqDeep(invocation.args.slice(0, 7), ["-d", "Ubuntu-24.04", "-u", "dev", "--cd", "/home/dev/my project", "-e"]);
 });
 
 test("wsl pi check uses exactly the same exec args as the launch path", async () => {
 	const captured = [];
-	const { PiLocator, resetWslCommandCache } = loadPiLocatorModule(
-		"win32",
-		{},
-		tmpdir(),
-		{
-			"node:child_process": {
-				execFile: (command, args, _options, callback) => {
-					captured.push(args);
-					if (isWslProbeArgs(args)) {
-						callback(null, FNM_PROBE_OUTPUT, "");
-						return;
-					}
-					callback(null, "0.85.1\n", "");
-				},
-				execFileSync: () => "",
+	const { PiLocator, resetWslCommandCache } = loadPiLocatorModule("win32", {}, tmpdir(), {
+		"node:child_process": {
+			execFile: (command, args, _options, callback) => {
+				captured.push(args);
+				if (isWslProbeArgs(args)) {
+					callback(null, FNM_PROBE_OUTPUT, "");
+					return;
+				}
+				callback(null, "0.85.1\n", "");
 			},
+			execFileSync: () => "",
 		},
-	);
+	});
 	resetWslCommandCache();
 	const locator = new PiLocator();
 	const status = await locator.check(undefined, true, "Ubuntu-24.04", "dev");
@@ -591,17 +512,7 @@ test("wsl pi check uses exactly the same exec args as the launch path", async ()
 	assert.equal(status.version, "0.85.1");
 	// 探测后紧跟的那次 --version 校验，参数结构必须与 createInvocation 一致
 	const checkArgs = captured[captured.length - 1];
-	eqDeep(checkArgs, [
-		"-d",
-		"Ubuntu-24.04",
-		"-u",
-		"dev",
-		"-e",
-		"/usr/bin/env",
-		`PATH=${FNM_NODE_BIN}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`,
-		FNM_PI,
-		"--version",
-	]);
+	eqDeep(checkArgs, ["-d", "Ubuntu-24.04", "-u", "dev", "-e", "/usr/bin/env", `PATH=${FNM_NODE_BIN}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`, FNM_PI, "--version"]);
 	// 同一份参数也能由 createInvocation 产出：探测通过 == 可启动
 	eqDeep(locator.createInvocation(`wsl://Ubuntu-24.04/dev/${FNM_PI}`, ["--version"]).args, checkArgs);
 	// 诊断展示用 command 带上绝对路径，用户能直接复制到 WSL 终端验证
@@ -609,12 +520,7 @@ test("wsl pi check uses exactly the same exec args as the launch path", async ()
 });
 
 test("a windows interop probe hit is not treated as a wsl installation", async () => {
-	const { PiLocator, resetWslCommandCache } = loadPiLocatorModule(
-		"win32",
-		{},
-		tmpdir(),
-		{ "node:child_process": mockWslProbe({ probeOutput: "PIDECK_PI=/mnt/c/Users/dev/AppData/Roaming/npm/pi\n" }) },
-	);
+	const { PiLocator, resetWslCommandCache } = loadPiLocatorModule("win32", {}, tmpdir(), { "node:child_process": mockWslProbe({ probeOutput: "PIDECK_PI=/mnt/c/Users/dev/AppData/Roaming/npm/pi\n" }) });
 	resetWslCommandCache();
 	const locator = new PiLocator();
 	const warmed = await locator.warmWslCommand("Ubuntu-24.04", "dev");
@@ -626,13 +532,7 @@ test("a windows interop probe hit is not treated as a wsl installation", async (
 test("negative wsl probe is cached until the ttl expires", async () => {
 	let probeCalls = 0;
 	let now = 1_000;
-	const { PiLocator, resetWslCommandCache } = loadPiLocatorModule(
-		"win32",
-		{},
-		tmpdir(),
-		{ "node:child_process": countingProbe(() => (probeCalls += 1), "PIDECK_MISS=1\n") },
-		{ Date: { now: () => now } },
-	);
+	const { PiLocator, resetWslCommandCache } = loadPiLocatorModule("win32", {}, tmpdir(), { "node:child_process": countingProbe(() => (probeCalls += 1), "PIDECK_MISS=1\n") }, { Date: { now: () => now } });
 	resetWslCommandCache();
 	const locator = new PiLocator();
 
@@ -650,24 +550,19 @@ test("negative wsl probe is cached until the ttl expires", async () => {
 
 test("force re-probes wsl even when a positive result is cached", async () => {
 	let probeCalls = 0;
-	const { PiLocator, resetWslCommandCache } = loadPiLocatorModule(
-		"win32",
-		{},
-		tmpdir(),
-		{
-			"node:child_process": {
-				execFile: (_command, args, _options, callback) => {
-					if (isWslProbeArgs(args)) {
-						probeCalls += 1;
-						callback(null, FNM_PROBE_OUTPUT, "");
-						return;
-					}
-					callback(null, "0.85.1\n", "");
-				},
-				execFileSync: () => "",
+	const { PiLocator, resetWslCommandCache } = loadPiLocatorModule("win32", {}, tmpdir(), {
+		"node:child_process": {
+			execFile: (_command, args, _options, callback) => {
+				if (isWslProbeArgs(args)) {
+					probeCalls += 1;
+					callback(null, FNM_PROBE_OUTPUT, "");
+					return;
+				}
+				callback(null, "0.85.1\n", "");
 			},
+			execFileSync: () => "",
 		},
-	);
+	});
 	resetWslCommandCache();
 	const locator = new PiLocator();
 	await locator.warmWslCommand("Ubuntu-24.04", "dev");
@@ -680,31 +575,19 @@ test("force re-probes wsl even when a positive result is cached", async () => {
 });
 
 test("a custom wsl pi path derives its own node bin dir instead of inheriting the probe cache", async () => {
-	const { PiLocator, resetWslCommandCache } = loadPiLocatorModule(
-		"win32",
-		{},
-		tmpdir(),
-		{ "node:child_process": mockWslProbe({ probeOutput: FNM_PROBE_OUTPUT }) },
-	);
+	const { PiLocator, resetWslCommandCache } = loadPiLocatorModule("win32", {}, tmpdir(), { "node:child_process": mockWslProbe({ probeOutput: FNM_PROBE_OUTPUT }) });
 	resetWslCommandCache();
 	const locator = new PiLocator();
 	await locator.warmWslCommand("Ubuntu-24.04", "dev");
 
 	// 用户手动指定了另一个 node 版本下的 pi：不得把探测缓存的 node 目录前置到 PATH
-	const invocation = locator.createInvocation("wsl://Ubuntu-24.04/dev//opt/other-node/bin/pi", [
-		"--version",
-	]);
+	const invocation = locator.createInvocation("wsl://Ubuntu-24.04/dev//opt/other-node/bin/pi", ["--version"]);
 	const execIndex = invocation.args.indexOf("-e");
 	assert.ok(invocation.args[execIndex + 2].startsWith("PATH=/opt/other-node/bin:"), invocation.args[execIndex + 2]);
 });
 
 test("checkWslInstallation reports the resolved linux path for the settings page", async () => {
-	const { PiLocator, resetWslCommandCache } = loadPiLocatorModule(
-		"win32",
-		{},
-		tmpdir(),
-		{ "node:child_process": mockWslProbe({ probeOutput: FNM_PROBE_OUTPUT }) },
-	);
+	const { PiLocator, resetWslCommandCache } = loadPiLocatorModule("win32", {}, tmpdir(), { "node:child_process": mockWslProbe({ probeOutput: FNM_PROBE_OUTPUT }) });
 	resetWslCommandCache();
 	const status = await new PiLocator().checkWslInstallation("Ubuntu-24.04", "dev", { force: true });
 	assert.equal(status.installed, true);
@@ -713,12 +596,7 @@ test("checkWslInstallation reports the resolved linux path for the settings page
 });
 
 test("checkWslInstallation reports not-installed when the probe finds nothing", async () => {
-	const { PiLocator, resetWslCommandCache } = loadPiLocatorModule(
-		"win32",
-		{},
-		tmpdir(),
-		{ "node:child_process": mockWslProbe({ probeOutput: "PIDECK_MISS=1\n" }) },
-	);
+	const { PiLocator, resetWslCommandCache } = loadPiLocatorModule("win32", {}, tmpdir(), { "node:child_process": mockWslProbe({ probeOutput: "PIDECK_MISS=1\n" }) });
 	resetWslCommandCache();
 	const status = await new PiLocator().checkWslInstallation("Ubuntu-24.04", "dev");
 	assert.equal(status.installed, false);
@@ -817,7 +695,7 @@ test("Windows shim falls back to cmd.exe when the referenced entry is missing", 
 });
 
 test("Windows shim falls back to cmd.exe for a hand-written wrapper", () => {
-	const body = "@echo off\r\npowershell -File \"%~dp0\\pi.ps1\" %*\r\n";
+	const body = '@echo off\r\npowershell -File "%~dp0\\pi.ps1" %*\r\n';
 	const { root, piCmd } = makeNpmShimInstall(body);
 	try {
 		const { PiLocator } = loadPiLocatorModule("win32", { APPDATA: join(root, "Roaming") }, root);
@@ -872,19 +750,13 @@ test("resolveArgCharBudget follows the actual launch channel instead of a worst-
 
 		// npm .cmd 垫片会被还原成 node 直启 → 按 CreateProcess 上限给预算
 		assert.equal(locator.resolveArgCharBudget(piCmd), win.CREATE_PROCESS_ARG_CHAR_BUDGET);
-		assert.ok(
-			win.CREATE_PROCESS_ARG_CHAR_BUDGET >= 20000,
-			`node 直启预算应能容纳几百个技能，实际 ${win.CREATE_PROCESS_ARG_CHAR_BUDGET}`,
-		);
+		assert.ok(win.CREATE_PROCESS_ARG_CHAR_BUDGET >= 20000, `node 直启预算应能容纳几百个技能，实际 ${win.CREATE_PROCESS_ARG_CHAR_BUDGET}`);
 		// 回归防线：预算若被改回「统一按 cmd.exe 取」，这条会失败
-		assert.ok(
-			win.CREATE_PROCESS_ARG_CHAR_BUDGET > win.CMD_EXE_ARG_CHAR_BUDGET * 3,
-			"node 直启预算必须显著高于 cmd.exe，否则又回到一刀切误拦",
-		);
+		assert.ok(win.CREATE_PROCESS_ARG_CHAR_BUDGET > win.CMD_EXE_ARG_CHAR_BUDGET * 3, "node 直启预算必须显著高于 cmd.exe，否则又回到一刀切误拦");
 
 		// 手写包装（垫片形态不符预期）→ 回退 cmd.exe，预算同步坍缩
 		const wrapper = join(binDir, "pi-wrapper.cmd");
-		writeFileSync(wrapper, "@echo off\r\npowershell -File \"%~dp0\\pi.ps1\" %*\r\n", "utf8");
+		writeFileSync(wrapper, '@echo off\r\npowershell -File "%~dp0\\pi.ps1" %*\r\n', "utf8");
 		assert.equal(locator.resolveArgCharBudget(wrapper), win.CMD_EXE_ARG_CHAR_BUDGET);
 
 		// 裸命令名（PATH 解析而非文件路径）同样落到 cmd.exe
@@ -894,10 +766,7 @@ test("resolveArgCharBudget follows the actual launch channel instead of a worst-
 		assert.equal(locator.resolveArgCharBudget(entry), win.CREATE_PROCESS_ARG_CHAR_BUDGET);
 
 		// WSL：wsl.exe 同样由 CreateProcess 拉起，受同一上限约束
-		assert.equal(
-			locator.resolveArgCharBudget("wsl://Ubuntu-24.04/root/pi"),
-			win.CREATE_PROCESS_ARG_CHAR_BUDGET,
-		);
+		assert.equal(locator.resolveArgCharBudget("wsl://Ubuntu-24.04/root/pi"), win.CREATE_PROCESS_ARG_CHAR_BUDGET);
 	} finally {
 		rmSync(root, { recursive: true, force: true });
 	}
@@ -905,11 +774,7 @@ test("resolveArgCharBudget follows the actual launch channel instead of a worst-
 	// 非 Windows 走 execve，上限是系统 ARG_MAX（Linux ≥2MB / macOS ≥1MB），实际不限制
 	for (const platform of ["linux", "darwin"]) {
 		const mod = loadPiLocatorModule(platform);
-		assert.equal(
-			new mod.PiLocator().resolveArgCharBudget("/usr/local/bin/pi"),
-			mod.UNLIMITED_ARG_CHAR_BUDGET,
-			`${platform} 不应受 Windows 命令行上限约束`,
-		);
+		assert.equal(new mod.PiLocator().resolveArgCharBudget("/usr/local/bin/pi"), mod.UNLIMITED_ARG_CHAR_BUDGET, `${platform} 不应受 Windows 命令行上限约束`);
 	}
 });
 
@@ -924,22 +789,7 @@ function makeLocalBinShim(entryBody, entryRel = "node_modules/some-cli/bin/run")
 	mkdirSync(join(root, "node_modules", "some-cli", "bin"), { recursive: true });
 	mkdirSync(binDir, { recursive: true });
 	const piCmd = join(binDir, "pi.cmd");
-	writeFileSync(
-		piCmd,
-		[
-			"@ECHO off",
-			"SETLOCAL",
-			'CALL :find_dp0',
-			'IF EXIST "%dp0%\\node.exe" (',
-			'  SET "_prog=%dp0%\\node.exe"',
-			") ELSE (",
-			'  SET "_prog=node"',
-			")",
-			'endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & "%_prog%"  "%dp0%\\..\\some-cli\\bin\\run" %*',
-			"",
-		].join("\r\n"),
-		"utf8",
-	);
+	writeFileSync(piCmd, ["@ECHO off", "SETLOCAL", "CALL :find_dp0", 'IF EXIST "%dp0%\\node.exe" (', '  SET "_prog=%dp0%\\node.exe"', ") ELSE (", '  SET "_prog=node"', ")", 'endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & "%_prog%"  "%dp0%\\..\\some-cli\\bin\\run" %*', ""].join("\r\n"), "utf8");
 	writeFileSync(join(root, entryRel), entryBody, "utf8");
 	return { root, binDir, piCmd, entry: join(root, entryRel) };
 }
@@ -1011,9 +861,7 @@ test("composeCheckFailure surfaces the first meaningful stderr line instead of t
 		return key === "mainPi.checkFailedReason" ? `REASON<${params?.reason}>` : `BASE<${key}>`;
 	});
 	// ANSI 噪音行（清洗后为空）被跳过，真实原因取自第一条非空行；其余行丢弃
-	const composed = locator.composeCheckFailure(
-		"\x1b[0m\r\n/home/user/.volta/bin/pi: No such file or directory\r\nwsl: second line dropped",
-	);
+	const composed = locator.composeCheckFailure("\x1b[0m\r\n/home/user/.volta/bin/pi: No such file or directory\r\nwsl: second line dropped");
 	assert.equal(composed, "REASON</home/user/.volta/bin/pi: No such file or directory>");
 	assert.ok(!composed.includes("\x1b"));
 	// 全空输入回落到通用文案键
@@ -1038,4 +886,3 @@ test("a driveless linux path without wsl context reports the actionable copy ins
 	assert.equal(interop.error, "KEY<mainPi.linuxPathOutsideWsl>");
 	// wsl:// 标记与 Windows 路径不受护栏影响——分别由 checkWslCommand / runCheck 分支的既有测试覆盖
 });
-

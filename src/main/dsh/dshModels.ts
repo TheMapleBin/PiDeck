@@ -23,33 +23,30 @@ export type DshModelGroupInput = {
 	}>;
 };
 
-
 /** DSH host 模型目录 → PiDeck AvailableModel 列表（纯函数，可单测）。 */
 export function toDshAvailableModels(groups: DshModelGroupInput[]): AvailableModel[] {
 	const result: AvailableModel[] = [];
 	for (const group of groups) {
 		for (const model of group.models ?? []) {
 			const efforts = Array.isArray(model.reasoning?.efforts)
-				? model.reasoning!.efforts
-					.map((effort) => {
-						const id = typeof effort.id === "string" ? effort.id : "";
-						if (!id) return undefined;
-						return {
-							id,
-							...(typeof effort.name === "string" ? { name: effort.name } : {}),
-							...(typeof effort.description === "string" ? { description: effort.description } : {}),
-						};
-					})
-					.filter((effort): effort is { id: string; name?: string; description?: string } => effort !== undefined)
+				? model
+						.reasoning!.efforts.map((effort) => {
+							const id = typeof effort.id === "string" ? effort.id : "";
+							if (!id) return undefined;
+							return {
+								id,
+								...(typeof effort.name === "string" ? { name: effort.name } : {}),
+								...(typeof effort.description === "string" ? { description: effort.description } : {}),
+							};
+						})
+						.filter((effort): effort is { id: string; name?: string; description?: string } => effort !== undefined)
 				: undefined;
 			result.push({
 				id: model.id,
 				name: model.name,
 				provider: group.id,
 				...(efforts && efforts.length > 0 ? { reasoningEfforts: efforts } : {}),
-				...(typeof model.reasoning?.defaultEffort === "string" && model.reasoning.defaultEffort
-					? { defaultEffort: model.reasoning.defaultEffort }
-					: {}),
+				...(typeof model.reasoning?.defaultEffort === "string" && model.reasoning.defaultEffort ? { defaultEffort: model.reasoning.defaultEffort } : {}),
 			});
 		}
 	}
@@ -81,15 +78,9 @@ export function toDshFetchedModels(models: DshDiscoveredModel[]): FetchedModel[]
  * 永远提示「已获取 0 个模型」。这里按两种可能形态防御性解包：数组本体，或
  * `{ models: [...] }` 包装（宿主若改为对象包装仍兼容）。
  */
-export function unwrapDshDiscoveryModels(
-	value: unknown,
-): DshDiscoveredModel[] {
+export function unwrapDshDiscoveryModels(value: unknown): DshDiscoveredModel[] {
 	if (Array.isArray(value)) return value as DshDiscoveredModel[];
-	if (
-		typeof value === "object" &&
-		value !== null &&
-		Array.isArray((value as { models?: unknown }).models)
-	) {
+	if (typeof value === "object" && value !== null && Array.isArray((value as { models?: unknown }).models)) {
 		return (value as { models: DshDiscoveredModel[] }).models;
 	}
 	return [];

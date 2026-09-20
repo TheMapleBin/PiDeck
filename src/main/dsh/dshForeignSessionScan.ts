@@ -3,11 +3,7 @@ import { join } from "node:path";
 import { zstdDecompressSync } from "node:zlib";
 import type { DshForeignSessionItem } from "./dshForeignSync";
 import { readSessionProjectionTitles } from "./dshProjectionCache";
-import {
-	consumeTitleEvent,
-	resolveFoldedTitle,
-	type LoggedTitleFold,
-} from "./dshSessionTitleFold";
+import { consumeTitleEvent, resolveFoldedTitle, type LoggedTitleFold } from "./dshSessionTitleFold";
 
 /**
  * 从 DSH_HOME 磁盘只读扫描外部根会话（不启动 host、不 attach、不写文件）。
@@ -182,10 +178,7 @@ function foldTitleFromJsonlPrefix(text: string): string | undefined {
 }
 
 /** 只读文件前缀 + mtime（不把整段会话日志读进内存）。 */
-function readFilePrefix(
-	filePath: string,
-	limit: number,
-): { bytes: Buffer; mtimeMs: number } | undefined {
+function readFilePrefix(filePath: string, limit: number): { bytes: Buffer; mtimeMs: number } | undefined {
 	let fd: number | undefined;
 	try {
 		const stat = statSync(filePath);
@@ -199,7 +192,11 @@ function readFilePrefix(
 		return undefined;
 	} finally {
 		if (fd !== undefined) {
-			try { closeSync(fd); } catch { /* 关闭失败不阻断扫描 */ }
+			try {
+				closeSync(fd);
+			} catch {
+				/* 关闭失败不阻断扫描 */
+			}
 		}
 	}
 }
@@ -264,15 +261,9 @@ export function parseHeaderLine(text: string, updatedAt: number): ScannedDshSess
 		updatedAt,
 		...(typeof record.cwd === "string" && record.cwd ? { cwd: record.cwd } : {}),
 		...(typeof record.origin === "string" && record.origin ? { origin: record.origin } : {}),
-		...(typeof record.parentSession === "string" && record.parentSession
-			? { parentSession: record.parentSession }
-			: {}),
-		...(typeof record.delegationDepth === "number" && Number.isFinite(record.delegationDepth)
-			? { delegationDepth: record.delegationDepth }
-			: {}),
+		...(typeof record.parentSession === "string" && record.parentSession ? { parentSession: record.parentSession } : {}),
+		...(typeof record.delegationDepth === "number" && Number.isFinite(record.delegationDepth) ? { delegationDepth: record.delegationDepth } : {}),
 		// 会话「模式」随 header 持久化（dsh-session-persistence-jsonl 的 HeaderLine.agentPreset）
-		...(typeof record.agentPreset === "string" && record.agentPreset
-			? { agentPreset: record.agentPreset }
-			: {}),
+		...(typeof record.agentPreset === "string" && record.agentPreset ? { agentPreset: record.agentPreset } : {}),
 	};
 }

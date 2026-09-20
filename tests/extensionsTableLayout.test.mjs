@@ -17,26 +17,17 @@ const tableRows = read("src/renderer/src/config/extensionsTableRows.tsx");
 const tablePrimitive = read("src/renderer/src/components/ui-shadcn/table.tsx");
 const zhCopy = read("src/renderer/src/i18n/rendererCopy.zh-CN.ts");
 
-const builtInDescriptions = [...zhCopy.matchAll(/"config\.builtInExtDesc\.[a-z0-9-]+":\s*"([^"]*)"/g)].map(
-	(m) => m[1],
-);
+const builtInDescriptions = [...zhCopy.matchAll(/"config\.builtInExtDesc\.[a-z0-9-]+":\s*"([^"]*)"/g)].map((m) => m[1]);
 
 test("built-in descriptions are long enough to blow up a nowrap column", () => {
 	// 前提校验：如果这些简介哪天都变短了，下面两条约束的「为什么」就不成立了
 	assert.ok(builtInDescriptions.length >= 12, `expected >=12 descriptions, got ${builtInDescriptions.length}`);
 	const longest = builtInDescriptions.reduce((a, b) => (b.length > a.length ? b : a), "");
-	assert.ok(
-		longest.length >= 40,
-		`expected at least one long built-in description (>=40 chars), longest was ${longest.length}`,
-	);
+	assert.ok(longest.length >= 40, `expected at least one long built-in description (>=40 chars), longest was ${longest.length}`);
 });
 
 test("TableCell base class is still nowrap, so the name cell must opt out explicitly", () => {
-	assert.match(
-		tablePrimitive,
-		/function TableCell[\s\S]*?whitespace-nowrap/,
-		"TableCell no longer defaults to whitespace-nowrap — revisit the explicit whitespace-normal overrides",
-	);
+	assert.match(tablePrimitive, /function TableCell[\s\S]*?whitespace-nowrap/, "TableCell no longer defaults to whitespace-nowrap — revisit the explicit whitespace-normal overrides");
 	// 两条扩展行（已安装行 + 运行时发现行）都要覆盖基类，缺一条就会重新顶宽
 	const nameCells = [...tableRows.matchAll(/<TableCell className="min-w-0([^"]*)">/g)].map((m) => m[1]);
 	assert.ok(nameCells.length >= 2, `expected >=2 name cells, found ${nameCells.length}`);
@@ -53,15 +44,7 @@ test("built-in description is line-clamped and keeps the full text in title", ()
 
 test("extension tab toolbars wrap instead of clipping their right-most buttons", () => {
 	const tab = read("src/renderer/src/config/ExtensionsTab.tsx");
-	assert.match(
-		tab,
-		/skills-toolbar-actions[^"]*flex-wrap[^"]*justify-end/,
-		"extensions toolbar action group must wrap (flex-wrap + justify-end)",
-	);
+	assert.match(tab, /skills-toolbar-actions[^"]*flex-wrap[^"]*justify-end/, "extensions toolbar action group must wrap (flex-wrap + justify-end)");
 	const panel = read("src/renderer/src/config/BuiltInExtensionsUpdatePanel.tsx");
-	assert.match(
-		panel,
-		/flex shrink-0 flex-wrap items-center justify-end gap-1\.5/,
-		"built-in extensions panel actions must right-align when wrapped",
-	);
+	assert.match(panel, /flex shrink-0 flex-wrap items-center justify-end gap-1\.5/, "built-in extensions panel actions must right-align when wrapped");
 });

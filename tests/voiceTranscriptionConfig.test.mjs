@@ -18,27 +18,35 @@ function transpile(path) {
 
 function loadSharedConfig() {
 	const module = { exports: {} };
-	vm.runInNewContext(transpile("src/shared/voiceTranscriptionConfig.ts"), {
-		module,
-		exports: module.exports,
-		URL,
-	}, { filename: "voiceTranscriptionConfig.ts" });
+	vm.runInNewContext(
+		transpile("src/shared/voiceTranscriptionConfig.ts"),
+		{
+			module,
+			exports: module.exports,
+			URL,
+		},
+		{ filename: "voiceTranscriptionConfig.ts" },
+	);
 	return module.exports;
 }
 
 function loadStoreClass(sharedConfig) {
 	const module = { exports: {} };
-	vm.runInNewContext(transpile("src/main/voice/VoiceTranscriptionConfigStore.ts"), {
-		module,
-		exports: module.exports,
-		Buffer,
-		require: (id) => {
-			if (id === "node:fs/promises") return require("node:fs/promises");
-			if (id === "node:path") return require("node:path");
-			if (id === "../../shared/voiceTranscriptionConfig") return sharedConfig;
-			throw new Error(`unexpected require: ${id}`);
+	vm.runInNewContext(
+		transpile("src/main/voice/VoiceTranscriptionConfigStore.ts"),
+		{
+			module,
+			exports: module.exports,
+			Buffer,
+			require: (id) => {
+				if (id === "node:fs/promises") return require("node:fs/promises");
+				if (id === "node:path") return require("node:path");
+				if (id === "../../shared/voiceTranscriptionConfig") return sharedConfig;
+				throw new Error(`unexpected require: ${id}`);
+			},
 		},
-	}, { filename: "VoiceTranscriptionConfigStore.ts" });
+		{ filename: "VoiceTranscriptionConfigStore.ts" },
+	);
 	return module.exports.VoiceTranscriptionConfigStore;
 }
 
@@ -46,14 +54,8 @@ const sharedConfig = loadSharedConfig();
 const VoiceTranscriptionConfigStore = loadStoreClass(sharedConfig);
 
 test("normalizes base URLs and rejects unsafe URL forms", () => {
-	assert.equal(
-		sharedConfig.normalizeVoiceTranscriptionUrl("https://api.example.com/v1/"),
-		"https://api.example.com/v1/audio/transcriptions",
-	);
-	assert.equal(
-		sharedConfig.normalizeVoiceTranscriptionUrl("https://api.example.com/v1/audio/transcriptions"),
-		"https://api.example.com/v1/audio/transcriptions",
-	);
+	assert.equal(sharedConfig.normalizeVoiceTranscriptionUrl("https://api.example.com/v1/"), "https://api.example.com/v1/audio/transcriptions");
+	assert.equal(sharedConfig.normalizeVoiceTranscriptionUrl("https://api.example.com/v1/audio/transcriptions"), "https://api.example.com/v1/audio/transcriptions");
 	assert.equal(sharedConfig.normalizeVoiceTranscriptionUrl("file:///tmp/api"), null);
 	assert.equal(sharedConfig.normalizeVoiceTranscriptionUrl("https://user:pass@example.com/v1"), null);
 	assert.equal(sharedConfig.normalizeVoiceTranscriptionUrl("https://example.com/v1?key=secret"), null);
@@ -66,7 +68,10 @@ test("encrypted key is redacted publicly, retained on blank save, and cleared wi
 		getConfigPath: () => configPath,
 		isEncryptionAvailable: () => true,
 		protect: (value) => Buffer.from(`protected:${value}`, "utf8"),
-		unprotect: (value) => Buffer.from(value).toString("utf8").replace(/^protected:/, ""),
+		unprotect: (value) =>
+			Buffer.from(value)
+				.toString("utf8")
+				.replace(/^protected:/, ""),
 		log: () => {},
 	});
 	try {
@@ -122,13 +127,17 @@ test("rejects new keys without secure storage and ignores oversized encrypted fi
 		});
 		assert.equal(result.ok, false);
 		assert.equal(result.error, "secureStorageUnavailable");
-		await writeFile(configPath, JSON.stringify({
-			version: 1,
-			baseUrl: "https://api.example.com/v1",
-			model: "whisper-1",
-			language: "",
-			protectedApiKey: "x".repeat(8193),
-		}), "utf8");
+		await writeFile(
+			configPath,
+			JSON.stringify({
+				version: 1,
+				baseUrl: "https://api.example.com/v1",
+				model: "whisper-1",
+				language: "",
+				protectedApiKey: "x".repeat(8193),
+			}),
+			"utf8",
+		);
 		assert.equal((await store.getPublicConfig()).hasApiKey, false);
 	} finally {
 		await rm(directory, { recursive: true, force: true });

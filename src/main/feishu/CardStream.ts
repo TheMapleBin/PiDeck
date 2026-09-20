@@ -35,12 +35,7 @@ export class CardStream {
 	 * 发送初始卡片并返回 CardStream。
 	 * 只调用一次 im.message.create/reply，后续更新用 im.v1.message.patch。
 	 */
-	static async open(
-		client: LarkClient,
-		chatId: string,
-		initialCard: object,
-		opts: { replyToMessageId?: string } = {},
-	): Promise<CardStream> {
+	static async open(client: LarkClient, chatId: string, initialCard: object, opts: { replyToMessageId?: string } = {}): Promise<CardStream> {
 		let messageId: string | undefined;
 
 		if (opts.replyToMessageId) {

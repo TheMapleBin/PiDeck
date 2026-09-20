@@ -3,19 +3,12 @@ import { cn } from "../../lib/utils";
 import { Button } from "../ui-shadcn/button";
 import { X } from "lucide-react";
 import { ConfirmDialog as ShadcnConfirmDialog } from "../ui-shadcn/ConfirmDialog";
-import {
-	Dialog,
-	DialogClose,
-	DialogContent,
-	DialogHeader,
-	DialogTitle,
-} from "../ui-shadcn/dialog";
+import { Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle } from "../ui-shadcn/dialog";
 import type { AppInfo, Project, PiInstallStatus, PiInstallExecResult } from "../../../../shared/types";
 import { Input } from "../ui-shadcn/input";
 import { Label } from "../../components/ui-shadcn/label";
 import { EnvironmentGuidePanel } from "./EnvironmentGuidePanel";
 import type { PiEnvironmentGuide } from "../../hooks/usePiEnvironmentGuide";
-
 
 export function EnvironmentDialog(props: {
 	status: PiInstallStatus | null;
@@ -58,16 +51,11 @@ export function EnvironmentDialog(props: {
 	const installed = props.status?.installed || props.customPathResult?.installed;
 	const searchedDirs = props.status?.searchedDirs.slice(0, 16) ?? [];
 	const errorText = props.status?.error ?? props.customPathResult?.error;
-	const steps = [
-		t("environment.stepInstall"),
-		t("environment.stepPath"),
-		t("environment.stepPermission"),
-		t("environment.stepDone"),
-	];
+	const steps = [t("environment.stepInstall"), t("environment.stepPath"), t("environment.stepPermission"), t("environment.stepDone")];
 	const activeStep = props.checking ? 0 : installed ? 3 : 1;
 
 	// Windows 统一使用 CMD 查找 .cmd/.exe shim，不再引导用户使用 PowerShell 的 .ps1 入口。
-	const refCmd = 'where pi';
+	const refCmd = "where pi";
 
 	return (
 		<Dialog open onOpenChange={(next) => !next && props.onClose()}>
@@ -80,13 +68,10 @@ export function EnvironmentDialog(props: {
 						</Button>
 					</DialogClose>
 				</DialogHeader>
-			<div className="environment-body">
+				<div className="environment-body">
 					<div className="env-stepper" aria-label={t("environment.title")}>
 						{steps.map((step, index) => (
-							<div
-								key={step}
-								className={`env-step ${index < activeStep ? "done" : ""} ${index === activeStep ? "active" : ""}`}
-							>
+							<div key={step} className={`env-step ${index < activeStep ? "done" : ""} ${index === activeStep ? "active" : ""}`}>
 								<span>{index < activeStep ? "✓" : index + 1}</span>
 								<b>{step}</b>
 							</div>
@@ -149,40 +134,16 @@ export function EnvironmentDialog(props: {
 										<span className="ref-label">{t("environment.commandLabel")}</span>
 										<code>{refCmd}</code>
 									</div>
-
 								</div>
 								<div className="custom-path-input-row">
-									<Input
-										type="text"
-										placeholder="D:\\mise-data\\installs\\node\\24 13 0\\pi.cmd"
-										value={props.customPath}
-										onChange={(e) =>
-											props.onCustomPathChange(e.target.value)
-										}
-										disabled={props.customPathValidating}
-									/>
-									<Button
-										variant="default"
-										size="sm"
-										className="env-card-btn primary env-card-btn h-auto rounded-[6px] px-4 py-[7px] text-xs shadow-none"
-										onClick={props.onValidateCustomPath}
-										disabled={
-											!props.customPath.trim() ||
-											props.customPathValidating
-										}
-									>
-										{props.customPathValidating
-											? t("environment.validatingPath")
-											: t("environment.validatePath")}
+									<Input type="text" placeholder="D:\\mise-data\\installs\\node\\24 13 0\\pi.cmd" value={props.customPath} onChange={(e) => props.onCustomPathChange(e.target.value)} disabled={props.customPathValidating} />
+									<Button variant="default" size="sm" className="env-card-btn primary env-card-btn h-auto rounded-[6px] px-4 py-[7px] text-xs shadow-none" onClick={props.onValidateCustomPath} disabled={!props.customPath.trim() || props.customPathValidating}>
+										{props.customPathValidating ? t("environment.validatingPath") : t("environment.validatePath")}
 									</Button>
 								</div>
 								{props.customPathResult && (
-									<div
-										className={`custom-path-result ${props.customPathResult.installed ? "success" : "error"}`}
-									>
-										{props.customPathResult.installed
-											? `✓ ${t("environment.validatePassed", { value: props.customPathResult.version ?? "pi" })}`
-											: `✗ ${t("environment.validateFailed", { value: props.customPathResult.error ?? t("environment.unableToRun") })}`}
+									<div className={`custom-path-result ${props.customPathResult.installed ? "success" : "error"}`}>
+										{props.customPathResult.installed ? `✓ ${t("environment.validatePassed", { value: props.customPathResult.version ?? "pi" })}` : `✗ ${t("environment.validateFailed", { value: props.customPathResult.error ?? t("environment.unableToRun") })}`}
 									</div>
 								)}
 							</div>
@@ -193,163 +154,121 @@ export function EnvironmentDialog(props: {
 									<EnvironmentGuidePanel guide={props.guide} />
 								</div>
 							) : (
-							<div className="env-card env-npm-install-card">
-								<strong>{t("environment.installCardTitle")}</strong>
-								<small>{t("environment.installCardDesc")}</small>
-								<small>
-									{t("environment.installDesc")}{" "}
-									<a
-										className="env-inline-link"
-										href="#"
-										onClick={(e) => {
-											e.preventDefault();
-											props.onOpenInstallDocs();
-										}}
-									>
-										{t("environment.openInstallDocs")}
-									</a>
-								</small>
+								<div className="env-card env-npm-install-card">
+									<strong>{t("environment.installCardTitle")}</strong>
+									<small>{t("environment.installCardDesc")}</small>
+									<small>
+										{t("environment.installDesc")}{" "}
+										<a
+											className="env-inline-link"
+											href="#"
+											onClick={(e) => {
+												e.preventDefault();
+												props.onOpenInstallDocs();
+											}}
+										>
+											{t("environment.openInstallDocs")}
+										</a>
+									</small>
 
-								{/* npm 可用性检测 */}
-								{props.npmAvailable === null && !props.npmChecking && (
-									<Button
-										variant="outline"
-										size="sm"
-										className="env-card-btn env-card-btn h-auto rounded-[6px] px-4 py-[7px] text-xs shadow-none"
-										onClick={props.onCheckNpm}
-									>
-										{t("environment.stepInstall")}
-									</Button>
-								)}
+									{/* npm 可用性检测 */}
+									{props.npmAvailable === null && !props.npmChecking && (
+										<Button variant="outline" size="sm" className="env-card-btn env-card-btn h-auto rounded-[6px] px-4 py-[7px] text-xs shadow-none" onClick={props.onCheckNpm}>
+											{t("environment.stepInstall")}
+										</Button>
+									)}
 
-								{props.npmChecking && (
-									<div className="env-install-loading">
-										<div className="loader animate-pideck-spin" />
-										<span>{t("environment.checking")}</span>
-									</div>
-								)}
-
-								{/* npm 可用时：显示安装命令和操作 */}
-								{props.npmAvailable === true && !props.npmChecking && (
-									<div className="env-install-area">
-										{props.npmVersion && (
-											<div className="env-install-npm-version">
-												npm {props.npmVersion}
-											</div>
-										)}
-										<div className="env-install-command-row">
-											<Label className="env-install-command-label">
-												{t("environment.installCommandLabel")}
-											</Label>
-											<Input
-												type="text"
-												className="env-install-command-input"
-												value={props.installCommand}
-												onChange={(e) =>
-													props.onInstallCommandChange(e.target.value)
-												}
-												disabled={props.installExecuting}
-												placeholder="npm install -g @earendil-works/pi-coding-agent"
-											/>
+									{props.npmChecking && (
+										<div className="env-install-loading">
+											<div className="loader animate-pideck-spin" />
+											<span>{t("environment.checking")}</span>
 										</div>
-										<div className="env-install-actions">
+									)}
+
+									{/* npm 可用时：显示安装命令和操作 */}
+									{props.npmAvailable === true && !props.npmChecking && (
+										<div className="env-install-area">
+											{props.npmVersion && <div className="env-install-npm-version">npm {props.npmVersion}</div>}
+											<div className="env-install-command-row">
+												<Label className="env-install-command-label">{t("environment.installCommandLabel")}</Label>
+												<Input type="text" className="env-install-command-input" value={props.installCommand} onChange={(e) => props.onInstallCommandChange(e.target.value)} disabled={props.installExecuting} placeholder="npm install -g @earendil-works/pi-coding-agent" />
+											</div>
+											<div className="env-install-actions">
+												<Button
+													variant="outline"
+													size="sm"
+													className={`env-card-btn env-mirror-btn ${props.installUseMirror ? "active" : ""} env-card-btn h-auto rounded-[6px] px-4 py-[7px] text-xs shadow-none`}
+													onClick={props.onToggleInstallMirror}
+													disabled={props.installExecuting}
+													title={t("environment.installUseMirror")}
+												>
+													{props.installUseMirror ? t("environment.installRemoveMirror") : t("environment.installUseMirror")}
+												</Button>
+												<Button variant="default" size="sm" className="env-card-btn primary env-card-btn h-auto rounded-[6px] px-4 py-[7px] text-xs shadow-none" onClick={props.onExecInstall} disabled={props.installExecuting || !props.installCommand.trim()}>
+													{props.installExecuting ? t("environment.installExecuting") : t("environment.installExec")}
+												</Button>
+											</div>
+
+											{/* 安装进行中：显示进度 */}
+											{props.installExecuting && (
+												<div className="env-install-progress">
+													<div className="loader animate-pideck-spin" />
+													<span>{t("environment.installExecuting")}</span>
+												</div>
+											)}
+
+											{/* 安装完成 */}
+											{props.installCompleted && (
+												<div className="env-install-success">
+													<div className="env-success-icon">✓</div>
+													<div className="env-success-info">
+														<strong>{t("environment.installSuccess")}</strong>
+														<small>{t("environment.installRestartHint")}</small>
+													</div>
+													<Button variant="default" size="sm" className="env-card-btn primary env-card-btn h-auto rounded-[6px] px-4 py-[7px] text-xs shadow-none" onClick={props.onRestartApp}>
+														{t("environment.restartApp")}
+													</Button>
+												</div>
+											)}
+
+											{/* 安装结果输出 */}
+											{props.installResult && (
+												<div className={`env-install-result ${props.installResult.success ? "success" : "error"}`}>
+													<strong>
+														{props.installResult.success ? t("environment.installCompleted") : t("environment.installFailed")}
+														{t("environment.installExitCode")}：{props.installResult.exitCode}
+													</strong>
+													{props.installResult.stdout && (
+														<>
+															<span>{t("environment.installOutput")}</span>
+															<pre className="env-install-output-pre">{props.installResult.stdout}</pre>
+														</>
+													)}
+													{props.installResult.stderr && <pre className="env-install-output-pre env-install-stderr">{props.installResult.stderr}</pre>}
+												</div>
+											)}
+										</div>
+									)}
+
+									{/* npm 不可用：引导安装 Node.js */}
+									{props.npmAvailable === false && !props.npmChecking && (
+										<div className="env-install-npm-missing">
+											<strong>{t("environment.npmNotFoundTitle")}</strong>
+											<small>{t("environment.npmNotFoundDesc")}</small>
 											<Button
 												variant="outline"
 												size="sm"
-												className={`env-card-btn env-mirror-btn ${props.installUseMirror ? "active" : ""} env-card-btn h-auto rounded-[6px] px-4 py-[7px] text-xs shadow-none`}
-												onClick={props.onToggleInstallMirror}
-												disabled={props.installExecuting}
-												title={t("environment.installUseMirror")}
+												className="env-card-btn env-card-btn h-auto rounded-[6px] px-4 py-[7px] text-xs shadow-none"
+												onClick={() =>
+													// 环境引导是弹框（Dialog），链接强制系统浏览器：内置浏览器面板在 Dialog 下层不可见
+													window.piDesktop.app.openExternal("https://nodejs.org/zh-cn/download/", true)
+												}
 											>
-												{props.installUseMirror
-													? t("environment.installRemoveMirror")
-													: t("environment.installUseMirror")}
-											</Button>
-											<Button
-												variant="default"
-												size="sm"
-												className="env-card-btn primary env-card-btn h-auto rounded-[6px] px-4 py-[7px] text-xs shadow-none"
-												onClick={props.onExecInstall}
-												disabled={props.installExecuting || !props.installCommand.trim()}
-											>
-												{props.installExecuting
-													? t("environment.installExecuting")
-													: t("environment.installExec")}
+												{t("environment.openNodejsOrg")}
 											</Button>
 										</div>
-
-										{/* 安装进行中：显示进度 */}
-										{props.installExecuting && (
-											<div className="env-install-progress">
-												<div className="loader animate-pideck-spin" />
-												<span>{t("environment.installExecuting")}</span>
-											</div>
-										)}
-
-										{/* 安装完成 */}
-										{props.installCompleted && (
-											<div className="env-install-success">
-												<div className="env-success-icon">✓</div>
-												<div className="env-success-info">
-													<strong>{t("environment.installSuccess")}</strong>
-													<small>{t("environment.installRestartHint")}</small>
-												</div>
-												<Button
-													variant="default"
-													size="sm"
-													className="env-card-btn primary env-card-btn h-auto rounded-[6px] px-4 py-[7px] text-xs shadow-none"
-													onClick={props.onRestartApp}
-												>
-													{t("environment.restartApp")}
-												</Button>
-											</div>
-										)}
-
-										{/* 安装结果输出 */}
-										{props.installResult && (
-											<div className={`env-install-result ${props.installResult.success ? "success" : "error"}`}>
-												<strong>
-													{props.installResult.success
-														? t("environment.installCompleted")
-														: t("environment.installFailed")}
-													{t("environment.installExitCode")}：{props.installResult.exitCode}
-												</strong>
-												{props.installResult.stdout && (
-													<>
-														<span>{t("environment.installOutput")}</span>
-														<pre className="env-install-output-pre">{props.installResult.stdout}</pre>
-													</>
-												)}
-												{props.installResult.stderr && (
-													<pre className="env-install-output-pre env-install-stderr">{props.installResult.stderr}</pre>
-												)}
-											</div>
-										)}
-									</div>
-								)}
-
-								{/* npm 不可用：引导安装 Node.js */}
-								{props.npmAvailable === false && !props.npmChecking && (
-									<div className="env-install-npm-missing">
-										<strong>{t("environment.npmNotFoundTitle")}</strong>
-										<small>{t("environment.npmNotFoundDesc")}</small>
-										<Button
-											variant="outline"
-											size="sm"
-											className="env-card-btn env-card-btn h-auto rounded-[6px] px-4 py-[7px] text-xs shadow-none"
-											onClick={() =>
-												// 环境引导是弹框（Dialog），链接强制系统浏览器：内置浏览器面板在 Dialog 下层不可见
-												window.piDesktop.app.openExternal(
-													"https://nodejs.org/zh-cn/download/",
-													true
-												)
-											}
-										>
-											{t("environment.openNodejsOrg")}
-										</Button>
-									</div>
-								)}
-							</div>
+									)}
+								</div>
 							)}
 
 							{/* 检测路径卡片 */}
@@ -369,41 +288,21 @@ export function EnvironmentDialog(props: {
 				</div>
 
 				<div className="environment-footer">
-					<Button
-					variant="default"
-					size="sm"
-					className="h-auto rounded-[6px] px-4 py-2.5 text-[13px]"
-						onClick={props.onRecheck}
-						disabled={props.checking || props.customPathValidating}
-					>
+					<Button variant="default" size="sm" className="h-auto rounded-[6px] px-4 py-2.5 text-[13px]" onClick={props.onRecheck} disabled={props.checking || props.customPathValidating}>
 						{t("environment.recheck")}
 					</Button>
 					{props.onClearCheckFlag && (
-						<Button
-							variant="ghost"
-							size="sm"
-							className="env-clear-flag-btn h-auto rounded-[6px] px-4 py-2.5 text-[13px]"
-							onClick={props.onClearCheckFlag}
-							title={t("environment.clearCheckFlagHint")}
-						>
+						<Button variant="ghost" size="sm" className="env-clear-flag-btn h-auto rounded-[6px] px-4 py-2.5 text-[13px]" onClick={props.onClearCheckFlag} title={t("environment.clearCheckFlagHint")}>
 							{t("environment.clearCheckFlag")}
 						</Button>
 					)}
 				</div>
-			
 			</DialogContent>
 		</Dialog>
 	);
 }
 
-export function ConfirmDialog(props: {
-	title: string;
-	message: string;
-	onConfirm: () => void;
-	onCancel: () => void;
-	confirmLabel?: string;
-	danger?: boolean;
-}) {
+export function ConfirmDialog(props: { title: string; message: string; onConfirm: () => void; onCancel: () => void; confirmLabel?: string; danger?: boolean }) {
 	// 实现已收敛到 ui-shadcn/ConfirmDialog（AlertDialog），此处仅保留兼容转发。
 	return <ShadcnConfirmDialog {...props} />;
 }

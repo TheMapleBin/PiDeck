@@ -35,7 +35,7 @@ const types = readFileSync("src/shared/types/announcement.ts", "utf8");
 test("去重状态持久化在主进程：notifiedIds 贯穿契约 → 服务 → 缓存 → IPC → preload", () => {
 	// 契约：渲染层收到的状态必须带 notifiedIds（否则渲染层无从判断「历史上弹过没」）
 	assert.match(types, /notifiedIds: string\[\]/);
-	assert.match(types, /AnnouncementState = AnnouncementSnapshot & \{[\s\S]*?readIds: string\[\];[\s\S]*?notifiedIds: string\[\]/);
+	assert.match(types, /AnnouncementState = AnnouncementSnapshot & \{[\s\S]*?readIds: string\[\];?[\s\S]*?notifiedIds: string\[\]/);
 	// 服务：内存态初始化 + 缓存读回 + 原子写盘 + pruneNotifiedIds 裁剪
 	assert.match(service, /notifiedIds: \[\],\n\t\};/);
 	assert.match(service, /notifiedIds: this\.pruneNotifiedIds/);
@@ -48,15 +48,13 @@ test("去重状态持久化在主进程：notifiedIds 贯穿契约 → 服务 �
 	assert.match(ipc, /ipcChannels\.announcementMarkNotified/);
 	assert.match(ipc, /if \(!Array\.isArray\(ids\)\) return false;/);
 	// preload 暴露给渲染层的方法
-	assert.match(preload, /markNotified: \(ids: readonly string\[\]\) =>\n\t\t\tipcRenderer\.invoke\(ipcChannels\.announcementMarkNotified, ids\)/);
+	// 声明与调用可能被格式化到同一行：用 \s* 容忍换行。
+	assert.match(preload, /markNotified: \(ids: readonly string\[\]\) =>\s*ipcRenderer\.invoke\(ipcChannels\.announcementMarkNotified, ids\)/);
 });
 
 test("notifier 必须用持久化的 notifiedIds 判重，不能退回只靠内存 ref", () => {
 	// 读主进程快照里的 notifiedIds 一起参与过滤
-	assert.match(
-		notifier,
-		/const alreadyNotified = new Set\(\[[\s\S]*?announcementStateAtom[\s\S]*?notifiedIds[\s\S]*?sessionShownIdsRef\.current[\s\S]*?\]\);/,
-	);
+	assert.match(notifier, /const alreadyNotified = new Set\(\[[\s\S]*?announcementStateAtom[\s\S]*?notifiedIds[\s\S]*?sessionShownIdsRef\.current[\s\S]*?\]\);/);
 	// 弹之前必须落盘（先记后弹：弹完立刻崩溃也不会重播）
 	assert.match(notifier, /markNotified\(consumed\.map\(\(item\) => item\.id\)\)/);
 	// ref 只能当周期内即时去重（注释里必须保留这个定位，防止后人当成唯一判据）
@@ -67,11 +65,7 @@ test("notifier 必须用持久化的 notifiedIds 判重，不能退回只靠内�
 test("关掉 toast ≠ 已读：markNotified 与 markRead 分离，不得顺手标已读", () => {
 	// notifier 只允许调 markNotified（打开公告中心那处除外，它本来就走 markAllRead）
 	assert.match(notifier, /desktopApi\.announcements\s*\n?\s*\.markNotified/);
-	assert.doesNotMatch(
-		notifier,
-		/markRead\(/,
-		"弹提醒时顺手标已读会让红点与归档一起消失，用户只是瞥了一眼公告",
-	);
+	assert.doesNotMatch(notifier, /markRead\(/, "弹提醒时顺手标已读会让红点与归档一起消失，用户只是瞥了一眼公告");
 	// 服务层两个方法必须独立存在（不能合并成一个动作）
 	assert.match(service, /markNotified\(ids: readonly unknown\[\]\): void/);
 	assert.match(service, /markRead\(id: string\): void/);
@@ -91,10 +85,7 @@ test("一轮只弹 1 条，且被压制的旧条目同样记为已提醒", () =>
 test("开关在每个 tick 内重读（运行中关闭立刻生效）", () => {
 	// 检查必须位于 tick 函数体内，且轮询 effect 的依赖数组为空——
 	// 若挪回 effect 顶部（挂载时读一次），已启动的轮询会继续弹，关开关看似无效
-	assert.match(
-		notifier,
-		/const tick = \(\) => \{[\s\S]*?if \(!getDefaultStore\(\)\.get\(announcementNotificationEnabledAtom\)\) return;/,
-	);
+	assert.match(notifier, /const tick = \(\) => \{[\s\S]*?if \(!getDefaultStore\(\)\.get\(announcementNotificationEnabledAtom\)\) return;/);
 	assert.match(notifier, /\}, \[\]\);\n\}/);
 	// 关掉开关弹窗也要收起（避免重新开启后残留 open=true 自动弹开）
 	const appTsx = readFileSync("src/renderer/src/App.tsx", "utf8");

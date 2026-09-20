@@ -19,7 +19,10 @@ test("window size memory: close writes last bounds to userData", async ({ app, w
 	// 保存后确认 last 模式生效（默认即 last，直接保存无脏字段不会出现保存按钮）
 	const combo = modal.getByRole("combobox").filter({ hasText: /上次窗口大小|窗口 · 大|Window · Large/ });
 	await combo.click();
-	await window.getByRole("option", { name: /窗口 · 大|Window · Large/ }).first().click();
+	await window
+		.getByRole("option", { name: /窗口 · 大|Window · Large/ })
+		.first()
+		.click();
 	await combo.click();
 	await window.getByRole("option", { name: "上次窗口大小" }).click();
 	await modal.getByRole("button", { name: "保存" }).click();
@@ -35,12 +38,14 @@ test("window size memory: close writes last bounds to userData", async ({ app, w
 		w?.unmaximize();
 		w?.setBounds({ width: 1200, height: 760 });
 	});
-	await expect.poll(() =>
-		app.evaluate(({ BrowserWindow }) => {
-			const w = BrowserWindow.getAllWindows()[0];
-			return w ? [w.getBounds().width, w.getBounds().height] : null;
-		}),
-	).toEqual([1200, 760]);
+	await expect
+		.poll(() =>
+			app.evaluate(({ BrowserWindow }) => {
+				const w = BrowserWindow.getAllWindows()[0];
+				return w ? [w.getBounds().width, w.getBounds().height] : null;
+			}),
+		)
+		.toEqual([1200, 760]);
 	await app.close();
 
 	// 记录文件已写入且尺寸正确（close 接线：关闭前保存 normal bounds）

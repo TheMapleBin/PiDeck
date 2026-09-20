@@ -34,11 +34,7 @@ let fetchStubRef = null;
 /** 加载 ImageGenService 类（运行时依赖 shared/imageGenParams，需注入 require） */
 function loadServiceClass() {
 	const configModule = { exports: {} };
-	vm.runInNewContext(
-		transpile(readFileSync("src/shared/imageGenConfig.ts", "utf8")),
-		{ module: configModule, exports: configModule.exports },
-		{ filename: "imageGenConfig.ts" },
-	);
+	vm.runInNewContext(transpile(readFileSync("src/shared/imageGenConfig.ts", "utf8")), { module: configModule, exports: configModule.exports }, { filename: "imageGenConfig.ts" });
 	const paramsModule = { exports: {} };
 	vm.runInNewContext(
 		transpile(readFileSync("src/shared/imageGenParams.ts", "utf8")),
@@ -272,16 +268,17 @@ test("其他非 2xx → http（detail 带状态码）", async () => {
 test("非 2xx 时 detail 带厂商错误正文，并脱敏 key", async () => {
 	const { service, restore } = createService({
 		credentials: CREDENTIALS,
-		fetchStub: () => fakeResponse({
-			ok: false,
-			status: 400,
-			json: async () => ({
-				error: {
-					message: "Your prompt was rejected. Use sk-abcdefghijklmnopqrstuvwxyz instead.",
-					code: "content_policy",
-				},
+		fetchStub: () =>
+			fakeResponse({
+				ok: false,
+				status: 400,
+				json: async () => ({
+					error: {
+						message: "Your prompt was rejected. Use sk-abcdefghijklmnopqrstuvwxyz instead.",
+						code: "content_policy",
+					},
+				}),
 			}),
-		}),
 	});
 	const result = await service.generate({ provider: "p", model: "m", prompt: "x" });
 	assert.equal(result.error, "http");
@@ -296,10 +293,11 @@ test("非 2xx 时 detail 带厂商错误正文，并脱敏 key", async () => {
 test("b64_json 优先返回 base64 图片", async () => {
 	const { service, restore } = createService({
 		credentials: CREDENTIALS,
-		fetchStub: () => fakeResponse({
-			ok: true,
-			json: async () => ({ data: [{ b64_json: "iVBORw0KGgo=", url: "https://x/y.png" }] }),
-		}),
+		fetchStub: () =>
+			fakeResponse({
+				ok: true,
+				json: async () => ({ data: [{ b64_json: "iVBORw0KGgo=", url: "https://x/y.png" }] }),
+			}),
 	});
 	const result = await service.generate({ provider: "p", model: "m", prompt: "x" });
 	assert.equal(result.image.type, "image");
@@ -458,12 +456,12 @@ test("apiStyle=siliconflow：size→image_size、单图参考、images[].url 兜
 	let downloads = 0;
 	const { service, restore } = createService({
 		credentials: {
-		...CREDENTIALS,
-		// 硅基用户勾选了 size：image_size 才随请求发出（与 openai 分支的 size 同一开关）
-		extraParams: { size: true, output_format: false, watermark: false },
-		apiStyle: "siliconflow",
-		referenceMode: "image-field",
-	},
+			...CREDENTIALS,
+			// 硅基用户勾选了 size：image_size 才随请求发出（与 openai 分支的 size 同一开关）
+			extraParams: { size: true, output_format: false, watermark: false },
+			apiStyle: "siliconflow",
+			referenceMode: "image-field",
+		},
 		fetchStub: (input, init) => {
 			if (String(input).endsWith("/images/generations")) {
 				capturedBody = JSON.parse(String(init.body));

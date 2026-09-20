@@ -1,7 +1,4 @@
-import {
-	extractFileLinkLocation,
-	matchPlainFilePaths,
-} from "../../utils/filePathLinks.ts";
+import { extractFileLinkLocation, matchPlainFilePaths } from "../../utils/filePathLinks.ts";
 
 /**
  * 本地复刻 react-markdown 的 defaultUrlTransform（迁移 streamdown 后不再依赖 react-markdown 包）：

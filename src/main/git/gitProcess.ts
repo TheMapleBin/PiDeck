@@ -16,10 +16,7 @@ export const DEFAULT_GIT_TIMEOUT_MS = 30_000;
  * - Windows：`taskkill /T /F` 递归杀整棵树（含 SSH / credential-helper / git hooks 孙进程）。
  * - Unix：依赖 spawn 的 `detached: true` 使子进程成为新进程组组长，用负 pid 杀整个进程组。
  */
-export function killProcessTree(
-	childPid: number,
-	platform: NodeJS.Platform = process.platform,
-): void {
+export function killProcessTree(childPid: number, platform: NodeJS.Platform = process.platform): void {
 	if (platform === "win32") {
 		// /T 递归杀树，/F 强制；忽略 taskkill 自身退出码（目标进程可能已退出）。
 		spawn("taskkill", ["/pid", String(childPid), "/T", "/F"], {
@@ -62,18 +59,8 @@ export interface RunGitOptions {
  *
  * 这里用 spawn + 进程树 kill + 兜底超时，保证任何情况下 promise 都会 settle。
  */
-export function runGit(
-	args: string[],
-	options: RunGitOptions,
-	command = "git",
-): Promise<{ stdout: string; stderr: string }> {
-	const {
-		cwd,
-		timeoutMs = DEFAULT_GIT_TIMEOUT_MS,
-		maxBuffer = 16 * 1024 * 1024,
-		env,
-		input,
-	} = options;
+export function runGit(args: string[], options: RunGitOptions, command = "git"): Promise<{ stdout: string; stderr: string }> {
+	const { cwd, timeoutMs = DEFAULT_GIT_TIMEOUT_MS, maxBuffer = 16 * 1024 * 1024, env, input } = options;
 	return new Promise((resolve, reject) => {
 		const child = spawn(command, args, {
 			cwd,
@@ -153,9 +140,7 @@ export function runGit(
 		child.on("close", (code) => {
 			clearTimers();
 			if (overflowed) {
-				settle(() =>
-					reject(new Error(`Command output exceeded ${maxBuffer} bytes: ${command} ${args.join(" ")}`)),
-				);
+				settle(() => reject(new Error(`Command output exceeded ${maxBuffer} bytes: ${command} ${args.join(" ")}`)));
 			} else if (code === 0) {
 				settle(() => resolve({ stdout, stderr }));
 			} else {

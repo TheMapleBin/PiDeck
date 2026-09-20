@@ -6,28 +6,10 @@ import { join } from "node:path";
 import test from "node:test";
 import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
-const {
-	compareSemver,
-	isAppVersionCompatible,
-	selectRuntime,
-	selectRelease,
-	collectRecyclableRuntimes,
-	defaultDshRuntimeIndexUrl,
-	dshRuntimeArchiveName,
-	dshRuntimeAssetDownloadUrl,
-	dshRuntimeIndexFileName,
-	resolveDshRuntimeIndexUrl,
-	resolveDshRuntimeReleaseUrl,
-} = loadTsCommonJs("src/shared/types/dshRuntimeManifest.ts");
+const { compareSemver, isAppVersionCompatible, selectRuntime, selectRelease, collectRecyclableRuntimes, defaultDshRuntimeIndexUrl, dshRuntimeArchiveName, dshRuntimeAssetDownloadUrl, dshRuntimeIndexFileName, resolveDshRuntimeIndexUrl, resolveDshRuntimeReleaseUrl } =
+	loadTsCommonJs("src/shared/types/dshRuntimeManifest.ts");
 
-const {
-	DshRuntimeManager,
-	isSafeArchiveEntry,
-	readBundledRuntime,
-	readDeclaredDshVersion,
-	readRuntimeManifest,
-	sha256OfFile,
-} = loadTsCommonJs("src/main/dsh/runtime/DshRuntimeManager.ts");
+const { DshRuntimeManager, isSafeArchiveEntry, readBundledRuntime, readDeclaredDshVersion, readRuntimeManifest, sha256OfFile } = loadTsCommonJs("src/main/dsh/runtime/DshRuntimeManager.ts");
 
 // ── 语义版本比较 ──
 
@@ -97,28 +79,12 @@ test("collectRecyclableRuntimes：保留最新兼容版与指定版本，其余�
 });
 
 test("runtime 索引挂 latest 应用 Release，禁止独立 dsh-runtime tag", () => {
-	assert.equal(
-		dshRuntimeIndexFileName("win32", "x64"),
-		"dsh-runtime-win32-x64-releases.json",
-	);
+	assert.equal(dshRuntimeIndexFileName("win32", "x64"), "dsh-runtime-win32-x64-releases.json");
 	assert.equal(dshRuntimeArchiveName("darwin", "arm64"), "dsh-runtime-darwin-arm64.tgz");
-	assert.equal(
-		defaultDshRuntimeIndexUrl("atomgit", "win32", "x64"),
-		"https://atomgit.com/ayuayue/PiDeck/releases/download/latest/dsh-runtime-win32-x64-releases.json",
-	);
-	assert.equal(
-		defaultDshRuntimeIndexUrl("github", "linux", "arm64"),
-		"https://github.com/ayuayue/PiDeck/releases/latest/download/dsh-runtime-linux-arm64-releases.json",
-	);
-	assert.doesNotMatch(
-		defaultDshRuntimeIndexUrl("github", "win32", "x64"),
-		/\/dsh-runtime\//,
-		"独立 sidecar tag 会抢走 GitHub /releases/latest",
-	);
-	assert.equal(
-		resolveDshRuntimeIndexUrl({ updateSource: "github", platform: "win32", arch: "x64" }),
-		defaultDshRuntimeIndexUrl("github", "win32", "x64"),
-	);
+	assert.equal(defaultDshRuntimeIndexUrl("atomgit", "win32", "x64"), "https://atomgit.com/ayuayue/PiDeck/releases/download/latest/dsh-runtime-win32-x64-releases.json");
+	assert.equal(defaultDshRuntimeIndexUrl("github", "linux", "arm64"), "https://github.com/ayuayue/PiDeck/releases/latest/download/dsh-runtime-linux-arm64-releases.json");
+	assert.doesNotMatch(defaultDshRuntimeIndexUrl("github", "win32", "x64"), /\/dsh-runtime\//, "独立 sidecar tag 会抢走 GitHub /releases/latest");
+	assert.equal(resolveDshRuntimeIndexUrl({ updateSource: "github", platform: "win32", arch: "x64" }), defaultDshRuntimeIndexUrl("github", "win32", "x64"));
 	assert.equal(
 		resolveDshRuntimeIndexUrl({
 			indexUrl: "file:///C:/tmp/dsh-runtime-releases.json",
@@ -135,40 +101,11 @@ test("runtime 索引挂 latest 应用 Release，禁止独立 dsh-runtime tag", (
 		sha256: "a".repeat(64),
 		size: 1,
 	};
-	assert.equal(
-		resolveDshRuntimeReleaseUrl(placeholder, "atomgit", "win32", "x64"),
-		dshRuntimeAssetDownloadUrl("atomgit", dshRuntimeArchiveName("win32", "x64")),
-	);
-	assert.equal(
-		resolveDshRuntimeReleaseUrl(
-			{ ...placeholder, url: "https://example.test/old-dsh-runtime-tag.tgz" },
-			"github",
-			"win32",
-			"x64",
-		),
-		dshRuntimeAssetDownloadUrl("github", dshRuntimeArchiveName("win32", "x64")),
-		"旧索引里的 http(s) 占位也改写，避免直连 sidecar tag",
-	);
-	assert.equal(
-		resolveDshRuntimeReleaseUrl(
-			{ ...placeholder, url: "file:///C:/tmp/runtime.tgz" },
-			"atomgit",
-			"win32",
-			"x64",
-		),
-		"file:///C:/tmp/runtime.tgz",
-		"file:// 离线验证不改写",
-	);
-	assert.equal(
-		resolveDshRuntimeReleaseUrl(placeholder, "github", "win32", "x64", "v0.7.6-beta"),
-		"https://github.com/ayuayue/PiDeck/releases/download/v0.7.6-beta/dsh-runtime-win32-x64.tgz",
-		"有明确 Release tag 时下载同一应用版本的 runtime",
-	);
-	assert.equal(
-		resolveDshRuntimeReleaseUrl(placeholder, "atomgit", "win32", "x64", "v0.7.6-beta"),
-		"https://atomgit.com/ayuayue/PiDeck/releases/download/v0.7.6-beta/dsh-runtime-win32-x64.tgz",
-		"AtomGit 也必须跟随同一应用 Release tag，不能回退 latest",
-	);
+	assert.equal(resolveDshRuntimeReleaseUrl(placeholder, "atomgit", "win32", "x64"), dshRuntimeAssetDownloadUrl("atomgit", dshRuntimeArchiveName("win32", "x64")));
+	assert.equal(resolveDshRuntimeReleaseUrl({ ...placeholder, url: "https://example.test/old-dsh-runtime-tag.tgz" }, "github", "win32", "x64"), dshRuntimeAssetDownloadUrl("github", dshRuntimeArchiveName("win32", "x64")), "旧索引里的 http(s) 占位也改写，避免直连 sidecar tag");
+	assert.equal(resolveDshRuntimeReleaseUrl({ ...placeholder, url: "file:///C:/tmp/runtime.tgz" }, "atomgit", "win32", "x64"), "file:///C:/tmp/runtime.tgz", "file:// 离线验证不改写");
+	assert.equal(resolveDshRuntimeReleaseUrl(placeholder, "github", "win32", "x64", "v0.7.6-beta"), "https://github.com/ayuayue/PiDeck/releases/download/v0.7.6-beta/dsh-runtime-win32-x64.tgz", "有明确 Release tag 时下载同一应用版本的 runtime");
+	assert.equal(resolveDshRuntimeReleaseUrl(placeholder, "atomgit", "win32", "x64", "v0.7.6-beta"), "https://atomgit.com/ayuayue/PiDeck/releases/download/v0.7.6-beta/dsh-runtime-win32-x64.tgz", "AtomGit 也必须跟随同一应用 Release tag，不能回退 latest");
 });
 
 test("selectRelease：与 selectRuntime 同样按兼容区间 + 取最新", () => {
@@ -202,10 +139,7 @@ function stageRuntime(root, { version = "0.1.1-rc.2", packages = ["@deepseek-ai/
 		mkdirSync(join(root, "node_modules", pkg), { recursive: true });
 		writeFileSync(join(root, "node_modules", pkg, "package.json"), "{}");
 	}
-	writeFileSync(
-		join(root, "manifest.json"),
-		JSON.stringify(manifest({ runtimeVersion: version, requiredPackages: packages, ...over })),
-	);
+	writeFileSync(join(root, "manifest.json"), JSON.stringify(manifest({ runtimeVersion: version, requiredPackages: packages, ...over })));
 }
 
 function makeManager(over = {}) {
@@ -338,9 +272,7 @@ test("installFromDirectory：manifest 缺失时拒绝，且不落位不残留", 
 	assert.equal(result.ok, false);
 	assert.equal(result.error, "manifest missing");
 	assert.equal(existsSync(layout.runtimesRoot), false, "校验失败绝不能落位");
-	const leftovers = existsSync(layout.tempRoot)
-		? readdirSync(layout.tempRoot).filter((name) => name.startsWith("install-"))
-		: [];
+	const leftovers = existsSync(layout.tempRoot) ? readdirSync(layout.tempRoot).filter((name) => name.startsWith("install-")) : [];
 	assert.deepEqual(leftovers, []);
 	rmSync(root, { recursive: true, force: true });
 });
@@ -356,11 +288,7 @@ test("installFromDirectory：选中父目录且仅一个有效 runtime 子目录
 	const result = await manager.installFromDirectory(layout.runtimesRoot);
 	assert.equal(result.ok, true);
 	assert.equal(result.dirName, "0.1.1-rc.1");
-	assert.equal(
-		existsSync(join(layout.runtimesRoot, "0.1.1-rc.1", "manifest.json")),
-		true,
-		"下钻后仍应落到正式版本目录",
-	);
+	assert.equal(existsSync(join(layout.runtimesRoot, "0.1.1-rc.1", "manifest.json")), true, "下钻后仍应落到正式版本目录");
 	rmSync(root, { recursive: true, force: true });
 });
 
@@ -383,11 +311,7 @@ test("installFromDirectory：同源目录卸载后重导成功（复制不破坏
 	stageRuntime(source);
 	assert.equal((await manager.installFromDirectory(source)).ok, true);
 	await manager.uninstall("0.1.1-rc.2");
-	assert.equal(
-		existsSync(join(source, "manifest.json")),
-		true,
-		"卸载后源目录的 manifest 不能被顺带删除",
-	);
+	assert.equal(existsSync(join(source, "manifest.json")), true, "卸载后源目录的 manifest 不能被顺带删除");
 	const again = await manager.installFromDirectory(source);
 	assert.equal(again.ok, true);
 	assert.equal(existsSync(join(layout.runtimesRoot, "0.1.1-rc.2", "manifest.json")), true);
@@ -426,9 +350,7 @@ test("installFromArchive：解压抛错时失败，且暂存目录被清理（�
 	assert.equal(result.ok, false);
 	assert.equal(result.error, "boom");
 	// 失败后暂存根目录下不应残留 install-* 目录（半截解压产物会占着 userData）
-	const leftovers = existsSync(layout.tempRoot)
-		? readdirSync(layout.tempRoot).filter((name) => name.startsWith("install-"))
-		: [];
+	const leftovers = existsSync(layout.tempRoot) ? readdirSync(layout.tempRoot).filter((name) => name.startsWith("install-")) : [];
 	assert.deepEqual(leftovers, []);
 	assert.equal(existsSync(join(layout.runtimesRoot, "0.1.1-rc.2")), false, "失败时不能落位");
 	rmSync(root, { recursive: true, force: true });
@@ -450,10 +372,7 @@ test("installFromUrl：下载后走同一条校验链路，临时归档被清理
 		onPhase: (phase) => phases.push(phase),
 	});
 	assert.equal(result.ok, true);
-	assert.deepEqual(
-		phases.slice(0, phases.indexOf("finalizing") + 1),
-		["downloading", "verifying", "extracting", "finalizing"],
-	);
+	assert.deepEqual(phases.slice(0, phases.indexOf("finalizing") + 1), ["downloading", "verifying", "extracting", "finalizing"]);
 	assert.equal(existsSync(join(layout.runtimesRoot, "0.1.1-rc.2", "manifest.json")), true);
 	rmSync(root, { recursive: true, force: true });
 });
@@ -493,11 +412,7 @@ test("readRuntimeManifest：清单损坏或缺失返回 undefined（按未安装
 test("readDeclaredDshVersion：读 package.json 声明的 @deepseek-ai/dsh 版本", () => {
 	const dir = mkdtempSync(join(tmpdir(), "pideck-declared-"));
 	try {
-		writeFileSync(
-			join(dir, "package.json"),
-			JSON.stringify({ dependencies: { "@deepseek-ai/dsh": "0.1.1-rc.2", other: "1.0.0" } }),
-			"utf8",
-		);
+		writeFileSync(join(dir, "package.json"), JSON.stringify({ dependencies: { "@deepseek-ai/dsh": "0.1.1-rc.2", other: "1.0.0" } }), "utf8");
 		assert.equal(readDeclaredDshVersion(dir), "0.1.1-rc.2");
 	} finally {
 		rmSync(dir, { recursive: true, force: true });

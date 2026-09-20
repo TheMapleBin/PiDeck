@@ -4,46 +4,12 @@ import { homedir } from "node:os";
 import { join, relative } from "node:path";
 import type { ConfigManager } from "../config/ConfigManager";
 import { homeFromPiAgentDir, isMcpServerName } from "../config/mcpConfig";
-import {
-	createProjectFileReadBoundary,
-	FILE_OUTSIDE_PROJECT_ERROR,
-	resolveProjectFileReadPath,
-	resolveProjectFileWritePath,
-	type ProjectFileReadBoundary,
-} from "../files/projectFileAccess";
+import { createProjectFileReadBoundary, FILE_OUTSIDE_PROJECT_ERROR, resolveProjectFileReadPath, resolveProjectFileWritePath, type ProjectFileReadBoundary } from "../files/projectFileAccess";
 import type { ProjectResourceManager } from "../projects/ProjectResourceManager";
-import type {
-	ResourceImportCandidate,
-	ResourceImportKind,
-	ResourceImportScanInput,
-	ResourceImportSourceKind,
-	ResourceImportSourceStatus,
-	StoredResourceImportCandidate,
-} from "../../shared/types/resourceImport";
-import {
-	fingerprint,
-	hasErrorCode,
-	isRecord,
-	MAX_FILE_BYTES,
-	MAX_SKILL_CANDIDATES,
-	redactSensitiveText,
-	sourceLabel,
-} from "./common";
-import {
-	convertMcpDefinition,
-	extractMcpServersWithStatus,
-	mcpTransportOf,
-	parseMcpSource,
-	probeMcpCandidates,
-	publicMcpCandidate,
-} from "./mcpImport";
-import {
-	buildSkillCandidate,
-	findSkillDirs,
-	publicSkillCandidate,
-	skillTreeFingerprint,
-	sourceDirectoryIsSafe,
-} from "./skillImport";
+import type { ResourceImportCandidate, ResourceImportKind, ResourceImportScanInput, ResourceImportSourceKind, ResourceImportSourceStatus, StoredResourceImportCandidate } from "../../shared/types/resourceImport";
+import { fingerprint, hasErrorCode, isRecord, MAX_FILE_BYTES, MAX_SKILL_CANDIDATES, redactSensitiveText, sourceLabel } from "./common";
+import { convertMcpDefinition, extractMcpServersWithStatus, mcpTransportOf, parseMcpSource, probeMcpCandidates, publicMcpCandidate } from "./mcpImport";
+import { buildSkillCandidate, findSkillDirs, publicSkillCandidate, skillTreeFingerprint, sourceDirectoryIsSafe } from "./skillImport";
 
 /** Minimal registered-project shape needed while reading an external project source. */
 export type ResourceImportProject = {
@@ -102,8 +68,7 @@ export type ResourceImportScanCandidates = {
 
 /** Keep a rejected project source excluded without treating an unchanged rejection as stale. */
 function isProjectBoundaryError(error: unknown): boolean {
-	return hasErrorCode(error, FILE_OUTSIDE_PROJECT_ERROR)
-		|| (error instanceof Error && error.message === FILE_OUTSIDE_PROJECT_ERROR);
+	return hasErrorCode(error, FILE_OUTSIDE_PROJECT_ERROR) || (error instanceof Error && error.message === FILE_OUTSIDE_PROJECT_ERROR);
 }
 
 /**
@@ -123,23 +88,12 @@ export class ResourceImportSourceScanner {
 	}
 
 	/** Build the renderer-safe view only after the manager has applied target conflicts. */
-	publicCandidates(
-		kind: ResourceImportKind,
-		candidates: StoredResourceImportCandidate[],
-	): ResourceImportCandidate[] {
-		return kind === "mcp"
-			? candidates.map(publicMcpCandidate)
-			: candidates.map(publicSkillCandidate);
+	publicCandidates(kind: ResourceImportKind, candidates: StoredResourceImportCandidate[]): ResourceImportCandidate[] {
+		return kind === "mcp" ? candidates.map(publicMcpCandidate) : candidates.map(publicSkillCandidate);
 	}
 
 	/** Ensure all sources and every discovered candidate still match the displayed scan. */
-	async assertFresh(
-		kind: ResourceImportKind,
-		candidates: StoredResourceImportCandidate[],
-		sourceProjectId: string | undefined,
-		mcpSourceSnapshots: McpSourceSnapshot[],
-		skillSourceSnapshots: SkillSourceSnapshot[],
-	): Promise<void> {
+	async assertFresh(kind: ResourceImportKind, candidates: StoredResourceImportCandidate[], sourceProjectId: string | undefined, mcpSourceSnapshots: McpSourceSnapshot[], skillSourceSnapshots: SkillSourceSnapshot[]): Promise<void> {
 		// MCP sources include empty and malformed files in the scan snapshot. A change to
 		// any of them invalidates the entire combined result, rather than silently
 		// importing against a mixture of old and new vendor config.
@@ -170,28 +124,25 @@ export class ResourceImportSourceScanner {
 
 	private async sourcePaths(input: ResourceImportScanInput): Promise<SourcePath[]> {
 		const home = homeFromPiAgentDir(this.configManager.getConfigDir()) || homedir();
-		const paths: SourcePath[] = input.kind === "mcp"
-			? [
-				{ source: "claude-global", path: join(home, ".claude.json") },
-				{ source: "claude-global", path: join(home, ".claude", "mcp-configs", "mcp-servers.json") },
-				{ source: "codex-global", path: join(home, ".codex", "config.toml") },
-			]
-			: [
-				{ source: "claude-global", path: join(home, ".claude", "skills") },
-				{ source: "codex-global", path: join(home, ".codex", "skills") },
-			];
+		const paths: SourcePath[] =
+			input.kind === "mcp"
+				? [
+						{ source: "claude-global", path: join(home, ".claude.json") },
+						{ source: "claude-global", path: join(home, ".claude", "mcp-configs", "mcp-servers.json") },
+						{ source: "codex-global", path: join(home, ".codex", "config.toml") },
+					]
+				: [
+						{ source: "claude-global", path: join(home, ".claude", "skills") },
+						{ source: "codex-global", path: join(home, ".codex", "skills") },
+					];
 		if (!input.sourceProjectId) return paths;
 		const project = this.getProject(input.sourceProjectId);
 		if (!project || project.kind === "chat") return paths;
 		const root = await this.projectResourceManager.resolveProjectRoot(input.sourceProjectId);
 		const projectBoundary = await createProjectFileReadBoundary(root);
 		paths.push(
-			input.kind === "mcp"
-				? { source: "claude-project", path: join(root, ".mcp.json"), projectBoundary }
-				: { source: "claude-project", path: join(root, ".claude", "skills"), projectBoundary },
-			input.kind === "mcp"
-				? { source: "codex-project", path: join(root, ".codex", "config.toml"), projectBoundary }
-				: { source: "codex-project", path: join(root, ".agents", "skills"), projectBoundary },
+			input.kind === "mcp" ? { source: "claude-project", path: join(root, ".mcp.json"), projectBoundary } : { source: "claude-project", path: join(root, ".claude", "skills"), projectBoundary },
+			input.kind === "mcp" ? { source: "codex-project", path: join(root, ".codex", "config.toml"), projectBoundary } : { source: "codex-project", path: join(root, ".agents", "skills"), projectBoundary },
 		);
 		return paths;
 	}
@@ -242,9 +193,7 @@ export class ResourceImportSourceScanner {
 				// remains safely excluded and must not block an independent source's import.
 				const boundaryRejected = isProjectBoundaryError(error);
 				status.exists = true;
-				status.error = boundaryRejected
-					? "Source path is outside the project boundary."
-					: "Source could not be resolved.";
+				status.error = boundaryRejected ? "Source path is outside the project boundary." : "Source could not be resolved.";
 				mcpSourceSnapshots.push({
 					source: item.source,
 					sourcePathLexical: item.path,
@@ -416,9 +365,7 @@ export class ResourceImportSourceScanner {
 				// Project roots are canonicalized for safe reads. Retain the corresponding
 				// lexical candidate path in the private scan cache so apply can detect a
 				// symlink/junction swap between scan and write.
-				candidate.sourcePathLexical = item.projectBoundary
-					? join(item.path, relative(sourceRoot, dir))
-					: dir;
+				candidate.sourcePathLexical = item.projectBoundary ? join(item.path, relative(sourceRoot, dir)) : dir;
 				stored.push(candidate);
 			}
 		}
@@ -435,18 +382,10 @@ export class ResourceImportSourceScanner {
 		return relative(root, directory).replace(/[\\/]+/g, "/");
 	}
 
-	private async assertCandidateFresh(
-		candidate: StoredResourceImportCandidate,
-		kind: ResourceImportKind,
-		sourceProjectId?: string,
-	): Promise<void> {
+	private async assertCandidateFresh(candidate: StoredResourceImportCandidate, kind: ResourceImportKind, sourceProjectId?: string): Promise<void> {
 		if (candidate.source.endsWith("-project")) {
 			try {
-				const resolvedPath = await this.resolveProjectScanSourcePath(
-					candidate.source,
-					candidate.sourcePathLexical ?? candidate.sourcePathLabel,
-					sourceProjectId,
-				);
+				const resolvedPath = await this.resolveProjectScanSourcePath(candidate.source, candidate.sourcePathLexical ?? candidate.sourcePathLabel, sourceProjectId);
 				if (!resolvedPath || resolvedPath !== candidate.sourcePath) {
 					throw new Error("Source changed or is no longer safe. Please scan again.");
 				}
@@ -461,37 +400,26 @@ export class ResourceImportSourceScanner {
 			return;
 		}
 		try {
-			if (await skillTreeFingerprint(candidate.sourcePath) !== candidate.sourceFingerprint) throw new Error("Source changed. Please scan again.");
+			if ((await skillTreeFingerprint(candidate.sourcePath)) !== candidate.sourceFingerprint) throw new Error("Source changed. Please scan again.");
 		} catch {
 			throw new Error("Source changed or is no longer safe. Please scan again.");
 		}
 	}
 
 	/** Resolve a stored project source again without ever accepting a new path alias. */
-	private async resolveProjectScanSourcePath(
-		source: ResourceImportSourceKind,
-		lexicalPath: string,
-		sourceProjectId?: string,
-	): Promise<string | undefined> {
+	private async resolveProjectScanSourcePath(source: ResourceImportSourceKind, lexicalPath: string, sourceProjectId?: string): Promise<string | undefined> {
 		if (!sourceProjectId) return undefined;
 		const project = this.getProject(sourceProjectId);
 		if (!project || project.kind === "chat") return undefined;
-		const boundary = await createProjectFileReadBoundary(
-			await this.projectResourceManager.resolveProjectRoot(sourceProjectId),
-		);
+		const boundary = await createProjectFileReadBoundary(await this.projectResourceManager.resolveProjectRoot(sourceProjectId));
 		return this.resolveProjectSourcePath({ source, path: lexicalPath, projectBoundary: boundary });
 	}
 
 	/** Compare each scanned MCP source, including sources that produced zero candidates. */
-	private async assertMcpSourceFresh(
-		snapshot: McpSourceSnapshot,
-		sourceProjectId?: string,
-	): Promise<void> {
+	private async assertMcpSourceFresh(snapshot: McpSourceSnapshot, sourceProjectId?: string): Promise<void> {
 		let currentPath: string | undefined;
 		try {
-			currentPath = snapshot.projectSource
-				? await this.resolveProjectScanSourcePath(snapshot.source, snapshot.sourcePathLexical, sourceProjectId)
-				: snapshot.canonicalPath ?? snapshot.sourcePathLexical;
+			currentPath = snapshot.projectSource ? await this.resolveProjectScanSourcePath(snapshot.source, snapshot.sourcePathLexical, sourceProjectId) : (snapshot.canonicalPath ?? snapshot.sourcePathLexical);
 		} catch (error) {
 			// Keep an unchanged unsafe project source excluded, just like an unchanged
 			// unsafe skills directory. A different error or a newly resolvable source is
@@ -519,27 +447,20 @@ export class ResourceImportSourceScanner {
 	}
 
 	/** Re-discover one scanned skill root before any write. */
-	private async assertSkillSourceFresh(
-		snapshot: SkillSourceSnapshot,
-		sourceProjectId?: string,
-	): Promise<void> {
+	private async assertSkillSourceFresh(snapshot: SkillSourceSnapshot, sourceProjectId?: string): Promise<void> {
 		// A scan may legitimately contain an unsafe/unreadable *other* vendor source
 		// alongside importable packages from a safe source. It must stay excluded, but
 		// it must not make confirmation of those safe packages impossible merely because
 		// it is still the same rejected directory. A transition back to a readable
 		// directory remains stale so the new candidates are never silently omitted.
-		const rejectedAtScan = snapshot.exists
-			&& snapshot.canonicalPath === undefined
-			&& snapshot.discoveryError !== undefined;
+		const rejectedAtScan = snapshot.exists && snapshot.canonicalPath === undefined && snapshot.discoveryError !== undefined;
 		const lexicalRoot = await sourceDirectoryIsSafe(snapshot.sourcePathLexical);
 		if (rejectedAtScan && lexicalRoot.exists && !lexicalRoot.safe && lexicalRoot.error === snapshot.discoveryError) {
 			return;
 		}
 		let currentPath: string | undefined;
 		try {
-			currentPath = snapshot.projectSource
-				? await this.resolveProjectScanSourcePath(snapshot.source, snapshot.sourcePathLexical, sourceProjectId)
-				: snapshot.canonicalPath ?? snapshot.sourcePathLexical;
+			currentPath = snapshot.projectSource ? await this.resolveProjectScanSourcePath(snapshot.source, snapshot.sourcePathLexical, sourceProjectId) : (snapshot.canonicalPath ?? snapshot.sourcePathLexical);
 		} catch {
 			// A project source can be rejected by the canonical boundary because an
 			// ancestor is a junction, while lstat on the leaf still looks ordinary. The

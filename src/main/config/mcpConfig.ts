@@ -7,34 +7,14 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { delimiter, isAbsolute, join } from "node:path";
 import { homedir } from "node:os";
-import type {
-	McpConfigFile,
-	McpConfigLayer,
-	McpConfigLayerKind,
-	McpConfigSnapshot,
-	McpProbeResult,
-	McpServerDefinition,
-	McpServerListItem,
-	McpServerTransport,
-} from "../../shared/types/mcp";
-import {
-	createProjectFileReadBoundary,
-	resolveProjectFileReadPath,
-	type ProjectFileReadBoundary,
-} from "../files/projectFileAccess";
+import type { McpConfigFile, McpConfigLayer, McpConfigLayerKind, McpConfigSnapshot, McpProbeResult, McpServerDefinition, McpServerListItem, McpServerTransport } from "../../shared/types/mcp";
+import { createProjectFileReadBoundary, resolveProjectFileReadPath, type ProjectFileReadBoundary } from "../files/projectFileAccess";
 
 const MCP_DOCS_URL = "https://nicobailon-pi-mcp-adapter.mintlify.app/configuration/server-setup";
 const HTTP_PROBE_TIMEOUT_MS = 8_000;
 const SERVER_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 
-const LAYER_KIND_ORDER: McpConfigLayerKind[] = [
-	"user-config",
-	"agents",
-	"agents-dir",
-	"pi-agent",
-	"project",
-	"project-pi",
-];
+const LAYER_KIND_ORDER: McpConfigLayerKind[] = ["user-config", "agents", "agents-dir", "pi-agent", "project", "project-pi"];
 
 export function mcpDocsUrl(): string {
 	return MCP_DOCS_URL;
@@ -57,10 +37,7 @@ export function mcpLayerPaths(home: string, piAgentDir: string, projectPath?: st
 	];
 	if (projectPath?.trim()) {
 		const root = projectPath.trim();
-		layers.push(
-			{ kind: "project", path: join(root, ".mcp.json"), exists: false, writable: false },
-			{ kind: "project-pi", path: join(root, ".pi", "mcp.json"), exists: false, writable: false },
-		);
+		layers.push({ kind: "project", path: join(root, ".mcp.json"), exists: false, writable: false }, { kind: "project-pi", path: join(root, ".pi", "mcp.json"), exists: false, writable: false });
 	}
 	return layers;
 }
@@ -143,22 +120,10 @@ function omitUndefined(value: Record<string, unknown>): Record<string, unknown> 
 /** 收窄未知 JSON 为定义；非法字段丢掉，扩展字段经 rest 保留。 */
 export function normalizeMcpServerDefinition(value: unknown): McpServerDefinition | null {
 	if (!isPlainObject(value)) return null;
-	const args = Array.isArray(value.args)
-		? value.args.filter((item): item is string => typeof item === "string")
-		: undefined;
-	const lifecycle =
-		value.lifecycle === "lazy" ||
-		value.lifecycle === "eager" ||
-		value.lifecycle === "keep-alive" ||
-		value.lifecycle === "lazy-keep-alive"
-			? value.lifecycle
-			: undefined;
+	const args = Array.isArray(value.args) ? value.args.filter((item): item is string => typeof item === "string") : undefined;
+	const lifecycle = value.lifecycle === "lazy" || value.lifecycle === "eager" || value.lifecycle === "keep-alive" || value.lifecycle === "lazy-keep-alive" ? value.lifecycle : undefined;
 	const auth = value.auth === "bearer" || value.auth === "oauth" ? value.auth : undefined;
-	const directTools = typeof value.directTools === "boolean"
-		? value.directTools
-		: Array.isArray(value.directTools)
-			? value.directTools.filter((item): item is string => typeof item === "string")
-			: undefined;
+	const directTools = typeof value.directTools === "boolean" ? value.directTools : Array.isArray(value.directTools) ? value.directTools.filter((item): item is string => typeof item === "string") : undefined;
 	const definition: McpServerDefinition = {
 		...value,
 		command: typeof value.command === "string" ? value.command : undefined,
@@ -188,10 +153,7 @@ function definitionHasTransport(def: McpServerDefinition): boolean {
  * 按 adapter 文档从低到高合并：同名 server 浅合并（后层字段覆盖前层），
  * 这样 `{ disabled: true }` 覆盖不会把下层 command/url 冲掉。
  */
-export function mergeMcpServers(
-	layers: Array<{ path: string; file: McpConfigFile }>,
-	writablePath: string,
-): McpServerListItem[] {
+export function mergeMcpServers(layers: Array<{ path: string; file: McpConfigFile }>, writablePath: string): McpServerListItem[] {
 	const merged = new Map<string, McpServerListItem>();
 	for (const layer of layers) {
 		const servers = layer.file.mcpServers;
@@ -265,10 +227,7 @@ function whichOnPath(command: string, pathEnv = process.env.PATH ?? "", platform
 	const trimmed = command.trim().replace(/^"|"$/g, "");
 	if (!trimmed) return null;
 	if (isAbsolute(trimmed)) return existsSync(trimmed) ? trimmed : null;
-	const extensions =
-		platform === "win32"
-			? (process.env.PATHEXT ?? ".EXE;.CMD;.BAT;.COM").split(";").filter(Boolean)
-			: [""];
+	const extensions = platform === "win32" ? (process.env.PATHEXT ?? ".EXE;.CMD;.BAT;.COM").split(";").filter(Boolean) : [""];
 	for (const dir of pathEnv.split(delimiter)) {
 		if (!dir) continue;
 		const direct = join(dir, trimmed);
@@ -286,10 +245,7 @@ function whichOnPath(command: string, pathEnv = process.env.PATH ?? "", platform
 	return null;
 }
 
-export function probeStdioCommand(
-	command: string,
-	options?: { pathEnv?: string; platform?: NodeJS.Platform },
-): McpProbeResult {
+export function probeStdioCommand(command: string, options?: { pathEnv?: string; platform?: NodeJS.Platform }): McpProbeResult {
 	const resolved = whichOnPath(command, options?.pathEnv, options?.platform);
 	if (!resolved) {
 		return { ok: false, transport: "stdio", error: `Command not found: ${command}` };
@@ -304,16 +260,8 @@ function isHttpReachableStatus(status: number): boolean {
 
 type HttpGet = (input: string, init?: RequestInit) => Promise<{ status: number }>;
 
-export async function probeHttpUrl(
-	url: string,
-	fetchImpl?: HttpGet,
-	timeoutMs = HTTP_PROBE_TIMEOUT_MS,
-): Promise<McpProbeResult> {
-	const request: HttpGet | undefined =
-		fetchImpl ??
-		(typeof globalThis.fetch === "function"
-			? (input, init) => globalThis.fetch(input, init)
-			: undefined);
+export async function probeHttpUrl(url: string, fetchImpl?: HttpGet, timeoutMs = HTTP_PROBE_TIMEOUT_MS): Promise<McpProbeResult> {
+	const request: HttpGet | undefined = fetchImpl ?? (typeof globalThis.fetch === "function" ? (input, init) => globalThis.fetch(input, init) : undefined);
 	if (!request) {
 		return { ok: false, transport: "http", error: "fetch is not available" };
 	}
@@ -364,19 +312,12 @@ export async function probeMcpServer(def: McpServerDefinition): Promise<McpProbe
 	if (transport === "http") return probeHttpUrl(def.url ?? "");
 	const socket = def.socket?.trim() ?? "";
 	if (!socket) return { ok: false, transport: "socket", error: "Socket path is empty" };
-	return existsSync(socket)
-		? { ok: true, transport: "socket", detail: socket }
-		: { ok: false, transport: "socket", error: `Socket not found: ${socket}` };
+	return existsSync(socket) ? { ok: true, transport: "socket", detail: socket } : { ok: false, transport: "socket", error: `Socket not found: ${socket}` };
 }
 
-async function readMcpLayerFile(
-	path: string,
-	projectBoundary?: ProjectFileReadBoundary,
-): Promise<{ exists: boolean; file: McpConfigFile; raw: string; error?: string }> {
+async function readMcpLayerFile(path: string, projectBoundary?: ProjectFileReadBoundary): Promise<{ exists: boolean; file: McpConfigFile; raw: string; error?: string }> {
 	try {
-		const readPath = projectBoundary
-			? await resolveProjectFileReadPath(projectBoundary, path)
-			: path;
+		const readPath = projectBoundary ? await resolveProjectFileReadPath(projectBoundary, path) : path;
 		const raw = await readFile(readPath, "utf8");
 		const parsed = parseMcpConfigFile(raw);
 		return { exists: true, file: parsed.file, raw, error: parsed.error };
@@ -385,11 +326,7 @@ async function readMcpLayerFile(
 	}
 }
 
-export async function loadMcpConfigSnapshot(
-	piAgentDir: string,
-	projectPath?: string,
-	home = homeFromPiAgentDir(piAgentDir),
-): Promise<McpConfigSnapshot> {
+export async function loadMcpConfigSnapshot(piAgentDir: string, projectPath?: string, home = homeFromPiAgentDir(piAgentDir)): Promise<McpConfigSnapshot> {
 	const declared = mcpLayerPaths(home, piAgentDir, projectPath);
 	const loaded: Array<{ path: string; file: McpConfigFile }> = [];
 	const layers: McpConfigLayer[] = [];
@@ -409,16 +346,15 @@ export async function loadMcpConfigSnapshot(
 
 	for (const layer of declared) {
 		const projectLayer = layer.kind === "project" || layer.kind === "project-pi";
-		const result = projectLayer && !projectBoundary
-			? { exists: false, file: { mcpServers: {} }, raw: "" }
-			: await readMcpLayerFile(layer.path, projectLayer ? projectBoundary : undefined);
+		const result = projectLayer && !projectBoundary ? { exists: false, file: { mcpServers: {} }, raw: "" } : await readMcpLayerFile(layer.path, projectLayer ? projectBoundary : undefined);
 		layers.push({ ...layer, exists: result.exists });
 		if (layer.writable) {
 			writablePath = layer.path;
 			writableError = result.error;
-			writableRaw = result.exists && result.raw
-				? result.raw
-				: `${JSON.stringify({ mcpServers: {} }, null, 2)}
+			writableRaw =
+				result.exists && result.raw
+					? result.raw
+					: `${JSON.stringify({ mcpServers: {} }, null, 2)}
 `;
 			// JSON 损坏时 parsed 是空对象兜底，不能拿去可视化保存，否则会覆盖用户原文件。
 			writableFile = result.exists && !result.error ? result.file : { mcpServers: {} };
@@ -438,11 +374,7 @@ export async function loadMcpConfigSnapshot(
 	};
 }
 
-export function upsertWritableServer(
-	writable: McpConfigFile,
-	name: string,
-	definition: McpServerDefinition,
-): McpConfigFile {
+export function upsertWritableServer(writable: McpConfigFile, name: string, definition: McpServerDefinition): McpConfigFile {
 	return {
 		...writable,
 		mcpServers: {

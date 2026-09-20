@@ -50,10 +50,7 @@ export const ANNOUNCEMENT_TOAST_BURST_LIMIT = 1;
  * suppressed 也必须被记为「已提醒」（不只是 shown）：否则下一轮 tick 会把「次新」当成
  * 最新再弹一条，每轮 1 条、间隔 4s，攒了 N 条就弹 N 次——绕回了要修的那个 bug。
  */
-export function pickAnnouncementBatch<T>(
-	pending: readonly T[],
-	limit: number = ANNOUNCEMENT_TOAST_BURST_LIMIT,
-): { shown: T[]; suppressed: T[] } {
+export function pickAnnouncementBatch<T>(pending: readonly T[], limit: number = ANNOUNCEMENT_TOAST_BURST_LIMIT): { shown: T[]; suppressed: T[] } {
 	// clamp 到非负：limit 传负数时 slice(0, 负数) 会从尾部取值，行为反直觉
 	const cut = Math.max(0, limit);
 	return { shown: pending.slice(0, cut), suppressed: pending.slice(cut) };
@@ -65,9 +62,7 @@ export function nextTickDelayMs(ctx: AnnouncementBusyContext): number {
 }
 
 /** 公告级别 → 全局 toast 的严重度映射（info/warn/critical → info/warning/error）。 */
-export function levelToNoticeKind(
-	level: "info" | "warn" | "critical",
-): "info" | "warning" | "error" {
+export function levelToNoticeKind(level: "info" | "warn" | "critical"): "info" | "warning" | "error" {
 	if (level === "critical") return "error";
 	if (level === "warn") return "warning";
 	return "info";

@@ -17,21 +17,13 @@
  */
 import { createServer, type Server } from "node:http";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import {
-	TOKENDANCE_APP_URL,
-	TOKENDANCE_AUTH_URL,
-	TOKENDANCE_EXCHANGE_URL,
-	TOKENDANCE_KEY_NAME,
-	type TokendanceAuthMode,
-} from "../../shared/tokendance";
+import { TOKENDANCE_APP_URL, TOKENDANCE_AUTH_URL, TOKENDANCE_EXCHANGE_URL, TOKENDANCE_KEY_NAME, type TokendanceAuthMode } from "../../shared/tokendance";
 
 // 跨层契约类型定义在 shared（preload/渲染层共用），主进程只负责实现。
 export type { TokendanceAuthMode } from "../../shared/tokendance";
 
 /** 交换响应中的完整 Key 只在首次成功交换出现；错误 verifier 不消费 code。 */
-export type TokendanceAuthExchangeResult =
-	| { ok: true; key: string }
-	| { ok: false; error: string };
+export type TokendanceAuthExchangeResult = { ok: true; key: string } | { ok: false; error: string };
 
 /** 授权模式：callback = 本地回环自动收 code；headless = 用户手动粘贴一次性 code（见 shared/tokendance）。 */
 
@@ -47,10 +39,7 @@ export type TokendanceAuthStartResult = {
 };
 
 /** 交换请求的最小 fetch 形状（默认 net.fetch；测试注入 stub）。 */
-export type TokendanceFetch = (
-	url: string,
-	init: { method: string; headers: Record<string, string>; body: string },
-) => Promise<{ ok: boolean; status?: number; json(): Promise<unknown> }>;
+export type TokendanceFetch = (url: string, init: { method: string; headers: Record<string, string>; body: string }) => Promise<{ ok: boolean; status?: number; json(): Promise<unknown> }>;
 
 export type TokendanceAuthStoreDeps = {
 	/** 拉取函数（默认 electron net.fetch，走系统代理会话）；测试注入 stub。 */
@@ -76,12 +65,7 @@ export function generateTokendancePkceChallenge(verifier: string): string {
  * callbackUrl 可选：传了走「有回调」模式（授权后重定向带 ?code=）；
  * 不传走 headless 模式（页面直接展示一次性 code，桌面应用用这个）。
  */
-export function buildTokendanceAuthUrl(options: {
-	codeChallenge: string;
-	appUrl?: string;
-	keyName?: string;
-	callbackUrl?: string;
-}): URL {
+export function buildTokendanceAuthUrl(options: { codeChallenge: string; appUrl?: string; keyName?: string; callbackUrl?: string }): URL {
 	const url = new URL(TOKENDANCE_AUTH_URL);
 	const { codeChallenge, appUrl, keyName, callbackUrl } = options;
 	if (callbackUrl) url.searchParams.set("callback_url", callbackUrl);
@@ -124,10 +108,7 @@ export async function exchangeTokendanceAuthCode(
 			return { ok: false, error: `TokenDance auth exchange ${status}` };
 		}
 		const body = (await response.json()) as unknown;
-		const key =
-			body && typeof body === "object"
-				? (body as { key?: unknown }).key
-				: undefined;
+		const key = body && typeof body === "object" ? (body as { key?: unknown }).key : undefined;
 		if (typeof key !== "string" || key.length === 0) {
 			return { ok: false, error: "TokenDance auth exchange empty key" };
 		}
@@ -163,14 +144,8 @@ export type LoopbackCallbackListener = {
 export type CallbackServerFactory = () => Promise<LoopbackCallbackListener>;
 
 /** 回调页文案：主进程无法走渲染层 i18n，中英双语一行带过（不反射任何查询参数）。 */
-const CALLBACK_DONE_HTML =
-	"<!doctype html><meta charset=utf-8><title>PiDeck</title>" +
-	"<p style=\"font:14px system-ui;max-width:28rem;margin:6rem auto;text-align:center\">" +
-	"授权已完成，可以关闭本页面返回 PiDeck。<br>Authorization complete — you can close this page.</p>";
-const CALLBACK_ERROR_HTML =
-	"<!doctype html><meta charset=utf-8><title>PiDeck</title>" +
-	"<p style=\"font:14px system-ui;max-width:28rem;margin:6rem auto;text-align:center\">" +
-	"回调地址无效，请回到 PiDeck 重新发起授权。Invalid callback — please restart authorization in PiDeck.</p>";
+const CALLBACK_DONE_HTML = "<!doctype html><meta charset=utf-8><title>PiDeck</title>" + '<p style="font:14px system-ui;max-width:28rem;margin:6rem auto;text-align:center">' + "授权已完成，可以关闭本页面返回 PiDeck。<br>Authorization complete — you can close this page.</p>";
+const CALLBACK_ERROR_HTML = "<!doctype html><meta charset=utf-8><title>PiDeck</title>" + '<p style="font:14px system-ui;max-width:28rem;margin:6rem auto;text-align:center">' + "回调地址无效，请回到 PiDeck 重新发起授权。Invalid callback — please restart authorization in PiDeck.</p>";
 
 /**
  * 默认监听器实现：node:http + 127.0.0.1:0（系统分配空闲端口）。
@@ -196,8 +171,7 @@ function createLoopbackCallbackServer(): Promise<LoopbackCallbackListener> {
 	const server = createServer((request, response) => {
 		const requestUrl = new URL(request.url ?? "/", "http://127.0.0.1");
 		// 路径带随机 token：同端口上的其它本地页面拿不到正确路径，一律 400 不处理。
-		const code =
-			requestUrl.pathname === path ? requestUrl.searchParams.get("code") : null;
+		const code = requestUrl.pathname === path ? requestUrl.searchParams.get("code") : null;
 		response.writeHead(code ? 200 : 400, {
 			"Content-Type": "text/html; charset=utf-8",
 			"Cache-Control": "no-store",
@@ -264,10 +238,7 @@ export class TokendanceAuthStore {
 	private pending = new Map<string, PendingFlow>();
 
 	constructor(deps: TokendanceAuthStoreDeps = {}) {
-		this.fetchFn =
-			deps.fetchFn ??
-			((url, init) =>
-				import("electron").then(({ net }) => net.fetch(url, init)));
+		this.fetchFn = deps.fetchFn ?? ((url, init) => import("electron").then(({ net }) => net.fetch(url, init)));
 		this.now = deps.now ?? Date.now;
 		this.createListener = deps.createCallbackServer ?? createLoopbackCallbackServer;
 	}
@@ -323,10 +294,7 @@ export class TokendanceAuthStore {
 	 * 超时（默认 5 分钟，覆盖“用户切去浏览器登录+确认”的真实耗时）后关闭监听器并返回失败，
 	 * 由渲染层引导用户改用粘贴授权码或手动粘贴 Key。
 	 */
-	async awaitKey(
-		flowId: string,
-		timeoutMs = 5 * 60 * 1000,
-	): Promise<TokendanceAuthExchangeResult> {
+	async awaitKey(flowId: string, timeoutMs = 5 * 60 * 1000): Promise<TokendanceAuthExchangeResult> {
 		const flow = this.pending.get(flowId);
 		if (!flow) {
 			return { ok: false, error: "Tokendance auth flow expired or unknown" };
@@ -366,10 +334,7 @@ export class TokendanceAuthStore {
 		if (!flow) {
 			return { ok: false, error: "Tokendance auth flow expired or unknown" };
 		}
-		const result = await exchangeTokendanceAuthCode(
-			{ code, verifier: flow.verifier, now: this.now() },
-			this.fetchFn,
-		);
+		const result = await exchangeTokendanceAuthCode({ code, verifier: flow.verifier, now: this.now() }, this.fetchFn);
 		if (result.ok) {
 			flow.listener?.close();
 			this.pending.delete(flowId);

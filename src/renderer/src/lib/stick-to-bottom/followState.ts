@@ -43,24 +43,14 @@ export const SCROLLBAR_HIT_SLOP_PX = 12;
 
 export type FollowDirection = "up" | "down";
 
-export type FollowDecision =
-	| { action: "none" }
-	| { action: "escape"; report: "up" }
-	| { action: "relock"; report: "down" }
-	| { action: "intent"; report: "down" };
+export type FollowDecision = { action: "none" } | { action: "escape"; report: "up" } | { action: "relock"; report: "down" } | { action: "intent"; report: "down" };
 
 /** wheel 在位移前触发：用这次 delta 将到达的距底做下滚重锁。 */
-export function distanceAfterWheelDelta(
-	distanceFromBottom: number,
-	deltaY: number,
-): number {
+export function distanceAfterWheelDelta(distanceFromBottom: number, deltaY: number): number {
 	return Math.max(0, distanceFromBottom - deltaY);
 }
 
-export function shouldRelockFromDownInput(
-	distanceFromBottom: number,
-	tolerancePx = AT_BOTTOM_TOLERANCE_PX,
-): boolean {
+export function shouldRelockFromDownInput(distanceFromBottom: number, tolerancePx = AT_BOTTOM_TOLERANCE_PX): boolean {
 	return distanceFromBottom <= tolerancePx;
 }
 
@@ -68,22 +58,11 @@ export function shouldRelockFromDownInput(
  * 把本次输入折进读者上滚累计。下滚清零；间隔超过窗口也清零。
  * 抖动走短窗；真实刻度走长窗，这样慢速上滚不会因为 250ms 间隔被清零。
  */
-export function nextReaderUpPx(input: {
-	previous: number;
-	previousAt: number;
-	now: number;
-	direction: FollowDirection;
-	thisInputPx: number;
-	windowMs?: number;
-}): { readerUpPx: number; at: number } {
+export function nextReaderUpPx(input: { previous: number; previousAt: number; now: number; direction: FollowDirection; thisInputPx: number; windowMs?: number }): { readerUpPx: number; at: number } {
 	if (input.direction === "down") {
 		return { readerUpPx: 0, at: input.now };
 	}
-	const windowMs =
-		input.windowMs ??
-		(input.thisInputPx <= READER_UP_JITTER_PX
-			? READER_UP_ACCUMULATE_MS
-			: READER_UP_GESTURE_MS);
+	const windowMs = input.windowMs ?? (input.thisInputPx <= READER_UP_JITTER_PX ? READER_UP_ACCUMULATE_MS : READER_UP_GESTURE_MS);
 	const fresh = input.now - input.previousAt > windowMs;
 	return {
 		readerUpPx: (fresh ? 0 : input.previous) + Math.max(0, input.thisInputPx),
@@ -91,10 +70,7 @@ export function nextReaderUpPx(input: {
 	};
 }
 
-export function readerDisplacementFromKey(
-	key: string,
-	clientHeight: number,
-): number {
+export function readerDisplacementFromKey(key: string, clientHeight: number): number {
 	if (key === "PageUp" || key === "PageDown") {
 		return Math.max(1, clientHeight);
 	}
@@ -111,13 +87,7 @@ export function readerDisplacementFromKey(
  * 上滚：近底带内只看 readerDisplacementPx；明确离底后任意上滚即逃逸。
  * 下滚：只看 distanceFromBottom（是否已经回到物理底）。
  */
-export function decideFollowFromUserInput(input: {
-	direction: FollowDirection;
-	readerDisplacementPx: number;
-	distanceFromBottom: number;
-	ignoreEscapes?: boolean;
-	canScroll?: boolean;
-}): FollowDecision {
+export function decideFollowFromUserInput(input: { direction: FollowDirection; readerDisplacementPx: number; distanceFromBottom: number; ignoreEscapes?: boolean; canScroll?: boolean }): FollowDecision {
 	if (input.ignoreEscapes) {
 		return { action: "none" };
 	}
@@ -125,10 +95,7 @@ export function decideFollowFromUserInput(input: {
 		if (input.canScroll === false) {
 			return { action: "none" };
 		}
-		if (
-			input.distanceFromBottom > FAR_FROM_BOTTOM_PX ||
-			input.readerDisplacementPx > AT_BOTTOM_TOLERANCE_PX
-		) {
+		if (input.distanceFromBottom > FAR_FROM_BOTTOM_PX || input.readerDisplacementPx > AT_BOTTOM_TOLERANCE_PX) {
 			return { action: "escape", report: "up" };
 		}
 		return { action: "none" };
@@ -163,11 +130,6 @@ export function isVerticallyScrollableOverflow(overflowY: string): boolean {
  * 经典滚动条槽在 clientWidth 外侧；overlay / stable gutter 画在右缘内侧。
  * 两种都认，避免 macOS overlay 下拖滚动条永远无法改跟随态。
  */
-export function isScrollbarGutterHit(
-	clientX: number,
-	viewportLeft: number,
-	clientWidth: number,
-	slopPx = SCROLLBAR_HIT_SLOP_PX,
-): boolean {
+export function isScrollbarGutterHit(clientX: number, viewportLeft: number, clientWidth: number, slopPx = SCROLLBAR_HIT_SLOP_PX): boolean {
 	return clientX >= viewportLeft + clientWidth - slopPx;
 }

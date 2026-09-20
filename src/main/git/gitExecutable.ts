@@ -3,11 +3,7 @@ import { existsSync } from "node:fs";
 import { promisify } from "node:util";
 // 类型契约在 shared/types/git.ts（主进程与渲染层共用）。import type 会被 Node
 // type stripping 直接剥离、不产生运行时依赖，故本模块仍可被 tests/*.test.mjs 直接加载。
-import type {
-	GitExecutableInfo,
-	GitExecutableProbe,
-	GitSystemProbe,
-} from "../../shared/types/git";
+import type { GitExecutableInfo, GitExecutableProbe, GitSystemProbe } from "../../shared/types/git";
 
 /**
  * git 可执行文件解析与探测（可单测的独立模块）。
@@ -54,18 +50,9 @@ const GIT_PROBE_TIMEOUT_MS = 5_000;
  * 顺序即优先级：先系统级目录，再包管理器/用户级目录。
  * Windows 上 `cmd\git.exe` 是官方推荐的外部调用入口（比 mingw64\bin\git.exe 启动更快）。
  */
-export function gitPathCandidates(
-	platform: NodeJS.Platform = process.platform,
-	localAppData: string | undefined = process.env.LOCALAPPDATA,
-): string[] {
+export function gitPathCandidates(platform: NodeJS.Platform = process.platform, localAppData: string | undefined = process.env.LOCALAPPDATA): string[] {
 	if (platform === "win32") {
-		return [
-			"C:\\Program Files\\Git\\cmd\\git.exe",
-			"C:\\Program Files\\Git\\mingw64\\bin\\git.exe",
-			"C:\\Program Files\\Git\\bin\\git.exe",
-			"C:\\Program Files (x86)\\Git\\cmd\\git.exe",
-			...(localAppData ? [`${localAppData}\\Programs\\Git\\cmd\\git.exe`] : []),
-		];
+		return ["C:\\Program Files\\Git\\cmd\\git.exe", "C:\\Program Files\\Git\\mingw64\\bin\\git.exe", "C:\\Program Files\\Git\\bin\\git.exe", "C:\\Program Files (x86)\\Git\\cmd\\git.exe", ...(localAppData ? [`${localAppData}\\Programs\\Git\\cmd\\git.exe`] : [])];
 	}
 	if (platform === "darwin") {
 		return [
@@ -106,7 +93,12 @@ async function resolvePathLocation(): Promise<string> {
 			windowsHide: true,
 		});
 		// where 在多命中时返回多行，取第一个非空行。
-		return stdout.split(/\r?\n/).map((line) => line.trim()).find(Boolean) ?? "";
+		return (
+			stdout
+				.split(/\r?\n/)
+				.map((line) => line.trim())
+				.find(Boolean) ?? ""
+		);
 	} catch {
 		return "";
 	}
@@ -121,8 +113,7 @@ async function probeExecutable(executable: string): Promise<GitExecutableProbe |
 		});
 		const version = parseGitVersion(stdout);
 		if (!version) return null;
-		const resolvedPath =
-			executable === "git" ? await resolvePathLocation() : executable;
+		const resolvedPath = executable === "git" ? await resolvePathLocation() : executable;
 		return { resolvedPath: resolvedPath || executable, version };
 	} catch {
 		return null;
@@ -152,9 +143,7 @@ export async function detectSystemGit(): Promise<GitSystemProbe | null> {
  *
  * @param configuredPath 用户配置的路径；空串/非法值表示未配置（走自动解析）。
  */
-export async function detectGitExecutable(
-	configuredPath?: string | null,
-): Promise<GitExecutableInfo> {
+export async function detectGitExecutable(configuredPath?: string | null): Promise<GitExecutableInfo> {
 	const system = await detectSystemGit();
 	const executable = resolveGitExecutable(configuredPath);
 

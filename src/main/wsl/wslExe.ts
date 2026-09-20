@@ -22,7 +22,10 @@ export function decodeWslOutput(raw: Buffer | string): string {
 	}
 	// 无 BOM 但呈「ASCII + NUL」交替特征：同样是 UTF-16LE
 	if (buffer.length >= 4 && buffer[1] === 0x00 && buffer[3] === 0x00) {
-		return buffer.toString("utf16le").replace(/\0/g, "").replace(/^\ufeff/, "");
+		return buffer
+			.toString("utf16le")
+			.replace(/\0/g, "")
+			.replace(/^\ufeff/, "");
 	}
 	return buffer.toString("utf8").replace(/\0/g, "");
 }
@@ -41,9 +44,7 @@ export function parseWslDistroList(raw: Buffer | string): string[] {
 export function getWslExe(): { command: string; shell: boolean } {
 	if (resolved) return resolved;
 	const root = process.env.SystemRoot || "C:\\Windows";
-	const candidates = process.arch === "ia32"
-		? [join(root, "Sysnative", "wsl.exe"), join(root, "System32", "wsl.exe")]
-		: [join(root, "System32", "wsl.exe")];
+	const candidates = process.arch === "ia32" ? [join(root, "Sysnative", "wsl.exe"), join(root, "System32", "wsl.exe")] : [join(root, "System32", "wsl.exe")];
 	for (const candidate of candidates) {
 		if (existsSync(candidate)) {
 			resolved = { command: candidate, shell: false };

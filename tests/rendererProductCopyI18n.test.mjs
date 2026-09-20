@@ -20,20 +20,10 @@ function rendererSourceFiles(directory = "src/renderer/src") {
 }
 
 function staticTranslationKeys(filePath) {
-	const source = ts.createSourceFile(
-		filePath,
-		read(filePath),
-		ts.ScriptTarget.Latest,
-		true,
-	);
+	const source = ts.createSourceFile(filePath, read(filePath), ts.ScriptTarget.Latest, true);
 	const keys = new Set();
 	function visit(node) {
-		if (
-			ts.isCallExpression(node) &&
-			ts.isIdentifier(node.expression) &&
-			node.expression.text === "t" &&
-			ts.isStringLiteral(node.arguments[0])
-		) {
+		if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "t" && ts.isStringLiteral(node.arguments[0])) {
 			keys.add(node.arguments[0].text);
 		}
 		ts.forEachChild(node, visit);
@@ -43,13 +33,11 @@ function staticTranslationKeys(filePath) {
 }
 
 test("renderer locale dictionaries expose the same translation keys", () => {
-  assert.deepEqual(Object.keys(enUS).sort(), Object.keys(zhCN).sort());
+	assert.deepEqual(Object.keys(enUS).sort(), Object.keys(zhCN).sort());
 });
 
 test("every static renderer translation key exists in both locale dictionaries", () => {
-	const usedKeys = new Set(
-		rendererSourceFiles().flatMap((filePath) => [...staticTranslationKeys(filePath)]),
-	);
+	const usedKeys = new Set(rendererSourceFiles().flatMap((filePath) => [...staticTranslationKeys(filePath)]));
 	for (const key of usedKeys) {
 		assert.ok(Object.hasOwn(zhCN, key), `zh-CN is missing ${key}`);
 		assert.ok(Object.hasOwn(enUS, key), `en-US is missing ${key}`);
@@ -104,8 +92,7 @@ const skillStore = read("src/renderer/src/config/SkillStoreTab.tsx");
 const yaoStore = read("src/renderer/src/config/YaoPromptTab.tsx");
 const skillHub = read("src/renderer/src/config/SkillHubStorePanel.tsx");
 const promptStore = read("src/renderer/src/config/PromptStoreTab.tsx");
-const extensions = read("src/renderer/src/config/ExtensionsTab.tsx")
-	+ "\n" + read("src/renderer/src/config/extensionsRecommendedPackages.tsx");
+const extensions = read("src/renderer/src/config/ExtensionsTab.tsx") + "\n" + read("src/renderer/src/config/extensionsRecommendedPackages.tsx");
 const configShared = read("src/renderer/src/config/ConfigShared.tsx");
 const providerHeaders = read("src/renderer/src/config/providerHeaders.ts");
 // UA 预设清单已从 providerHeaders.ts 迁到 userAgentPresets.ts（纯函数 + 分组元数据，可单测）；
@@ -171,7 +158,7 @@ test("reachable renderer surfaces use i18n without changing their UI structure",
 	assert.match(skillStore, /className="prompt-store-tab"[\s\S]*?t\("config\.skillStoreSearchPlaceholder"\)/);
 	assert.match(yaoStore, /className="store-sub-tab"[\s\S]*?t\("config\.yaoSearchPlaceholder"\)/);
 	assert.match(skillHub, /className="skillhub-installed-badge"[\s\S]*?t\("config\.installed"\)/);
-  assert.match(promptStore, /value: "yao", label: t\("config\.promptStoreChinesePicks"\)/);
+	assert.match(promptStore, /value: "yao", label: t\("config\.promptStoreChinesePicks"\)/);
 	assert.match(extensions, /className="extensions-recommended-desc">[\s\S]*?t\(pkg\.descriptionKey\)/);
 	assert.match(configShared, /getApiTypeDescription\(option\)/);
 	assert.match(userAgentPresets, /labelKey: "config\.userAgentBrowser"/);

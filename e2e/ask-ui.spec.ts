@@ -189,9 +189,7 @@ test("ask 多 pending: 渲染最新到达的请求而不是第一个", async ({ 
 	await expect(window.locator("#boot-overlay")).toHaveCount(0, { timeout: 20_000 });
 
 	// 1. 从当前激活 Tab 读真实 currentSessionId（渲染层不会把会话 id 暴露到别处）
-	const focusedSessionId = await window
-		.locator('.session-tab[aria-selected="true"]')
-		.getAttribute("data-session-id");
+	const focusedSessionId = await window.locator('.session-tab[aria-selected="true"]').getAttribute("data-session-id");
 	expect(focusedSessionId).toBeTruthy();
 
 	const inject = (event: unknown) =>

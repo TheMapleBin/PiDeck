@@ -88,17 +88,14 @@ export function parseSessionProcessEventLine(rawLine: string, index: number): Se
 	if (!kind) return undefined;
 
 	const cwd = asString(entry.cwd) ?? asString((entry.header as Record<string, unknown> | undefined)?.cwd);
-	const parentSession = asString(entry.parentSession)
-		?? asString((entry.header as Record<string, unknown> | undefined)?.parentSession);
+	const parentSession = asString(entry.parentSession) ?? asString((entry.header as Record<string, unknown> | undefined)?.parentSession);
 	const provider = asString(entry.provider);
 	const modelId = asString(entry.modelId);
 	const thinkingLevel = asString(entry.thinkingLevel);
 	const name = asString(entry.name) ?? asString((entry.data as Record<string, unknown> | undefined)?.name);
 	const tokensBefore = asNumber(entry.tokensBefore);
 	const summaryText = asString(entry.summary);
-	const customContent = asString(entry.content)
-		?? stringifyUnknown(entry.data)
-		?? stringifyUnknown(entry.customData);
+	const customContent = asString(entry.content) ?? stringifyUnknown(entry.data) ?? stringifyUnknown(entry.customData);
 
 	let summary = type;
 	if (kind === "session") summary = cwd ? `cwd ${cwd}` : "session";

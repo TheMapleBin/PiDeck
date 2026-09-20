@@ -24,17 +24,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { DshRuntimeDownloader, DshRuntimeExtractor } from "../dsh/runtime/DshRuntimeManager";
 import { sha256OfFile } from "../dsh/runtime/DshRuntimeManager";
-import {
-	PI_RUNTIME_NODE_VERSION,
-	PI_RUNTIME_NODE_SHA256,
-	piRuntimeNodeArchiveName,
-	piRuntimeNodeDownloadUrls,
-	piRuntimeNodeInnerDir,
-	toPiRuntimePlatform,
-	toPiRuntimeArch,
-	type PiRuntimeNodeInstallResult,
-	type PiRuntimeNodeStatus,
-} from "../../shared/types/piRuntimeNode";
+import { PI_RUNTIME_NODE_VERSION, PI_RUNTIME_NODE_SHA256, piRuntimeNodeArchiveName, piRuntimeNodeDownloadUrls, piRuntimeNodeInnerDir, toPiRuntimePlatform, toPiRuntimeArch, type PiRuntimeNodeInstallResult, type PiRuntimeNodeStatus } from "../../shared/types/piRuntimeNode";
 
 const execFileAsync = promisify(execFile);
 
@@ -69,8 +59,7 @@ export async function detectPiRuntimeNode(
 	/** 可替换的版本探测（测试注入）；缺省用真实 execFile 探测。 */
 	probeVersion: (nodePath: string) => Promise<string | undefined> = probeNodeVersion,
 ): Promise<PiRuntimeNodeStatus> {
-	const installSupported =
-		toPiRuntimePlatform(platform) !== null && toPiRuntimeArch(process.arch) !== null;
+	const installSupported = toPiRuntimePlatform(platform) !== null && toPiRuntimeArch(process.arch) !== null;
 	const exePath = piRuntimeNodeExePath(userDataPath, platform);
 	const systemState = {
 		systemNodeAvailable: systemNodeVersion !== undefined,

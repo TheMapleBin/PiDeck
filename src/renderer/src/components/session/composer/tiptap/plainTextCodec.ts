@@ -4,10 +4,7 @@
  */
 
 import type { JSONContent } from "@tiptap/core";
-import {
-	parseRichInputChips,
-	type ComposerChip,
-} from "../chips";
+import { parseRichInputChips, type ComposerChip } from "../chips";
 
 export type ComposerChipWhitelist = {
 	validCommandNames?: Set<string>;
@@ -29,11 +26,7 @@ function mentionNode(chip: ComposerChip): JSONContent {
 }
 
 /** 将一行（不含 \\n）拆成 text + mention 内联节点。 */
-function inlineNodesForLine(
-	line: string,
-	lineOffset: number,
-	chips: ComposerChip[],
-): JSONContent[] {
+function inlineNodesForLine(line: string, lineOffset: number, chips: ComposerChip[]): JSONContent[] {
 	const lineChips = chips
 		.filter((c) => c.start >= lineOffset && c.end <= lineOffset + line.length)
 		.map((c) => ({
@@ -60,17 +53,8 @@ function inlineNodesForLine(
 }
 
 /** 纯字符串 → TipTap JSON（单 paragraph，换行用 hardBreak）。 */
-export function plainTextToComposerDoc(
-	text: string,
-	whitelist: ComposerChipWhitelist = {},
-): JSONContent {
-	const chips = parseRichInputChips(
-		text,
-		whitelist.validCommandNames,
-		whitelist.validFilePaths,
-		whitelist.validSessionRefs,
-		whitelist.validQuotes,
-	);
+export function plainTextToComposerDoc(text: string, whitelist: ComposerChipWhitelist = {}): JSONContent {
+	const chips = parseRichInputChips(text, whitelist.validCommandNames, whitelist.validFilePaths, whitelist.validSessionRefs, whitelist.validQuotes);
 	const lines = text.split("\n");
 	const content: JSONContent[] = [];
 	let offset = 0;

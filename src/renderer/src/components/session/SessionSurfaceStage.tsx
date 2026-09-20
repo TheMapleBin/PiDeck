@@ -24,46 +24,18 @@ const HISTORY_OVERLAY_COPY: Record<string, TranslationKey> = {
 /**
  * 中栏表面：只承载对话时间线。轨迹复盘已迁到右侧抽屉独立 tab。
  */
-export function SessionSurfaceStage(props: {
-	sessionId: string;
-	sessionTimeline: SessionTimelineController;
-	timelineProps: Omit<SessionMessageTimelineProps, "sessionId" | "controller">;
-	isRestarting: boolean;
-}) {
+export function SessionSurfaceStage(props: { sessionId: string; sessionTimeline: SessionTimelineController; timelineProps: Omit<SessionMessageTimelineProps, "sessionId" | "controller">; isRestarting: boolean }) {
 	const { sessionId, sessionTimeline, timelineProps, isRestarting } = props;
 	// Assistant streaming rebuilds the derived array; equal user checkpoints should not rerender the rail.
-	const outlineItemsAtom = useMemo(
-		() => selectAtom(
-			outlineItemsBySessionIdAtomFamily(sessionId),
-			(items) => items,
-			areOutlineRailItemsEqual,
-		),
-		[sessionId],
-	);
+	const outlineItemsAtom = useMemo(() => selectAtom(outlineItemsBySessionIdAtomFamily(sessionId), (items) => items, areOutlineRailItemsEqual), [sessionId]);
 	const outlineItems = useAtomValue(outlineItemsAtom);
-	const mutationKind = useAtomValue(
-		sessionHistoryMutationOverlayBySessionIdAtomFamily(sessionId),
-	);
+	const mutationKind = useAtomValue(sessionHistoryMutationOverlayBySessionIdAtomFamily(sessionId));
 	const overlayVisible = isRestarting || Boolean(mutationKind);
-	const overlayLabel = isRestarting
-		? t("app.restarting")
-		: mutationKind
-			? t(HISTORY_OVERLAY_COPY[mutationKind] ?? "message.historyOverlay.mutating")
-			: t("app.restarting");
+	const overlayLabel = isRestarting ? t("app.restarting") : mutationKind ? t(HISTORY_OVERLAY_COPY[mutationKind] ?? "message.historyOverlay.mutating") : t("app.restarting");
 	return (
 		<div className="relative h-full min-h-0">
-            <ConversationOutline
-              className="session-outline-pane"
-              timelineRef={sessionTimeline.timelineRef}
-              onTimelineWheel={sessionTimeline.scrollTimelineBy}
-              items={outlineItems}
-              onJump={sessionTimeline.jumpToMessage}
-            />
-			<SessionMessageTimeline
-				sessionId={sessionId}
-				controller={sessionTimeline}
-				{...timelineProps}
-			/>
+			<ConversationOutline className="session-outline-pane" timelineRef={sessionTimeline.timelineRef} onTimelineWheel={sessionTimeline.scrollTimelineBy} items={outlineItems} onJump={sessionTimeline.jumpToMessage} />
+			<SessionMessageTimeline sessionId={sessionId} controller={sessionTimeline} {...timelineProps} />
 
 			{sessionTimeline.showScrollToBottom && (
 				// 右下角小圆形按钮，跟随消息列/输入框列宽（chatContentWidthStyle 同一基准），
@@ -85,11 +57,7 @@ export function SessionSurfaceStage(props: {
 				</div>
 			)}
 			{/* 重启 / 历史改写遮罩：opacity 过渡 + loader 旋转走合成器，始终挂载以便淡出。 */}
-			<div
-				className={`absolute inset-0 z-30 flex flex-col items-center justify-center gap-2.5 bg-bg-panel/70 transition-opacity duration-200 ${overlayVisible ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"}`}
-				role={overlayVisible ? "status" : undefined}
-				aria-hidden={!overlayVisible}
-			>
+			<div className={`absolute inset-0 z-30 flex flex-col items-center justify-center gap-2.5 bg-bg-panel/70 transition-opacity duration-200 ${overlayVisible ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"}`} role={overlayVisible ? "status" : undefined} aria-hidden={!overlayVisible}>
 				<div className="loader animate-pideck-spin" />
 				<span className="text-body text-text-secondary">{overlayLabel}</span>
 			</div>

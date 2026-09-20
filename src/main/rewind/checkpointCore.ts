@@ -27,24 +27,11 @@ import { join } from "node:path";
 import type { RewindCheckpointSummary } from "../../shared/types/rewind.ts";
 import { runGit } from "../git/gitProcess.ts";
 import { currentGitExecutable } from "../git/gitExecutable.ts";
-import {
-	DEFAULT_MAX_CHECKPOINTS,
-	MAX_UNTRACKED_DIR_FILES,
-	MAX_UNTRACKED_FILE_SIZE,
-	MAX_UNTRACKED_TOTAL_BYTES,
-	REF_BASE,
-	ZEROS,
-} from "./checkpointConstants.ts";
-import {
-	detectLargeDirs,
-	isPathWithinAny,
-	normalizeGitPath,
-	shouldIgnoreForSnapshot,
-} from "./checkpointFilter.ts";
+import { DEFAULT_MAX_CHECKPOINTS, MAX_UNTRACKED_DIR_FILES, MAX_UNTRACKED_FILE_SIZE, MAX_UNTRACKED_TOTAL_BYTES, REF_BASE, ZEROS } from "./checkpointConstants.ts";
+import { detectLargeDirs, isPathWithinAny, normalizeGitPath, shouldIgnoreForSnapshot } from "./checkpointFilter.ts";
 
 /** 会话 ref 名里嵌入的 UUID 形态（5 段，用于 pruneOldSessions 从 ref 名解析会话 id）。 */
-const SESSION_UUID_RE =
-	/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const SESSION_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 export interface CheckpointData {
 	/** checkpoint id（= ref 名最后一段，如 turn-<uuid>-<turn>-<ts>） */
@@ -80,11 +67,7 @@ export interface CheckpointData {
 }
 
 /** git 命令小封装：跑 runGit、只回 trim 后的 stdout（错误原样抛给调用方 catch）。 */
-async function gitOp(
-	root: string,
-	args: string[],
-	env?: NodeJS.ProcessEnv,
-): Promise<string> {
+async function gitOp(root: string, args: string[], env?: NodeJS.ProcessEnv): Promise<string> {
 	const { stdout } = await runGit(args, { cwd: root, env }, currentGitExecutable());
 	return stdout.trim();
 }
@@ -123,12 +106,7 @@ async function captureStatusSnapshot(root: string): Promise<StatusSnapshot> {
 		skippedLargeFiles: [],
 	};
 
-	const output = await gitOp(root, [
-		"status",
-		"--porcelain=2",
-		"-z",
-		"--untracked-files=all",
-	]).catch(() => "");
+	const output = await gitOp(root, ["status", "--porcelain=2", "-z", "--untracked-files=all"]).catch(() => "");
 	if (!output) return snap;
 
 	const entries = output.split("\0").filter(Boolean);
@@ -211,19 +189,11 @@ interface FilesToAddResult {
 
 async function getFilesToAdd(root: string): Promise<FilesToAddResult> {
 	const status = await captureStatusSnapshot(root);
-	const largeDirs = detectLargeDirs(
-		status.untrackedFiles,
-		status.untrackedDirs,
-		MAX_UNTRACKED_DIR_FILES,
-	);
+	const largeDirs = detectLargeDirs(status.untrackedFiles, status.untrackedDirs, MAX_UNTRACKED_DIR_FILES);
 	const largeDirsSet = new Set(largeDirs);
 
-	const untrackedForIndex = status.untrackedFilesForIndex.filter(
-		(p) => !isPathWithinAny(p, largeDirsSet),
-	);
-	const skippedLargeFiles = status.skippedLargeFiles.filter(
-		(p) => !isPathWithinAny(p, largeDirsSet),
-	);
+	const untrackedForIndex = status.untrackedFilesForIndex.filter((p) => !isPathWithinAny(p, largeDirsSet));
+	const skippedLargeFiles = status.skippedLargeFiles.filter((p) => !isPathWithinAny(p, largeDirsSet));
 
 	// 总字节预算：很多小文件（.runs/ 截图、报告、中间权重）单文件都低于
 	// MAX_UNTRACKED_FILE_SIZE，但总量可到 GB 级——临时 index 每次都要重新
@@ -278,11 +248,7 @@ export interface CreateCheckpointOpts {
  * 丢掉整份快照」。批次失败时逐路径重试，失败路径剔除并计入 droppedPaths；
  * 逐路径重试与 git 错误文案语言无关，比解析 stderr 更稳。
  */
-export async function addPathsToIndex(
-	root: string,
-	env: NodeJS.ProcessEnv,
-	paths: string[],
-): Promise<string[]> {
+export async function addPathsToIndex(root: string, env: NodeJS.ProcessEnv, paths: string[]): Promise<string[]> {
 	const droppedPaths: string[] = [];
 	const BATCH = 100;
 	for (let i = 0; i < paths.length; i += BATCH) {
@@ -309,18 +275,14 @@ export async function addPathsToIndex(
  * 所以用 GIT_INDEX_FILE 指向临时文件：read-tree HEAD 播种 → add --all 收入
  * 未跟踪/修改 → write-tree。100 个一批分批 add，避免超长命令行。
  */
-export async function createCheckpoint(
-	opts: CreateCheckpointOpts,
-): Promise<CheckpointData> {
+export async function createCheckpoint(opts: CreateCheckpointOpts): Promise<CheckpointData> {
 	const { root, id, sessionId, trigger, turnIndex, toolName, description } = opts;
 	const timestamp = Date.now();
 	const iso = new Date(timestamp).toISOString();
 
 	// 空仓库（无提交）时 rev-parse HEAD 失败 → ZEROS，恢复时跳过 reset。
 	const headSha = await gitOp(root, ["rev-parse", "HEAD"]).catch(() => ZEROS);
-	const branch = await gitOp(root, ["rev-parse", "--abbrev-ref", "HEAD"]).catch(
-		() => "unknown",
-	);
+	const branch = await gitOp(root, ["rev-parse", "--abbrev-ref", "HEAD"]).catch(() => "unknown");
 	const indexTreeSha = await gitOp(root, ["write-tree"]);
 
 	const tmpDir = await mkdtemp(join(tmpdir(), "pi-rewind-"));
@@ -329,13 +291,7 @@ export async function createCheckpoint(
 	const tmpEnv = { GIT_INDEX_FILE: tmpIndex };
 
 	try {
-		const {
-			filtered,
-			allUntracked,
-			skippedLargeFiles,
-			skippedLargeDirs,
-			skippedOverBudget,
-		} = await getFilesToAdd(root);
+		const { filtered, allUntracked, skippedLargeFiles, skippedLargeDirs, skippedOverBudget } = await getFilesToAdd(root);
 
 		const largeDirsSet = new Set(skippedLargeDirs);
 		const largeFilesSet = new Set(skippedLargeFiles);
@@ -419,11 +375,9 @@ export async function createCheckpoint(
 			worktreeTreeSha,
 			timestamp,
 			preexistingUntrackedFiles,
-			skippedLargeFiles:
-				skippedLargeFiles.length > 0 ? skippedLargeFiles : undefined,
+			skippedLargeFiles: skippedLargeFiles.length > 0 ? skippedLargeFiles : undefined,
 			skippedLargeDirs: skippedLargeDirs.length > 0 ? skippedLargeDirs : undefined,
-			skippedOverBudgetFiles:
-				skippedOverBudget.length > 0 ? skippedOverBudget : undefined,
+			skippedOverBudgetFiles: skippedOverBudget.length > 0 ? skippedOverBudget : undefined,
 			droppedPaths: droppedPaths.length > 0 ? droppedPaths : undefined,
 		};
 	} finally {
@@ -441,21 +395,11 @@ export async function createCheckpoint(
  * 4. safeClean 只删「快照时没有、现在新出现」的未跟踪文件；
  * 5. read-tree --reset 恢复暂存区态（不碰工作区文件）。
  */
-export async function restoreCheckpoint(
-	root: string,
-	cp: CheckpointData,
-): Promise<void> {
+export async function restoreCheckpoint(root: string, cp: CheckpointData): Promise<void> {
 	if (cp.branch) {
-		const currentBranch = await gitOp(root, [
-			"rev-parse",
-			"--abbrev-ref",
-			"HEAD",
-		]).catch(() => "unknown");
+		const currentBranch = await gitOp(root, ["rev-parse", "--abbrev-ref", "HEAD"]).catch(() => "unknown");
 		if (currentBranch !== cp.branch) {
-			throw new Error(
-				`Branch mismatch: checkpoint was created on "${cp.branch}" but you are on "${currentBranch}". ` +
-					`Switch to "${cp.branch}" first, or this restore could corrupt your worktree.`,
-			);
+			throw new Error(`Branch mismatch: checkpoint was created on "${cp.branch}" but you are on "${currentBranch}". ` + `Switch to "${cp.branch}" first, or this restore could corrupt your worktree.`);
 		}
 	}
 
@@ -465,12 +409,7 @@ export async function restoreCheckpoint(
 
 	await gitOp(root, ["read-tree", "--reset", "-u", cp.worktreeTreeSha]);
 
-	await safeClean(
-		root,
-		cp.preexistingUntrackedFiles || [],
-		cp.skippedLargeFiles || [],
-		cp.skippedLargeDirs || [],
-	);
+	await safeClean(root, cp.preexistingUntrackedFiles || [], cp.skippedLargeFiles || [], cp.skippedLargeDirs || []);
 
 	await gitOp(root, ["read-tree", "--reset", cp.indexTreeSha]);
 }
@@ -480,17 +419,8 @@ export async function restoreCheckpoint(
  * 保护名单：快照时已存在的未跟踪文件、忽略目录、跳过大文件、跳过大目录。
  * 100 个一批，单个失败忽略（clean 对已消失的文件会报错，不能因此中断整批）。
  */
-async function safeClean(
-	root: string,
-	preexisting: string[],
-	skippedFiles: string[],
-	skippedDirs: string[],
-): Promise<void> {
-	const output = await gitOp(root, [
-		"ls-files",
-		"--others",
-		"--exclude-standard",
-	]).catch(() => "");
+async function safeClean(root: string, preexisting: string[], skippedFiles: string[], skippedDirs: string[]): Promise<void> {
+	const output = await gitOp(root, ["ls-files", "--others", "--exclude-standard"]).catch(() => "");
 	if (!output) return;
 	const current = output.split("\n").filter(Boolean);
 	if (current.length === 0) return;
@@ -524,11 +454,8 @@ async function safeClean(
  * 从 commit message 解析 checkpoint 元数据（不含 id；id 由 ref 名提供）。
  * 供 loadCheckpointFromRef（单条）与 loadAllCheckpoints（批量）复用。
  */
-function parseCheckpointCommit(
-	msg: string,
-): Omit<CheckpointData, "id"> | null {
-	const get = (key: string) =>
-		msg.match(new RegExp(`^${key} (.+)$`, "m"))?.[1]?.trim();
+function parseCheckpointCommit(msg: string): Omit<CheckpointData, "id"> | null {
+	const get = (key: string) => msg.match(new RegExp(`^${key} (.+)$`, "m"))?.[1]?.trim();
 
 	const sid = get("sessionId");
 	const turn = get("turn");
@@ -567,16 +494,9 @@ function parseCheckpointCommit(
 }
 
 /** 从 git ref 加载 checkpoint 元数据；ref 不存在或元数据不完整返回 null。 */
-export async function loadCheckpointFromRef(
-	root: string,
-	refName: string,
-): Promise<CheckpointData | null> {
+export async function loadCheckpointFromRef(root: string, refName: string): Promise<CheckpointData | null> {
 	try {
-		const commitSha = await gitOp(root, [
-			"rev-parse",
-			"--verify",
-			`${REF_BASE}/${refName}`,
-		]);
+		const commitSha = await gitOp(root, ["rev-parse", "--verify", `${REF_BASE}/${refName}`]);
 		const msg = await gitOp(root, ["cat-file", "commit", commitSha]);
 		const parsed = parseCheckpointCommit(msg);
 		return parsed ? { ...parsed, id: refName } : null;
@@ -586,9 +506,7 @@ export async function loadCheckpointFromRef(
 }
 
 /** 从 commit message 解析 trigger，非法值回退 "turn"（旧数据兼容，不用 as 强转）。 */
-function parseTrigger(
-	raw: string | undefined,
-): CheckpointData["trigger"] {
+function parseTrigger(raw: string | undefined): CheckpointData["trigger"] {
 	switch (raw) {
 		case "tool":
 		case "resume":
@@ -603,11 +521,7 @@ function parseTrigger(
 export async function listCheckpointRefs(root: string): Promise<string[]> {
 	try {
 		const prefix = `${REF_BASE}/`;
-		const out = await gitOp(root, [
-			"for-each-ref",
-			"--format=%(refname)",
-			prefix,
-		]);
+		const out = await gitOp(root, ["for-each-ref", "--format=%(refname)", prefix]);
 		return out
 			.split("\n")
 			.filter(Boolean)
@@ -618,17 +532,10 @@ export async function listCheckpointRefs(root: string): Promise<string[]> {
 }
 
 /** 加载全部 checkpoint，可按 sessionId 过滤（用于会话列表与 prune）。 */
-export async function loadAllCheckpoints(
-	root: string,
-	sessionId?: string,
-): Promise<CheckpointData[]> {
+export async function loadAllCheckpoints(root: string, sessionId?: string): Promise<CheckpointData[]> {
 	try {
 		const prefix = `${REF_BASE}/`;
-		const refOut = await gitOp(root, [
-			"for-each-ref",
-			"--format=%(refname)%00%(objectname)",
-			prefix,
-		]);
+		const refOut = await gitOp(root, ["for-each-ref", "--format=%(refname)%00%(objectname)", prefix]);
 		const pairs = refOut
 			.split("\n")
 			.filter(Boolean)
@@ -648,11 +555,7 @@ export async function loadAllCheckpoints(
 		// 吞成 []；而 sessionId 过滤是在全量读取之后做的，任何会话都读不到自己的
 		// 检查点，表现为「检查点列表永远暂无」。stdin 无这个限制，仍保持单次进程调用
 		// 与批量解析的效率。
-		const { stdout: catOut } = await runGit(
-			["cat-file", "--batch"],
-			{ cwd: root, input: `${pairs.map((p) => p.sha).join("\n")}\n` },
-			currentGitExecutable(),
-		);
+		const { stdout: catOut } = await runGit(["cat-file", "--batch"], { cwd: root, input: `${pairs.map((p) => p.sha).join("\n")}\n` }, currentGitExecutable());
 		const bySha = new Map<string, Omit<CheckpointData, "id">>();
 		// cat-file --batch 输出记录流：`<sha> commit <size>\n<contents>\n`。
 		// contents 是 commit 对象全文（tree/author/committer 头 + 空行 + message），
@@ -698,22 +601,14 @@ export async function deleteCheckpoint(root: string, id: string): Promise<void> 
  * delete 不带 oldvalue 时缺失的 ref 容忍（实测 git exit 0，并发裁剪安全），
  * 批次整体失败再降级逐条（deleteCheckpoint 自带 catch，不中断整批）。
  */
-export async function deleteCheckpoints(
-	root: string,
-	ids: string[],
-): Promise<void> {
+export async function deleteCheckpoints(root: string, ids: string[]): Promise<void> {
 	if (ids.length === 0) return;
 	const BATCH = 1000;
 	for (let i = 0; i < ids.length; i += BATCH) {
 		const batch = ids.slice(i, i + BATCH);
-		const input =
-			batch.map((id) => `delete ${REF_BASE}/${id}`).join("\n") + "\n";
+		const input = batch.map((id) => `delete ${REF_BASE}/${id}`).join("\n") + "\n";
 		try {
-			await runGit(
-				["update-ref", "--stdin"],
-				{ cwd: root, input },
-				currentGitExecutable(),
-			);
+			await runGit(["update-ref", "--stdin"], { cwd: root, input }, currentGitExecutable());
 		} catch {
 			for (const id of batch) {
 				await deleteCheckpoint(root, id);
@@ -726,11 +621,7 @@ export async function deleteCheckpoints(
  * 按时间裁剪单会话 checkpoint，最多保留 max 个。
  * before-restore 安全网永不裁剪（它是「回退前兜底」，删了就无法撤销恢复）。
  */
-export async function pruneCheckpoints(
-	root: string,
-	sessionId: string,
-	max: number = DEFAULT_MAX_CHECKPOINTS,
-): Promise<number> {
+export async function pruneCheckpoints(root: string, sessionId: string, max: number = DEFAULT_MAX_CHECKPOINTS): Promise<number> {
 	const all = await loadAllCheckpoints(root, sessionId);
 	all.sort((a, b) => a.timestamp - b.timestamp);
 
@@ -752,14 +643,8 @@ export async function pruneCheckpoints(
  * UUID 本身含连字符，所以按「第 i 段起连续 5 段拼出合法 UUID」来定位），避免为
  * 每个 ref 读 commit 元数据。
  */
-export async function pruneOldSessions(
-	root: string,
-	keepSessionIds: string | readonly string[],
-	keepPerOldSession: number = 0,
-): Promise<number> {
-	const keep = new Set(
-		Array.isArray(keepSessionIds) ? keepSessionIds : [keepSessionIds],
-	);
+export async function pruneOldSessions(root: string, keepSessionIds: string | readonly string[], keepPerOldSession: number = 0): Promise<number> {
+	const keep = new Set(Array.isArray(keepSessionIds) ? keepSessionIds : [keepSessionIds]);
 	const refs = await listCheckpointRefs(root);
 	const toDelete: string[] = [];
 
@@ -783,10 +668,7 @@ export async function pruneOldSessions(
 	for (const sessionRefs of bySession.values()) {
 		// ref 名尾部含时间戳，字典序 ≈ 时间序（旧在前）。
 		sessionRefs.sort();
-		const sessionToDelete =
-			keepPerOldSession > 0
-				? sessionRefs.slice(0, Math.max(0, sessionRefs.length - keepPerOldSession))
-				: sessionRefs;
+		const sessionToDelete = keepPerOldSession > 0 ? sessionRefs.slice(0, Math.max(0, sessionRefs.length - keepPerOldSession)) : sessionRefs;
 		toDelete.push(...sessionToDelete);
 	}
 
@@ -795,19 +677,9 @@ export async function pruneOldSessions(
 }
 
 /** 两个 checkpoint 树之间的变更摘要（diff-tree --stat）。 */
-export async function diffCheckpoints(
-	root: string,
-	fromTree: string,
-	toTree: string,
-): Promise<string> {
+export async function diffCheckpoints(root: string, fromTree: string, toTree: string): Promise<string> {
 	try {
-		return await gitOp(root, [
-			"diff-tree",
-			"--stat",
-			"--no-commit-id",
-			fromTree,
-			toTree,
-		]);
+		return await gitOp(root, ["diff-tree", "--stat", "--no-commit-id", fromTree, toTree]);
 	} catch {
 		return "(diff unavailable)";
 	}
@@ -819,9 +691,7 @@ export async function currentIndexTree(root: string): Promise<string> {
 }
 
 /** 完整元数据 → IPC/UI 摘要（去掉 git 内部 SHA）。 */
-export function toCheckpointSummary(
-	cp: CheckpointData,
-): RewindCheckpointSummary {
+export function toCheckpointSummary(cp: CheckpointData): RewindCheckpointSummary {
 	return {
 		id: cp.id,
 		sessionId: cp.sessionId,

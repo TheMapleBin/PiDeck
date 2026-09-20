@@ -13,10 +13,7 @@
  * 本文件保持纯类型 + 纯函数（无任何运行时层依赖），主/渲染两侧与 node 单测共享。
  */
 
-import {
-	atomGitFeedUrl,
-	gitHubLatestDownloadBase,
-} from "../updateSources";
+import { atomGitFeedUrl, gitHubLatestDownloadBase } from "../updateSources";
 import type { UpdateSourceId } from "./settings";
 
 /** 清单 schema 版本：结构不兼容变更时 +1，旧 runtime 会被判定为不可用并提示重装。 */
@@ -46,10 +43,7 @@ export function dshRuntimeIndexFileName(platform: string, arch: string): string 
 }
 
 /** 当前 latest 应用 Release 上的 runtime 资产 URL（AtomGit / GitHub 路径不同）。 */
-export function dshRuntimeAssetDownloadUrl(
-	source: UpdateSourceId,
-	fileName: string,
-): string {
+export function dshRuntimeAssetDownloadUrl(source: UpdateSourceId, fileName: string): string {
 	const encoded = encodeURIComponent(fileName);
 	if (source === "github") {
 		return `${gitHubLatestDownloadBase()}/${encoded}`;
@@ -58,11 +52,7 @@ export function dshRuntimeAssetDownloadUrl(
 }
 
 /** 索引默认地址：按平台分索引文件名拼 latest 资产。 */
-export function defaultDshRuntimeIndexUrl(
-	source: UpdateSourceId = "atomgit",
-	platform: string = typeof process !== "undefined" ? process.platform : "win32",
-	arch: string = typeof process !== "undefined" ? process.arch : "x64",
-): string {
+export function defaultDshRuntimeIndexUrl(source: UpdateSourceId = "atomgit", platform: string = typeof process !== "undefined" ? process.platform : "win32", arch: string = typeof process !== "undefined" ? process.arch : "x64"): string {
 	return dshRuntimeAssetDownloadUrl(source, dshRuntimeIndexFileName(platform, arch));
 }
 
@@ -70,19 +60,10 @@ export function defaultDshRuntimeIndexUrl(
  * 解析 runtime 索引地址：环境变量 / 设置覆盖优先，否则跟 updateSource 拼 latest。
  * 空串视为未配置，走内置默认。
  */
-export function resolveDshRuntimeIndexUrl(input: {
-	indexUrl?: string;
-	updateSource?: UpdateSourceId;
-	platform?: string;
-	arch?: string;
-}): string {
+export function resolveDshRuntimeIndexUrl(input: { indexUrl?: string; updateSource?: UpdateSourceId; platform?: string; arch?: string }): string {
 	const override = input.indexUrl?.trim();
 	if (override) return override;
-	return defaultDshRuntimeIndexUrl(
-		input.updateSource ?? "atomgit",
-		input.platform,
-		input.arch,
-	);
+	return defaultDshRuntimeIndexUrl(input.updateSource ?? "atomgit", input.platform, input.arch);
 }
 
 /** runtime 清单。 */
@@ -142,13 +123,7 @@ export type DshRuntimeReleaseIndex = {
  * 默认跟随 latest；启动旧版/预发布 app 时可传 releaseTag，避免误从 latest
  * 下载不匹配当前 app 的 runtime。file:// / 本地路径不改写——离线/内网验证用。
  */
-export function resolveDshRuntimeReleaseUrl(
-	release: DshRuntimeRelease,
-	source: UpdateSourceId,
-	platform: string,
-	arch: string,
-	releaseTag?: string,
-): string {
+export function resolveDshRuntimeReleaseUrl(release: DshRuntimeRelease, source: UpdateSourceId, platform: string, arch: string, releaseTag?: string): string {
 	const url = release.url;
 	if (url.startsWith("file:") || /^[a-zA-Z]:[\\/]/.test(url) || url.startsWith("/")) {
 		return url;
@@ -170,19 +145,10 @@ export function resolveDshRuntimeReleaseUrl(
  * 为当前 app 版本挑出要安装的版本：兼容区间内 runtimeVersion 最大的一条。
  * 与 selectRuntime 的区别是入参形状不同（索引条目 vs 已安装清单）。
  */
-export function selectRelease(
-	releases: readonly DshRuntimeRelease[],
-	appVersion: string,
-): DshRuntimeRelease | undefined {
-	const compatible = releases.filter(
-		(release) =>
-			compareSemver(appVersion, release.minAppVersion) >= 0 &&
-			(!release.maxAppVersion || compareSemver(appVersion, release.maxAppVersion) < 0),
-	);
+export function selectRelease(releases: readonly DshRuntimeRelease[], appVersion: string): DshRuntimeRelease | undefined {
+	const compatible = releases.filter((release) => compareSemver(appVersion, release.minAppVersion) >= 0 && (!release.maxAppVersion || compareSemver(appVersion, release.maxAppVersion) < 0));
 	if (compatible.length === 0) return undefined;
-	return compatible.reduce((best, current) =>
-		compareSemver(current.runtimeVersion, best.runtimeVersion) > 0 ? current : best,
-	);
+	return compatible.reduce((best, current) => (compareSemver(current.runtimeVersion, best.runtimeVersion) > 0 ? current : best));
 }
 
 // ── 语义版本比较 ──
@@ -203,9 +169,7 @@ function parseVersion(version: string): ParsedVersion {
 	});
 	// 补齐到三段，保证 0.7 与 0.7.0 等价。
 	while (core.length < 3) core.push(0);
-	const pre = buildStripped
-		? buildStripped.split(".").map((part) => (/^\d+$/.test(part) ? Number.parseInt(part, 10) : part))
-		: [];
+	const pre = buildStripped ? buildStripped.split(".").map((part) => (/^\d+$/.test(part) ? Number.parseInt(part, 10) : part)) : [];
 	return { core, pre };
 }
 
@@ -254,10 +218,7 @@ export function isManifestSchemaSupported(manifest: DshRuntimeManifest): boolean
  * app 版本是否落在 runtime 声明的兼容区间内。
  * 区间语义：`minAppVersion <= appVersion < maxAppVersion`（max 为空 = 不设上限）。
  */
-export function isAppVersionCompatible(
-	appVersion: string,
-	manifest: DshRuntimeManifest,
-): boolean {
+export function isAppVersionCompatible(appVersion: string, manifest: DshRuntimeManifest): boolean {
 	if (!isManifestSchemaSupported(manifest)) return false;
 	if (compareSemver(appVersion, manifest.minAppVersion) < 0) return false;
 	if (manifest.maxAppVersion && compareSemver(appVersion, manifest.maxAppVersion) >= 0) return false;
@@ -270,31 +231,20 @@ export function isAppVersionCompatible(
  * 选出要启用的 runtime：在兼容当前 app 的版本里取 runtimeVersion 最大的那个。
  * 不兼容的版本一律跳过（即使更新），否则会静默用上一个桥协议的 runtime。
  */
-export function selectRuntime(
-	runtimes: readonly InstalledDshRuntime[],
-	appVersion: string,
-): InstalledDshRuntime | undefined {
+export function selectRuntime(runtimes: readonly InstalledDshRuntime[], appVersion: string): InstalledDshRuntime | undefined {
 	const compatible = runtimes.filter((entry) => isAppVersionCompatible(appVersion, entry.manifest));
 	if (compatible.length === 0) return undefined;
-	return compatible.reduce((best, current) =>
-		compareSemver(current.manifest.runtimeVersion, best.manifest.runtimeVersion) > 0 ? current : best,
-	);
+	return compatible.reduce((best, current) => (compareSemver(current.manifest.runtimeVersion, best.manifest.runtimeVersion) > 0 ? current : best));
 }
 
 /**
  * 回收判定：保留 keep（当前启用版本）与最新一个兼容版本，其余可删。
  * 保留「最新兼容版」而非「最新版本」：不兼容的更新版本留着也无法回退启用。
  */
-export function collectRecyclableRuntimes(
-	runtimes: readonly InstalledDshRuntime[],
-	appVersion: string,
-	keepDirName?: string,
-): string[] {
+export function collectRecyclableRuntimes(runtimes: readonly InstalledDshRuntime[], appVersion: string, keepDirName?: string): string[] {
 	const keep = new Set<string>();
 	if (keepDirName) keep.add(keepDirName);
-	const compatible = runtimes
-		.filter((entry) => isAppVersionCompatible(appVersion, entry.manifest))
-		.sort((a, b) => compareSemver(b.manifest.runtimeVersion, a.manifest.runtimeVersion));
+	const compatible = runtimes.filter((entry) => isAppVersionCompatible(appVersion, entry.manifest)).sort((a, b) => compareSemver(b.manifest.runtimeVersion, a.manifest.runtimeVersion));
 	if (compatible[0]) keep.add(compatible[0].dirName);
 	return runtimes.filter((entry) => !keep.has(entry.dirName)).map((entry) => entry.dirName);
 }

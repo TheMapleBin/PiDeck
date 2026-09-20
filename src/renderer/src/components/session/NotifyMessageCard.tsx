@@ -5,11 +5,7 @@ import { t, type TranslationKey } from "../../i18n";
 import { formatTime, stripAnsi } from "./TimelineFormat";
 import { TimelineMarker } from "./TimelineMarker";
 import { SingleLinePreview } from "./SingleLinePreview";
-import {
-	isNotifiableCustomType,
-	parseNotifySummary,
-	type NotifySummaryStatus,
-} from "./notifySummary";
+import { isNotifiableCustomType, parseNotifySummary, type NotifySummaryStatus } from "./notifySummary";
 
 /**
  * 状态 → 标题 i18n key。写成静态表而不是模板拼接：
@@ -34,9 +30,7 @@ const STATUS_TITLE_KEYS: Record<NotifySummaryStatus, TranslationKey> = {
  * （后台子代理完成会唤醒父会话），用户需要知道「为什么又冒出一段回答」。
  * 折叠是本地 state：卡片挂在 key=message.id 的时间线节点上，展开态在会话内保持。
  */
-export const NotifyMessageCard = memo(function NotifyMessageCard(props: {
-	message: ChatMessage;
-}) {
+export const NotifyMessageCard = memo(function NotifyMessageCard(props: { message: ChatMessage }) {
 	const [expanded, setExpanded] = useState(false);
 	const summary = parseNotifySummary(props.message.text ?? "");
 	const tone = notifyTone(summary.status);
@@ -46,13 +40,7 @@ export const NotifyMessageCard = memo(function NotifyMessageCard(props: {
 
 	return (
 		<TimelineMarker kind="diagnostic" tone={tone}>
-			<article
-				className="w-full min-w-0 overflow-hidden rounded-md border border-border-subtle bg-[var(--color-chat-muted-bg)]"
-				data-message-id={props.message.id}
-				data-role={props.message.role}
-				data-custom-type={customType || undefined}
-				data-notify-status={summary.status}
-			>
+			<article className="w-full min-w-0 overflow-hidden rounded-md border border-border-subtle bg-[var(--color-chat-muted-bg)]" data-message-id={props.message.id} data-role={props.message.role} data-custom-type={customType || undefined} data-notify-status={summary.status}>
 				{/* 整行可点：图标 + 标题 + 子代理名 + 折叠预览 + 时间 + chevron */}
 				<button
 					type="button"
@@ -63,32 +51,16 @@ export const NotifyMessageCard = memo(function NotifyMessageCard(props: {
 				>
 					<Bell size={14} className="shrink-0 text-text-faint" aria-hidden="true" />
 					<span className="shrink-0 font-semibold text-text-secondary">{title}</span>
-					{agentsText ? (
-						<span className="shrink-0 max-w-[16rem] truncate text-text-tertiary">{agentsText}</span>
-					) : null}
+					{agentsText ? <span className="shrink-0 max-w-[16rem] truncate text-text-tertiary">{agentsText}</span> : null}
 					{/* 折叠行只在没有解析出子代理名时预览原文，避免与标题/名称重复 */}
-					{!expanded && !agentsText && summary.headline ? (
-						<SingleLinePreview
-							text={summary.headline}
-							showSweep={false}
-							className="min-w-0 flex-[1_1_auto] text-text-faint"
-						/>
-					) : null}
-					<time className="ml-auto shrink-0 text-micro tabular-nums text-text-tertiary">
-						{formatTime(props.message.timestamp)}
-					</time>
-					{expanded ? (
-						<ChevronDown size={14} className="shrink-0 text-text-faint" aria-hidden="true" />
-					) : (
-						<ChevronRight size={14} className="shrink-0 text-text-faint" aria-hidden="true" />
-					)}
+					{!expanded && !agentsText && summary.headline ? <SingleLinePreview text={summary.headline} showSweep={false} className="min-w-0 flex-[1_1_auto] text-text-faint" /> : null}
+					<time className="ml-auto shrink-0 text-micro tabular-nums text-text-tertiary">{formatTime(props.message.timestamp)}</time>
+					{expanded ? <ChevronDown size={14} className="shrink-0 text-text-faint" aria-hidden="true" /> : <ChevronRight size={14} className="shrink-0 text-text-faint" aria-hidden="true" />}
 				</button>
 				{expanded ? (
 					<div className="border-t border-border-subtle px-2 py-1.5">
 						{/* 原文整体展示：解析只是「摘要」，不能被当成唯一事实来源 */}
-						<p className="m-0 whitespace-pre-wrap break-words text-caption leading-relaxed text-text-secondary">
-							{stripAnsi(props.message.text ?? "")}
-						</p>
+						<p className="m-0 whitespace-pre-wrap break-words text-caption leading-relaxed text-text-secondary">{stripAnsi(props.message.text ?? "")}</p>
 					</div>
 				) : null}
 			</article>

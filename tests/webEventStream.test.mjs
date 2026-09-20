@@ -16,12 +16,7 @@ import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 const webServiceSource = readFileSync("src/main/web/WebServiceManager.ts", "utf8");
 const indexSource = readFileSync("src/main/index.ts", "utf8");
 
-const {
-	PiEventToUiMessageStream,
-	WebEventStreamRouter,
-	SSE_DONE,
-	serializeSseFrame,
-} = loadTsCommonJs("src/main/web/WebEventStream.ts");
+const { PiEventToUiMessageStream, WebEventStreamRouter, SSE_DONE, serializeSseFrame } = loadTsCommonJs("src/main/web/WebEventStream.ts");
 
 test("text_delta produces start/delta/end triple with auto text-start", () => {
 	const adapter = new PiEventToUiMessageStream();
@@ -110,7 +105,10 @@ test("assistant done and agent_end do not close the stream before tools finish",
 		type: "message_update",
 		assistantMessageEvent: { type: "done" },
 	});
-	assert.equal(midDone.some((frame) => frame.type === "finish"), false);
+	assert.equal(
+		midDone.some((frame) => frame.type === "finish"),
+		false,
+	);
 	assert.equal(adapter.push({ type: "agent_end", stopReason: "toolUse" }).length, 0);
 
 	const tool = adapter.push({
@@ -205,7 +203,17 @@ test("WebEventStreamRouter closes the response after sending the done marker", (
 	const received = [];
 	let finished = 0;
 	const router = new WebEventStreamRouter(() => "session-1");
-	router.add("session-1", (wire) => { received.push(wire); return true; }, () => {}, () => { finished += 1; });
+	router.add(
+		"session-1",
+		(wire) => {
+			received.push(wire);
+			return true;
+		},
+		() => {},
+		() => {
+			finished += 1;
+		},
+	);
 	router.bindPiSource((handler) => {
 		handler("agent-a", { type: "agent_settled" });
 		return () => {};
@@ -220,7 +228,14 @@ test("WebEventStreamRouter routes agent events to per-session entries only", () 
 		if (agentId === "agent-a") return "session-1";
 		return undefined;
 	});
-	router.add("session-1", (wire) => { received.push(wire); return true; }, () => {});
+	router.add(
+		"session-1",
+		(wire) => {
+			received.push(wire);
+			return true;
+		},
+		() => {},
+	);
 	// 绑定 pi 源后事件按 agentId → sessionId 路由；finish 后自动附 [DONE]
 	router.bindPiSource((handler) => {
 		handler("agent-a", { type: "message_start", message: { role: "assistant" } });
@@ -241,10 +256,7 @@ test("WebServiceManager registers /stream SSE endpoint with protocol header", ()
 	assert.match(webServiceSource, /x-vercel-ai-ui-message-stream/);
 	assert.match(webServiceSource, /text\/event-stream/);
 	// [DONE] 终止标记在翻译器模块
-	assert.match(
-		readFileSync("src/main/web/WebEventStream.ts", "utf8"),
-		/data: \[DONE\]/,
-	);
+	assert.match(readFileSync("src/main/web/WebEventStream.ts", "utf8"), /data: \[DONE\]/);
 });
 
 test("index.ts wires pi event source + agent-to-session router to WebServiceManager", () => {
@@ -255,20 +267,17 @@ test("index.ts wires pi event source + agent-to-session router to WebServiceMana
 });
 
 test("web frontend preserves streaming block during polling refresh", () => {
-  // refresh() 在流式活跃时只渲染侧栏/状态，不整体重绘 #messages
-  assert.match(webServiceSource, /if \(streamingSessionId\)/);
-  assert.match(webServiceSource, /renderMessages\(\)/);
-  // render() 不再直接操作 #messages（拆到 renderMessages）
-  const renderBody = webServiceSource.slice(
-    webServiceSource.indexOf("function render() {"),
-    webServiceSource.indexOf("function renderMessages()"),
-  );
-  assert.doesNotMatch(renderBody, /el\("messages"\)/);
+	// refresh() 在流式活跃时只渲染侧栏/状态，不整体重绘 #messages
+	assert.match(webServiceSource, /if \(streamingSessionId\)/);
+	assert.match(webServiceSource, /renderMessages\(\)/);
+	// render() 不再直接操作 #messages（拆到 renderMessages）
+	const renderBody = webServiceSource.slice(webServiceSource.indexOf("function render() {"), webServiceSource.indexOf("function renderMessages()"));
+	assert.doesNotMatch(renderBody, /el\("messages"\)/);
 });
 
 test("web frontend reloads authoritative messages on stream finish", () => {
-  // [DONE] 后先停流、再 loadSessionMessages + 整体重绘（替换流式增量块）
-  assert.match(webServiceSource, /finishStream\(sessionId\)/);
-  assert.match(webServiceSource, /loadSessionMessages\(sessionId\)/);
-  assert.match(webServiceSource, /async function finishStream/);
+	// [DONE] 后先停流、再 loadSessionMessages + 整体重绘（替换流式增量块）
+	assert.match(webServiceSource, /finishStream\(sessionId\)/);
+	assert.match(webServiceSource, /loadSessionMessages\(sessionId\)/);
+	assert.match(webServiceSource, /async function finishStream/);
 });

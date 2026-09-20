@@ -27,10 +27,7 @@ test("mergeRunFileChanges: existing path keeps full count but adopts run diff", 
 test("mergeRunFileChanges: mixed new and existing paths", () => {
 	const full = [file("a.ts", 1, "", "A"), file("b.ts", 2, "bo", "bn")];
 	const merged = mergeRunFileChanges(full, [file("b.ts", 1, "bo2", "bn2"), file("c.ts", 1, "", "C")]);
-	assert.deepEqual(
-		merged.map((f) => f.path).sort(),
-		["a.ts", "b.ts", "c.ts"],
-	);
+	assert.deepEqual(merged.map((f) => f.path).sort(), ["a.ts", "b.ts", "c.ts"]);
 	const b = merged.find((f) => f.path === "b.ts");
 	assert.deepEqual(b, file("b.ts", 2, "bo2", "bn2"));
 	const c = merged.find((f) => f.path === "c.ts");

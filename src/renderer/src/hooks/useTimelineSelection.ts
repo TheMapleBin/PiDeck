@@ -1,9 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
-import {
-	MAX_QUOTE_CHARS,
-	QUOTE_EXCLUDED_SELECTOR,
-	isQuotableRange,
-} from "../components/session/timeline/selectionToolbarPolicy";
+import { MAX_QUOTE_CHARS, QUOTE_EXCLUDED_SELECTOR, isQuotableRange } from "../components/session/timeline/selectionToolbarPolicy";
 
 export type TimelineSelectionQuote = {
 	text: string;
@@ -14,18 +10,14 @@ export type TimelineSelectionQuote = {
 /** 从 DOM 节点向上找所属消息 id；不在容器内返回 null。 */
 function resolveMessageId(node: Node | null, container: HTMLElement): string | null {
 	if (!node) return null;
-	const element = node.nodeType === Node.ELEMENT_NODE
-		? (node as Element)
-		: node.parentElement;
+	const element = node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement;
 	if (!element || !container.contains(element)) return null;
 	return element.closest("[data-message-id]")?.getAttribute("data-message-id") ?? null;
 }
 
 function isExcluded(node: Node | null): boolean {
 	if (!node) return false;
-	const element = node.nodeType === Node.ELEMENT_NODE
-		? (node as Element)
-		: node.parentElement;
+	const element = node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement;
 	if (!element) return false;
 	return Boolean(element.closest(QUOTE_EXCLUDED_SELECTOR));
 }
@@ -38,9 +30,7 @@ function isExcluded(node: Node | null): boolean {
  * - selectionchange 只负责"收起"（拖选中不闪浮层）；pointerup/keyup 后延迟 ~60ms 评估展示；
  * - 容器滚动即隐藏（fixed 定位会随滚动失效）；Escape 收起。
  */
-export function useTimelineSelection(
-	containerRef: RefObject<HTMLElement | null>,
-): { quote: TimelineSelectionQuote | null; clear: () => void } {
+export function useTimelineSelection(containerRef: RefObject<HTMLElement | null>): { quote: TimelineSelectionQuote | null; clear: () => void } {
 	const [quote, setQuote] = useState<TimelineSelectionQuote | null>(null);
 	const evaluateTimerRef = useRef(0);
 

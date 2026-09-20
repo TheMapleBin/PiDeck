@@ -51,20 +51,11 @@ test("prompt IPC rejects malformed global and project payloads before manager ca
 	);
 
 	await assert.rejects(handlers.get(ipcChannels.promptsCreate)({}, 42), /Invalid prompt input/);
-	await assert.rejects(
-		handlers.get(ipcChannels.promptsCreate)({}, { name: "valid", description: 42 }),
-		/Invalid prompt description/,
-	);
+	await assert.rejects(handlers.get(ipcChannels.promptsCreate)({}, { name: "valid", description: 42 }), /Invalid prompt description/);
 	await assert.rejects(handlers.get(ipcChannels.promptsDelete)({}, 42), /Invalid prompt path/);
-	await assert.rejects(
-		handlers.get(ipcChannels.promptsEdit)({}, "C:/prompt.md", { invalid: true }),
-		/Invalid prompt content/,
-	);
+	await assert.rejects(handlers.get(ipcChannels.promptsEdit)({}, "C:/prompt.md", { invalid: true }), /Invalid prompt content/);
 	await assert.rejects(handlers.get(ipcChannels.promptsRename)({}, "old", 42), /Invalid new prompt name/);
-	await assert.rejects(
-		handlers.get(ipcChannels.promptsToggle)({}, "C:/prompt.md", "yes"),
-		/Invalid prompt toggle input/,
-	);
+	await assert.rejects(handlers.get(ipcChannels.promptsToggle)({}, "C:/prompt.md", "yes"), /Invalid prompt toggle input/);
 	assert.equal(managerCalls, 0);
 });
 
@@ -85,12 +76,15 @@ test("project store imports require trust before writing project-local resources
 	);
 
 	await assert.rejects(
-		handlers.get(ipcChannels.promptStoreImport)({}, {
-			title: "Demo",
-			description: "A demo prompt",
-			content: "body",
-			projectId: "p1",
-		}),
+		handlers.get(ipcChannels.promptStoreImport)(
+			{},
+			{
+				title: "Demo",
+				description: "A demo prompt",
+				content: "body",
+				projectId: "p1",
+			},
+		),
 		/mainProjectResource\.projectNotTrusted/,
 	);
 	assert.equal(promptCalls, 0);
@@ -124,24 +118,32 @@ test("trusted project store imports route prompts, skills, and extensions to the
 		},
 	);
 
-	await handlers.get(ipcChannels.promptStoreImport)({}, {
-		title: "Demo",
-		description: "A demo prompt",
-		content: "body",
-		projectId: "p1",
-	});
-	await handlers.get(ipcChannels.skillStoreImport)({}, {
-		id: "skill-1",
-		title: "Demo Skill",
-		description: "A demo skill",
-		content: "body",
-		type: "skill",
-		author: "",
-		category: "",
-		tags: [],
-		votes: 0,
-		createdAt: "",
-	}, "pi-global", "p1");
+	await handlers.get(ipcChannels.promptStoreImport)(
+		{},
+		{
+			title: "Demo",
+			description: "A demo prompt",
+			content: "body",
+			projectId: "p1",
+		},
+	);
+	await handlers.get(ipcChannels.skillStoreImport)(
+		{},
+		{
+			id: "skill-1",
+			title: "Demo Skill",
+			description: "A demo skill",
+			content: "body",
+			type: "skill",
+			author: "",
+			category: "",
+			tags: [],
+			votes: 0,
+			createdAt: "",
+		},
+		"pi-global",
+		"p1",
+	);
 	await handlers.get(ipcChannels.extensionsInstall)({}, "npm:demo", "p1");
 
 	assert.equal(calls.filter(([kind]) => kind === "prompt-create").length, 1);

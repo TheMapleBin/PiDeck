@@ -14,9 +14,7 @@
 
 import type { VisionBridgeEvent } from "../../../shared/types/vision";
 
-export type VisionBridgeBlock =
-	| { kind: "success"; index: number; description: string }
-	| { kind: "failed"; index: number; reason: string };
+export type VisionBridgeBlock = { kind: "success"; index: number; description: string } | { kind: "failed"; index: number; reason: string };
 
 /** 成功标记：兼容「（视觉桥已查看）」与「（视觉桥已查看，以下为图片实际内容）」两种后缀。 */
 const SUCCESS_MARK_RE = /\[图片 #(\d+)（视觉桥已查看[^）]*）\]/g;
@@ -81,20 +79,12 @@ export function extractVisionBridgeBlocks(text: string): {
  * 背景：pi 只把转换结果写进会话文件、不推送给实时消息流，渲染层的实时用户消息
  * 只有原文 + 图片附件；靠图片哈希把事件匹配回来，才能在实时气泡上渲染视觉桥卡片。
  */
-export function matchVisionBridgeEvent(
-	events: VisionBridgeEvent[] | undefined,
-	imageHashes: string[],
-	sentAt: number,
-): VisionBridgeEvent | null {
+export function matchVisionBridgeEvent(events: VisionBridgeEvent[] | undefined, imageHashes: string[], sentAt: number): VisionBridgeEvent | null {
 	if (!events || events.length === 0 || imageHashes.length === 0) return null;
 	const hashSet = new Set(imageHashes);
-	const candidates = events.filter(
-		(event) => event.kind === "input" && event.ts >= sentAt,
-	);
+	const candidates = events.filter((event) => event.kind === "input" && event.ts >= sentAt);
 	for (let i = candidates.length - 1; i >= 0; i--) {
-		const itemHashes = candidates[i].items
-			.map((item) => item.imageHash)
-			.filter((hash): hash is string => typeof hash === "string" && hash.length > 0);
+		const itemHashes = candidates[i].items.map((item) => item.imageHash).filter((hash): hash is string => typeof hash === "string" && hash.length > 0);
 		if (itemHashes.length === 0) continue;
 		// 批次必须完全由本消息的图片构成（至少一张），避免把别的会话/别的消息的批次误配
 		if (itemHashes.every((hash) => hashSet.has(hash))) return candidates[i];

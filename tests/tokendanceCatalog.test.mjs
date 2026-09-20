@@ -11,12 +11,7 @@ import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
 // 用真实依赖图加载：本模块需要 shared/tokendance 常量与 shared/modelOrder 排序器，
 // 旧的“非 node: 一律返回 {}”内联 loader 会把这些依赖静默掏空（常量变 undefined 也不报错）。
-const {
-	parseTokenDanceCatalog,
-	TokendanceCatalogStore,
-	TOKENDANCE_CATALOG_TTL_MS,
-	TOKENDANCE_PROVIDER,
-} = loadTsCommonJs("src/main/config/tokendanceCatalog.ts");
+const { parseTokenDanceCatalog, TokendanceCatalogStore, TOKENDANCE_CATALOG_TTL_MS, TOKENDANCE_PROVIDER } = loadTsCommonJs("src/main/config/tokendanceCatalog.ts");
 
 const SAMPLE_PAYLOAD = {
 	data: [
@@ -93,7 +88,6 @@ test("parseTokenDanceCatalog context_length 为 0/负数/非整数时省略 cont
 	assert.equal(byId(models, "fractional").contextWindow, undefined);
 	assert.equal(byId(models, "ok-model").contextWindow, 200000);
 });
-
 
 test("缓存新鲜时直接读缓存（TTL 内不再发请求）", async () => {
 	const dir = await mkdtemp(join(tmpdir(), "tokendance-test-"));

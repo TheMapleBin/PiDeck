@@ -5,28 +5,16 @@ export type VoiceTranscriptionTarget = {
 	to: number;
 };
 
-export type VoiceTranscriptionInsertionResult =
-	| { ok: true; value: string; caret: number }
-	| { ok: false; reason: "stale" };
+export type VoiceTranscriptionInsertionResult = { ok: true; value: string; caret: number } | { ok: false; reason: "stale" };
 
 /**
  * Maps the captured selection through a later edit only when that edit is
  * wholly before or after the target. Ambiguous overlap is rejected so an
  * asynchronous transcription can never overwrite newer user input.
  */
-export function resolveVoiceTranscriptionInsertion(input: {
-	target: VoiceTranscriptionTarget;
-	currentSessionId: string;
-	currentDraft: string;
-	text: string;
-}): VoiceTranscriptionInsertionResult {
+export function resolveVoiceTranscriptionInsertion(input: { target: VoiceTranscriptionTarget; currentSessionId: string; currentDraft: string; text: string }): VoiceTranscriptionInsertionResult {
 	const { target, currentSessionId, currentDraft, text } = input;
-	if (
-		target.sessionId !== currentSessionId ||
-		target.from < 0 ||
-		target.to < target.from ||
-		target.to > target.draft.length
-	) {
+	if (target.sessionId !== currentSessionId || target.from < 0 || target.to < target.from || target.to > target.draft.length) {
 		return { ok: false, reason: "stale" };
 	}
 
@@ -62,10 +50,7 @@ function commonPrefixLength(left: string, right: string): number {
 function commonSuffixLength(left: string, right: string, prefix: number): number {
 	const limit = Math.min(left.length, right.length) - prefix;
 	let length = 0;
-	while (
-		length < limit &&
-		left[left.length - 1 - length] === right[right.length - 1 - length]
-	) {
+	while (length < limit && left[left.length - 1 - length] === right[right.length - 1 - length]) {
 		length += 1;
 	}
 	return length;

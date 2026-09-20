@@ -11,11 +11,7 @@ export const MODE_ORDER: ComposerAgentMode[] = ["normal", "goal", "plan"];
  *   而 legacy 含生图消息的 pi 会话（imageGenLocked）同样锁定为生图，不展示 LLM 模式；
  * - plan/goal 由对应内置扩展开关决定；
  */
-export function computeVisibleModes(options: {
-	isImageGen: boolean;
-	planModeAvailable: boolean;
-	goalModeAvailable: boolean;
-}): ComposerAgentMode[] {
+export function computeVisibleModes(options: { isImageGen: boolean; planModeAvailable: boolean; goalModeAvailable: boolean }): ComposerAgentMode[] {
 	if (options.isImageGen) return [];
 	return MODE_ORDER.filter((mode) => {
 		if (mode === "plan") return options.planModeAvailable;
@@ -32,13 +28,7 @@ export function computeVisibleModes(options: {
  * - imageGenLocked（legacy pi 会话已有生图消息）或 backend=imagegen：锁定为生图，
  *   「+」菜单不提供 LLM 模式；imagegen 会话走专用生图底栏。
  */
-export function useComposerModeAvailability(props: {
-	backend?: AgentBackend;
-	imageGenLocked?: boolean;
-	value: ComposerAgentMode;
-	disabled?: boolean;
-	onChange: (mode: ComposerAgentMode) => void;
-}) {
+export function useComposerModeAvailability(props: { backend?: AgentBackend; imageGenLocked?: boolean; value: ComposerAgentMode; disabled?: boolean; onChange: (mode: ComposerAgentMode) => void }) {
 	const isDsh = props.backend === "dsh";
 	const isImageGen = props.backend === "imagegen" || props.imageGenLocked === true;
 	const [planModeAvailable, setPlanModeAvailable] = useState(true);

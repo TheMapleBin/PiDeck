@@ -5,15 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
-const {
-	readUserPatchRows,
-	isUserPluginEntry,
-	classifyStaticPlugins,
-	removeUserPatchRow,
-	normalizeModuleName,
-	resolveManagedPluginDir,
-	USER_PATCH_FILENAME,
-} = loadTsCommonJs("src/main/dsh/dshUserPlugins.ts");
+const { readUserPatchRows, isUserPluginEntry, classifyStaticPlugins, removeUserPatchRow, normalizeModuleName, resolveManagedPluginDir, USER_PATCH_FILENAME } = loadTsCommonJs("src/main/dsh/dshUserPlugins.ts");
 
 const SAMPLE_PATCH = [
 	"# PiDeck / DSH 用户补丁层",
@@ -77,24 +69,11 @@ test("isUserPluginEntry：id 命中（含 include: 前缀）与 name 归一化�
 		{ id: "model-proxy/host", name: "file:///C:/x/pi-desktop/dsh-plugins/dsh-plugin-model-proxy/lib/host/index.js" },
 		{ id: "second-plugin/host", name: "dsh-plugin-second" },
 	];
-	assert.equal(
-		isUserPluginEntry({ entryId: "include:model-proxy/host", moduleName: "file:///C:/x/pi-desktop/dsh-plugins/dsh-plugin-model-proxy/lib/host/index.js" }, rows),
-		true,
-		"entryId 剥 include: 前缀后按 id 命中",
-	);
-	assert.equal(
-		isUserPluginEntry({ entryId: "include:second-plugin/host", moduleName: "dsh-plugin-second" }, rows),
-		true,
-		"name 精确命中",
-	);
+	assert.equal(isUserPluginEntry({ entryId: "include:model-proxy/host", moduleName: "file:///C:/x/pi-desktop/dsh-plugins/dsh-plugin-model-proxy/lib/host/index.js" }, rows), true, "entryId 剥 include: 前缀后按 id 命中");
+	assert.equal(isUserPluginEntry({ entryId: "include:second-plugin/host", moduleName: "dsh-plugin-second" }, rows), true, "name 精确命中");
 	assert.equal(isUserPluginEntry({ entryId: "include:tool-bash", moduleName: "@deepseek-ai/dsh-tool-bash" }, rows), false);
 	// Windows 反斜杠路径归一化后命中
-	assert.equal(
-		isUserPluginEntry({ entryId: "other", moduleName: "C:\\x\\pi-desktop\\dsh-plugins\\dsh-plugin-model-proxy\\lib\\host\\index.js" }, [
-			{ name: "C:/x/pi-desktop/dsh-plugins/dsh-plugin-model-proxy/lib/host/index.js" },
-		]),
-		true,
-	);
+	assert.equal(isUserPluginEntry({ entryId: "other", moduleName: "C:\\x\\pi-desktop\\dsh-plugins\\dsh-plugin-model-proxy\\lib\\host\\index.js" }, [{ name: "C:/x/pi-desktop/dsh-plugins/dsh-plugin-model-proxy/lib/host/index.js" }]), true);
 });
 
 test("classifyStaticPlugins：命中用户行为 user，其余 builtin", () => {
@@ -122,13 +101,7 @@ test("removeUserPatchRow：只移除目标行组，其余内容（含注释）�
 });
 
 test("removeUserPatchRow：块内最后一行移除后，空的 - insert: 头一并删除", () => {
-	const single = [
-		"- insert:",
-		"    - id: only-one/host",
-		"      name: dsh-plugin-only",
-		"      config: {}",
-		"",
-	].join("\n");
+	const single = ["- insert:", "    - id: only-one/host", "      name: dsh-plugin-only", "      config: {}", ""].join("\n");
 	const result = removeUserPatchRow(single, { id: "only-one/host" });
 	assert.equal(result.removed, true);
 	assert.ok(!result.text.includes("- insert:"), "空块头删除");
@@ -168,11 +141,7 @@ test("resolveManagedPluginDir：仅 PiDeck 管理目录内的路径返回插件�
 		assert.ok(dirFromUrl !== undefined && dirFromUrl.endsWith("dsh-plugin-model-proxy"), "file URL 前缀也支持");
 
 		assert.equal(resolveManagedPluginDir("dsh-plugin-model-proxy", managedRoot), undefined, "裸包名不是路径");
-		assert.equal(
-			resolveManagedPluginDir(join(root, "elsewhere", "pkg", "index.js"), managedRoot),
-			undefined,
-			"管理目录之外不删",
-		);
+		assert.equal(resolveManagedPluginDir(join(root, "elsewhere", "pkg", "index.js"), managedRoot), undefined, "管理目录之外不删");
 	} finally {
 		rmSync(root, { recursive: true, force: true });
 	}

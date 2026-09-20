@@ -27,12 +27,7 @@ function mtimeIso(filePath: string): string | undefined {
  *   installedAt = 可执行文件 mtime（Windows 安装版升级时覆盖写入，macOS 同理按 .app 替换）。
  * - 开发态：只有 buildTime = 项目 package.json mtime（避免 execPath 是 Electron 壳，误报安装时间）。
  */
-export function resolveAppTimes(input: {
-	isPackaged: boolean;
-	resourcesPath: string;
-	appPath: string;
-	execPath: string;
-}): AppTimes {
+export function resolveAppTimes(input: { isPackaged: boolean; resourcesPath: string; appPath: string; execPath: string }): AppTimes {
 	if (input.isPackaged) {
 		return {
 			buildTime: mtimeIso(join(input.resourcesPath, "app.asar")),

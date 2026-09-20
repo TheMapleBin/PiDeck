@@ -55,40 +55,19 @@ test("tailwind 主题把 accent 映射为悬停面色（text-accent 不是正文
 });
 
 test("商店搜索栏热门词 chip 悬停态使用面上的前景色 token", () => {
-	const chipClasses = classNameLiterals(storeSearchBar).filter(
-		(value) => value.includes("rounded-full") && value.includes("bg-bg-muted"),
-	);
+	const chipClasses = classNameLiterals(storeSearchBar).filter((value) => value.includes("rounded-full") && value.includes("bg-bg-muted"));
 	assert.equal(chipClasses.length, 1, "StoreSearchBar 应保留热门词 chip 的胶囊类名");
 	const classes = ` ${chipClasses[0]} `;
 	// 悬停高亮：ghost Button 语义（bg-accent 面 + text-accent-foreground 前景）
 	assert.ok(classes.includes(" hover:bg-accent "), `chip 悬停缺少 hover:bg-accent：${classes}`);
-	assert.ok(
-		classes.includes(" hover:text-accent-foreground "),
-		`chip 悬停缺少 hover:text-accent-foreground：${classes}`,
-	);
+	assert.ok(classes.includes(" hover:text-accent-foreground "), `chip 悬停缺少 hover:text-accent-foreground：${classes}`);
 	assert.ok(!classes.includes(" hover:text-accent "), "chip 悬停不得把 accent 面色当正文色");
 });
 
 test("渲染层不把面色 token 当正文色（text-<面色> 必与底同值）", () => {
 	// 面色语义的 token：`text-*` 用它们会与自身/悬停底色撞色（可读性归零）。
 	// 合法写法是配套的 `-foreground`（text-accent-foreground / text-muted-foreground…）。
-	const surfaceTokens = [
-		"accent",
-		"muted",
-		"bg-muted",
-		"bg-hover",
-		"bg-active",
-		"bg-panel",
-		"bg-app",
-		"bg-sidebar",
-		"bg-input",
-		"bg-popover",
-		"bg-subtle",
-		"card",
-		"popover",
-		"secondary",
-		"border",
-	];
+	const surfaceTokens = ["accent", "muted", "bg-muted", "bg-hover", "bg-active", "bg-panel", "bg-app", "bg-sidebar", "bg-input", "bg-popover", "bg-subtle", "card", "popover", "secondary", "border"];
 	// 变体前缀（hover: / dark: / group-data-…: / [&_svg:…]: 等）
 	const variant = "(?:[\\w[\\].-]+:)";
 	const textToken = new RegExp(`(?:^|\\s)${variant}*text-([\\w.-]+?)(?=[\\s"]|$)`, "g");
@@ -98,10 +77,7 @@ test("渲染层不把面色 token 当正文色（text-<面色> 必与底同值�
 			for (const match of classes.matchAll(textToken)) {
 				const token = match[1];
 				if (token.endsWith("-foreground")) continue;
-				assert.ok(
-					!surfaceTokens.includes(token),
-					`${name}: text-${token} 是面色 token，当正文色会与底色同值、文字不可见`,
-				);
+				assert.ok(!surfaceTokens.includes(token), `${name}: text-${token} 是面色 token，当正文色会与底色同值、文字不可见`);
 			}
 		}
 	}

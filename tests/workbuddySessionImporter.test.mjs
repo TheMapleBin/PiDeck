@@ -162,11 +162,7 @@ test("scan: 忽略 file-rollback 快照流，POSIX 路径同样能定位目录",
 	const home = mkdtempSync(join(tmpdir(), "wb-home-"));
 	try {
 		const sessionFile = writeSession(home, "work-demo", SID, baseEntries({ userText: "hi" }));
-		writeFileSync(
-			join(home, ".workbuddy", "projects", "work-demo", `${SID}.file-rollback.ndjson`),
-			JSON.stringify({ type: "rollback" }) + "\n",
-			"utf8",
-		);
+		writeFileSync(join(home, ".workbuddy", "projects", "work-demo", `${SID}.file-rollback.ndjson`), JSON.stringify({ type: "rollback" }) + "\n", "utf8");
 
 		const { importer } = loadImporter(home);
 		const sessions = await importer.scan("/work/demo");
@@ -181,26 +177,15 @@ test("scan: 忽略 file-rollback 快照流，POSIX 路径同样能定位目录",
 test("import: 剥离 system-reminder，只保留用户真实输入", async () => {
 	const home = mkdtempSync(join(tmpdir(), "wb-home-"));
 	try {
-		const injected = [
-			"<system-reminder data-role=\"user-context\">",
-			"<user_info>OS Version: win32</user_info>",
-			"## AGENTS.md",
-			"项目规则正文",
-			"</system-reminder>",
-			"真正的提问在这里",
-		].join("\n");
+		const injected = ['<system-reminder data-role="user-context">', "<user_info>OS Version: win32</user_info>", "## AGENTS.md", "项目规则正文", "</system-reminder>", "真正的提问在这里"].join("\n");
 		writeSession(home, "d-work-demo", SID, baseEntries({ userText: injected }));
 
 		const { importer } = loadImporter(home);
-		const report = await importer.import("D:\\work\\demo", [
-			join(home, ".workbuddy", "projects", "d-work-demo", `${SID}.jsonl`),
-		]);
+		const report = await importer.import("D:\\work\\demo", [join(home, ".workbuddy", "projects", "d-work-demo", `${SID}.jsonl`)]);
 
 		assert.equal(report.imported, 1);
 		const lines = readLines(report.results[0].targetPath);
-		const firstUser = lines.find(
-			(line) => line.type === "message" && line.message?.role === "user",
-		);
+		const firstUser = lines.find((line) => line.type === "message" && line.message?.role === "user");
 		assert.ok(firstUser, "应存在 user 消息");
 		assert.equal(firstUser.message.content[0].text, "真正的提问在这里");
 		assert.ok(!firstUser.message.content[0].text.includes("AGENTS.md"));
@@ -215,17 +200,13 @@ test("import: reasoning 与 function_call 聚合进同一条 assistant 消息", 
 		writeSession(home, "d-work-demo", SID, baseEntries({ userText: "排查构建失败" }));
 
 		const { importer } = loadImporter(home);
-		const report = await importer.import("D:\\work\\demo", [
-			join(home, ".workbuddy", "projects", "d-work-demo", `${SID}.jsonl`),
-		]);
+		const report = await importer.import("D:\\work\\demo", [join(home, ".workbuddy", "projects", "d-work-demo", `${SID}.jsonl`)]);
 
 		const lines = readLines(report.results[0].targetPath);
 		// user + 聚合(thinking/toolCall) + toolResult + 结论文本
 		assert.equal(report.results[0].messageCount, 4);
 
-		const assistant = lines.filter(
-			(line) => line.type === "message" && line.message?.role === "assistant",
-		);
+		const assistant = lines.filter((line) => line.type === "message" && line.message?.role === "assistant");
 		// 第一条：thinking + toolCall 合并；第二条：结论文本。
 		assert.equal(assistant.length, 2);
 		assert.deepEqual(
@@ -241,9 +222,7 @@ test("import: reasoning 与 function_call 聚合进同一条 assistant 消息", 
 		assert.equal(assistant[1].message.stopReason, "stop");
 		assert.equal(assistant[1].message.content[0].text, "构建已通过");
 
-		const toolResult = lines.find(
-			(line) => line.type === "message" && line.message?.role === "toolResult",
-		);
+		const toolResult = lines.find((line) => line.type === "message" && line.message?.role === "toolResult");
 		assert.equal(toolResult.message.toolCallId, "call-1");
 		assert.equal(toolResult.message.toolName, "Bash");
 		assert.equal(toolResult.message.content[0].text, "build ok");
@@ -258,9 +237,7 @@ test("import: 写出 session 头与末尾 session_info，且 file-history-snapsh
 		writeSession(home, "d-work-demo", SID, baseEntries({ userText: "排查构建失败" }));
 
 		const { importer } = loadImporter(home);
-		const report = await importer.import("D:\\work\\demo", [
-			join(home, ".workbuddy", "projects", "d-work-demo", `${SID}.jsonl`),
-		]);
+		const report = await importer.import("D:\\work\\demo", [join(home, ".workbuddy", "projects", "d-work-demo", `${SID}.jsonl`)]);
 		const lines = readLines(report.results[0].targetPath);
 
 		assert.equal(lines[0].type, "session");
@@ -269,10 +246,7 @@ test("import: 写出 session 头与末尾 session_info，且 file-history-snapsh
 		assert.equal(lines[1].type, "workbuddy_import");
 		assert.equal(lines.at(-1).type, "session_info");
 		assert.equal(lines.at(-1).name, "排查构建失败");
-		assert.ok(
-			!lines.some((line) => line.type === "file-history-snapshot"),
-			"快照记录不应写入 pi 会话文件",
-		);
+		assert.ok(!lines.some((line) => line.type === "file-history-snapshot"), "快照记录不应写入 pi 会话文件");
 	} finally {
 		rmSync(home, { recursive: true, force: true });
 	}
@@ -351,10 +325,7 @@ test("纯函数: stripInjectedContext 移除自闭合与成对 system-reminder",
 		const { registry } = loadImporter(home);
 		const { stripInjectedContext } = registry.source;
 		assert.equal(stripInjectedContext("<system-reminder />保留"), "保留");
-		assert.equal(
-			stripInjectedContext("前缀<system-reminder>注入</system-reminder>后缀"),
-			"前缀后缀",
-		);
+		assert.equal(stripInjectedContext("前缀<system-reminder>注入</system-reminder>后缀"), "前缀后缀");
 		assert.equal(stripInjectedContext("   "), "");
 	} finally {
 		rmSync(home, { recursive: true, force: true });
@@ -367,12 +338,7 @@ test("纯函数: stripInjectedContext 去掉 user_query 包装但保留提问内
 		const { registry } = loadImporter(home);
 		const { stripInjectedContext } = registry.source;
 		assert.equal(stripInjectedContext("<user_query>真实提问</user_query>"), "真实提问");
-		assert.equal(
-			stripInjectedContext(
-				"<system-reminder>上下文</system-reminder><user_query>真实提问</user_query>",
-			),
-			"真实提问",
-		);
+		assert.equal(stripInjectedContext("<system-reminder>上下文</system-reminder><user_query>真实提问</user_query>"), "真实提问");
 	} finally {
 		rmSync(home, { recursive: true, force: true });
 	}

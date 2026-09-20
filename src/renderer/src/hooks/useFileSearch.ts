@@ -66,9 +66,12 @@ export function useFileSearch(options: { projectId?: string }) {
 	}, [query, projectId, searchNow]);
 
 	// 卸载时作废在途请求，防止 setState 到已卸载组件
-	useEffect(() => () => {
-		requestSeqRef.current += 1;
-	}, []);
+	useEffect(
+		() => () => {
+			requestSeqRef.current += 1;
+		},
+		[],
+	);
 
 	/**
 	 * 展示列表：查询是快照查询的前缀时走前端过滤（零延迟），

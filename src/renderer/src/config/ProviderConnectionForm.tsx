@@ -6,11 +6,7 @@ import { Input } from "../components/ui-shadcn/input";
 import { Label } from "../components/ui-shadcn/label";
 import { t } from "../i18n";
 import { ApiTypeInput, ConfigComboboxInput, ConfigSelect, SecretInput } from "./ConfigShared";
-import {
-	getUserAgentOptions,
-	isUserAgentOverriddenByApiType,
-	isValidUserAgent,
-} from "./userAgentPresets";
+import { getUserAgentOptions, isUserAgentOverriddenByApiType, isValidUserAgent } from "./userAgentPresets";
 import type { ConfigProxyMode } from "../../../shared/types/fetchedModel";
 
 export type ProviderTestResult = {
@@ -48,12 +44,10 @@ export function ProviderConnectionForm(props: {
 		supportsReasoningEffort: boolean;
 		/** 未赋值 = 未表态（保存时按 DeepSeek 特征自动判定）；true/false = 用户显式表态。 */
 		requiresReasoningContentOnAssistantMessages?: boolean;
+		/** 未赋值 = 跟随 pi 协议默认（不写该键）；true/false = 用户显式表态。 */
+		supportsStrictMode?: boolean;
 	};
-	onChangeCompat: (next: {
-		supportsDeveloperRole: boolean;
-		supportsReasoningEffort: boolean;
-		requiresReasoningContentOnAssistantMessages?: boolean;
-	}) => void;
+	onChangeCompat: (next: { supportsDeveloperRole: boolean; supportsReasoningEffort: boolean; requiresReasoningContentOnAssistantMessages?: boolean; supportsStrictMode?: boolean }) => void;
 
 	/** ── 快速测试连接 ── */
 	testModelId: string;
@@ -109,12 +103,7 @@ export function ProviderConnectionForm(props: {
 			<div className="grid grid-cols-[90px_1fr] items-center gap-2.5">
 				<Label className="pl-0.5 text-left text-xs font-medium text-text-secondary">{t("config.field.userAgent")}</Label>
 				<div className="config-header-field">
-					<ConfigComboboxInput
-						value={props.userAgent}
-						options={userAgentOptions}
-						onChange={props.onChangeUserAgent}
-						placeholder={t("config.userAgentRuntimeDefault")}
-					/>
+					<ConfigComboboxInput value={props.userAgent} options={userAgentOptions} onChange={props.onChangeUserAgent} placeholder={t("config.userAgentRuntimeDefault")} />
 					{/* pi 会用自身 UA 覆盖本项时优先展示这条：此时「配了 UA 却不生效」的困惑
 					    比留空提示更关键，两条同时出现会让真正的原因被埋掉。 */}
 					{userAgentOverridden ? (
@@ -122,9 +111,7 @@ export function ProviderConnectionForm(props: {
 					) : (
 						<>
 							<span>{t("config.headerEmptyHint")}</span>
-							{userAgentInvalid && (
-								<span className="text-danger">{t("config.userAgentInvalid")}</span>
-							)}
+							{userAgentInvalid && <span className="text-danger">{t("config.userAgentInvalid")}</span>}
 						</>
 					)}
 				</div>
@@ -165,19 +152,10 @@ export function ProviderConnectionForm(props: {
 			{/* 测试结果 */}
 			{props.testResult && (
 				<>
-					<div
-						className={`config-test-result ${props.testResult.success ? "success" : "fail"}`}
-					>
+					<div className={`config-test-result ${props.testResult.success ? "success" : "fail"}`}>
 						<div className="config-test-result-header">
-							<span>
-								{props.testResult.success
-									? `✅ ${t("config.connectionOk")}`
-									: `❌ ${t("config.connectionFailed")}`}
-							</span>
-							<Button variant="ghost" size="icon-sm" className="size-7"
-								onClick={props.onClearTestResult}
-								title={t("config.clearResult")}
-							>
+							<span>{props.testResult.success ? `✅ ${t("config.connectionOk")}` : `❌ ${t("config.connectionFailed")}`}</span>
+							<Button variant="ghost" size="icon-sm" className="size-7" onClick={props.onClearTestResult} title={t("config.clearResult")}>
 								<X size={14} />
 							</Button>
 						</div>
@@ -191,9 +169,7 @@ export function ProviderConnectionForm(props: {
 									<span className="basis-12 shrink-0 text-xs text-text-secondary">{t("config.response")}</span>
 									<span className="break-all text-text-primary">{props.testResult.snippet}</span>
 								</div>
-								{props.testResult.tokens &&
-									(props.testResult.tokens.input != null ||
-										props.testResult.tokens.output != null) && (
+								{props.testResult.tokens && (props.testResult.tokens.input != null || props.testResult.tokens.output != null) && (
 									<div className="flex items-baseline gap-4 text-control">
 										<span className="basis-12 shrink-0 text-xs text-text-secondary">{t("config.tokens")}</span>
 										<span className="break-all text-text-primary">
@@ -210,11 +186,7 @@ export function ProviderConnectionForm(props: {
 								{props.testResult.latencyMs != null && (
 									<div className="flex items-baseline gap-4 text-control">
 										<span className="basis-12 shrink-0 text-xs text-text-secondary">{t("config.testLatency")}</span>
-										<span className="break-all text-text-primary">
-											{props.testResult.latencyMs < 1000
-												? `${props.testResult.latencyMs} ms`
-												: `${(props.testResult.latencyMs / 1000).toFixed(1)} s`}
-										</span>
+										<span className="break-all text-text-primary">{props.testResult.latencyMs < 1000 ? `${props.testResult.latencyMs} ms` : `${(props.testResult.latencyMs / 1000).toFixed(1)} s`}</span>
 									</div>
 								)}
 							</div>
@@ -229,19 +201,13 @@ export function ProviderConnectionForm(props: {
 								{props.testResult.latencyMs != null && (
 									<div className="flex items-baseline gap-4 text-control">
 										<span className="basis-12 shrink-0 text-xs text-text-secondary">{t("config.testElapsed")}</span>
-										<span className="break-all text-text-primary">
-											{props.testResult.latencyMs < 1000
-												? `${props.testResult.latencyMs} ms`
-												: `${(props.testResult.latencyMs / 1000).toFixed(1)} s`}
-										</span>
+										<span className="break-all text-text-primary">{props.testResult.latencyMs < 1000 ? `${props.testResult.latencyMs} ms` : `${(props.testResult.latencyMs / 1000).toFixed(1)} s`}</span>
 									</div>
 								)}
 							</div>
 						)}
 					</div>
-					{!props.testResult.success && props.testHint && (
-						<div className="config-test-hint">💡 {props.testHint}</div>
-					)}
+					{!props.testResult.success && props.testHint && <div className="config-test-hint">💡 {props.testHint}</div>}
 				</>
 			)}
 
@@ -301,6 +267,32 @@ export function ProviderConnectionForm(props: {
 							<span>{t("config.reasoningContentReplay")}</span>
 						</Label>
 						<small className="config-compat-item-desc">{t("config.reasoningContentReplayDesc")}</small>
+					</div>
+					<div className="config-compat-item">
+						<Label className="config-checkbox-label">
+							<span>{t("config.strictToolSampling")}</span>
+						</Label>
+						{/* 三态下拉而不是复选框：pi 的 strict 默认值随协议不同（openai-completions 默认开、
+						    responses 系默认关），用「勾/不勾」表达不出「跟随 pi 默认」这一档，
+						    还会让界面显示的开关状态与实际线上行为不一致。选「跟随 pi 默认」时不写该键。 */}
+						<ConfigSelect
+							value={props.compat.supportsStrictMode === undefined ? "follow" : props.compat.supportsStrictMode ? "on" : "off"}
+							options={[
+								{ value: "follow", label: t("config.strictToolSamplingFollow") },
+								{ value: "on", label: t("config.strictToolSamplingOn") },
+								{ value: "off", label: t("config.strictToolSamplingOff") },
+							]}
+							onChange={(value) =>
+								props.onChangeCompat({
+									// 展开保留未知 compat 子键（如手写的 openRouterRouting），只覆盖面板拥有的项
+									...props.compat,
+									supportsDeveloperRole: props.compat.supportsDeveloperRole || false,
+									supportsReasoningEffort: props.compat.supportsReasoningEffort || false,
+									supportsStrictMode: value === "follow" ? undefined : value === "on",
+								})
+							}
+						/>
+						<small className="config-compat-item-desc">{t("config.strictToolSamplingDesc")}</small>
 					</div>
 				</div>
 			</div>

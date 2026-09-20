@@ -31,13 +31,7 @@ const providerUsageRecordsAtom = atom<Record<string, ProviderUsageEntry>>({});
 export const providerUsageRecordsReadAtom = atom((get) => get(providerUsageRecordsAtom));
 
 /** 按 provider 的只读选择器：record 局部更新只重渲染订阅该 provider 的组件。 */
-export const providerUsageEntryAtomFamily = atomFamily((provider: string) =>
-	selectAtom(
-		providerUsageRecordsAtom,
-		(records) => records[provider] ?? EMPTY_ENTRY,
-		Object.is,
-	),
-);
+export const providerUsageEntryAtomFamily = atomFamily((provider: string) => selectAtom(providerUsageRecordsAtom, (records) => records[provider] ?? EMPTY_ENTRY, Object.is));
 
 /** 开始查询：已处于 loading 的 provider 幂等跳过（重查时保留旧结果供降级展示）。 */
 export const beginProviderUsageAtom = atom(null, (get, set, provider: string) => {
@@ -54,19 +48,16 @@ export const beginProviderUsageAtom = atom(null, (get, set, provider: string) =>
 });
 
 /** 查询完成：success → ready，否则 error（raw 保留时 UI 可降级展示）。 */
-export const resolveProviderUsageAtom = atom(
-	null,
-	(_get, set, provider: string, result: ProviderUsageResult) => {
-		set(providerUsageRecordsAtom, (records) => ({
-			...records,
-			[provider]: {
-				status: result.success ? "ready" : "error",
-				result,
-				fetchedAt: Date.now(),
-			},
-		}));
-	},
-);
+export const resolveProviderUsageAtom = atom(null, (_get, set, provider: string, result: ProviderUsageResult) => {
+	set(providerUsageRecordsAtom, (records) => ({
+		...records,
+		[provider]: {
+			status: result.success ? "ready" : "error",
+			result,
+			fetchedAt: Date.now(),
+		},
+	}));
+});
 
 /** 全部失效：清空 record（下次任一消费点挂载即重查）。保存探针配置后调用。 */
 export const invalidateAllProviderUsageAtom = atom(null, (_get, set) => {
@@ -93,20 +84,15 @@ export const invalidateProviderUsageAtom = atom(null, (_get, set, provider: stri
 const providerUsageStatesAtom = atom<Record<string, UsageProbeProviderState>>({});
 
 /** 按 provider 的只读选择器：某条状态更新只重渲染订阅它的卡片。 */
-export const providerUsageStateAtomFamily = atomFamily((cacheKey: string) =>
-	selectAtom(providerUsageStatesAtom, (states) => states[cacheKey], Object.is),
-);
+export const providerUsageStateAtomFamily = atomFamily((cacheKey: string) => selectAtom(providerUsageStatesAtom, (states) => states[cacheKey], Object.is));
 
 /** 状态表只读视图（启动预热选源用：一次性读全表）。 */
 export const providerUsageStatesReadAtom = atom((get) => get(providerUsageStatesAtom));
 
 /** 批量写入状态（状态表 IPC 回来后一次合并；只覆盖本次带回的 key）。 */
-export const mergeProviderUsageStatesAtom = atom(
-	null,
-	(_get, set, entries: Record<string, UsageProbeProviderState>) => {
-		set(providerUsageStatesAtom, (states) => ({ ...states, ...entries }));
-	},
-);
+export const mergeProviderUsageStatesAtom = atom(null, (_get, set, entries: Record<string, UsageProbeProviderState>) => {
+	set(providerUsageStatesAtom, (states) => ({ ...states, ...entries }));
+});
 
 /**
  * 状态表加载阶段（按 backend）：idle = 从未请求（无消费方加载器）、loading = 请求中、
@@ -116,9 +102,6 @@ export const mergeProviderUsageStatesAtom = atom(
  */
 export const providerUsageStatesStatusAtom = atom<Record<string, "idle" | "loading" | "ready">>({});
 
-export const markProviderUsageStatesStatusAtom = atom(
-	null,
-	(_get, set, backend: string, status: "idle" | "loading" | "ready") => {
-		set(providerUsageStatesStatusAtom, (current) => ({ ...current, [backend]: status }));
-	},
-);
+export const markProviderUsageStatesStatusAtom = atom(null, (_get, set, backend: string, status: "idle" | "loading" | "ready") => {
+	set(providerUsageStatesStatusAtom, (current) => ({ ...current, [backend]: status }));
+});

@@ -7,10 +7,7 @@ import { ConfirmDialog } from "../components/ui-shadcn/ConfirmDialog";
 import { desktopApi } from "../desktopApi";
 import { showNotice } from "../utils/notice";
 import { dshInstallProgressAtom } from "../atoms/dsh-atoms";
-import type {
-	DshRuntimeInstallPhase,
-	DshRuntimeStatus,
-} from "../../../shared/types/dshRuntime";
+import type { DshRuntimeInstallPhase, DshRuntimeStatus } from "../../../shared/types/dshRuntime";
 
 /** 阶段 → 文案 key（done/error 不在此列，各自单独渲染）。 */
 const PHASE_LABEL: Partial<Record<DshRuntimeInstallPhase, string>> = {
@@ -34,13 +31,7 @@ const PHASE_LABEL: Partial<Record<DshRuntimeInstallPhase, string>> = {
  * 进度状态存 dshInstallProgressAtom（useDshRuntimeInstallProgressSync 在 App
  * 挂载一份订阅写入）：切配置分页/关弹窗再回来，进度不丢；本区块只读。
  */
-export function DshRuntimeSection({
-	status,
-	onOpenFolder,
-}: {
-	status: DshRuntimeStatus;
-	onOpenFolder: (path: string) => void;
-}) {
+export function DshRuntimeSection({ status, onOpenFolder }: { status: DshRuntimeStatus; onOpenFolder: (path: string) => void }) {
 	const { phase, percent, error } = useAtomValue(dshInstallProgressAtom);
 	const setProgress = useSetAtom(dshInstallProgressAtom);
 	const [uninstallOpen, setUninstallOpen] = useState(false);
@@ -48,22 +39,22 @@ export function DshRuntimeSection({
 	// 停 host → 删目录 → 拉起 host 可能耗时数秒，期间必须给用户转圈反馈。
 	const [uninstalling, setUninstalling] = useState(false);
 
-	const run = useCallback(async (kind: "online" | "local") => {
-		// 先落乐观进度：主进程首个 install-progress 推送到达前不让按钮无反馈。
-		setProgress({ phase: kind === "online" ? "downloading" : "verifying", percent: 0, error: undefined });
-		const result =
-			kind === "online"
-				? await desktopApi.sessions.installDshRuntime()
-				: await desktopApi.sessions.importDshRuntimeFile();
-		// 失败时错误文案通常已由 install-progress 推送（phase=error）；这里兜底
-		// 未推送的场景（如文件对话框取消后无事件），并保证 atom 与主进程结果一致。
-		// 用户取消不是错误，静默回到初始态即可。
-		if (!result.ok && result.error !== "cancelled") {
-			setProgress({ phase: "error", percent: 100, error: result.error ?? "unknown error" });
-		} else if (!result.ok) {
-			setProgress({ phase: null, percent: 0, error: undefined });
-		}
-	}, [setProgress]);
+	const run = useCallback(
+		async (kind: "online" | "local") => {
+			// 先落乐观进度：主进程首个 install-progress 推送到达前不让按钮无反馈。
+			setProgress({ phase: kind === "online" ? "downloading" : "verifying", percent: 0, error: undefined });
+			const result = kind === "online" ? await desktopApi.sessions.installDshRuntime() : await desktopApi.sessions.importDshRuntimeFile();
+			// 失败时错误文案通常已由 install-progress 推送（phase=error）；这里兜底
+			// 未推送的场景（如文件对话框取消后无事件），并保证 atom 与主进程结果一致。
+			// 用户取消不是错误，静默回到初始态即可。
+			if (!result.ok && result.error !== "cancelled") {
+				setProgress({ phase: "error", percent: 100, error: result.error ?? "unknown error" });
+			} else if (!result.ok) {
+				setProgress({ phase: null, percent: 0, error: undefined });
+			}
+		},
+		[setProgress],
+	);
 
 	const handleUninstall = useCallback(async () => {
 		setUninstallOpen(false);
@@ -92,16 +83,8 @@ export function DshRuntimeSection({
 				<h3 className="text-caption font-semibold text-muted-foreground">{t("settings.dshRuntime")}</h3>
 				<div className="grid gap-1.5 rounded-md border border-border-subtle bg-bg-panel p-3">
 					<div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-						<span className="text-control font-medium text-foreground">
-							{status.source === "builtin"
-								? t("settings.dshRuntimeBuiltin", { version: status.runtimeVersion ?? "" })
-								: t("settings.dshRuntimeManaged", { version: status.runtimeVersion ?? "" })}
-						</span>
-						<span className="text-micro text-muted-foreground">
-							{status.source === "builtin"
-								? t("dsh.runtime.builtinHint")
-								: t("dsh.runtime.managedHint")}
-						</span>
+						<span className="text-control font-medium text-foreground">{status.source === "builtin" ? t("settings.dshRuntimeBuiltin", { version: status.runtimeVersion ?? "" }) : t("settings.dshRuntimeManaged", { version: status.runtimeVersion ?? "" })}</span>
+						<span className="text-micro text-muted-foreground">{status.source === "builtin" ? t("dsh.runtime.builtinHint") : t("dsh.runtime.managedHint")}</span>
 					</div>
 					{/* 安装目录：managed 才有独立落盘目录；builtin 在 app.asar 内无意义 */}
 					{status.source === "managed" && status.installDir ? (
@@ -110,13 +93,7 @@ export function DshRuntimeSection({
 							<span className="min-w-0 flex-1 truncate font-mono text-micro text-foreground" title={status.installDir}>
 								{status.installDir}
 							</span>
-							<Button
-								type="button"
-								variant="ghost"
-								size="sm"
-								className="h-7 shrink-0 rounded-md px-2 text-control"
-								onClick={() => onOpenFolder(status.installDir ?? "")}
-							>
+							<Button type="button" variant="ghost" size="sm" className="h-7 shrink-0 rounded-md px-2 text-control" onClick={() => onOpenFolder(status.installDir ?? "")}>
 								{t("config.dsh.openFolder")}
 							</Button>
 						</div>
@@ -160,16 +137,7 @@ export function DshRuntimeSection({
 					) : null}
 				</div>
 				{/* ConfirmDialog 自身恒 open（靠 AlertDialog 内部控制），必须条件渲染。 */}
-				{uninstallOpen ? (
-					<ConfirmDialog
-						title={t("settings.dshRuntimeUninstall")}
-						message={t("settings.dshRuntimeUninstallConfirm")}
-						confirmLabel={t("settings.dshRuntimeUninstall")}
-						danger
-						onConfirm={() => void handleUninstall()}
-						onCancel={() => setUninstallOpen(false)}
-					/>
-				) : null}
+				{uninstallOpen ? <ConfirmDialog title={t("settings.dshRuntimeUninstall")} message={t("settings.dshRuntimeUninstallConfirm")} confirmLabel={t("settings.dshRuntimeUninstall")} danger onConfirm={() => void handleUninstall()} onCancel={() => setUninstallOpen(false)} /> : null}
 			</section>
 		);
 	}
@@ -179,15 +147,7 @@ export function DshRuntimeSection({
 		<section className="grid gap-2">
 			<h3 className="text-caption font-semibold text-muted-foreground">{t("settings.dshRuntime")}</h3>
 			<div className="grid gap-2 rounded-md border border-dashed border-border bg-muted/30 px-3.5 py-3">
-				<div className="text-control font-medium text-foreground">
-					{t(
-						status.state === "outdated"
-							? "dsh.runtime.outdatedTitle"
-							: broken
-								? "dsh.runtime.brokenTitle"
-								: "dsh.runtime.notInstalledTitle",
-					)}
-				</div>
+				<div className="text-control font-medium text-foreground">{t(status.state === "outdated" ? "dsh.runtime.outdatedTitle" : broken ? "dsh.runtime.brokenTitle" : "dsh.runtime.notInstalledTitle")}</div>
 				<p className="text-micro leading-relaxed text-muted-foreground">
 					{status.state === "outdated"
 						? t("dsh.runtime.outdatedDesc", {
@@ -231,11 +191,7 @@ export function DshRuntimeSection({
 						<span>{t("dsh.runtime.installFailed", { error })}</span>
 					</div>
 				) : (
-					<p className="text-[12px] text-muted-foreground/80">
-						{status.installEnabled === false
-							? t("dsh.runtime.devNoDownload")
-							: t("dsh.runtime.installHint")}
-					</p>
+					<p className="text-[12px] text-muted-foreground/80">{status.installEnabled === false ? t("dsh.runtime.devNoDownload") : t("dsh.runtime.installHint")}</p>
 				)}
 			</div>
 		</section>

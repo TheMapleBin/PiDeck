@@ -6,11 +6,7 @@
 
 import { ipcMain } from "electron";
 import { ipcChannels } from "../../shared/ipc";
-import type {
-	ConfigBackupDetail,
-	ConfigBackupListResult,
-	ConfigBackupReason,
-} from "../../shared/types/backup";
+import type { ConfigBackupDetail, ConfigBackupListResult, ConfigBackupReason } from "../../shared/types/backup";
 import { BACKUP_FILE_KEYS, type ConfigBackupManager } from "../config/ConfigBackupManager";
 import type { AppLogger } from "../logging/AppLogger";
 
@@ -21,11 +17,7 @@ export type BackupIpcDeps = {
 	afterRestore?: () => Promise<void>;
 };
 
-export function registerBackupIpc({
-	configBackupManager,
-	appLogger,
-	afterRestore,
-}: BackupIpcDeps): void {
+export function registerBackupIpc({ configBackupManager, appLogger, afterRestore }: BackupIpcDeps): void {
 	/** id 入参校验：必须为本应用命名的备份文件名（backup-<时间戳>[-序号].json；ConfigBackupManager 内还会做路径逃逸检查）。 */
 	const requireBackupId = (value: unknown): string => {
 		if (typeof value !== "string" || !/^backup-[0-9]+(?:-[0-9]+)?\.json$/.test(value)) {
@@ -45,9 +37,7 @@ export function registerBackupIpc({
 			throw new Error("Invalid backup files.");
 		}
 		const allowed = new Set<string>(BACKUP_FILE_KEYS);
-		const files = value.filter(
-			(entry): entry is string => typeof entry === "string" && allowed.has(entry),
-		);
+		const files = value.filter((entry): entry is string => typeof entry === "string" && allowed.has(entry));
 		// 有任何一项不在白名单 → 拒绝（与“过滤后剩空”同等处理）。
 		if (files.length !== value.length) {
 			throw new Error("Invalid backup file.");
@@ -60,19 +50,14 @@ export function registerBackupIpc({
 		if (!Array.isArray(value) || value.length === 0) {
 			throw new Error("Invalid backup ids.");
 		}
-		const ids = value.filter(
-			(entry): entry is string =>
-				typeof entry === "string" && /^backup-[0-9]+(?:-[0-9]+)?\.json$/.test(entry),
-		);
+		const ids = value.filter((entry): entry is string => typeof entry === "string" && /^backup-[0-9]+(?:-[0-9]+)?\.json$/.test(entry));
 		if (ids.length !== value.length) {
 			throw new Error("Invalid backup id.");
 		}
 		return ids;
 	};
 
-	ipcMain.handle(ipcChannels.configBackupList, (): ConfigBackupListResult =>
-		configBackupManager.list(),
-	);
+	ipcMain.handle(ipcChannels.configBackupList, (): ConfigBackupListResult => configBackupManager.list());
 
 	ipcMain.handle(ipcChannels.configBackupCreate, async (_event, _reason: unknown) => {
 		// 渲染层不可信：手动备份固定 reason=manual（first-run/upgrade/on-save/pre-restore
@@ -85,14 +70,11 @@ export function registerBackupIpc({
 		return result;
 	});
 
-	ipcMain.handle(
-		ipcChannels.configBackupRead,
-		(_event, id: unknown): ConfigBackupDetail | null => {
-			const detail = configBackupManager.read(requireBackupId(id));
-			if (!detail) void appLogger.warn("backup", "Backup read failed or missing", { id: String(id) });
-			return detail;
-		},
-	);
+	ipcMain.handle(ipcChannels.configBackupRead, (_event, id: unknown): ConfigBackupDetail | null => {
+		const detail = configBackupManager.read(requireBackupId(id));
+		if (!detail) void appLogger.warn("backup", "Backup read failed or missing", { id: String(id) });
+		return detail;
+	});
 
 	ipcMain.handle(ipcChannels.configBackupRestore, async (_event, id: unknown, files: unknown) => {
 		const result = configBackupManager.restore(requireBackupId(id), requireRestoreFiles(files));

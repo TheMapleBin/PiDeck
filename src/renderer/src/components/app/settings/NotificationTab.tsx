@@ -1,29 +1,12 @@
 import { memo, useEffect, useState } from "react";
 import { Play, Upload, Trash2 } from "lucide-react";
-import {
-	createDefaultSoundAlertSettings,
-	DEFAULT_SOUND_BY_KIND,
-	SOUND_ALERT_PRESETS,
-	parseSoundAlertRef,
-	type AppSettings,
-	type CustomSoundInfo,
-	type SoundAlertKind,
-	type SoundAlertSettings,
-} from "../../../../../shared/types";
+import { createDefaultSoundAlertSettings, DEFAULT_SOUND_BY_KIND, SOUND_ALERT_PRESETS, parseSoundAlertRef, type AppSettings, type CustomSoundInfo, type SoundAlertKind, type SoundAlertSettings } from "../../../../../shared/types";
 import { t } from "../../../i18n";
 import { desktopApi } from "../../../desktopApi";
 import { resolveSoundUrl } from "../../../utils/soundUrls";
 import { Button } from "../../ui-shadcn/button";
 import { Switch } from "../../ui-shadcn/switch";
-import {
-	Select,
-	SelectContent,
-	SelectGroup,
-	SelectItem,
-	SelectLabel,
-	SelectTrigger,
-	SelectValue,
-} from "../../ui-shadcn/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "../../ui-shadcn/select";
 import { SettingsSection } from "./SettingsStorageTab";
 import { DirtyMarker, SettingRow, SettingSwitchRow } from "./SettingRows";
 
@@ -35,13 +18,7 @@ type NotificationTabProps = {
 };
 
 /** 事件行：启用开关 + 音效下拉 + 试听。 */
-function SoundEventRow(props: {
-	kind: SoundAlertKind;
-	settings: SoundAlertSettings;
-	customSounds: CustomSoundInfo[];
-	isDirty: (field: keyof AppSettings) => boolean;
-	onChange: (config: SoundAlertSettings[SoundAlertKind]) => void;
-}) {
+function SoundEventRow(props: { kind: SoundAlertKind; settings: SoundAlertSettings; customSounds: CustomSoundInfo[]; isDirty: (field: keyof AppSettings) => boolean; onChange: (config: SoundAlertSettings[SoundAlertKind]) => void }) {
 	const { kind, settings } = props;
 	const config = settings[kind];
 	const isDirty = props.isDirty;
@@ -78,17 +55,8 @@ function SoundEventRow(props: {
 			alignEnd={false}
 		>
 			<div className="flex w-full items-center gap-2">
-				<Switch
-					checked={config.enabled}
-					disabled={!settings.enabled}
-					aria-label={t(`settings.sound.${kind}Enable`)}
-					onCheckedChange={(value) => onChange({ ...config, enabled: value })}
-				/>
-				<Select
-					value={config.sound}
-					disabled={!settings.enabled || !config.enabled}
-					onValueChange={(value) => onChange({ ...config, sound: value })}
-				>
+				<Switch checked={config.enabled} disabled={!settings.enabled} aria-label={t(`settings.sound.${kind}Enable`)} onCheckedChange={(value) => onChange({ ...config, enabled: value })} />
+				<Select value={config.sound} disabled={!settings.enabled || !config.enabled} onValueChange={(value) => onChange({ ...config, sound: value })}>
 					<SelectTrigger className="h-9 min-w-0 flex-1" aria-label={t(`settings.sound.${kind}`)}>
 						<SelectValue placeholder={t("settings.sound.choose")} />
 					</SelectTrigger>
@@ -113,13 +81,7 @@ function SoundEventRow(props: {
 						)}
 					</SelectContent>
 				</Select>
-				<Button
-					variant="outline"
-					size="icon-sm"
-					title={t("settings.sound.preview")}
-					aria-label={t("settings.sound.preview")}
-					onClick={preview}
-				>
+				<Button variant="outline" size="icon-sm" title={t("settings.sound.preview")} aria-label={t("settings.sound.preview")} onClick={preview}>
 					<Play className="size-4" />
 				</Button>
 			</div>
@@ -144,17 +106,20 @@ export const NotificationTab = memo(function NotificationTab(props: Notification
 	// 进入本 tab 拉取自定义音频列表
 	useEffect(() => {
 		let alive = true;
-		void desktopApi.sounds.listCustom().then((list) => {
-			if (alive) setCustomSounds(list);
-		}).catch(() => undefined);
-		return () => { alive = false; };
+		void desktopApi.sounds
+			.listCustom()
+			.then((list) => {
+				if (alive) setCustomSounds(list);
+			})
+			.catch(() => undefined);
+		return () => {
+			alive = false;
+		};
 	}, []);
 
-	const updateSound = (patch: Partial<SoundAlertSettings>) =>
-		updateDraft({ soundAlert: { ...settings, ...patch } });
+	const updateSound = (patch: Partial<SoundAlertSettings>) => updateDraft({ soundAlert: { ...settings, ...patch } });
 
-	const updateEvent = (kind: SoundAlertKind, config: SoundAlertSettings[SoundAlertKind]) =>
-		updateSound({ [kind]: config });
+	const updateEvent = (kind: SoundAlertKind, config: SoundAlertSettings[SoundAlertKind]) => updateSound({ [kind]: config });
 
 	const onImport = async () => {
 		setImporting(true);
@@ -191,51 +156,14 @@ export const NotificationTab = memo(function NotificationTab(props: Notification
 		<>
 			{/* 系统通知（原常用设置「通知」区）：会话完成/Ask 提问/Agent 数量提醒三个独立开关 */}
 			<SettingsSection title={t("settings.notificationSection")}>
-				<SettingSwitchRow
-					anchor="notification-enable"
-					title={t("settings.enableNotifications")}
-					checked={draft.enableNotifications}
-					onChange={(checked) =>
-						updateDraft({ enableNotifications: checked })
-					}
-				/>
-				<SettingSwitchRow
-					anchor="notification-ask"
-					title={t("settings.askNotification")}
-					description={t("settings.askNotificationDesc")}
-					checked={draft.askNotificationEnabled}
-					onChange={(checked) =>
-						updateDraft({ askNotificationEnabled: checked })
-					}
-				/>
-				<SettingSwitchRow
-					anchor="notification-agent-count"
-					title={t("settings.agentCountReminder")}
-					description={t("settings.agentCountReminderDesc")}
-					checked={draft.agentCountReminderEnabled}
-					onChange={(checked) =>
-						updateDraft({ agentCountReminderEnabled: checked })
-					}
-				/>
-				<SettingSwitchRow
-					anchor="notification-announcement"
-					title={t("settings.announcementNotification")}
-					description={t("settings.announcementNotificationDesc")}
-					checked={draft.announcementNotificationEnabled}
-					onChange={(checked) =>
-						updateDraft({ announcementNotificationEnabled: checked })
-					}
-				/>
+				<SettingSwitchRow anchor="notification-enable" title={t("settings.enableNotifications")} checked={draft.enableNotifications} onChange={(checked) => updateDraft({ enableNotifications: checked })} />
+				<SettingSwitchRow anchor="notification-ask" title={t("settings.askNotification")} description={t("settings.askNotificationDesc")} checked={draft.askNotificationEnabled} onChange={(checked) => updateDraft({ askNotificationEnabled: checked })} />
+				<SettingSwitchRow anchor="notification-agent-count" title={t("settings.agentCountReminder")} description={t("settings.agentCountReminderDesc")} checked={draft.agentCountReminderEnabled} onChange={(checked) => updateDraft({ agentCountReminderEnabled: checked })} />
+				<SettingSwitchRow anchor="notification-announcement" title={t("settings.announcementNotification")} description={t("settings.announcementNotificationDesc")} checked={draft.announcementNotificationEnabled} onChange={(checked) => updateDraft({ announcementNotificationEnabled: checked })} />
 			</SettingsSection>
 
 			<SettingsSection title={t("settings.sound.title")} description={t("settings.sound.sectionDesc")}>
-				<SettingSwitchRow
-					title={t("settings.sound.enabled")}
-					description={t("settings.sound.enabledDesc")}
-					checked={settings.enabled}
-					dirty={isDirty("soundAlert")}
-					onChange={(value) => updateSound({ enabled: value })}
-				/>
+				<SettingSwitchRow title={t("settings.sound.enabled")} description={t("settings.sound.enabledDesc")} checked={settings.enabled} dirty={isDirty("soundAlert")} onChange={(value) => updateSound({ enabled: value })} />
 				<SettingRow
 					title={
 						<span className="inline-flex items-center gap-1.5">
@@ -246,19 +174,8 @@ export const NotificationTab = memo(function NotificationTab(props: Notification
 					description={t("settings.sound.volumeDesc")}
 				>
 					<div className="flex w-full items-center gap-3">
-						<input
-							type="range"
-							min="0"
-							max="100"
-							step="1"
-							value={Math.round(settings.volume * 100)}
-							onChange={(event) => updateSound({ volume: Number(event.target.value) / 100 })}
-							className="min-w-0 flex-1 accent-[var(--color-accent)]"
-							aria-label={t("settings.sound.volume")}
-						/>
-						<span className="min-w-12 shrink-0 text-right font-brand text-sm text-muted-foreground tabular-nums">
-							{Math.round(settings.volume * 100)}%
-						</span>
+						<input type="range" min="0" max="100" step="1" value={Math.round(settings.volume * 100)} onChange={(event) => updateSound({ volume: Number(event.target.value) / 100 })} className="min-w-0 flex-1 accent-[var(--color-accent)]" aria-label={t("settings.sound.volume")} />
+						<span className="min-w-12 shrink-0 text-right font-brand text-sm text-muted-foreground tabular-nums">{Math.round(settings.volume * 100)}%</span>
 					</div>
 				</SettingRow>
 			</SettingsSection>
@@ -266,50 +183,23 @@ export const NotificationTab = memo(function NotificationTab(props: Notification
 			{/* 三个事件行直接铺在 SettingsSection 外框里，不再套 SettingBox 内框。 */}
 			<SettingsSection title={t("settings.sound.eventsTitle")} description={t("settings.sound.eventsDesc")}>
 				{(["done", "error", "waiting"] as const).map((kind) => (
-					<SoundEventRow
-						key={kind}
-						kind={kind}
-						settings={settings}
-						customSounds={customSounds}
-						isDirty={isDirty}
-						onChange={(config) => updateEvent(kind, config)}
-					/>
+					<SoundEventRow key={kind} kind={kind} settings={settings} customSounds={customSounds} isDirty={isDirty} onChange={(config) => updateEvent(kind, config)} />
 				))}
 			</SettingsSection>
 
 			<SettingsSection title={t("settings.sound.customTitle")} description={t("settings.sound.customDesc")}>
-				<SettingRow
-					title={t("settings.sound.import")}
-					description={t("settings.sound.importDesc")}
-				>
+				<SettingRow title={t("settings.sound.import")} description={t("settings.sound.importDesc")}>
 					<div className="flex items-center gap-2">
-						{importError && (
-							<span className="text-xs text-destructive">{importError}</span>
-						)}
-						<Button
-							variant="outline"
-							size="sm"
-							disabled={importing}
-							onClick={() => void onImport()}
-						>
+						{importError && <span className="text-xs text-destructive">{importError}</span>}
+						<Button variant="outline" size="sm" disabled={importing} onClick={() => void onImport()}>
 							<Upload className="size-4" />
 							{importing ? t("settings.sound.importing") : t("settings.sound.import")}
 						</Button>
 					</div>
 				</SettingRow>
 				{customSounds.map((sound) => (
-					<SettingRow
-						key={sound.name}
-						title={<span className="font-mono text-[13px]">{sound.name}</span>}
-						description={`${(sound.size / 1024).toFixed(0)} KB`}
-					>
-						<Button
-							variant="ghost"
-							size="icon-sm"
-							title={t("settings.sound.remove")}
-							aria-label={t("settings.sound.remove")}
-							onClick={() => void onRemove(sound.name)}
-						>
+					<SettingRow key={sound.name} title={<span className="font-mono text-[13px]">{sound.name}</span>} description={`${(sound.size / 1024).toFixed(0)} KB`}>
+						<Button variant="ghost" size="icon-sm" title={t("settings.sound.remove")} aria-label={t("settings.sound.remove")} onClick={() => void onRemove(sound.name)}>
 							<Trash2 className="size-4" />
 						</Button>
 					</SettingRow>

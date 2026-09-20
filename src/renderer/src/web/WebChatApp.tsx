@@ -22,20 +22,7 @@ import { WebHeader, type WebHeaderStatus } from "./WebHeader";
 import { WebTimeline } from "./WebTimeline";
 import { WebComposer } from "./WebComposer";
 import { WebDshToolsPanel } from "./WebDshToolsPanel";
-import {
-	chatMessagesToUiMessages,
-	createProject,
-	createSession,
-	deleteProject,
-	fetchMessagePage,
-	fetchModels,
-	fetchState,
-	getWebAuthHeaders,
-	respondToUi,
-	setRuntimeModel,
-	setRuntimeThinking,
-	updateSessionRecord,
-} from "./webApi";
+import { chatMessagesToUiMessages, createProject, createSession, deleteProject, fetchMessagePage, fetchModels, fetchState, getWebAuthHeaders, respondToUi, setRuntimeModel, setRuntimeThinking, updateSessionRecord } from "./webApi";
 import type { AgentUiResponse } from "../../../shared/types";
 import type { WebProject, WebState } from "./webTypes";
 
@@ -99,8 +86,7 @@ export function WebChatApp() {
 
 	activeSessionIdRef.current = activeSessionId;
 
-	const runtimeFor = (sessionId: string) =>
-		state.runtimes.find((runtime) => runtime.sessionId === sessionId);
+	const runtimeFor = (sessionId: string) => state.runtimes.find((runtime) => runtime.sessionId === sessionId);
 	const activeSession = state.sessions.find((session) => session.id === activeSessionId);
 	const activeRuntime = activeSessionId ? runtimeFor(activeSessionId) : undefined;
 
@@ -151,7 +137,9 @@ export function WebChatApp() {
 
 	// 模型列表是全局 pi 配置，草稿会话也需要先选模型再发送第一条消息。
 	useEffect(() => {
-		void fetchModels().then(setModels).catch(() => setModels([]));
+		void fetchModels()
+			.then(setModels)
+			.catch(() => setModels([]));
 	}, []);
 
 	// 低频轮询项目/会话/运行态（3s；useChat 负责消息流，不参与轮询）
@@ -287,9 +275,7 @@ export function WebChatApp() {
 	const updateActiveSessionState = (patch: { model?: { provider: string; modelId: string }; thinkingLevel?: string }) => {
 		setState((current) => ({
 			...current,
-			sessions: current.sessions.map((session) =>
-				session.id === activeSessionId ? { ...session, ...patch } : session,
-			),
+			sessions: current.sessions.map((session) => (session.id === activeSessionId ? { ...session, ...patch } : session)),
 		}));
 	};
 
@@ -413,9 +399,7 @@ export function WebChatApp() {
 
 	const activeMeta = activeSessionId ? historyMetaRef.current[activeSessionId] : undefined;
 	const hasMoreHistory = Boolean(activeMeta && activeMeta.nextBefore != null && !streaming);
-	const moreCount = activeMeta
-		? Math.max(0, activeMeta.total - messagesBySessionRef.current[activeSessionId]?.length)
-		: 0;
+	const moreCount = activeMeta ? Math.max(0, activeMeta.total - messagesBySessionRef.current[activeSessionId]?.length) : 0;
 
 	return (
 		<div className="app web-app wechat-shell flex h-screen w-full min-w-0 overflow-hidden bg-background text-foreground">
@@ -462,17 +446,10 @@ export function WebChatApp() {
 					onRespondUi={(response) => void handleRespondUi(response)}
 					onLoadMore={() => void handleLoadMore()}
 				/>
-				<WebComposer
-					disabled={Boolean(creatingProjectId)}
-					streaming={streaming}
-					onSend={handleSend}
-					onStop={() => stop()}
-				/>
+				<WebComposer disabled={Boolean(creatingProjectId)} streaming={streaming} onSend={handleSend} onStop={() => stop()} />
 			</main>
 			{/* S6.3：DSH 工具面板（仅 dsh 会话头部按钮触发） */}
-			{dshToolsOpen && activeSessionId && (
-				<WebDshToolsPanel sessionId={activeSessionId} onClose={() => setDshToolsOpen(false)} />
-			)}
+			{dshToolsOpen && activeSessionId && <WebDshToolsPanel sessionId={activeSessionId} onClose={() => setDshToolsOpen(false)} />}
 		</div>
 	);
 }

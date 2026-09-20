@@ -163,7 +163,5 @@ export function parseAssetSelection(input, count) {
  */
 export function selectRows(rows, indices) {
 	const chosen = new Set(indices);
-	return rows
-		.filter((row) => chosen.has(row.index))
-		.map((row) => (row.action === "skip" ? { ...row, action: "upload", reason: "force-reselect" } : row));
+	return rows.filter((row) => chosen.has(row.index)).map((row) => (row.action === "skip" ? { ...row, action: "upload", reason: "force-reselect" } : row));
 }

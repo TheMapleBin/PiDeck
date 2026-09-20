@@ -4,29 +4,15 @@ import { useAtomValue } from "jotai";
 import { t, type TranslationKey } from "../../i18n";
 import { sessionRuntimeBySessionIdAtomFamily } from "../../atoms/session-selectors";
 import { desktopApi } from "../../desktopApi";
-import {
-	requireSessionCommand,
-	sessionCommandFailureToast,
-	toSessionRuntimeTarget,
-} from "../../utils/sessionCommands";
+import { requireSessionCommand, sessionCommandFailureToast, toSessionRuntimeTarget } from "../../utils/sessionCommands";
 import { formatRelativeTime, formatAbsoluteTime } from "../../utils/relativeTime";
 import { parseDiffStatSummary, type DiffStatSummary } from "../../utils/rewindDiffStat";
 import { showNotice } from "../../utils/notice";
 import { ConfirmDialog } from "../ui-shadcn/ConfirmDialog";
 import { Badge } from "../ui-shadcn/badge";
-import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuItem,
-	DropdownMenuTrigger,
-} from "../ui-shadcn/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../ui-shadcn/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui-shadcn/tooltip";
-import type {
-	RewindCheckpointHealth,
-	RewindCheckpointSummary,
-	RewindCheckpointTrigger,
-	RewindRestoreScope,
-} from "../../../../shared/types";
+import type { RewindCheckpointHealth, RewindCheckpointSummary, RewindCheckpointTrigger, RewindRestoreScope } from "../../../../shared/types";
 
 /** trigger → i18n key（before-restore 含连字符，key 用 camelCase）。 */
 const TRIGGER_LABEL_KEY: Record<RewindCheckpointTrigger, TranslationKey> = {
@@ -54,13 +40,7 @@ export function RewindCheckpointList(props: { sessionId: string }) {
 	const runtime = useAtomValue(sessionRuntimeBySessionIdAtomFamily(props.sessionId));
 	const agentId = runtime?.agentId;
 	const runtimeGeneration = runtime?.runtimeGeneration;
-	const target = useMemo(
-		() =>
-			agentId
-				? { sessionId: props.sessionId, agentId, runtimeGeneration }
-				: undefined,
-		[props.sessionId, agentId, runtimeGeneration],
-	);
+	const target = useMemo(() => (agentId ? { sessionId: props.sessionId, agentId, runtimeGeneration } : undefined), [props.sessionId, agentId, runtimeGeneration]);
 	const [checkpoints, setCheckpoints] = useState<RewindCheckpointSummary[]>([]);
 	const [hasMore, setHasMore] = useState(false);
 	/** 自动打点健康状态（主进程 per 工作目录维护）：失败态显示警示条，不再静默。 */
@@ -75,9 +55,7 @@ export function RewindCheckpointList(props: { sessionId: string }) {
 	/** checkpointId → 变更统计（auto 摘要行）；null = 与当前工作区无差异；缺 key = 未拉取。 */
 	const [diffStats, setDiffStats] = useState<Record<string, DiffStatSummary | null>>({});
 	/** 待确认回退：检查点 + 回退范围（files/conversation/all，由恢复按钮的下拉菜单选择）。 */
-	const [confirmRestore, setConfirmRestore] = useState<
-		{ cp: RewindCheckpointSummary; scope: RewindRestoreScope } | null
-	>(null);
+	const [confirmRestore, setConfirmRestore] = useState<{ cp: RewindCheckpointSummary; scope: RewindRestoreScope } | null>(null);
 	const [restoring, setRestoring] = useState(false);
 
 	/** 拉取当前会话检查点列表（首页）；无运行时（未激活/已停止）时给出可读提示。 */
@@ -91,12 +69,10 @@ export function RewindCheckpointList(props: { sessionId: string }) {
 		setLoading(true);
 		setLoadError(null);
 		try {
-		const page = requireSessionCommand(
-			await desktopApi.sessions.listRewindCheckpoints(target, { limit: PAGE_SIZE }),
-		).value;
-		setCheckpoints(page.items);
-		setHasMore(page.hasMore);
-		setHealth(page.health);
+			const page = requireSessionCommand(await desktopApi.sessions.listRewindCheckpoints(target, { limit: PAGE_SIZE })).value;
+			setCheckpoints(page.items);
+			setHasMore(page.hasMore);
+			setHealth(page.health);
 		} catch (error) {
 			setCheckpoints([]);
 			setHasMore(false);
@@ -145,18 +121,14 @@ export function RewindCheckpointList(props: { sessionId: string }) {
 	const visibleCheckpointIds = checkpoints.map((cp) => cp.id).join(",");
 	useEffect(() => {
 		if (!target || loading || !visibleCheckpointIds) return;
-		const idsToFetch = visibleCheckpointIds
-			.split(",")
-			.filter((id) => !(id in diffStats));
+		const idsToFetch = visibleCheckpointIds.split(",").filter((id) => !(id in diffStats));
 		if (idsToFetch.length === 0) return;
 		let cancelled = false;
 		void (async () => {
 			const results = await Promise.all(
 				idsToFetch.map(async (id) => {
 					try {
-						const text = requireSessionCommand(
-							await desktopApi.sessions.getRewindCheckpointDiff(target, id),
-						).value;
+						const text = requireSessionCommand(await desktopApi.sessions.getRewindCheckpointDiff(target, id)).value;
 						return { id, stat: parseDiffStatSummary(text) };
 					} catch {
 						// 单条 diff 失败不阻塞其余行：标记为 null（按无差异显示）
@@ -194,9 +166,7 @@ export function RewindCheckpointList(props: { sessionId: string }) {
 			if (!target) return;
 			setDiffLoadingId(cp.id);
 			try {
-				const text = requireSessionCommand(
-					await desktopApi.sessions.getRewindCheckpointDiff(target, cp.id),
-				).value;
+				const text = requireSessionCommand(await desktopApi.sessions.getRewindCheckpointDiff(target, cp.id)).value;
 				setDiffs((prev) => ({ ...prev, [cp.id]: text }));
 			} catch (error) {
 				showNotice(
@@ -217,16 +187,10 @@ export function RewindCheckpointList(props: { sessionId: string }) {
 		const { cp, scope } = confirmRestore;
 		setRestoring(true);
 		try {
-			const result = requireSessionCommand(
-				await desktopApi.sessions.restoreRewindCheckpoint(target, cp.id, scope),
-			).value;
+			const result = requireSessionCommand(await desktopApi.sessions.restoreRewindCheckpoint(target, cp.id, scope)).value;
 			// conversation/all 会 fork 出新会话（原会话保留）：toast 提示新会话 id。
 			if (result.forkedSessionId) {
-				showNotice(
-					scope === "conversation"
-						? t("rewind.conversationForked", { id: cp.id, forked: result.forkedSessionId })
-						: t("rewind.restoreDoneForked", { id: cp.id, forked: result.forkedSessionId }),
-				);
+				showNotice(scope === "conversation" ? t("rewind.conversationForked", { id: cp.id, forked: result.forkedSessionId }) : t("rewind.restoreDoneForked", { id: cp.id, forked: result.forkedSessionId }));
 			} else {
 				showNotice(t("rewind.restoreDone", { id: cp.id }));
 			}
@@ -268,18 +232,8 @@ export function RewindCheckpointList(props: { sessionId: string }) {
 			<div className="flex justify-end pb-1">
 				<Tooltip>
 					<TooltipTrigger asChild>
-						<button
-							type="button"
-							className="grid size-6 place-items-center rounded-md text-text-tertiary transition-colors hover:bg-muted/60 disabled:opacity-50"
-							disabled={loading || restoring}
-							aria-label={t("common.refresh")}
-							onClick={() => void reload()}
-						>
-							{loading ? (
-								<span className="size-3 animate-pideck-spin rounded-full border border-text-tertiary border-t-transparent" aria-hidden="true" />
-							) : (
-								<RefreshCw size={13} strokeWidth={1.8} aria-hidden="true" />
-							)}
+						<button type="button" className="grid size-6 place-items-center rounded-md text-text-tertiary transition-colors hover:bg-muted/60 disabled:opacity-50" disabled={loading || restoring} aria-label={t("common.refresh")} onClick={() => void reload()}>
+							{loading ? <span className="size-3 animate-pideck-spin rounded-full border border-text-tertiary border-t-transparent" aria-hidden="true" /> : <RefreshCw size={13} strokeWidth={1.8} aria-hidden="true" />}
 						</button>
 					</TooltipTrigger>
 					<TooltipContent>{t("common.refresh")}</TooltipContent>
@@ -297,28 +251,12 @@ export function RewindCheckpointList(props: { sessionId: string }) {
 			) : (
 				<>
 					{checkpoints.map((cp) => (
-						<CheckpointRow
-							key={cp.id}
-							cp={cp}
-							diff={diffs[cp.id]}
-							diffStat={diffStats[cp.id]}
-							diffLoading={diffLoadingId === cp.id}
-							restoring={restoring && confirmRestore?.cp.id === cp.id}
-							onToggleDiff={() => void toggleDiff(cp)}
-							onRestore={(scope) => setConfirmRestore({ cp, scope })}
-						/>
+						<CheckpointRow key={cp.id} cp={cp} diff={diffs[cp.id]} diffStat={diffStats[cp.id]} diffLoading={diffLoadingId === cp.id} restoring={restoring && confirmRestore?.cp.id === cp.id} onToggleDiff={() => void toggleDiff(cp)} onRestore={(scope) => setConfirmRestore({ cp, scope })} />
 					))}
 					{/* 加载更多：按时间倒序逐页追加（hasMore 由后端游标判断）。 */}
 					{hasMore && (
-						<button
-							type="button"
-							disabled={loadingMore}
-							className="flex w-full items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-center text-xs text-text-tertiary transition-colors hover:bg-muted/60 hover:text-foreground disabled:cursor-default disabled:opacity-50"
-							onClick={() => void loadMore()}
-						>
-							{loadingMore && (
-								<span className="size-3 animate-pideck-spin rounded-full border border-text-tertiary border-t-transparent" aria-hidden="true" />
-							)}
+						<button type="button" disabled={loadingMore} className="flex w-full items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-center text-xs text-text-tertiary transition-colors hover:bg-muted/60 hover:text-foreground disabled:cursor-default disabled:opacity-50" onClick={() => void loadMore()}>
+							{loadingMore && <span className="size-3 animate-pideck-spin rounded-full border border-text-tertiary border-t-transparent" aria-hidden="true" />}
 							{t("rewind.loadMore")}
 						</button>
 					)}
@@ -326,31 +264,12 @@ export function RewindCheckpointList(props: { sessionId: string }) {
 			)}
 			{confirmRestore && (
 				<ConfirmDialog
-					title={t(
-						confirmRestore.scope === "files"
-							? "rewind.restoreConfirmTitle"
-							: confirmRestore.scope === "conversation"
-								? "rewind.restoreConfirmConversation"
-								: "rewind.restoreConfirmAll",
-					)}
-					message={t(
-						confirmRestore.scope === "files"
-							? "rewind.restoreConfirmMessage"
-							: confirmRestore.scope === "conversation"
-								? "rewind.restoreConfirmMessageConversation"
-								: "rewind.restoreConfirmMessageAll",
-						{
-							id: confirmRestore.cp.id,
-							time: formatRelativeTime(confirmRestore.cp.timestamp),
-						},
-					)}
-					confirmLabel={t(
-						confirmRestore.scope === "files"
-							? "rewind.restoreConfirmRestore"
-							: confirmRestore.scope === "conversation"
-								? "rewind.restoreConfirmConversation"
-								: "rewind.restoreConfirmAll",
-					)}
+					title={t(confirmRestore.scope === "files" ? "rewind.restoreConfirmTitle" : confirmRestore.scope === "conversation" ? "rewind.restoreConfirmConversation" : "rewind.restoreConfirmAll")}
+					message={t(confirmRestore.scope === "files" ? "rewind.restoreConfirmMessage" : confirmRestore.scope === "conversation" ? "rewind.restoreConfirmMessageConversation" : "rewind.restoreConfirmMessageAll", {
+						id: confirmRestore.cp.id,
+						time: formatRelativeTime(confirmRestore.cp.timestamp),
+					})}
+					confirmLabel={t(confirmRestore.scope === "files" ? "rewind.restoreConfirmRestore" : confirmRestore.scope === "conversation" ? "rewind.restoreConfirmConversation" : "rewind.restoreConfirmAll")}
 					danger
 					onConfirm={() => void performRestore()}
 					onCancel={() => setConfirmRestore(null)}
@@ -372,14 +291,7 @@ function CheckpointRow(props: {
 }) {
 	const { cp } = props;
 	// 描述缺省时按 trigger 回退到可读标签（tool → 工具名，turn → 第 N 轮）。
-	const fallbackLabel =
-		cp.trigger === "tool" && cp.toolName
-			? cp.toolName
-			: cp.trigger === "turn"
-				? t("rewind.turnLabel", { turn: cp.turnIndex })
-				: cp.trigger === "before-restore"
-					? t("rewind.triggerBeforeRestoreHint")
-					: t(TRIGGER_LABEL_KEY[cp.trigger]);
+	const fallbackLabel = cp.trigger === "tool" && cp.toolName ? cp.toolName : cp.trigger === "turn" ? t("rewind.turnLabel", { turn: cp.turnIndex }) : cp.trigger === "before-restore" ? t("rewind.triggerBeforeRestoreHint") : t(TRIGGER_LABEL_KEY[cp.trigger]);
 	const diffVisible = props.diff !== undefined || props.diffLoading;
 	const stat = props.diffStat;
 	// 展示标题：描述缺省时按 trigger 回退到可读标签（tool → 工具名，turn → 第 N 轮）。
@@ -397,10 +309,7 @@ function CheckpointRow(props: {
 						<p className="min-w-0 flex-1 truncate text-xs font-medium text-foreground" title={cp.description}>
 							{titleText}
 						</p>
-						<span
-							className="shrink-0 text-[11px] tabular-nums text-text-tertiary"
-							title={formatAbsoluteTime(cp.timestamp)}
-						>
+						<span className="shrink-0 text-[11px] tabular-nums text-text-tertiary" title={formatAbsoluteTime(cp.timestamp)}>
 							{formatRelativeTime(cp.timestamp)}
 						</span>
 					</div>
@@ -409,7 +318,9 @@ function CheckpointRow(props: {
 							{t(TRIGGER_LABEL_KEY[cp.trigger])}
 						</Badge>
 						{showToolName && (
-							<span className="truncate" title={cp.toolName}>{cp.toolName}</span>
+							<span className="truncate" title={cp.toolName}>
+								{cp.toolName}
+							</span>
 						)}
 						{showTurnLabel && <span>{turnLabelText}</span>}
 						{stat === null ? (
@@ -418,12 +329,8 @@ function CheckpointRow(props: {
 							// 变更统计拆成三段渲染：文件数走文案，增删行数着色（+绿 −红，与 activity-row/git 面板一致）。
 							<span className="flex flex-wrap items-center gap-x-1.5" title={t("rewind.diffVsCurrentHint")}>
 								<span className="text-text-secondary">{t("rewind.changedFiles", { files: stat.files })}</span>
-								{stat.insertions !== undefined && (
-									<span className="font-mono tabular-nums text-emerald-500">+{stat.insertions}</span>
-								)}
-								{stat.deletions !== undefined && (
-									<span className="font-mono tabular-nums text-rose-500">−{stat.deletions}</span>
-								)}
+								{stat.insertions !== undefined && <span className="font-mono tabular-nums text-emerald-500">+{stat.insertions}</span>}
+								{stat.deletions !== undefined && <span className="font-mono tabular-nums text-rose-500">−{stat.deletions}</span>}
 							</span>
 						) : null}
 					</div>
@@ -431,13 +338,7 @@ function CheckpointRow(props: {
 				<div className="flex shrink-0 items-center gap-1">
 					<Tooltip>
 						<TooltipTrigger asChild>
-							<button
-								type="button"
-								className="grid size-6 place-items-center rounded-md text-text-tertiary transition-colors hover:bg-muted/60 disabled:opacity-50"
-								disabled={props.diffLoading || props.restoring}
-								aria-label={t(diffVisible ? "rewind.diffClose" : "rewind.diff")}
-								onClick={props.onToggleDiff}
-							>
+							<button type="button" className="grid size-6 place-items-center rounded-md text-text-tertiary transition-colors hover:bg-muted/60 disabled:opacity-50" disabled={props.diffLoading || props.restoring} aria-label={t(diffVisible ? "rewind.diffClose" : "rewind.diff")} onClick={props.onToggleDiff}>
 								<FileDiff size={13} strokeWidth={1.8} aria-hidden="true" />
 							</button>
 						</TooltipTrigger>
@@ -446,17 +347,8 @@ function CheckpointRow(props: {
 					{/* 恢复按钮：下拉选择回退范围（仅文件 / 仅对话 / 全部），选项自带说明文案。 */}
 					<DropdownMenu>
 						<DropdownMenuTrigger asChild>
-							<button
-								type="button"
-								className="grid size-6 place-items-center rounded-md text-text-tertiary transition-colors hover:bg-muted/60 disabled:cursor-default disabled:opacity-50"
-								disabled={props.restoring}
-								aria-label={t("rewind.restoreTitle")}
-							>
-								{props.restoring ? (
-									<span className="size-3 animate-pideck-spin rounded-full border border-text-tertiary border-t-transparent" aria-hidden="true" />
-								) : (
-									<Undo2 size={13} strokeWidth={1.8} aria-hidden="true" />
-								)}
+							<button type="button" className="grid size-6 place-items-center rounded-md text-text-tertiary transition-colors hover:bg-muted/60 disabled:cursor-default disabled:opacity-50" disabled={props.restoring} aria-label={t("rewind.restoreTitle")}>
+								{props.restoring ? <span className="size-3 animate-pideck-spin rounded-full border border-text-tertiary border-t-transparent" aria-hidden="true" /> : <Undo2 size={13} strokeWidth={1.8} aria-hidden="true" />}
 							</button>
 						</DropdownMenuTrigger>
 						<DropdownMenuContent align="end" className="min-w-44">
@@ -483,15 +375,7 @@ function CheckpointRow(props: {
 				</div>
 			</div>
 			{diffVisible && (
-				<div className="mt-1.5 max-h-40 overflow-auto rounded-md bg-muted/40 px-2 py-1.5 font-mono text-[10px] leading-4 text-text-secondary">
-					{props.diffLoading ? (
-						<span>{t("common.loading")}</span>
-					) : props.diff ? (
-						<pre className="whitespace-pre-wrap">{props.diff}</pre>
-					) : (
-						<span>{t("rewind.diffEmpty")}</span>
-					)}
-				</div>
+				<div className="mt-1.5 max-h-40 overflow-auto rounded-md bg-muted/40 px-2 py-1.5 font-mono text-[10px] leading-4 text-text-secondary">{props.diffLoading ? <span>{t("common.loading")}</span> : props.diff ? <pre className="whitespace-pre-wrap">{props.diff}</pre> : <span>{t("rewind.diffEmpty")}</span>}</div>
 			)}
 		</div>
 	);

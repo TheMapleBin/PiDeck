@@ -21,18 +21,10 @@ test("decideDshHostConsolePolicy：win32 永不 AllocConsole，子进程走 CREA
 	assert.equal(withSidecar.allocHostConsole, false);
 	assert.equal(withSidecar.injectWindowsHide, true);
 	assert.equal(withSidecar.rewriteRunnerToSidecar, true);
-	assert.equal(
-		decideDshHostConsolePolicy({ platform: "win32", sidecarPath: "   " }).rewriteRunnerToSidecar,
-		false,
-		"空白 sidecar 不算可用",
-	);
+	assert.equal(decideDshHostConsolePolicy({ platform: "win32", sidecarPath: "   " }).rewriteRunnerToSidecar, false, "空白 sidecar 不算可用");
 });
 
 test("hideChildConsoles 源码不得再调用 AllocConsole（策略回归）", () => {
 	const source = readFileSync("src/main/dsh/hideChildConsoles.ts", "utf8");
-	assert.equal(
-		source.includes("AllocConsole("),
-		false,
-		"host 侧 AllocConsole 会异步弹出 conhost；只允许 runnerConsolePreload 兜底路径使用",
-	);
+	assert.equal(source.includes("AllocConsole("), false, "host 侧 AllocConsole 会异步弹出 conhost；只允许 runnerConsolePreload 兜底路径使用");
 });

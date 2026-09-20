@@ -89,10 +89,7 @@ export function readUserPatchRows(patchPath: string): UserPatchRowsResult {
 }
 
 /** 一条静态清单行是否命中用户补丁层的某个 insert 行（id 或 name 任一命中）。 */
-export function isUserPluginEntry(
-	view: { entryId: string; moduleName: string },
-	rows: readonly UserPatchRow[],
-): boolean {
+export function isUserPluginEntry(view: { entryId: string; moduleName: string }, rows: readonly UserPatchRow[]): boolean {
 	// loader 的条目 id 形如 `include:<rowId>`，剥掉来源前缀后与行 id 对照
 	const bareEntryId = view.entryId.replace(/^include:/, "");
 	const normalizedModule = normalizeModuleName(view.moduleName);
@@ -104,10 +101,7 @@ export function isUserPluginEntry(
 }
 
 /** 给静态清单标注来源（user = 用户补丁层声明；其余 builtin）。 */
-export function classifyStaticPlugins<T extends { entryId: string; moduleName: string }>(
-	views: readonly T[],
-	rows: readonly UserPatchRow[],
-): Array<T & { origin: "builtin" | "user" }> {
+export function classifyStaticPlugins<T extends { entryId: string; moduleName: string }>(views: readonly T[], rows: readonly UserPatchRow[]): Array<T & { origin: "builtin" | "user" }> {
 	return views.map((view) => ({ ...view, origin: isUserPluginEntry(view, rows) ? ("user" as const) : ("builtin" as const) }));
 }
 
@@ -209,10 +203,7 @@ export function removeUserPatchRow(text: string, target: RemoveRowTarget): Remov
  * （userData/dsh-plugins/<pkg>/…）时返回该插件根（含 package.json 的最近祖先），
  * 其余位置（用户自选路径、runtime 内、node_modules）一律不动。
  */
-export function resolveManagedPluginDir(
-	rowName: string,
-	managedRoot: string,
-): string | undefined {
+export function resolveManagedPluginDir(rowName: string, managedRoot: string): string | undefined {
 	const normalized = normalizeModuleName(rowName);
 	if (!isAbsolute(normalized)) return undefined;
 	const rootWithSlash = managedRoot.replace(/\\/g, "/").replace(/\/+$/, "") + "/";

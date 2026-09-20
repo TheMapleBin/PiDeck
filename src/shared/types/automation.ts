@@ -10,23 +10,11 @@ import type { AgentBackend, ComposerAgentMode } from "./agent";
 export type AutomationTaskMode = Extract<ComposerAgentMode, "normal" | "plan" | "goal">;
 
 /** P0 scheduler supports local-time five-field cron plus explicitly manual tasks. */
-export type AutomationSchedule =
-	| { type: "cron"; expression: string }
-	| { type: "manual" };
+export type AutomationSchedule = { type: "cron"; expression: string } | { type: "manual" };
 
 export type AutomationRunTrigger = "manual" | "schedule" | "catch-up";
 
-export type AutomationRunStatus =
-	| "queued"
-	| "starting"
-	| "running"
-	| "succeeded"
-	| "failed"
-	| "aborted"
-	| "timed-out"
-	| "budget-exhausted"
-	| "skipped"
-	| "interrupted";
+export type AutomationRunStatus = "queued" | "starting" | "running" | "succeeded" | "failed" | "aborted" | "timed-out" | "budget-exhausted" | "skipped" | "interrupted";
 
 export type AutomationBudget = {
 	/**
@@ -85,19 +73,7 @@ export type AutomationTaskSummary = AutomationTask & {
 	nextRunAt?: number;
 };
 
-export type AutomationRunEventType =
-	| "queued"
-	| "starting"
-	| "session-created"
-	| "prompt-accepted"
-	| "metrics"
-	| "completed"
-	| "failed"
-	| "aborted"
-	| "skipped"
-	| "interrupted"
-	| "budget-exhausted"
-	| "timed-out";
+export type AutomationRunEventType = "queued" | "starting" | "session-created" | "prompt-accepted" | "metrics" | "completed" | "failed" | "aborted" | "skipped" | "interrupted" | "budget-exhausted" | "timed-out";
 
 export type AutomationRunEvent = {
 	id: string;
@@ -166,9 +142,7 @@ export type CreateAutomationTaskInput = {
 export type UpdateAutomationTaskInput = Partial<CreateAutomationTaskInput>;
 export type UpdateAutomationSettingsInput = Partial<AutomationSettings>;
 
-export type AutomationCronPreview =
-	| { valid: true; nextRuns: number[] }
-	| { valid: false; error: string };
+export type AutomationCronPreview = { valid: true; nextRuns: number[] } | { valid: false; error: string };
 
 export type AutomationChangedEvent = {
 	revision: number;

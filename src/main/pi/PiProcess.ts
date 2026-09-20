@@ -6,11 +6,7 @@ import { join } from "node:path";
 import { PiRpcClient } from "./PiRpcClient";
 import { PiLocator } from "./PiLocator";
 import { createSpawnFailureError } from "./piSpawnFailure";
-import {
-  parkBlockedExtensionsInDir,
-  unparkBlockedExtensions,
-  type ParkedExtension,
-} from "./piExtensionFilter";
+import { parkBlockedExtensionsInDir, unparkBlockedExtensions, type ParkedExtension } from "./piExtensionFilter";
 import type { AppSettings } from "../../shared/types";
 import type { SessionProxyMode } from "../../shared/types/session";
 import { toWindowsHostPath, toWslLinuxPath } from "../wsl/WslPaths";
@@ -21,101 +17,67 @@ import { applyPiProxyMode } from "../sessions/sessionProxyPolicy";
 import { killProcessTree } from "../git/gitProcess";
 
 type PiProcessSettings = Pick<
-  AppSettings,
-  | "piProxyEnabled"
-  | "piProxyUrl"
-  | "piProxyBypass"
-  | "customPiPath"
-  | "wslEnabled"
-  | "wslDistro"
-  | "wslUser"
-  | "piRpcOffline"
-  | "piRpcNoExtensions"
-  | "piRpcNoSkills"
-  | "removedBuiltInExtensions"
-  | "disabledExtensions"
-  | "disabledSkills"
-  | "disabledPrompts"
-  | "disableExtensionWhitelist"
-  | "autoSessionTitle"
+	AppSettings,
+	"piProxyEnabled" | "piProxyUrl" | "piProxyBypass" | "customPiPath" | "wslEnabled" | "wslDistro" | "wslUser" | "piRpcOffline" | "piRpcNoExtensions" | "piRpcNoSkills" | "removedBuiltInExtensions" | "disabledExtensions" | "disabledSkills" | "disabledPrompts" | "disableExtensionWhitelist" | "autoSessionTitle"
 >;
 
-type PiProcessLocator = Pick<
-  PiLocator,
-  "resolveCommand" | "createInvocation" | "createProcessEnv" | "resolveArgCharBudget"
-> & Partial<Pick<PiLocator, "warmWslCommand">>;
-
+type PiProcessLocator = Pick<PiLocator, "resolveCommand" | "createInvocation" | "createProcessEnv" | "resolveArgCharBudget"> & Partial<Pick<PiLocator, "warmWslCommand">>;
 
 /** 可选：覆盖扩展扫描用的用户 home（WSL 映射 Windows home 时传入）。 */
 type PiProcessOptions = {
-  agentHomeDir?: string;
-  /**
-   * 解析当前应通过 -e 注入的 PiDeck 内置扩展绝对路径。
-   * 未提供时 RPC 不注入内置扩展（兼容测试/探针）。
-   */
-  resolveBuiltInExtensionPaths?: (
-    settings?: PiProcessSettings,
-    includeProjectResources?: boolean,
-  ) => string[];
-  /**
-   * 白名单模式解析器：user/project packages + 本地扩展 + 内置扩展的启用路径列表。
-   * 返回 null = 无禁用项，不启用白名单（pi 自动发现全部扩展）；
-   * 返回数组（可能为空）= 启用白名单，start() 附加 --no-extensions 并逐条注入。
-   */
-  resolveEnabledExtensionPaths?: (
-    settings?: PiProcessSettings,
-    cwd?: string,
-    includeProjectResources?: boolean,
-  ) => string[] | null;
-  /**
-   * 技能白名单模式解析器：全局/项目技能目录 + settings.skills + 包技能的全部启用路径。
-   * 返回 null = 无禁用项，不启用白名单（pi 自动发现全部技能）；
-   * 返回数组（可能为空）= 启用白名单，start() 附加 --no-skills 并逐条 --skill 注入。
-   */
-  resolveEnabledSkillPaths?: (
-    settings?: PiProcessSettings,
-    cwd?: string,
-    includeProjectResources?: boolean,
-  ) => string[] | null;
-  /**
-   * 提示词模板白名单模式解析器：全局/项目 prompts 目录 + settings.prompts + 包模板的全部启用路径。
-   * 返回 null = 无禁用项，不启用白名单（pi 自动发现全部模板）；
-   * 返回数组（可能为空）= 启用白名单，start() 附加 --no-prompt-templates 并逐条 --prompt-template 注入。
-   */
-  resolveEnabledPromptPaths?: (
-    settings?: PiProcessSettings,
-    cwd?: string,
-    includeProjectResources?: boolean,
-  ) => string[] | null;
-  /**
-   * 安全策略快照路径（userData/security-policy.json）。
-   * 注入 PIDECK_SECURITY_CONFIG 环境变量，pi-deck-security-gate 扩展据此加载规则。
-   */
-  securitySnapshotPath?: string;
-  /**
-   * 会话身份（会话文件路径 = SessionRecord.id）。
-   * 注入 PIDECK_SESSION_ID 环境变量，扩展按它解析会话级等级覆盖。
-   */
-  securitySessionId?: string;
-  /**
-   * 当前会话是否已绑定飞书（PIDECK_FEISHU_LINKED=1）。
-   * pi-deck-ask-question 扩展据此把 ask_question 换成禁用提示版：
-   * 飞书端交互卡片体验差（按钮截断/选项上限），agent 应把问题直接写进回复。
-   * 进程级标记，绑定发生在 runtime 启动前（FeishuBridge 先建 binding 再 activateRuntime），
-   * 因此 spawn 时判断可靠；绑定后已运行的会话需重启才生效（解绑后同样持续到重启）。
-   */
-  feishuLinked?: boolean;
-  /**
-   * 会话级代理覆盖（单会话开关）：on = 强制启用（复用全局 piProxyUrl），
-   * off = 强制直连；缺省/follow = 跟随全局设置。仅在本进程 spawn 时生效。
-   */
-  proxyOverride?: SessionProxyMode;
-  /**
-   * spawn pi 前对会话文件的预检/修复回调（如剔除旧版 PiDeck 私有 sessionName 头行，
-   * 该行会让 pi 报 "Session file is not a valid pi session" 并 exit 1）。
-   * 返回是否发生修复；抛错或未注入都不阻塞启动（pi 自身的加载错误更接近事实，留日志即可）。
-   */
-  repairSessionFileBeforeStart?: (sessionPath: string) => Promise<boolean>;
+	agentHomeDir?: string;
+	/**
+	 * 解析当前应通过 -e 注入的 PiDeck 内置扩展绝对路径。
+	 * 未提供时 RPC 不注入内置扩展（兼容测试/探针）。
+	 */
+	resolveBuiltInExtensionPaths?: (settings?: PiProcessSettings, includeProjectResources?: boolean) => string[];
+	/**
+	 * 白名单模式解析器：user/project packages + 本地扩展 + 内置扩展的启用路径列表。
+	 * 返回 null = 无禁用项，不启用白名单（pi 自动发现全部扩展）；
+	 * 返回数组（可能为空）= 启用白名单，start() 附加 --no-extensions 并逐条注入。
+	 */
+	resolveEnabledExtensionPaths?: (settings?: PiProcessSettings, cwd?: string, includeProjectResources?: boolean) => string[] | null;
+	/**
+	 * 技能白名单模式解析器：全局/项目技能目录 + settings.skills + 包技能的全部启用路径。
+	 * 返回 null = 无禁用项，不启用白名单（pi 自动发现全部技能）；
+	 * 返回数组（可能为空）= 启用白名单，start() 附加 --no-skills 并逐条 --skill 注入。
+	 */
+	resolveEnabledSkillPaths?: (settings?: PiProcessSettings, cwd?: string, includeProjectResources?: boolean) => string[] | null;
+	/**
+	 * 提示词模板白名单模式解析器：全局/项目 prompts 目录 + settings.prompts + 包模板的全部启用路径。
+	 * 返回 null = 无禁用项，不启用白名单（pi 自动发现全部模板）；
+	 * 返回数组（可能为空）= 启用白名单，start() 附加 --no-prompt-templates 并逐条 --prompt-template 注入。
+	 */
+	resolveEnabledPromptPaths?: (settings?: PiProcessSettings, cwd?: string, includeProjectResources?: boolean) => string[] | null;
+	/**
+	 * 安全策略快照路径（userData/security-policy.json）。
+	 * 注入 PIDECK_SECURITY_CONFIG 环境变量，pi-deck-security-gate 扩展据此加载规则。
+	 */
+	securitySnapshotPath?: string;
+	/**
+	 * 会话身份（会话文件路径 = SessionRecord.id）。
+	 * 注入 PIDECK_SESSION_ID 环境变量，扩展按它解析会话级等级覆盖。
+	 */
+	securitySessionId?: string;
+	/**
+	 * 当前会话是否已绑定飞书（PIDECK_FEISHU_LINKED=1）。
+	 * pi-deck-ask-question 扩展据此把 ask_question 换成禁用提示版：
+	 * 飞书端交互卡片体验差（按钮截断/选项上限），agent 应把问题直接写进回复。
+	 * 进程级标记，绑定发生在 runtime 启动前（FeishuBridge 先建 binding 再 activateRuntime），
+	 * 因此 spawn 时判断可靠；绑定后已运行的会话需重启才生效（解绑后同样持续到重启）。
+	 */
+	feishuLinked?: boolean;
+	/**
+	 * 会话级代理覆盖（单会话开关）：on = 强制启用（复用全局 piProxyUrl），
+	 * off = 强制直连；缺省/follow = 跟随全局设置。仅在本进程 spawn 时生效。
+	 */
+	proxyOverride?: SessionProxyMode;
+	/**
+	 * spawn pi 前对会话文件的预检/修复回调（如剔除旧版 PiDeck 私有 sessionName 头行，
+	 * 该行会让 pi 报 "Session file is not a valid pi session" 并 exit 1）。
+	 * 返回是否发生修复；抛错或未注入都不阻塞启动（pi 自身的加载错误更接近事实，留日志即可）。
+	 */
+	repairSessionFileBeforeStart?: (sessionPath: string) => Promise<boolean>;
 };
 
 /**
@@ -127,28 +89,28 @@ type WhitelistKind = "extensions" | "skills" | "prompts";
 
 /** 各资源白名单对应的 pi 命令行参数（总开关 + 逐条注入用的选项名）。 */
 const WHITELIST_FLAGS: Record<WhitelistKind, { off: string; per: string }> = {
-  extensions: { off: "--no-extensions", per: "--extension" },
-  skills: { off: "--no-skills", per: "--skill" },
-  prompts: { off: "--no-prompt-templates", per: "--prompt-template" },
+	extensions: { off: "--no-extensions", per: "--extension" },
+	skills: { off: "--no-skills", per: "--skill" },
+	prompts: { off: "--no-prompt-templates", per: "--prompt-template" },
 };
 
 /** 某类白名单因超出命令行预算被整体跳过时，留给启动诊断的信息。 */
 export type WhitelistSkip = {
-  kind: WhitelistKind;
-  /** 被跳过的条数（用户关心的是「多少个」）。 */
-  count: number;
-  /** 注入后的整条命令行估算字符数（含已有参数），可直接与 budget 比较。 */
-  chars: number;
-  /** 本次注入自身占用的估算字符数，用来说明「谁是撑爆预算的大头」。 */
-  injected: number;
-  budget: number;
+	kind: WhitelistKind;
+	/** 被跳过的条数（用户关心的是「多少个」）。 */
+	count: number;
+	/** 注入后的整条命令行估算字符数（含已有参数），可直接与 budget 比较。 */
+	chars: number;
+	/** 本次注入自身占用的估算字符数，用来说明「谁是撑爆预算的大头」。 */
+	injected: number;
+	budget: number;
 };
 
 /** 估算一组参数占用的命令行字符数（含分隔空格；路径带空格时 spawn 会补引号，一并留余量）。 */
 function estimateArgChars(args: readonly string[]): number {
-  let total = 0;
-  for (const arg of args) total += arg.length + 1 + (arg.includes(" ") ? 2 : 0);
-  return total;
+	let total = 0;
+	for (const arg of args) total += arg.length + 1 + (arg.includes(" ") ? 2 : 0);
+	return total;
 }
 
 /**
@@ -161,15 +123,15 @@ function estimateArgChars(args: readonly string[]): number {
  * pi 走默认发现，本次「禁用」不生效但启动不会失败；跳过的事实记入 diagnostics 供 UI 提示用户。
  */
 function estimateWhitelistInjectionChars(kind: WhitelistKind, paths: readonly string[]): number {
-  const flags = WHITELIST_FLAGS[kind];
-  // 总开关本身也占长度，且「空列表」表示全部禁用、依然要注入总开关。
-  let total = flags.off.length + 1;
-  for (const path of paths) {
-    const trimmed = path.trim();
-    if (!trimmed) continue;
-    total += flags.per.length + 1 + trimmed.length + (trimmed.includes(" ") ? 2 : 0);
-  }
-  return total;
+	const flags = WHITELIST_FLAGS[kind];
+	// 总开关本身也占长度，且「空列表」表示全部禁用、依然要注入总开关。
+	let total = flags.off.length + 1;
+	for (const path of paths) {
+		const trimmed = path.trim();
+		if (!trimmed) continue;
+		total += flags.per.length + 1 + trimmed.length + (trimmed.includes(" ") ? 2 : 0);
+	}
+	return total;
 }
 
 /**
@@ -179,855 +141,776 @@ function estimateWhitelistInjectionChars(kind: WhitelistKind, paths: readonly st
  * WSL 的 \\wsl$\... 宿主路径在 Windows 侧 stat 可能失败，但 spawn 是正常的。
  */
 function readCwdState(cwd: string): { exists: boolean; isDirectory: boolean } {
-  try {
-    return { exists: true, isDirectory: statSync(cwd).isDirectory() };
-  } catch {
-    return { exists: false, isDirectory: false };
-  }
+	try {
+		return { exists: true, isDirectory: statSync(cwd).isDirectory() };
+	} catch {
+		return { exists: false, isDirectory: false };
+	}
 }
 
-type VersionCacheEntry =
-  | { status: "pending"; promise: Promise<boolean> }
-  | { status: "done"; ok: boolean; minorVersion: number | null };
+type VersionCacheEntry = { status: "pending"; promise: Promise<boolean> } | { status: "done"; ok: boolean; minorVersion: number | null };
 
 export class PiProcess extends EventEmitter {
-  private proc?: ChildProcessWithoutNullStreams;
-  private rpc?: PiRpcClient;
-  /** 从 --version 解析出的次版本号（第二段），用于启动诊断和信任标志兼容性判断。 */
-  private piMinorVersion: number | null = null;
-  /**
-   * pi --version 只用于启动失败后的诊断，不应阻塞真正的 RPC 进程启动。
-   * 按 command 路径缓存结果，避免连续打开多个 Agent 时重复启动 Node shim。
-   */
-  private static readonly versionCache = new Map<string, VersionCacheEntry>();
+	private proc?: ChildProcessWithoutNullStreams;
+	private rpc?: PiRpcClient;
+	/** 从 --version 解析出的次版本号（第二段），用于启动诊断和信任标志兼容性判断。 */
+	private piMinorVersion: number | null = null;
+	/**
+	 * pi --version 只用于启动失败后的诊断，不应阻塞真正的 RPC 进程启动。
+	 * 按 command 路径缓存结果，避免连续打开多个 Agent 时重复启动 Node shim。
+	 */
+	private static readonly versionCache = new Map<string, VersionCacheEntry>();
 
-  /**
-   * --approve/--no-approve 信任标志在 pi 0.79.0 引入。
-   * 检查次版本号是否 >= 79（当前 pi 版本为 0.x.y，次版本号对应第二段）。
-   * 未来 pi 升级到 1.x+ 后需要同步更新此检查。
-   */
-  private static versionSupportsTrustFlags(minorVersion: number | null): boolean {
-    if (minorVersion === null) return false;
-    return minorVersion >= 79;
-  }
+	/**
+	 * --approve/--no-approve 信任标志在 pi 0.79.0 引入。
+	 * 检查次版本号是否 >= 79（当前 pi 版本为 0.x.y，次版本号对应第二段）。
+	 * 未来 pi 升级到 1.x+ 后需要同步更新此检查。
+	 */
+	private static versionSupportsTrustFlags(minorVersion: number | null): boolean {
+		if (minorVersion === null) return false;
+		return minorVersion >= 79;
+	}
 
-  /**
-   * 应用启动时预热 pi --version 缓存，避免首次创建 Agent（尤其 trust 路径）同步等待版本检测。
-   * 失败不抛错：仅影响缓存命中与诊断字段，不阻塞主流程。
-   */
-  static async warmVersionCache(
-    settings?: PiProcessSettings,
-    locator: PiProcessLocator = new PiLocator(),
-  ): Promise<boolean> {
-    // WSL which 必须先异步预热，否则 resolveCommand 只能回退 Windows "pi"。
-    if (settings?.wslEnabled && settings.wslDistro && settings.wslUser) {
-      await locator.warmWslCommand?.(settings.wslDistro, settings.wslUser);
-    }
-    const command = locator.resolveCommand(
-      settings?.customPiPath,
-      settings?.wslEnabled,
-      settings?.wslDistro,
-      settings?.wslUser,
-    );
-    // 复用实例方法的缓存逻辑：构造临时实例只为调用 ensureVersionCheck。
-    const probe = new PiProcess(process.cwd(), settings, locator);
-    return probe.ensureVersionCheck(command);
-  }
+	/**
+	 * 应用启动时预热 pi --version 缓存，避免首次创建 Agent（尤其 trust 路径）同步等待版本检测。
+	 * 失败不抛错：仅影响缓存命中与诊断字段，不阻塞主流程。
+	 */
+	static async warmVersionCache(settings?: PiProcessSettings, locator: PiProcessLocator = new PiLocator()): Promise<boolean> {
+		// WSL which 必须先异步预热，否则 resolveCommand 只能回退 Windows "pi"。
+		if (settings?.wslEnabled && settings.wslDistro && settings.wslUser) {
+			await locator.warmWslCommand?.(settings.wslDistro, settings.wslUser);
+		}
+		const command = locator.resolveCommand(settings?.customPiPath, settings?.wslEnabled, settings?.wslDistro, settings?.wslUser);
+		// 复用实例方法的缓存逻辑：构造临时实例只为调用 ensureVersionCheck。
+		const probe = new PiProcess(process.cwd(), settings, locator);
+		return probe.ensureVersionCheck(command);
+	}
 
-  /** 启动失败 / 异常退出时的诊断信息 */
-  private diagnostics: {
-    command: string;
-    args: string[];
-    cwd: string;
-    stderr: string[];
-    exitCode: number | null;
-    exitSignal: string | null;
-    customPiPath: string | undefined;
-    versionCheck: boolean;
-    /** 版本检测是否真的跑完过（false 时 versionCheck=false 只表示「还没探过」，不是失败）。 */
-    versionCheckProbed?: boolean;
-    /**
-     * spawn 阶段就失败（Node 只发 error、不发 exit，pid 从未拿到）。
-     * 与「进程起来了又退出」严格区分：前者一定与扩展无关，回退禁用扩展没有意义。
-     */
-    spawnFailed?: boolean;
-    cwdMissing?: boolean;
-    /**
-     * Windows 启动通道：node 直启（.cmd 垫片已还原成 node + JS 入口）或 cmd.exe 回退 + 原因。
-     * 这条以前是静默的，用户看到命令行里有 cmd.exe 会以为「改 node 启动没生效」。
-     */
-    launch?: { channel: "node-direct" | "cmd-shim"; reason?: string; entry?: string };
-    /** 被桌面端 RPC 启动路径自动隔离的扩展名（如 codeisland） */
-    blockedExtensions?: string[];
-    /**
-     * 因超出命令行注入预算而被跳过的白名单（扩展/技能/提示词，条数多时可能同时命中多项）。
-     * 跳过不影响启动（pi 走默认发现），只意味着本次「禁用」不生效，需要告知用户。
-     */
-    whitelistSkipped?: WhitelistSkip[];
-  } | null = null;
+	/** 启动失败 / 异常退出时的诊断信息 */
+	private diagnostics: {
+		command: string;
+		args: string[];
+		cwd: string;
+		stderr: string[];
+		exitCode: number | null;
+		exitSignal: string | null;
+		customPiPath: string | undefined;
+		versionCheck: boolean;
+		/** 版本检测是否真的跑完过（false 时 versionCheck=false 只表示「还没探过」，不是失败）。 */
+		versionCheckProbed?: boolean;
+		/**
+		 * spawn 阶段就失败（Node 只发 error、不发 exit，pid 从未拿到）。
+		 * 与「进程起来了又退出」严格区分：前者一定与扩展无关，回退禁用扩展没有意义。
+		 */
+		spawnFailed?: boolean;
+		cwdMissing?: boolean;
+		/**
+		 * Windows 启动通道：node 直启（.cmd 垫片已还原成 node + JS 入口）或 cmd.exe 回退 + 原因。
+		 * 这条以前是静默的，用户看到命令行里有 cmd.exe 会以为「改 node 启动没生效」。
+		 */
+		launch?: { channel: "node-direct" | "cmd-shim"; reason?: string; entry?: string };
+		/** 被桌面端 RPC 启动路径自动隔离的扩展名（如 codeisland） */
+		blockedExtensions?: string[];
+		/**
+		 * 因超出命令行注入预算而被跳过的白名单（扩展/技能/提示词，条数多时可能同时命中多项）。
+		 * 跳过不影响启动（pi 走默认发现），只意味着本次「禁用」不生效，需要告知用户。
+		 */
+		whitelistSkipped?: WhitelistSkip[];
+	} | null = null;
 
-  constructor(
-    private readonly cwd: string,
-    private readonly settings?: PiProcessSettings,
-    private readonly locator: PiProcessLocator = new PiLocator(),
-    private readonly options: PiProcessOptions = {},
-  ) {
-    super();
-    // EventEmitter 在没有 listener 时 emit('error') 会变成未捕获异常并可能拖垮主进程。
-    // AgentManager 在 await start() 之后才挂业务 error 监听，spawn 的 ENOENT 等错误
-    // 往往在中间窗口异步到达。这里先挂一个诊断 sink，保证永远不会因 0 listener 崩进程；
-    // 业务侧仍可再挂自己的 listener 做 UI 提示。
-    this.on("error", (error: unknown) => {
-      const message = error instanceof Error ? error.message : String(error);
-      // spawn 失败（ENOENT 等）在业务 listener 挂载前到达，双写日志文件避免启动失败无痕
-      void getAppLogger()?.error("pi-process", "Spawn error (pre-listener sink)", { message });
-      console.error("[PiProcess] child process error (pre-listener safe sink):", message);
-    });
-  }
+	constructor(
+		private readonly cwd: string,
+		private readonly settings?: PiProcessSettings,
+		private readonly locator: PiProcessLocator = new PiLocator(),
+		private readonly options: PiProcessOptions = {},
+	) {
+		super();
+		// EventEmitter 在没有 listener 时 emit('error') 会变成未捕获异常并可能拖垮主进程。
+		// AgentManager 在 await start() 之后才挂业务 error 监听，spawn 的 ENOENT 等错误
+		// 往往在中间窗口异步到达。这里先挂一个诊断 sink，保证永远不会因 0 listener 崩进程；
+		// 业务侧仍可再挂自己的 listener 做 UI 提示。
+		this.on("error", (error: unknown) => {
+			const message = error instanceof Error ? error.message : String(error);
+			// spawn 失败（ENOENT 等）在业务 listener 挂载前到达，双写日志文件避免启动失败无痕
+			void getAppLogger()?.error("pi-process", "Spawn error (pre-listener sink)", { message });
+			console.error("[PiProcess] child process error (pre-listener safe sink):", message);
+		});
+	}
 
-  /** 返回诊断信息（进程启动失败或异常退出后调用） */
-  getDiagnostics(): Readonly<{
-    command: string;
-    args: string[];
-    cwd: string;
-    stderr: string[];
-    exitCode: number | null;
-    exitSignal: string | null;
-    customPiPath: string | undefined;
-    versionCheck: boolean;
-    /**
-     * 版本检测是否真的跑完过。
-     * versionCheck=false 有两种含义：探测失败（pi 不可用）或**还没探过**（未命中 --version 缓存）。
-     * 诊断卡不分青红皂白显示「✗ 失败」会把用户引去重装 pi，故单列一位。
-     */
-    versionCheckProbed?: boolean;
-    spawnFailed?: boolean;
-    cwdMissing?: boolean;
-    launch?: { channel: "node-direct" | "cmd-shim"; reason?: string; entry?: string };
-    blockedExtensions?: string[];
-    whitelistSkipped?: WhitelistSkip[];
-  }> | null {
-    return this.diagnostics;
-  }
+	/** 返回诊断信息（进程启动失败或异常退出后调用） */
+	getDiagnostics(): Readonly<{
+		command: string;
+		args: string[];
+		cwd: string;
+		stderr: string[];
+		exitCode: number | null;
+		exitSignal: string | null;
+		customPiPath: string | undefined;
+		versionCheck: boolean;
+		/**
+		 * 版本检测是否真的跑完过。
+		 * versionCheck=false 有两种含义：探测失败（pi 不可用）或**还没探过**（未命中 --version 缓存）。
+		 * 诊断卡不分青红皂白显示「✗ 失败」会把用户引去重装 pi，故单列一位。
+		 */
+		versionCheckProbed?: boolean;
+		spawnFailed?: boolean;
+		cwdMissing?: boolean;
+		launch?: { channel: "node-direct" | "cmd-shim"; reason?: string; entry?: string };
+		blockedExtensions?: string[];
+		whitelistSkipped?: WhitelistSkip[];
+	}> | null {
+		return this.diagnostics;
+	}
 
-  /** 本进程生命周期内临时停放的扩展，exit/stop 时还原。 */
-  private parkedExtensions: ParkedExtension[] = [];
+	/** 本进程生命周期内临时停放的扩展，exit/stop 时还原。 */
+	private parkedExtensions: ParkedExtension[] = [];
 
-  /**
-   * 仅停放 codeisland 等黑名单文件，不碰 npm packages / 其它本地扩展。
-   * 拒绝项目 trust 时只允许访问全局目录，不能扫描或移动项目资源。
-   * 用户已开 piRpcNoExtensions 时无需停放（扩展本就不会加载）。
-   */
-  private parkIncompatibleExtensions(includeProjectResources: boolean): string[] {
-    if (this.settings?.piRpcNoExtensions) return [];
-    const home = this.options.agentHomeDir?.trim() || homedir();
-    const dirs = [join(home, ".pi", "agent", "extensions")];
-    if (includeProjectResources) dirs.push(join(this.cwd, ".pi", "extensions"));
-    const parked: ParkedExtension[] = [];
-    for (const dir of dirs) {
-      parked.push(...parkBlockedExtensionsInDir(dir));
-    }
-    this.parkedExtensions = parked;
-    // 去重 basename 供诊断展示
-    return [...new Set(parked.map((p) => p.name))];
-  }
+	/**
+	 * 仅停放 codeisland 等黑名单文件，不碰 npm packages / 其它本地扩展。
+	 * 拒绝项目 trust 时只允许访问全局目录，不能扫描或移动项目资源。
+	 * 用户已开 piRpcNoExtensions 时无需停放（扩展本就不会加载）。
+	 */
+	private parkIncompatibleExtensions(includeProjectResources: boolean): string[] {
+		if (this.settings?.piRpcNoExtensions) return [];
+		const home = this.options.agentHomeDir?.trim() || homedir();
+		const dirs = [join(home, ".pi", "agent", "extensions")];
+		if (includeProjectResources) dirs.push(join(this.cwd, ".pi", "extensions"));
+		const parked: ParkedExtension[] = [];
+		for (const dir of dirs) {
+			parked.push(...parkBlockedExtensionsInDir(dir));
+		}
+		this.parkedExtensions = parked;
+		// 去重 basename 供诊断展示
+		return [...new Set(parked.map((p) => p.name))];
+	}
 
-  /** 还原本进程停放的扩展；幂等，可多次调用。 */
-  private restoreParkedExtensions(): void {
-    if (this.parkedExtensions.length === 0) return;
-    unparkBlockedExtensions(this.parkedExtensions);
-    this.parkedExtensions = [];
-  }
+	/** 还原本进程停放的扩展；幂等，可多次调用。 */
+	private restoreParkedExtensions(): void {
+		if (this.parkedExtensions.length === 0) return;
+		unparkBlockedExtensions(this.parkedExtensions);
+		this.parkedExtensions = [];
+	}
 
-  async start(sessionPath?: string, trustOverride?: "approve" | "no-approve", noSession?: boolean) {
-    if (this.proc) return this.rpc!;
+	async start(sessionPath?: string, trustOverride?: "approve" | "no-approve", noSession?: boolean) {
+		if (this.proc) return this.rpc!;
 
-    // 预检会话文件：旧版 PiDeck 私有 sessionName 头行会让 pi 拒绝加载（exit 1）。
-    // 修复失败不阻塞启动——pi 自身的报错会进入启动诊断，比静默吞掉更有价值。
-    if (sessionPath && !noSession && this.options.repairSessionFileBeforeStart) {
-      try {
-        const repaired = await this.options.repairSessionFileBeforeStart(sessionPath);
-        if (repaired) {
-          void getAppLogger()?.warn("pi-process", "Repaired legacy sessionName header before spawn", {
-            sessionPath,
-          });
-        }
-      } catch (error) {
-        void getAppLogger()?.warn("pi-process", "Session file preflight repair failed", {
-          sessionPath,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
+		// 预检会话文件：旧版 PiDeck 私有 sessionName 头行会让 pi 拒绝加载（exit 1）。
+		// 修复失败不阻塞启动——pi 自身的报错会进入启动诊断，比静默吞掉更有价值。
+		if (sessionPath && !noSession && this.options.repairSessionFileBeforeStart) {
+			try {
+				const repaired = await this.options.repairSessionFileBeforeStart(sessionPath);
+				if (repaired) {
+					void getAppLogger()?.warn("pi-process", "Repaired legacy sessionName header before spawn", {
+						sessionPath,
+					});
+				}
+			} catch (error) {
+				void getAppLogger()?.warn("pi-process", "Session file preflight repair failed", {
+					sessionPath,
+					error: error instanceof Error ? error.message : String(error),
+				});
+			}
+		}
 
-    // 信任确认由桌面端 AgentManager.ensureProjectTrust 在启动 pi 前完成，不再静默 --approve。
-    // pi 在 RPC 模式下 project_trust 事件 hasUI 恒为 false，故信任弹窗由桌面端自行处理。
-    const args = ["--mode", "rpc"];
-    // RPC 无 TUI，不需要主题发现/加载；跳过可少扫用户/项目/package themes，加快冷启动。
-    args.push("--no-themes");
-    // 桌面端模型列表来自本地 models.json；默认 --offline 跳过 pi 启动期模型目录网络刷新。
-    if (this.settings?.piRpcOffline !== false) args.push("--offline");
+		// 信任确认由桌面端 AgentManager.ensureProjectTrust 在启动 pi 前完成，不再静默 --approve。
+		// pi 在 RPC 模式下 project_trust 事件 hasUI 恒为 false，故信任弹窗由桌面端自行处理。
+		const args = ["--mode", "rpc"];
+		// RPC 无 TUI，不需要主题发现/加载；跳过可少扫用户/项目/package themes，加快冷启动。
+		args.push("--no-themes");
+		// 桌面端模型列表来自本地 models.json；默认 --offline 跳过 pi 启动期模型目录网络刷新。
+		if (this.settings?.piRpcOffline !== false) args.push("--offline");
 
-    // 诊断开关：坏扩展/技能有时会拖垮 RPC 初始化；用户可在开发设置临时关闭后重试。
-    // piRpcNoExtensions（总开关）优先：关闭后连白名单注入也不做，保证诊断路径干净。
-    if (this.settings?.piRpcNoExtensions) args.push("--no-extensions");
-    if (this.settings?.piRpcNoSkills) args.push("--no-skills");
+		// 诊断开关：坏扩展/技能有时会拖垮 RPC 初始化；用户可在开发设置临时关闭后重试。
+		// piRpcNoExtensions（总开关）优先：关闭后连白名单注入也不做，保证诊断路径干净。
+		if (this.settings?.piRpcNoExtensions) args.push("--no-extensions");
+		if (this.settings?.piRpcNoSkills) args.push("--no-skills");
 
-    const includeProjectResources = trustOverride !== "no-approve";
-    let blockedNames: string[] = [];
-    let startupComplete = false;
-    /**
-     * 被预算兜底跳过的白名单（扩展/技能/提示词）。三类注入共用同一条命令行预算，
-     * 因此统一记账、统一进 diagnostics，而不是各自只算自己那一段。
-     */
-    const whitelistSkipped: WhitelistSkip[] = [];
-    try {
-      // 仅临时停放 codeisland 等黑名单扩展文件；拒绝 trust 时不得扫描或移动项目扩展。
-      blockedNames = this.parkIncompatibleExtensions(includeProjectResources);
-    if (blockedNames.length > 0) {
-      // 黑名单扩展被停放属于启动诊断事件，同步写入日志文件便于排查 RPC 初始化失败
-      void getAppLogger()?.warn("pi-process", "Desktop-incompatible extensions parked for RPC", {
-        blocked: blockedNames.join(", "),
-      });
-      console.warn(
-        "[PiProcess] Desktop-incompatible extensions parked for RPC:",
-        blockedNames.join(", "),
-      );
-    }
+		const includeProjectResources = trustOverride !== "no-approve";
+		let blockedNames: string[] = [];
+		let startupComplete = false;
+		/**
+		 * 被预算兜底跳过的白名单（扩展/技能/提示词）。三类注入共用同一条命令行预算，
+		 * 因此统一记账、统一进 diagnostics，而不是各自只算自己那一段。
+		 */
+		const whitelistSkipped: WhitelistSkip[] = [];
+		try {
+			// 仅临时停放 codeisland 等黑名单扩展文件；拒绝 trust 时不得扫描或移动项目扩展。
+			blockedNames = this.parkIncompatibleExtensions(includeProjectResources);
+			if (blockedNames.length > 0) {
+				// 黑名单扩展被停放属于启动诊断事件，同步写入日志文件便于排查 RPC 初始化失败
+				void getAppLogger()?.warn("pi-process", "Desktop-incompatible extensions parked for RPC", {
+					blocked: blockedNames.join(", "),
+				});
+				console.warn("[PiProcess] Desktop-incompatible extensions parked for RPC:", blockedNames.join(", "));
+			}
 
-    // 白名单模式：存在禁用扩展时，--no-extensions 关自动发现 + 逐条 -e 注入未禁用的扩展。
-    // 必须在 parkIncompatibleExtensions 之后调用：黑名单文件已被移走，resolver 的 existsSync
-    // 会自然跳过它们，避免 -e 指向已停放路径导致 pi 报 path does not exist。
-    // disableExtensionWhitelist only affects trusted sessions. Denied trust is a security mode and
-    // always keeps the global-only whitelist so the diagnostic switch cannot restore project discovery.
-    // 此处只计算列表，实际注入推迟到版本门槛检查之后（见下方 version gate），
-    // 确保在拿到 command + versionCache 后统一决定。
-    const whitelistPaths = this.options.resolveEnabledExtensionPaths?.(
-      this.settings,
-      this.cwd,
-      includeProjectResources,
-    ) ?? null;
-    const useWhitelist =
-      whitelistPaths !== null &&
-      whitelistPaths !== undefined &&
-      !this.settings?.piRpcNoExtensions &&
-      (!this.settings?.disableExtensionWhitelist || !includeProjectResources);
+			// 白名单模式：存在禁用扩展时，--no-extensions 关自动发现 + 逐条 -e 注入未禁用的扩展。
+			// 必须在 parkIncompatibleExtensions 之后调用：黑名单文件已被移走，resolver 的 existsSync
+			// 会自然跳过它们，避免 -e 指向已停放路径导致 pi 报 path does not exist。
+			// disableExtensionWhitelist only affects trusted sessions. Denied trust is a security mode and
+			// always keeps the global-only whitelist so the diagnostic switch cannot restore project discovery.
+			// 此处只计算列表，实际注入推迟到版本门槛检查之后（见下方 version gate），
+			// 确保在拿到 command + versionCache 后统一决定。
+			const whitelistPaths = this.options.resolveEnabledExtensionPaths?.(this.settings, this.cwd, includeProjectResources) ?? null;
+			const useWhitelist = whitelistPaths !== null && whitelistPaths !== undefined && !this.settings?.piRpcNoExtensions && (!this.settings?.disableExtensionWhitelist || !includeProjectResources);
 
-    // PiDeck 内置扩展：从 app resources 以 -e 注入，不再复制到 ~/.pi/agent/extensions。
-    // piRpcNoExtensions 或白名单模式时不再单独注入（白名单列表已包含内置扩展）。
-    const builtInPaths = this.options.resolveBuiltInExtensionPaths?.(
-      this.settings,
-      includeProjectResources,
-    ) ?? [];
-    const argsWithBuiltIns = useWhitelist
-      ? args
-      : appendBuiltInExtensionArgs(args, builtInPaths, {
-          noExtensions: Boolean(this.settings?.piRpcNoExtensions),
-        });
-    if (useWhitelist) {
-      void getAppLogger()?.info("pi-process", "Extension whitelist mode enabled", {
-        extensions: whitelistPaths.length,
-        cwd: this.cwd,
-      });
-      console.log(`[PiProcess] Extension whitelist mode: ${whitelistPaths.length} extensions via -e`);
-    } else if (builtInPaths.length > 0 && !this.settings?.piRpcNoExtensions) {
-      void getAppLogger()?.info("pi-process", "Loading PiDeck built-in extensions via -e", {
-        extensions: builtInPaths.map((path) => path.split(/[/\\]/).pop()).join(", "),
-      });
-      console.log(
-        "[PiProcess] Loading PiDeck built-in extensions via -e:",
-        builtInPaths.map((path) => path.split(/[/\\]/).pop()).join(", "),
-      );
-    }
+			// PiDeck 内置扩展：从 app resources 以 -e 注入，不再复制到 ~/.pi/agent/extensions。
+			// piRpcNoExtensions 或白名单模式时不再单独注入（白名单列表已包含内置扩展）。
+			const builtInPaths = this.options.resolveBuiltInExtensionPaths?.(this.settings, includeProjectResources) ?? [];
+			const argsWithBuiltIns = useWhitelist
+				? args
+				: appendBuiltInExtensionArgs(args, builtInPaths, {
+						noExtensions: Boolean(this.settings?.piRpcNoExtensions),
+					});
+			if (useWhitelist) {
+				void getAppLogger()?.info("pi-process", "Extension whitelist mode enabled", {
+					extensions: whitelistPaths.length,
+					cwd: this.cwd,
+				});
+				console.log(`[PiProcess] Extension whitelist mode: ${whitelistPaths.length} extensions via -e`);
+			} else if (builtInPaths.length > 0 && !this.settings?.piRpcNoExtensions) {
+				void getAppLogger()?.info("pi-process", "Loading PiDeck built-in extensions via -e", {
+					extensions: builtInPaths.map((path) => path.split(/[/\\]/).pop()).join(", "),
+				});
+				console.log("[PiProcess] Loading PiDeck built-in extensions via -e:", builtInPaths.map((path) => path.split(/[/\\]/).pop()).join(", "));
+			}
 
-    // 后续信任标志 / session / WSL 路径改写都基于已含 -e 的参数列表
-    let finalPiArgs = argsWithBuiltIns;
-    if (noSession) finalPiArgs.push("--no-session");
-    if (sessionPath) finalPiArgs.push("--session", sessionPath);
+			// 后续信任标志 / session / WSL 路径改写都基于已含 -e 的参数列表
+			let finalPiArgs = argsWithBuiltIns;
+			if (noSession) finalPiArgs.push("--no-session");
+			if (sessionPath) finalPiArgs.push("--session", sessionPath);
 
-    // 用户手动指定的 pi 路径优先于自动检测，解决 npm global、nvm 等路径未在 PATH 中的问题。
-    // spawn 前再预热一次 WSL which：启动窗口已显示时异步等待可接受，不能同步 which。
-    if (this.settings?.wslEnabled && this.settings.wslDistro && this.settings.wslUser) {
-      await this.locator.warmWslCommand?.(this.settings.wslDistro, this.settings.wslUser);
-    }
-    const command = this.locator.resolveCommand(this.settings?.customPiPath, this.settings?.wslEnabled, this.settings?.wslDistro, this.settings?.wslUser);
+			// 用户手动指定的 pi 路径优先于自动检测，解决 npm global、nvm 等路径未在 PATH 中的问题。
+			// spawn 前再预热一次 WSL which：启动窗口已显示时异步等待可接受，不能同步 which。
+			if (this.settings?.wslEnabled && this.settings.wslDistro && this.settings.wslUser) {
+				await this.locator.warmWslCommand?.(this.settings.wslDistro, this.settings.wslUser);
+			}
+			const command = this.locator.resolveCommand(this.settings?.customPiPath, this.settings?.wslEnabled, this.settings?.wslDistro, this.settings?.wslUser);
 
-    // A denied trust decision must fail closed. Without a verified --no-approve flag, starting pi
-    // would allow its normal project discovery to load code the user explicitly rejected.
-    if (trustOverride) {
-      await this.ensureVersionCheck(command);
-      const cached = PiProcess.versionCache.get(command);
-      const supportsTrustFlags =
-        cached?.status === "done" &&
-        cached.ok &&
-        PiProcess.versionSupportsTrustFlags(cached.minorVersion);
-      if (trustOverride === "no-approve" && !supportsTrustFlags) {
-        this.restoreParkedExtensions();
-        void getAppLogger()?.error("pi-process", "Cannot enforce denied project trust", {
-          command,
-          minorVersion: cached?.status === "done" ? cached.minorVersion : null,
-          versionCheck: cached?.status === "done" ? cached.ok : false,
-        });
-        throw new Error(
-          "Cannot start an untrusted project safely: pi 0.79.0 or newer is required and its version must be verifiable.",
-        );
-      }
-      if (supportsTrustFlags) finalPiArgs.push(trustOverride === "approve" ? "--approve" : "--no-approve");
-      // Approving an old pi retains historical behavior; only denial requires a hard security guarantee.
-    }
+			// A denied trust decision must fail closed. Without a verified --no-approve flag, starting pi
+			// would allow its normal project discovery to load code the user explicitly rejected.
+			if (trustOverride) {
+				await this.ensureVersionCheck(command);
+				const cached = PiProcess.versionCache.get(command);
+				const supportsTrustFlags = cached?.status === "done" && cached.ok && PiProcess.versionSupportsTrustFlags(cached.minorVersion);
+				if (trustOverride === "no-approve" && !supportsTrustFlags) {
+					this.restoreParkedExtensions();
+					void getAppLogger()?.error("pi-process", "Cannot enforce denied project trust", {
+						command,
+						minorVersion: cached?.status === "done" ? cached.minorVersion : null,
+						versionCheck: cached?.status === "done" ? cached.ok : false,
+					});
+					throw new Error("Cannot start an untrusted project safely: pi 0.79.0 or newer is required and its version must be verifiable.");
+				}
+				if (supportsTrustFlags) finalPiArgs.push(trustOverride === "approve" ? "--approve" : "--no-approve");
+				// Approving an old pi retains historical behavior; only denial requires a hard security guarantee.
+			}
 
-    /**
-     * 评估某类白名单注入是否超出本通道的命令行预算（node 直启 26000 / cmd.exe 5000）。
-     * 比较对象是「整条命令行」（已有参数 + 本次注入）：三类白名单可同时注入，只算自己
-     * 会漏掉叠加效应，叠加超限同样会撑爆命令行。
-     */
-    const evaluateWhitelistBudget = (kind: WhitelistKind, paths: readonly string[]) => {
-      const injected = estimateWhitelistInjectionChars(kind, paths);
-      const budget = this.locator.resolveArgCharBudget(command);
-      const argvChars = estimateArgChars(finalPiArgs) + injected;
-      return { injected, budget, argvChars, overBudget: argvChars > budget };
-    };
-    /**
-     * 记录「白名单因超预算被跳过」：进 diagnostics 供启动诊断卡与时间线提示，并双写日志。
-     * 跳过不影响启动，但用户看到「禁用的东西又被加载了」会当成 bug，必须可追溯。
-     */
-    const recordWhitelistSkip = (
-      kind: WhitelistKind,
-      count: number,
-      budget: { injected: number; budget: number; argvChars: number },
-    ): void => {
-      whitelistSkipped.push({
-        kind,
-        count,
-        chars: budget.argvChars,
-        injected: budget.injected,
-        budget: budget.budget,
-      });
-      void getAppLogger()?.warn(
-        "pi-process",
-        `${kind} whitelist skipped: injection exceeds command line budget`,
-        {
-          count,
-          estimatedChars: budget.argvChars,
-          injectedChars: budget.injected,
-          budget: budget.budget,
-          cwd: this.cwd,
-        },
-      );
-      console.warn(
-        `[PiProcess] ${kind} whitelist skipped: ${count} entries (~${budget.injected} chars, ` +
-          `argv ~${budget.argvChars}) exceed budget ${budget.budget}; ` +
-          `falling back to default ${kind} discovery (disabled ${kind} will still load)`,
-      );
-    };
+			/**
+			 * 评估某类白名单注入是否超出本通道的命令行预算（node 直启 26000 / cmd.exe 5000）。
+			 * 比较对象是「整条命令行」（已有参数 + 本次注入）：三类白名单可同时注入，只算自己
+			 * 会漏掉叠加效应，叠加超限同样会撑爆命令行。
+			 */
+			const evaluateWhitelistBudget = (kind: WhitelistKind, paths: readonly string[]) => {
+				const injected = estimateWhitelistInjectionChars(kind, paths);
+				const budget = this.locator.resolveArgCharBudget(command);
+				const argvChars = estimateArgChars(finalPiArgs) + injected;
+				return { injected, budget, argvChars, overBudget: argvChars > budget };
+			};
+			/**
+			 * 记录「白名单因超预算被跳过」：进 diagnostics 供启动诊断卡与时间线提示，并双写日志。
+			 * 跳过不影响启动，但用户看到「禁用的东西又被加载了」会当成 bug，必须可追溯。
+			 */
+			const recordWhitelistSkip = (kind: WhitelistKind, count: number, budget: { injected: number; budget: number; argvChars: number }): void => {
+				whitelistSkipped.push({
+					kind,
+					count,
+					chars: budget.argvChars,
+					injected: budget.injected,
+					budget: budget.budget,
+				});
+				void getAppLogger()?.warn("pi-process", `${kind} whitelist skipped: injection exceeds command line budget`, {
+					count,
+					estimatedChars: budget.argvChars,
+					injectedChars: budget.injected,
+					budget: budget.budget,
+					cwd: this.cwd,
+				});
+				console.warn(`[PiProcess] ${kind} whitelist skipped: ${count} entries (~${budget.injected} chars, ` + `argv ~${budget.argvChars}) exceed budget ${budget.budget}; ` + `falling back to default ${kind} discovery (disabled ${kind} will still load)`);
+			};
 
-    // 扩展白名单的版本门槛：-e 的目录/包源语义从 pi 0.60 起才文档化，过低版本传目录
-    // 可能 unknown option / path not found 导致 RPC 启动失败。白名单模式这里同步确认版本：
-    // - 信任场景 ensureVersionCheck 已 await（versionCache 为 done），无需重复；
-    // - 非信任场景强制 await 一次（--version 探测命中预热缓存，正常为 0 开销；
-    //   未命中时多一次探测，仅白名单模式发生，可接受）；
-    // - 版本已知且低于门槛 → 降级为默认扩展发现（禁用不生效），并补回内置扩展注入，
-    //   保证启动行为与未启用白名单时一致；
-    // - 版本未知（探测失败）→ 不阻塞，照常启用（warmVersionCache 已预热，未知=探测失败）。
-    // 注入延迟到此处还使 --extension 路径处于 wsl 转换（下方 finalPiArgs.map）之前，
-    // WSL 下同样会被正确转成 Linux 路径。
-    if (useWhitelist) {
-      if (!trustOverride) await this.ensureVersionCheck(command);
-      const cachedVersionGate = PiProcess.versionCache.get(command);
-      const minorForGate =
-        cachedVersionGate?.status === "done" ? cachedVersionGate.minorVersion : this.piMinorVersion;
-      const versionTooOld =
-        minorForGate !== null &&
-        minorForGate !== undefined &&
-        minorForGate < MIN_PI_MINOR_VERSION_FOR_EXTENSION_WHITELIST;
-      // 注入预算兜底：逐条 --extension 使命令行长度 O(扩展数)，与技能/提示词同一套判断。
-      const extensionBudget = evaluateWhitelistBudget("extensions", whitelistPaths);
-      if (versionTooOld || extensionBudget.overBudget) {
-        // 降级（版本过低 / 超预算）：不注入 --no-extensions/-e，恢复 pi 默认扩展发现，
-        // 并按非白名单路径补回内置扩展，避免降级后连内置扩展都缺失。
-        appendBuiltInExtensionArgs(finalPiArgs, builtInPaths, { noExtensions: false });
-        if (versionTooOld) {
-          void getAppLogger()?.warn("pi-process", "pi version too old for extension whitelist; falling back to default discovery", {
-            minorVersion: minorForGate,
-            required: MIN_PI_MINOR_VERSION_FOR_EXTENSION_WHITELIST,
-          });
-          console.warn(
-            `[PiProcess] pi ${minorForGate}.x too old for extension disable whitelist (need >= ${MIN_PI_MINOR_VERSION_FOR_EXTENSION_WHITELIST}); disabled extensions will still load`,
-          );
-        } else {
-          recordWhitelistSkip("extensions", whitelistPaths.length, extensionBudget);
-        }
-      } else {
-        // 白名单模式即使列表为空也要加 --no-extensions：空列表表示「全部禁用」，不是「不启用」。
-        // 路径经 spawn 参数数组传递（不经 shell），空格/中文/& 等特殊字符无需转义。
-        finalPiArgs.push("--no-extensions");
-        for (const extensionPath of whitelistPaths) {
-          const trimmed = extensionPath.trim();
-          if (!trimmed) continue;
-          finalPiArgs.push("--extension", trimmed);
-        }
-        void getAppLogger()?.info("pi-process", "Extension whitelist mode enabled", {
-          extensions: whitelistPaths.length,
-          cwd: this.cwd,
-        });
-        console.log(`[PiProcess] Extension whitelist mode: ${whitelistPaths.length} extensions via -e`);
-      }
-    }
+			// 扩展白名单的版本门槛：-e 的目录/包源语义从 pi 0.60 起才文档化，过低版本传目录
+			// 可能 unknown option / path not found 导致 RPC 启动失败。白名单模式这里同步确认版本：
+			// - 信任场景 ensureVersionCheck 已 await（versionCache 为 done），无需重复；
+			// - 非信任场景强制 await 一次（--version 探测命中预热缓存，正常为 0 开销；
+			//   未命中时多一次探测，仅白名单模式发生，可接受）；
+			// - 版本已知且低于门槛 → 降级为默认扩展发现（禁用不生效），并补回内置扩展注入，
+			//   保证启动行为与未启用白名单时一致；
+			// - 版本未知（探测失败）→ 不阻塞，照常启用（warmVersionCache 已预热，未知=探测失败）。
+			// 注入延迟到此处还使 --extension 路径处于 wsl 转换（下方 finalPiArgs.map）之前，
+			// WSL 下同样会被正确转成 Linux 路径。
+			if (useWhitelist) {
+				if (!trustOverride) await this.ensureVersionCheck(command);
+				const cachedVersionGate = PiProcess.versionCache.get(command);
+				const minorForGate = cachedVersionGate?.status === "done" ? cachedVersionGate.minorVersion : this.piMinorVersion;
+				const versionTooOld = minorForGate !== null && minorForGate !== undefined && minorForGate < MIN_PI_MINOR_VERSION_FOR_EXTENSION_WHITELIST;
+				// 注入预算兜底：逐条 --extension 使命令行长度 O(扩展数)，与技能/提示词同一套判断。
+				const extensionBudget = evaluateWhitelistBudget("extensions", whitelistPaths);
+				if (versionTooOld || extensionBudget.overBudget) {
+					// 降级（版本过低 / 超预算）：不注入 --no-extensions/-e，恢复 pi 默认扩展发现，
+					// 并按非白名单路径补回内置扩展，避免降级后连内置扩展都缺失。
+					appendBuiltInExtensionArgs(finalPiArgs, builtInPaths, { noExtensions: false });
+					if (versionTooOld) {
+						void getAppLogger()?.warn("pi-process", "pi version too old for extension whitelist; falling back to default discovery", {
+							minorVersion: minorForGate,
+							required: MIN_PI_MINOR_VERSION_FOR_EXTENSION_WHITELIST,
+						});
+						console.warn(`[PiProcess] pi ${minorForGate}.x too old for extension disable whitelist (need >= ${MIN_PI_MINOR_VERSION_FOR_EXTENSION_WHITELIST}); disabled extensions will still load`);
+					} else {
+						recordWhitelistSkip("extensions", whitelistPaths.length, extensionBudget);
+					}
+				} else {
+					// 白名单模式即使列表为空也要加 --no-extensions：空列表表示「全部禁用」，不是「不启用」。
+					// 路径经 spawn 参数数组传递（不经 shell），空格/中文/& 等特殊字符无需转义。
+					finalPiArgs.push("--no-extensions");
+					for (const extensionPath of whitelistPaths) {
+						const trimmed = extensionPath.trim();
+						if (!trimmed) continue;
+						finalPiArgs.push("--extension", trimmed);
+					}
+					void getAppLogger()?.info("pi-process", "Extension whitelist mode enabled", {
+						extensions: whitelistPaths.length,
+						cwd: this.cwd,
+					});
+					console.log(`[PiProcess] Extension whitelist mode: ${whitelistPaths.length} extensions via -e`);
+				}
+			}
 
-    // 技能白名单模式：存在禁用技能时 --no-skills 关自动发现 + 逐条 --skill 注入未禁用的技能。
-    // pi 的 frontmatter disable-model-invocation 只阻止模型自动调用、不阻止加载（用户仍可
-    // /skill:name 手动触发）；「不加载」唯一可靠手段就是白名单（与扩展白名单同构）。
-    // 解析器返回 null = 无禁用项，不启用（pi 默认发现全部技能，兼容 PiDeck 未跟踪的安装）。
-    const skillWhitelistPaths = this.options.resolveEnabledSkillPaths?.(
-      this.settings,
-      this.cwd,
-      includeProjectResources,
-    ) ?? null;
-    // piRpcNoSkills（诊断总开关）优先：已传 --no-skills 时不再注入，保证诊断路径干净。
-    const requestedSkillPaths: string[] | null =
-      skillWhitelistPaths !== null && !this.settings?.piRpcNoSkills ? skillWhitelistPaths : null;
-    // 注入预算兜底：白名单逐条 --skill 注入使命令行长度 O(技能数)，技能多的用户会超长
-    // （见 estimateWhitelistInjectionChars 注释）。预算按实际启动通道取（node 直启 26000 /
-    // cmd.exe 5000 / 非 Windows 不限制），超预算就整体放弃注入，pi 走默认发现——「禁用技能」
-    // 本次不生效，但启动不会失败；跳过的事实记入 diagnostics 供 UI 提示用户。
-    // 仅在确有白名单需要注入时才解析通道：非白名单模式零额外开销（不必读 .cmd 垫片）。
-    const skillBudget = requestedSkillPaths
-      ? evaluateWhitelistBudget("skills", requestedSkillPaths)
-      : null;
-    const skillWhitelistOverBudget = skillBudget !== null && skillBudget.overBudget;
-    if (skillBudget && skillBudget.overBudget && requestedSkillPaths) {
-      recordWhitelistSkip("skills", requestedSkillPaths.length, skillBudget);
-    }
-    const useSkillWhitelist = requestedSkillPaths !== null && !skillWhitelistOverBudget;
-    if (useSkillWhitelist) {
-      if (!trustOverride) await this.ensureVersionCheck(command);
-      const cachedSkillGate = PiProcess.versionCache.get(command);
-      const minorForSkillGate =
-        cachedSkillGate?.status === "done" ? cachedSkillGate.minorVersion : this.piMinorVersion;
-      if (
-        minorForSkillGate !== null &&
-        minorForSkillGate !== undefined &&
-        minorForSkillGate < MIN_PI_MINOR_VERSION_FOR_SKILL_WHITELIST
-      ) {
-        // 版本过低：白名单不可用，恢复 pi 默认技能发现（禁用不生效，行为与未启用一致）。
-        void getAppLogger()?.warn("pi-process", "pi version too old for skill whitelist; falling back to default discovery", {
-          minorVersion: minorForSkillGate,
-          required: MIN_PI_MINOR_VERSION_FOR_SKILL_WHITELIST,
-        });
-        console.warn(
-          `[PiProcess] pi ${minorForSkillGate}.x too old for skill disable whitelist (need >= ${MIN_PI_MINOR_VERSION_FOR_SKILL_WHITELIST}); disabled skills will still load`,
-        );
-      } else {
-        // 白名单模式即使列表为空也要加 --no-skills：空列表表示「全部禁用」，不是「不启用」。
-        // requestedSkillPaths 已排除 piRpcNoSkills，此处不会与诊断开关重复加参数。
-        finalPiArgs.push("--no-skills");
-        for (const skillPath of requestedSkillPaths) {
-          const trimmed = skillPath.trim();
-          if (!trimmed) continue;
-          finalPiArgs.push("--skill", trimmed);
-        }
-        void getAppLogger()?.info("pi-process", "Skill whitelist mode enabled", {
-          skills: requestedSkillPaths.length,
-          cwd: this.cwd,
-        });
-        console.log(`[PiProcess] Skill whitelist mode: ${requestedSkillPaths.length} skills via --skill`);
-      }
-    }
+			// 技能白名单模式：存在禁用技能时 --no-skills 关自动发现 + 逐条 --skill 注入未禁用的技能。
+			// pi 的 frontmatter disable-model-invocation 只阻止模型自动调用、不阻止加载（用户仍可
+			// /skill:name 手动触发）；「不加载」唯一可靠手段就是白名单（与扩展白名单同构）。
+			// 解析器返回 null = 无禁用项，不启用（pi 默认发现全部技能，兼容 PiDeck 未跟踪的安装）。
+			const skillWhitelistPaths = this.options.resolveEnabledSkillPaths?.(this.settings, this.cwd, includeProjectResources) ?? null;
+			// piRpcNoSkills（诊断总开关）优先：已传 --no-skills 时不再注入，保证诊断路径干净。
+			const requestedSkillPaths: string[] | null = skillWhitelistPaths !== null && !this.settings?.piRpcNoSkills ? skillWhitelistPaths : null;
+			// 注入预算兜底：白名单逐条 --skill 注入使命令行长度 O(技能数)，技能多的用户会超长
+			// （见 estimateWhitelistInjectionChars 注释）。预算按实际启动通道取（node 直启 26000 /
+			// cmd.exe 5000 / 非 Windows 不限制），超预算就整体放弃注入，pi 走默认发现——「禁用技能」
+			// 本次不生效，但启动不会失败；跳过的事实记入 diagnostics 供 UI 提示用户。
+			// 仅在确有白名单需要注入时才解析通道：非白名单模式零额外开销（不必读 .cmd 垫片）。
+			const skillBudget = requestedSkillPaths ? evaluateWhitelistBudget("skills", requestedSkillPaths) : null;
+			const skillWhitelistOverBudget = skillBudget !== null && skillBudget.overBudget;
+			if (skillBudget && skillBudget.overBudget && requestedSkillPaths) {
+				recordWhitelistSkip("skills", requestedSkillPaths.length, skillBudget);
+			}
+			const useSkillWhitelist = requestedSkillPaths !== null && !skillWhitelistOverBudget;
+			if (useSkillWhitelist) {
+				if (!trustOverride) await this.ensureVersionCheck(command);
+				const cachedSkillGate = PiProcess.versionCache.get(command);
+				const minorForSkillGate = cachedSkillGate?.status === "done" ? cachedSkillGate.minorVersion : this.piMinorVersion;
+				if (minorForSkillGate !== null && minorForSkillGate !== undefined && minorForSkillGate < MIN_PI_MINOR_VERSION_FOR_SKILL_WHITELIST) {
+					// 版本过低：白名单不可用，恢复 pi 默认技能发现（禁用不生效，行为与未启用一致）。
+					void getAppLogger()?.warn("pi-process", "pi version too old for skill whitelist; falling back to default discovery", {
+						minorVersion: minorForSkillGate,
+						required: MIN_PI_MINOR_VERSION_FOR_SKILL_WHITELIST,
+					});
+					console.warn(`[PiProcess] pi ${minorForSkillGate}.x too old for skill disable whitelist (need >= ${MIN_PI_MINOR_VERSION_FOR_SKILL_WHITELIST}); disabled skills will still load`);
+				} else {
+					// 白名单模式即使列表为空也要加 --no-skills：空列表表示「全部禁用」，不是「不启用」。
+					// requestedSkillPaths 已排除 piRpcNoSkills，此处不会与诊断开关重复加参数。
+					finalPiArgs.push("--no-skills");
+					for (const skillPath of requestedSkillPaths) {
+						const trimmed = skillPath.trim();
+						if (!trimmed) continue;
+						finalPiArgs.push("--skill", trimmed);
+					}
+					void getAppLogger()?.info("pi-process", "Skill whitelist mode enabled", {
+						skills: requestedSkillPaths.length,
+						cwd: this.cwd,
+					});
+					console.log(`[PiProcess] Skill whitelist mode: ${requestedSkillPaths.length} skills via --skill`);
+				}
+			}
 
-    // 提示词模板白名单模式：与技能白名单同构。存在禁用模板时 --no-prompt-templates 关自动
-    // 发现 + 逐条 --prompt-template 注入未禁用的模板（/name 命令只展开白名单内的模板）。
-    // 解析器返回 null = 无禁用项，不启用（pi 默认发现全部模板）。
-    const promptWhitelistPaths = this.options.resolveEnabledPromptPaths?.(
-      this.settings,
-      this.cwd,
-      includeProjectResources,
-    ) ?? null;
-    const usePromptWhitelist =
-      promptWhitelistPaths !== null &&
-      promptWhitelistPaths !== undefined;
-    // 注入预算兜底：与扩展/技能同构（逐条 --prompt-template 使命令行长度 O(模板数)），
-    // 超预算同样退回默认模板发现（禁用不生效，但启动不会失败）。
-    const promptBudget = promptWhitelistPaths
-      ? evaluateWhitelistBudget("prompts", promptWhitelistPaths)
-      : null;
-    if (usePromptWhitelist) {
-      if (!trustOverride) await this.ensureVersionCheck(command);
-      const cachedPromptGate = PiProcess.versionCache.get(command);
-      const minorForPromptGate =
-        cachedPromptGate?.status === "done" ? cachedPromptGate.minorVersion : this.piMinorVersion;
-      if (
-        minorForPromptGate !== null &&
-        minorForPromptGate !== undefined &&
-        minorForPromptGate < MIN_PI_MINOR_VERSION_FOR_PROMPT_WHITELIST
-      ) {
-        // 版本过低：白名单不可用，恢复 pi 默认模板发现（禁用不生效，行为与未启用一致）。
-        void getAppLogger()?.warn("pi-process", "pi version too old for prompt whitelist; falling back to default discovery", {
-          minorVersion: minorForPromptGate,
-          required: MIN_PI_MINOR_VERSION_FOR_PROMPT_WHITELIST,
-        });
-        console.warn(
-          `[PiProcess] pi ${minorForPromptGate}.x too old for prompt disable whitelist (need >= ${MIN_PI_MINOR_VERSION_FOR_PROMPT_WHITELIST}); disabled prompts will still load`,
-        );
-      } else if (promptBudget && promptBudget.overBudget && promptWhitelistPaths) {
-        recordWhitelistSkip("prompts", promptWhitelistPaths.length, promptBudget);
-      } else {
-        // 白名单模式即使列表为空也要加 --no-prompt-templates：空列表表示「全部禁用」。
-        finalPiArgs.push("--no-prompt-templates");
-        for (const promptPath of promptWhitelistPaths) {
-          const trimmed = promptPath.trim();
-          if (!trimmed) continue;
-          finalPiArgs.push("--prompt-template", trimmed);
-        }
-        void getAppLogger()?.info("pi-process", "Prompt whitelist mode enabled", {
-          prompts: promptWhitelistPaths.length,
-          cwd: this.cwd,
-        });
-        console.log(`[PiProcess] Prompt whitelist mode: ${promptWhitelistPaths.length} prompts via --prompt-template`);
-      }
-    }
+			// 提示词模板白名单模式：与技能白名单同构。存在禁用模板时 --no-prompt-templates 关自动
+			// 发现 + 逐条 --prompt-template 注入未禁用的模板（/name 命令只展开白名单内的模板）。
+			// 解析器返回 null = 无禁用项，不启用（pi 默认发现全部模板）。
+			const promptWhitelistPaths = this.options.resolveEnabledPromptPaths?.(this.settings, this.cwd, includeProjectResources) ?? null;
+			const usePromptWhitelist = promptWhitelistPaths !== null && promptWhitelistPaths !== undefined;
+			// 注入预算兜底：与扩展/技能同构（逐条 --prompt-template 使命令行长度 O(模板数)），
+			// 超预算同样退回默认模板发现（禁用不生效，但启动不会失败）。
+			const promptBudget = promptWhitelistPaths ? evaluateWhitelistBudget("prompts", promptWhitelistPaths) : null;
+			if (usePromptWhitelist) {
+				if (!trustOverride) await this.ensureVersionCheck(command);
+				const cachedPromptGate = PiProcess.versionCache.get(command);
+				const minorForPromptGate = cachedPromptGate?.status === "done" ? cachedPromptGate.minorVersion : this.piMinorVersion;
+				if (minorForPromptGate !== null && minorForPromptGate !== undefined && minorForPromptGate < MIN_PI_MINOR_VERSION_FOR_PROMPT_WHITELIST) {
+					// 版本过低：白名单不可用，恢复 pi 默认模板发现（禁用不生效，行为与未启用一致）。
+					void getAppLogger()?.warn("pi-process", "pi version too old for prompt whitelist; falling back to default discovery", {
+						minorVersion: minorForPromptGate,
+						required: MIN_PI_MINOR_VERSION_FOR_PROMPT_WHITELIST,
+					});
+					console.warn(`[PiProcess] pi ${minorForPromptGate}.x too old for prompt disable whitelist (need >= ${MIN_PI_MINOR_VERSION_FOR_PROMPT_WHITELIST}); disabled prompts will still load`);
+				} else if (promptBudget && promptBudget.overBudget && promptWhitelistPaths) {
+					recordWhitelistSkip("prompts", promptWhitelistPaths.length, promptBudget);
+				} else {
+					// 白名单模式即使列表为空也要加 --no-prompt-templates：空列表表示「全部禁用」。
+					finalPiArgs.push("--no-prompt-templates");
+					for (const promptPath of promptWhitelistPaths) {
+						const trimmed = promptPath.trim();
+						if (!trimmed) continue;
+						finalPiArgs.push("--prompt-template", trimmed);
+					}
+					void getAppLogger()?.info("pi-process", "Prompt whitelist mode enabled", {
+						prompts: promptWhitelistPaths.length,
+						cwd: this.cwd,
+					});
+					console.log(`[PiProcess] Prompt whitelist mode: ${promptWhitelistPaths.length} prompts via --prompt-template`);
+				}
+			}
 
-    let spawnCwd = this.cwd;
-    let diagnosticCwd = this.cwd;
-    let wslCwd: string | undefined;
-    if (command.startsWith("wsl://")) {
-      const distro = this.settings?.wslDistro;
-      if (!distro) throw new Error("WSL distribution is unavailable for pi startup.");
-      const environment = { distro };
-      wslCwd = toWslLinuxPath(this.cwd, environment);
-      spawnCwd = toWindowsHostPath(this.cwd, environment);
-      diagnosticCwd = wslCwd;
+			let spawnCwd = this.cwd;
+			let diagnosticCwd = this.cwd;
+			let wslCwd: string | undefined;
+			if (command.startsWith("wsl://")) {
+				const distro = this.settings?.wslDistro;
+				if (!distro) throw new Error("WSL distribution is unavailable for pi startup.");
+				const environment = { distro };
+				wslCwd = toWslLinuxPath(this.cwd, environment);
+				spawnCwd = toWindowsHostPath(this.cwd, environment);
+				diagnosticCwd = wslCwd;
 
-      // WSL 下 session 路径与 -e 扩展路径都需转成 Linux 路径，否则 pi 在 distro 内打不开 Windows 路径。
-      finalPiArgs = finalPiArgs.map((arg, index) => {
-        const prev = finalPiArgs[index - 1];
-        if (prev === "--session" || prev === "--extension" || prev === "-e" || prev === "--skill" || prev === "--prompt-template") {
-          // 仅转换看起来像 Windows 绝对路径的参数，避免误伤相对路径/选项值
-          if (/^[A-Za-z]:[\\/]/.test(arg) || arg.startsWith("\\\\")) {
-            return toWslLinuxPath(arg, environment);
-          }
-        }
-        return arg;
-      });
-    }
-    const invocation = this.locator.createInvocation(
-      command,
-      finalPiArgs,
-      wslCwd ? { wslCwd } : undefined,
-    );
-    const finalArgs = invocation.args;
+				// WSL 下 session 路径与 -e 扩展路径都需转成 Linux 路径，否则 pi 在 distro 内打不开 Windows 路径。
+				finalPiArgs = finalPiArgs.map((arg, index) => {
+					const prev = finalPiArgs[index - 1];
+					if (prev === "--session" || prev === "--extension" || prev === "-e" || prev === "--skill" || prev === "--prompt-template") {
+						// 仅转换看起来像 Windows 绝对路径的参数，避免误伤相对路径/选项值
+						if (/^[A-Za-z]:[\\/]/.test(arg) || arg.startsWith("\\\\")) {
+							return toWslLinuxPath(arg, environment);
+						}
+					}
+					return arg;
+				});
+			}
+			const invocation = this.locator.createInvocation(command, finalPiArgs, wslCwd ? { wslCwd } : undefined);
+			const finalArgs = invocation.args;
 
-    // 初始化诊断信息。信任场景的版本检测已在上方同步完成。
-    // 非信任场景仍异步触发，不阻塞 RPC 启动。
-    const cachedVersion = PiProcess.versionCache.get(command);
-    this.piMinorVersion = cachedVersion?.status === "done" ? cachedVersion.minorVersion : this.piMinorVersion;
-    this.diagnostics = {
-      command: command,
-      args: finalArgs,
-      cwd: diagnosticCwd,
-      stderr: [],
-      exitCode: null,
-      exitSignal: null,
-      customPiPath: this.settings?.customPiPath,
-      versionCheck: cachedVersion?.status === "done" ? cachedVersion.ok : false,
-      // 与 versionCheck 一起记录：只有真的探过才配显示「✗ 失败」（见 getDiagnostics 注释）。
-      versionCheckProbed: cachedVersion?.status === "done",
-      launch: invocation.windowsLaunch,
-      blockedExtensions: blockedNames.length > 0 ? blockedNames : undefined,
-      whitelistSkipped: whitelistSkipped.length > 0 ? whitelistSkipped : undefined,
-    };
-    if (invocation.windowsLaunch?.channel === "cmd-shim" && invocation.windowsLaunch.reason) {
-      // 显式记录回退原因：命令行里出现 cmd.exe 时，用户与支持人员都要能立刻知道为什么没走 node 直启。
-      void getAppLogger()?.warn("pi-process", "Windows launch falls back to cmd.exe", {
-        command,
-        spawned: invocation.command,
-        reason: invocation.windowsLaunch.reason,
-      });
-      console.warn(`[PiProcess] Windows launch falls back to cmd.exe: ${invocation.windowsLaunch.reason}`);
-    }
-    if (!trustOverride) {
-      void this.ensureVersionCheck(command);
-    }
+			// 初始化诊断信息。信任场景的版本检测已在上方同步完成。
+			// 非信任场景仍异步触发，不阻塞 RPC 启动。
+			const cachedVersion = PiProcess.versionCache.get(command);
+			this.piMinorVersion = cachedVersion?.status === "done" ? cachedVersion.minorVersion : this.piMinorVersion;
+			this.diagnostics = {
+				command: command,
+				args: finalArgs,
+				cwd: diagnosticCwd,
+				stderr: [],
+				exitCode: null,
+				exitSignal: null,
+				customPiPath: this.settings?.customPiPath,
+				versionCheck: cachedVersion?.status === "done" ? cachedVersion.ok : false,
+				// 与 versionCheck 一起记录：只有真的探过才配显示「✗ 失败」（见 getDiagnostics 注释）。
+				versionCheckProbed: cachedVersion?.status === "done",
+				launch: invocation.windowsLaunch,
+				blockedExtensions: blockedNames.length > 0 ? blockedNames : undefined,
+				whitelistSkipped: whitelistSkipped.length > 0 ? whitelistSkipped : undefined,
+			};
+			if (invocation.windowsLaunch?.channel === "cmd-shim" && invocation.windowsLaunch.reason) {
+				// 显式记录回退原因：命令行里出现 cmd.exe 时，用户与支持人员都要能立刻知道为什么没走 node 直启。
+				void getAppLogger()?.warn("pi-process", "Windows launch falls back to cmd.exe", {
+					command,
+					spawned: invocation.command,
+					reason: invocation.windowsLaunch.reason,
+				});
+				console.warn(`[PiProcess] Windows launch falls back to cmd.exe: ${invocation.windowsLaunch.reason}`);
+			}
+			if (!trustOverride) {
+				void this.ensureVersionCheck(command);
+			}
 
-    // 打印等效命令行，方便在终端重现排查（同时写入日志文件供事后审计）
-    console.log('[PiProcess] spawn等效命令:', [invocation.command, ...finalArgs].map(a => a.includes(' ') ? `"${a}"` : a).join(' '));
-    console.log('[PiProcess] spawn参数:', JSON.stringify({ command: invocation.command, shell: invocation.shell, cwd: spawnCwd, wslCwd: diagnosticCwd, argsCount: finalArgs.length }));
-    void getAppLogger()?.debug("pi-process", "Pi process spawn", {
-      command: invocation.command,
-      argsCount: finalArgs.length,
-      cwd: spawnCwd,
-      shell: invocation.shell,
-    });
+			// 打印等效命令行，方便在终端重现排查（同时写入日志文件供事后审计）
+			console.log("[PiProcess] spawn等效命令:", [invocation.command, ...finalArgs].map((a) => (a.includes(" ") ? `"${a}"` : a)).join(" "));
+			console.log("[PiProcess] spawn参数:", JSON.stringify({ command: invocation.command, shell: invocation.shell, cwd: spawnCwd, wslCwd: diagnosticCwd, argsCount: finalArgs.length }));
+			void getAppLogger()?.debug("pi-process", "Pi process spawn", {
+				command: invocation.command,
+				argsCount: finalArgs.length,
+				cwd: spawnCwd,
+				shell: invocation.shell,
+			});
 
-    // 安全管理：把策略快照路径 + 会话身份注入 pi 子进程环境。
-    // - securitySnapshotPath 是真实 Windows 路径（扩展需 fs 读取），WSL 下必须转成 /mnt/c/...，
-    //   否则 pi 在 distro 内打不开。
-    // - securitySessionId 是不透明身份 key（SessionRecord.id：新会话为 UUID，历史会话为文件路径），
-    //   扩展仅用它做 sessionLevels 字典查表，从不 fs 打开——任何模式都原样注入，绝不能做路径转换：
-    //   UUID 既非 UNC/盘符/绝对 Linux 路径，喂给 toWslLinuxPath 会抛 INVALID_WSL_PATH，
-    //   导致 WSL 下临时会话（deckSessionId=UUID、无 sessionPath 兜底）在 spawn 前就崩、起不来。
-    // 会话级代理覆盖：先按单会话开关改写设置（on/off），再走 createProcessEnv 注入标准代理 env。
-    const effectiveSettings = applyPiProxyMode(this.settings, this.options.proxyOverride);
-    if (this.options.proxyOverride === "on" && this.settings && !this.settings.piProxyUrl.trim()) {
-      // on 但全局 URL 为空：applyPiProxyEnv 会因空 URL 直接放行（直连），留日志便于排查。
-      void getAppLogger()?.warn("pi-process", "Session proxy override 'on' but global proxy URL is empty: falling back to direct", {
-        sessionKey: this.options.securitySessionId,
-      });
-    }
-    const env = this.locator.createProcessEnv(effectiveSettings, invocation.pathPrefix, invocation.wsl);
-    if (this.options.securitySnapshotPath) {
-      env.PIDECK_SECURITY_CONFIG = command.startsWith("wsl://")
-        ? toWslLinuxPath(this.options.securitySnapshotPath, { distro: this.settings?.wslDistro ?? "" })
-        : this.options.securitySnapshotPath;
-    }
-    if (this.options.securitySessionId) {
-      env.PIDECK_SESSION_ID = this.options.securitySessionId;
-    }
-    // 飞书绑定会话：ask_question 换成禁用提示版（扩展读取此标记，纯标志位无需路径转换）
-    if (this.options.feishuLinked) {
-      env.PIDECK_FEISHU_LINKED = "1";
-    }
-    // 会话自动标题由 PiDeck 内置扩展在 agent_settled 后独立调用模型；
-    // 显式注入 0/1，避免继承宿主环境中的同名变量。设置变更对新建/重启 Agent 生效。
-    env.PIDECK_AUTO_SESSION_TITLE = this.settings?.autoSessionTitle === false ? "0" : "1";
+			// 安全管理：把策略快照路径 + 会话身份注入 pi 子进程环境。
+			// - securitySnapshotPath 是真实 Windows 路径（扩展需 fs 读取），WSL 下必须转成 /mnt/c/...，
+			//   否则 pi 在 distro 内打不开。
+			// - securitySessionId 是不透明身份 key（SessionRecord.id：新会话为 UUID，历史会话为文件路径），
+			//   扩展仅用它做 sessionLevels 字典查表，从不 fs 打开——任何模式都原样注入，绝不能做路径转换：
+			//   UUID 既非 UNC/盘符/绝对 Linux 路径，喂给 toWslLinuxPath 会抛 INVALID_WSL_PATH，
+			//   导致 WSL 下临时会话（deckSessionId=UUID、无 sessionPath 兜底）在 spawn 前就崩、起不来。
+			// 会话级代理覆盖：先按单会话开关改写设置（on/off），再走 createProcessEnv 注入标准代理 env。
+			const effectiveSettings = applyPiProxyMode(this.settings, this.options.proxyOverride);
+			if (this.options.proxyOverride === "on" && this.settings && !this.settings.piProxyUrl.trim()) {
+				// on 但全局 URL 为空：applyPiProxyEnv 会因空 URL 直接放行（直连），留日志便于排查。
+				void getAppLogger()?.warn("pi-process", "Session proxy override 'on' but global proxy URL is empty: falling back to direct", {
+					sessionKey: this.options.securitySessionId,
+				});
+			}
+			const env = this.locator.createProcessEnv(effectiveSettings, invocation.pathPrefix, invocation.wsl);
+			if (this.options.securitySnapshotPath) {
+				env.PIDECK_SECURITY_CONFIG = command.startsWith("wsl://") ? toWslLinuxPath(this.options.securitySnapshotPath, { distro: this.settings?.wslDistro ?? "" }) : this.options.securitySnapshotPath;
+			}
+			if (this.options.securitySessionId) {
+				env.PIDECK_SESSION_ID = this.options.securitySessionId;
+			}
+			// 飞书绑定会话：ask_question 换成禁用提示版（扩展读取此标记，纯标志位无需路径转换）
+			if (this.options.feishuLinked) {
+				env.PIDECK_FEISHU_LINKED = "1";
+			}
+			// 会话自动标题由 PiDeck 内置扩展在 agent_settled 后独立调用模型；
+			// 显式注入 0/1，避免继承宿主环境中的同名变量。设置变更对新建/重启 Agent 生效。
+			env.PIDECK_AUTO_SESSION_TITLE = this.settings?.autoSessionTitle === false ? "0" : "1";
 
-    // spawn 前记录工作目录事实，仅用于「失败后还原真实原因」：
-    // Windows 下 cwd 无效会被 libuv 报成 "spawn <cmd.exe> ENOENT"（实测复现），
-    // 不记下来就只能把这条误导性错误原样丢给用户。
-    const cwdFact = readCwdState(spawnCwd);
-    const isWslCommand = command.startsWith("wsl://");
+			// spawn 前记录工作目录事实，仅用于「失败后还原真实原因」：
+			// Windows 下 cwd 无效会被 libuv 报成 "spawn <cmd.exe> ENOENT"（实测复现），
+			// 不记下来就只能把这条误导性错误原样丢给用户。
+			const cwdFact = readCwdState(spawnCwd);
+			const isWslCommand = command.startsWith("wsl://");
 
-    // 每个 agent 绑定独立 cwd，确保 pi 自己发现项目级 AGENTS.md、settings 和 session 分组。
-    // 打包后的 Electron 不一定继承用户终端 PATH；这里补齐跨平台 Node 工具链常见 bin 目录，尽量让已安装 pi 的用户开箱即用。
-    // Windows 下通过 PiLocator.createInvocation 显式包裹含空格的 npm shim 路径，避免 cmd 拆分路径导致 agent 启动失败。
-    // spawn 本身很少同步抛错（ENOENT 等多半异步 error 事件），但 cwd 非法等仍可能同步失败，必须捕获。
-    try {
-      this.proc = spawn(invocation.command, finalArgs, {
-        cwd: spawnCwd,
-        stdio: ["pipe", "pipe", "pipe"],
-        shell: invocation.shell,
-        // Unix：让 pi 成为新进程组组长，stop() 时可用负 pid 对整个进程组兜底
-        // SIGKILL（清理 pi 退出后残留的子代理）。Windows 的树杀走 taskkill /T，
-        // 不依赖进程组。
-        detached: process.platform !== "win32",
-        // env 已在上方合并安全门环境变量（PIDECK_SECURITY_CONFIG / PIDECK_SESSION_ID）
-        // Windows：PiDeck 是无控制台的 GUI 进程，隐藏子进程窗口以免 cmd.exe 弹出控制台。
-        env,
-        windowsHide: true,
-        windowsVerbatimArguments: invocation.windowsVerbatimArguments,
-      });
-    } catch (error) {
-      const err = error instanceof Error ? error : new Error(String(error));
-      if (this.diagnostics) {
-        this.diagnostics.stderr.push(err.message);
-        this.diagnostics.exitCode = -1;
-        // 同步失败同样属于「进程从未起来」：回退禁用扩展没有意义（见 spawnFailed）。
-        this.diagnostics.spawnFailed = true;
-      }
-      // spawn 失败也要还原停放的扩展，避免 codeisland 永久消失。
-      this.restoreParkedExtensions();
-      // 同步失败也走 error 通道，让 AgentManager 能把诊断写到会话卡片而不是主进程崩掉。
-      this.emit("error", err);
-      throw err;
-    }
+			// 每个 agent 绑定独立 cwd，确保 pi 自己发现项目级 AGENTS.md、settings 和 session 分组。
+			// 打包后的 Electron 不一定继承用户终端 PATH；这里补齐跨平台 Node 工具链常见 bin 目录，尽量让已安装 pi 的用户开箱即用。
+			// Windows 下通过 PiLocator.createInvocation 显式包裹含空格的 npm shim 路径，避免 cmd 拆分路径导致 agent 启动失败。
+			// spawn 本身很少同步抛错（ENOENT 等多半异步 error 事件），但 cwd 非法等仍可能同步失败，必须捕获。
+			try {
+				this.proc = spawn(invocation.command, finalArgs, {
+					cwd: spawnCwd,
+					stdio: ["pipe", "pipe", "pipe"],
+					shell: invocation.shell,
+					// Unix：让 pi 成为新进程组组长，stop() 时可用负 pid 对整个进程组兜底
+					// SIGKILL（清理 pi 退出后残留的子代理）。Windows 的树杀走 taskkill /T，
+					// 不依赖进程组。
+					detached: process.platform !== "win32",
+					// env 已在上方合并安全门环境变量（PIDECK_SECURITY_CONFIG / PIDECK_SESSION_ID）
+					// Windows：PiDeck 是无控制台的 GUI 进程，隐藏子进程窗口以免 cmd.exe 弹出控制台。
+					env,
+					windowsHide: true,
+					windowsVerbatimArguments: invocation.windowsVerbatimArguments,
+				});
+			} catch (error) {
+				const err = error instanceof Error ? error : new Error(String(error));
+				if (this.diagnostics) {
+					this.diagnostics.stderr.push(err.message);
+					this.diagnostics.exitCode = -1;
+					// 同步失败同样属于「进程从未起来」：回退禁用扩展没有意义（见 spawnFailed）。
+					this.diagnostics.spawnFailed = true;
+				}
+				// spawn 失败也要还原停放的扩展，避免 codeisland 永久消失。
+				this.restoreParkedExtensions();
+				// 同步失败也走 error 通道，让 AgentManager 能把诊断写到会话卡片而不是主进程崩掉。
+				this.emit("error", err);
+				throw err;
+			}
 
-    this.rpc = new PiRpcClient(this.proc.stdin, this.proc.stdout);
+			this.rpc = new PiRpcClient(this.proc.stdin, this.proc.stdout);
 
-    this.rpc.on("event", event => this.emit("event", event));
-    this.rpc.on("protocol-error", line => this.emit("protocol-error", line));
-    // 转发 RPC 日志到 AgentManager，用于前端调试面板展示
-    this.rpc.on("log", entry => this.emit("rpc-log", entry));
+			this.rpc.on("event", (event) => this.emit("event", event));
+			this.rpc.on("protocol-error", (line) => this.emit("protocol-error", line));
+			// 转发 RPC 日志到 AgentManager，用于前端调试面板展示
+			this.rpc.on("log", (entry) => this.emit("rpc-log", entry));
 
-    this.proc.stderr.on("data", chunk => {
-      const text = chunk.toString("utf8");
-      // 缓冲启动期 stderr（上限 8KB），供启动失败后诊断展示
-      if (this.diagnostics) {
-        this.diagnostics.stderr.push(text);
-        const total = this.diagnostics.stderr.reduce((s, l) => s + l.length, 0);
-        if (total > 8192) this.diagnostics.stderr = [this.diagnostics.stderr.join("").slice(-4096)];
-      }
-      // stderr 不属于 RPC 协议，单独暴露给 UI 的日志面板，避免污染 JSONL stdout。
-      this.emit("stderr", text);
-    });
+			this.proc.stderr.on("data", (chunk) => {
+				const text = chunk.toString("utf8");
+				// 缓冲启动期 stderr（上限 8KB），供启动失败后诊断展示
+				if (this.diagnostics) {
+					this.diagnostics.stderr.push(text);
+					const total = this.diagnostics.stderr.reduce((s, l) => s + l.length, 0);
+					if (total > 8192) this.diagnostics.stderr = [this.diagnostics.stderr.join("").slice(-4096)];
+				}
+				// stderr 不属于 RPC 协议，单独暴露给 UI 的日志面板，避免污染 JSONL stdout。
+				this.emit("stderr", text);
+			});
 
-    // 立即绑定 error/exit：不要等 AgentManager 挂业务监听。
-    // macOS 上 pi 路径缺失/架构不匹配时，error 事件可能在 start() 返回后几毫秒就到。
-    this.proc.on("error", (error) => {
-      if (this.diagnostics) {
-        this.diagnostics.stderr.push(error.message);
-        // spawn 失败通常没有 exit code；用 -1 标记“未能真正拉起进程”。
-        if (this.diagnostics.exitCode === null) this.diagnostics.exitCode = -1;
-      }
-      // 关键：spawn 失败在 Node 里**只有 error 事件、没有 exit 事件**（pid 从未拿到）。
-      // 不在这里收尾的话：
-      //   1) 挂起的 RPC 请求（启动握手的 get_state）只能等满 rpcTimeout —— 默认 10 分钟，
-      //      用户体感就是「启动失败不报错、直接超时」；
-      //   2) 已停放的黑名单扩展永不还原（exit 回调是唯一的还原点）；
-      //   3) isRunning() 仍为 true，扩展回退策略会误判为「进程还活着，别动它」。
-      const spawnFailed = this.proc?.pid === undefined;
-      let surfaced: Error = error;
-      if (spawnFailed) {
-        // WSL 的工作目录在 distro 内，Windows 侧 stat 宿主路径（\\wsl$\...）不可靠：
-        // 探不到时不能反过来说「目录不存在」，否则会把 wsl.exe 自身的问题误报成项目路径问题。
-        const cwdFactForDiagnosis = isWslCommand
-          ? { exists: true, isDirectory: true }
-          : cwdFact;
-        if (this.diagnostics) {
-          this.diagnostics.spawnFailed = true;
-          this.diagnostics.cwdMissing =
-            !cwdFactForDiagnosis.exists || !cwdFactForDiagnosis.isDirectory;
-        }
-        const { error: described, described: hasReason } = createSpawnFailureError({
-          error,
-          spawnedCommand: invocation.command,
-          piCommand: command,
-          cwd: spawnCwd,
-          cwdExists: cwdFactForDiagnosis.exists,
-          cwdIsDirectory: cwdFactForDiagnosis.isDirectory,
-          // WSL 的 pi 在 distro 内，Windows 侧 existsSync 只会返回 false，不能据此说路径失效。
-          piCommandExists: isWslCommand ? true : existsSync(command),
-          isWindows: process.platform === "win32",
-        });
-        if (hasReason) {
-          // 归因成功时把可读原因补进 stderr 缓冲：诊断卡展示这条，原始 errno 文本仍保留可检索
-          surfaced = described;
-          if (this.diagnostics) this.diagnostics.stderr.push(described.message);
-        }
-        // 用同一个错误终结 client：启动握手的 pending 请求会立刻以此 reject，不再空等超时。
-        this.rpc?.close(surfaced);
-        this.restoreParkedExtensions();
-        this.proc = undefined;
-        this.rpc = undefined;
-      }
-      this.emit("error", surfaced);
-    });
-    this.proc.on("exit", (code, signal) => {
-      // 退出时更新诊断信息
-      if (this.diagnostics) {
-        this.diagnostics.exitCode = code;
-        this.diagnostics.exitSignal = signal;
-      }
-      // pi 退出后还原临时停放的扩展，保证 CLI 仍能加载 codeisland。
-      this.restoreParkedExtensions();
-      this.rpc?.close(new Error(`pi exited: code=${code ?? "null"}, signal=${signal ?? "null"}`));
-      this.emit("exit", { code, signal });
-      this.proc = undefined;
-      this.rpc = undefined;
-    });
+			// 立即绑定 error/exit：不要等 AgentManager 挂业务监听。
+			// macOS 上 pi 路径缺失/架构不匹配时，error 事件可能在 start() 返回后几毫秒就到。
+			this.proc.on("error", (error) => {
+				if (this.diagnostics) {
+					this.diagnostics.stderr.push(error.message);
+					// spawn 失败通常没有 exit code；用 -1 标记“未能真正拉起进程”。
+					if (this.diagnostics.exitCode === null) this.diagnostics.exitCode = -1;
+				}
+				// 关键：spawn 失败在 Node 里**只有 error 事件、没有 exit 事件**（pid 从未拿到）。
+				// 不在这里收尾的话：
+				//   1) 挂起的 RPC 请求（启动握手的 get_state）只能等满 rpcTimeout —— 默认 10 分钟，
+				//      用户体感就是「启动失败不报错、直接超时」；
+				//   2) 已停放的黑名单扩展永不还原（exit 回调是唯一的还原点）；
+				//   3) isRunning() 仍为 true，扩展回退策略会误判为「进程还活着，别动它」。
+				const spawnFailed = this.proc?.pid === undefined;
+				let surfaced: Error = error;
+				if (spawnFailed) {
+					// WSL 的工作目录在 distro 内，Windows 侧 stat 宿主路径（\\wsl$\...）不可靠：
+					// 探不到时不能反过来说「目录不存在」，否则会把 wsl.exe 自身的问题误报成项目路径问题。
+					const cwdFactForDiagnosis = isWslCommand ? { exists: true, isDirectory: true } : cwdFact;
+					if (this.diagnostics) {
+						this.diagnostics.spawnFailed = true;
+						this.diagnostics.cwdMissing = !cwdFactForDiagnosis.exists || !cwdFactForDiagnosis.isDirectory;
+					}
+					const { error: described, described: hasReason } = createSpawnFailureError({
+						error,
+						spawnedCommand: invocation.command,
+						piCommand: command,
+						cwd: spawnCwd,
+						cwdExists: cwdFactForDiagnosis.exists,
+						cwdIsDirectory: cwdFactForDiagnosis.isDirectory,
+						// WSL 的 pi 在 distro 内，Windows 侧 existsSync 只会返回 false，不能据此说路径失效。
+						piCommandExists: isWslCommand ? true : existsSync(command),
+						isWindows: process.platform === "win32",
+					});
+					if (hasReason) {
+						// 归因成功时把可读原因补进 stderr 缓冲：诊断卡展示这条，原始 errno 文本仍保留可检索
+						surfaced = described;
+						if (this.diagnostics) this.diagnostics.stderr.push(described.message);
+					}
+					// 用同一个错误终结 client：启动握手的 pending 请求会立刻以此 reject，不再空等超时。
+					this.rpc?.close(surfaced);
+					this.restoreParkedExtensions();
+					this.proc = undefined;
+					this.rpc = undefined;
+				}
+				this.emit("error", surfaced);
+			});
+			this.proc.on("exit", (code, signal) => {
+				// 退出时更新诊断信息
+				if (this.diagnostics) {
+					this.diagnostics.exitCode = code;
+					this.diagnostics.exitSignal = signal;
+				}
+				// pi 退出后还原临时停放的扩展，保证 CLI 仍能加载 codeisland。
+				this.restoreParkedExtensions();
+				this.rpc?.close(new Error(`pi exited: code=${code ?? "null"}, signal=${signal ?? "null"}`));
+				this.emit("exit", { code, signal });
+				this.proc = undefined;
+				this.rpc = undefined;
+			});
 
-    startupComplete = true;
-    return this.rpc;
-    } catch (error) {
-      // Resolver/version/WSL preparation can fail after extensions were parked but before a
-      // child exit handler owns restoration. Roll back this start attempt synchronously.
-      if (!startupComplete) {
-        const failedProcess = this.proc;
-        this.proc = undefined;
-        this.rpc = undefined;
-        try {
-          failedProcess?.kill();
-        } catch {
-          // The process may already have exited; restoration remains required either way.
-        }
-        this.restoreParkedExtensions();
-      }
-      throw error;
-    }
-  }
+			startupComplete = true;
+			return this.rpc;
+		} catch (error) {
+			// Resolver/version/WSL preparation can fail after extensions were parked but before a
+			// child exit handler owns restoration. Roll back this start attempt synchronously.
+			if (!startupComplete) {
+				const failedProcess = this.proc;
+				this.proc = undefined;
+				this.rpc = undefined;
+				try {
+					failedProcess?.kill();
+				} catch {
+					// The process may already have exited; restoration remains required either way.
+				}
+				this.restoreParkedExtensions();
+			}
+			throw error;
+		}
+	}
 
-  get client() {
-    if (!this.rpc) throw new Error("pi process is not running");
-    return this.rpc;
-  }
+	get client() {
+		if (!this.rpc) throw new Error("pi process is not running");
+		return this.rpc;
+	}
 
-  /**
-   * 子进程 pid；尚未 start 或已退出时为 undefined。
-   * 供进程监控（内存查询/指标展示）使用，不持有引用之外的生命周期语义。
-   */
-  get pid(): number | undefined {
-    return this.proc?.pid;
-  }
+	/**
+	 * 子进程 pid；尚未 start 或已退出时为 undefined。
+	 * 供进程监控（内存查询/指标展示）使用，不持有引用之外的生命周期语义。
+	 */
+	get pid(): number | undefined {
+		return this.proc?.pid;
+	}
 
-  isRunning(): boolean {
-    return this.proc !== undefined && this.rpc !== undefined;
-  }
+	isRunning(): boolean {
+		return this.proc !== undefined && this.rpc !== undefined;
+	}
 
-  stop() {
-    if (!this.proc) {
-      // 进程已不在仍可能残留停放态（例如 start 中途失败路径）。
-      this.restoreParkedExtensions();
-      return;
-    }
-    const pid = this.proc.pid;
-    if (pid !== undefined && process.platform === "win32") {
-      // Windows：先整树强杀、再杀根。pi-subagents / acp_delegate 的子代理是 pi
-      // 自行 spawn 的独立进程，只 kill 根进程会把它们留在孤儿态继续运行（父会话
-      // 已停、子代理还在烧 token）。taskkill /T 需要根进程存活才能枚举整棵树，
-      // 顺序反过来会漏杀；/F 与原 proc.kill()（TerminateProcess）强度一致。
-      killProcessTree(pid);
-    }
-    this.proc.kill();
-    if (pid !== undefined && process.platform !== "win32") {
-      // Unix：先 SIGTERM 优雅停 pi（保持原语义），延迟对整个进程组 SIGKILL 兜底
-      // ——spawn 已 detached（pi 是组长），兜底只清理 pi 退出后残留的子代理；
-      // 组随最后一个成员退出自然消失，kill 失败（ESRCH）忽略。unref 不阻退出。
-      const groupId = -pid;
-      const reaper = setTimeout(() => {
-        try { process.kill(groupId, "SIGKILL"); } catch { /* 组已不存在 */ }
-      }, 3_000);
-      reaper.unref?.();
-    }
-    // 真正还原在 exit 回调里做；此处不提前 unpark，避免与仍在退出的 pi 竞态。
-  }
+	stop() {
+		if (!this.proc) {
+			// 进程已不在仍可能残留停放态（例如 start 中途失败路径）。
+			this.restoreParkedExtensions();
+			return;
+		}
+		const pid = this.proc.pid;
+		if (pid !== undefined && process.platform === "win32") {
+			// Windows：先整树强杀、再杀根。pi-subagents / acp_delegate 的子代理是 pi
+			// 自行 spawn 的独立进程，只 kill 根进程会把它们留在孤儿态继续运行（父会话
+			// 已停、子代理还在烧 token）。taskkill /T 需要根进程存活才能枚举整棵树，
+			// 顺序反过来会漏杀；/F 与原 proc.kill()（TerminateProcess）强度一致。
+			killProcessTree(pid);
+		}
+		this.proc.kill();
+		if (pid !== undefined && process.platform !== "win32") {
+			// Unix：先 SIGTERM 优雅停 pi（保持原语义），延迟对整个进程组 SIGKILL 兜底
+			// ——spawn 已 detached（pi 是组长），兜底只清理 pi 退出后残留的子代理；
+			// 组随最后一个成员退出自然消失，kill 失败（ESRCH）忽略。unref 不阻退出。
+			const groupId = -pid;
+			const reaper = setTimeout(() => {
+				try {
+					process.kill(groupId, "SIGKILL");
+				} catch {
+					/* 组已不存在 */
+				}
+			}, 3_000);
+			reaper.unref?.();
+		}
+		// 真正还原在 exit 回调里做；此处不提前 unpark，避免与仍在退出的 pi 竞态。
+	}
 
-  /** 后台执行 pi --version：更新诊断缓存，但不阻塞 start()/spawn。 */
-  private ensureVersionCheck(command: string): Promise<boolean> {
-    const cached = PiProcess.versionCache.get(command);
-    if (cached?.status === "done") {
-      this.piMinorVersion = cached.minorVersion;
-      if (this.diagnostics?.command === command) {
-        this.diagnostics.versionCheck = cached.ok;
-        this.diagnostics.versionCheckProbed = true;
-      }
-      return Promise.resolve(cached.ok);
-    }
-    if (cached?.status === "pending") return cached.promise;
+	/** 后台执行 pi --version：更新诊断缓存，但不阻塞 start()/spawn。 */
+	private ensureVersionCheck(command: string): Promise<boolean> {
+		const cached = PiProcess.versionCache.get(command);
+		if (cached?.status === "done") {
+			this.piMinorVersion = cached.minorVersion;
+			if (this.diagnostics?.command === command) {
+				this.diagnostics.versionCheck = cached.ok;
+				this.diagnostics.versionCheckProbed = true;
+			}
+			return Promise.resolve(cached.ok);
+		}
+		if (cached?.status === "pending") return cached.promise;
 
-    const promise = new Promise<boolean>((resolve) => {
-      const invocation = this.locator.createInvocation(command, ["--version"]);
-      execFile(invocation.command, invocation.args, {
-        encoding: "utf8" as const,
-        timeout: 5_000,
-        shell: false,
-        // Windows：--version 检查同样经 cmd.exe 拉起，缺 windowsHide 会闪现控制台窗口。
-        windowsHide: true,
-        env: this.locator.createProcessEnv(this.settings, invocation.pathPrefix),
-        windowsVerbatimArguments: invocation.windowsVerbatimArguments,
-      }, (error, stdout) => {
-        const ok = !error;
-        const minorVersion = ok ? this.parseMinorVersion(stdout.trim()) : 0;
-        PiProcess.versionCache.set(command, { status: "done", ok, minorVersion });
-        this.piMinorVersion = minorVersion;
-        if (this.diagnostics?.command === command) {
-          this.diagnostics.versionCheck = ok;
-          this.diagnostics.versionCheckProbed = true;
-        }
-        this.emit("version-check", { ok, minorVersion });
-        resolve(ok);
-      });
-    });
-    PiProcess.versionCache.set(command, { status: "pending", promise });
-    return promise;
-  }
+		const promise = new Promise<boolean>((resolve) => {
+			const invocation = this.locator.createInvocation(command, ["--version"]);
+			execFile(
+				invocation.command,
+				invocation.args,
+				{
+					encoding: "utf8" as const,
+					timeout: 5_000,
+					shell: false,
+					// Windows：--version 检查同样经 cmd.exe 拉起，缺 windowsHide 会闪现控制台窗口。
+					windowsHide: true,
+					env: this.locator.createProcessEnv(this.settings, invocation.pathPrefix),
+					windowsVerbatimArguments: invocation.windowsVerbatimArguments,
+				},
+				(error, stdout) => {
+					const ok = !error;
+					const minorVersion = ok ? this.parseMinorVersion(stdout.trim()) : 0;
+					PiProcess.versionCache.set(command, { status: "done", ok, minorVersion });
+					this.piMinorVersion = minorVersion;
+					if (this.diagnostics?.command === command) {
+						this.diagnostics.versionCheck = ok;
+						this.diagnostics.versionCheckProbed = true;
+					}
+					this.emit("version-check", { ok, minorVersion });
+					resolve(ok);
+				},
+			);
+		});
+		PiProcess.versionCache.set(command, { status: "pending", promise });
+		return promise;
+	}
 
-  /**
-   * 从 pi 的版本号字符串提取次版本号（第二段），用于信任标志兼容性判断。
-   * 格式通常为 "0.79.4"，返回 79。
-   */
-  private parseMinorVersion(version: string): number {
-    const match = version.match(/^(\d+)\.(\d+)/);
-    if (match) return parseInt(match[2], 10);
-    // fallback：如果只有主版本号或裸数字
-    const major = parseInt(version, 10);
-    return Number.isFinite(major) ? major : 0;
-  }
+	/**
+	 * 从 pi 的版本号字符串提取次版本号（第二段），用于信任标志兼容性判断。
+	 * 格式通常为 "0.79.4"，返回 79。
+	 */
+	private parseMinorVersion(version: string): number {
+		const match = version.match(/^(\d+)\.(\d+)/);
+		if (match) return parseInt(match[2], 10);
+		// fallback：如果只有主版本号或裸数字
+		const major = parseInt(version, 10);
+		return Number.isFinite(major) ? major : 0;
+	}
 }
