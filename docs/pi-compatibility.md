@@ -161,6 +161,7 @@ PiDeck 当前有三条不同的 pi-ai 使用路径，不能混为一谈：
 **PiDeck 主进程不再打包完整的 `@earendil-works/pi-ai@0.86.1` SDK；安装包只带静态 catalog artifact**：
 
 - `@earendil-works/pi-ai` 位于精确锁定的 `devDependencies`，`npm run build` 先运行 `scripts/generate-pi-ai-catalog.mjs`；
+- 生成器在使用默认来源目录（`node_modules`）时会校验本地安装版本与 `package.json` 精确锁定一致，不一致直接失败并提示 `npm ci`（防陈旧安装静默降级目录）；确需从未锁定来源生成时显式传 `--source-dir`；
 - 生成器从官方 `dist/providers/data/*.json` 仅提取主进程消费的模型规格，写入 `resources/pi-ai-catalog.json` 及带来源/完整性信息的 manifest；
 - electron-builder 通过 `extraResources` 将这两个文件放进 `resources/`；`piAiBuiltinCatalog.ts` 运行时校验 manifest 的 catalog SHA-256 与条目数，失败则回退 endpoint `/models` 或用户手填；
 - `scripts/verify-asar-runtime.js` 守护 app 的两份 catalog 资源；`scripts/check-dsh-asar.mjs` 与 `scripts/check-dsh-boot.mjs` 继续守护 DSH runtime 所需的 `pi-ai@0.82.1`；
