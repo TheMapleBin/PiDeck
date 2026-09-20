@@ -8,7 +8,7 @@
  */
 
 import { useCallback, useEffect, useId, useMemo, useState, type ReactNode } from "react";
-import { ChevronDown, ChevronRight, Copy, Eye, EyeOff, Plus, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Copy, Eye, EyeOff, GripVertical, Plus, Trash2, X } from "lucide-react";
 import { t } from "../i18n";
 import { desktopApi } from "../desktopApi";
 import { showNotice } from "../utils/notice";
@@ -27,6 +27,12 @@ import type { DshModelRow } from "./DshModelsTable";
 import { ProviderMigrationButton } from "./ProviderMigrationButton";
 import { ConfirmDialog } from "../components/ui-shadcn/ConfirmDialog";
 import { isValidProviderName } from "../../../shared/providerName";
+import { applyProviderOrder } from "../utils/providerOrder";
+import { useProviderReorder } from "../hooks/useProviderReorder";
+
+/** 未提供重排回调时的空实现：保持 hook 调用参数稳定，同时让只读页面照常渲染。 */
+/** 未提供重排回调时的空实现：保持 hook 调用参数稳定，同时让只读页面照常渲染。 */
+const noopReorder = (): void => undefined;
 
 export type DshCredentialState = {
 	configured: boolean;
@@ -41,10 +47,26 @@ export type DshCredentialOps = {
 	unsetKey: (ref: string) => Promise<void>;
 };
 
-/** 收起行头通用布局：chevron + 模型数 + 状态点 + 右侧操作（折叠时不显示名称/URL/协议）。 */
-function ProviderRowHead(props: { title?: string; subtitle?: string; keyRef?: string; keyDot?: ReactNode; badges?: ReactNode[]; isOpen: boolean; onToggle: () => void; onRemove?: () => void; removeDisabled?: boolean; removeTitle?: string; extraActions?: ReactNode }) {
+/** 收起行头通用布局：[排序手柄] chevron + 模型数 + 状态点 + 右侧操作（折叠时不显示名称/URL/协议）。 */
+function ProviderRowHead(props: {
+	title?: string;
+	subtitle?: string;
+	keyRef?: string;
+	keyDot?: ReactNode;
+	badges?: ReactNode[];
+	isOpen: boolean;
+	onToggle: () => void;
+	onRemove?: () => void;
+	removeDisabled?: boolean;
+	removeTitle?: string;
+	extraActions?: ReactNode;
+	/** 行头左侧插槽（供应商排序的拖拽手柄与上移/下移按钮）。 */
+	leading?: ReactNode;
+}) {
 	return (
-		<div className="flex items-center gap-2 px-3 py-2">
+		// group：上移/下移按钮靠 group-hover 浮现，避免行头常驻一排图标
+		<div data-provider-head="" className="group flex items-center gap-2 px-3 py-2">
+			{props.leading}
 			<button type="button" className="flex min-w-0 flex-1 items-center gap-1.5 text-left" onClick={props.onToggle}>
 				{props.isOpen ? <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" /> : <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />}
 				{props.title && <span className="truncate font-mono text-control font-semibold text-foreground">{props.title}</span>}
@@ -242,6 +264,10 @@ export function PiAiProvidersCard(props: {
 	onMigrated?: () => void;
 	/** 打开用量查询配置弹窗（与 Pi 模型页共用；provider=DSH route 名）。 */
 	onOpenUsageProbeDialog: (provider: string) => void;
+	/** 供应商卡片自定义顺序（AppSettings.dshProviderOrder，仅展示用）。 */
+	providerOrder?: string[];
+	/** 卡片重排回调（父级持久化到 AppSettings）。 */
+	onReorderProviders?: (nextOrder: string[]) => void;
 }) {
 	const { namespace, writable, ops, sectionApi } = props;
 	const generatedId = useId();
@@ -335,16 +361,33 @@ export function PiAiProvidersCard(props: {
 		return () => sectionApi.unregisterSave(instanceId);
 	}, [sectionApi, instanceId, save]);
 
-	if (!schema || !root || !providersField) {
-		return <div className="py-6 text-center text-control text-muted-foreground">{t("config.dsh.schemaUnavailable")}</div>;
-	}
-
+	// 注意：下面的顺序计算 + 排序 hook 必须放在任何提前 return 之前——
+	// schema/字段未就绪时组件会早退，若 hook 落在早退之后，schema 异步到达时 hook 数量变化，React 直接报错。
 	const providersValue = (namespace.value as { providers?: unknown } | undefined)?.providers;
 	// 按 key 深合并：draft 往往只带 models，浅合并会盖掉已保存的 displayName/baseURL
 	const mergedProvidersValue = mergeProviderMaps((providersValue ?? {}) as Record<string, unknown>, (draft.providers ?? {}) as Record<string, unknown>);
 	const entries = dictEntries(mergedProvidersValue)
 		// 待删除的 provider 立即从列表隐藏（host 侧删除在保存时经 mutate unset 提交）
 		.filter((entry) => !pendingRemovals.includes(entry.key));
+	// 自定义顺序只作用于展示：DSH 配置里的 providers 是 dict，写回是 merge 语义的 patch，无法表达键顺序，
+	// 所以排序偏好存在 PiDeck 本地设置（AppSettings.dshProviderOrder），不去改 DSH 配置。
+	const orderedEntries = useMemo(() => {
+		const byKey = new Map(entries.map((entry) => [entry.key, entry]));
+		return applyProviderOrder(
+			entries.map((entry) => entry.key),
+			props.providerOrder,
+		)
+			.map((key) => byKey.get(key))
+			.filter((entry): entry is (typeof entries)[number] => Boolean(entry));
+	}, [entries, props.providerOrder]);
+	// 排序输入用有序键列表；DSH 页无隐藏供应商概念，完整列表即可见列表。
+	const orderedKeys = useMemo(() => orderedEntries.map((entry) => entry.key), [orderedEntries]);
+	const providerReorder = useProviderReorder({ names: orderedKeys, visibleNames: orderedKeys, onReorder: props.onReorderProviders ?? noopReorder });
+
+	if (!schema || !root || !providersField) {
+		return <div className="py-6 text-center text-control text-muted-foreground">{t("config.dsh.schemaUnavailable")}</div>;
+	}
+
 	const innerRefId = providersField.ref.inner;
 	if (innerRefId === undefined) {
 		return <div className="py-6 text-center text-control text-muted-foreground">{t("config.dsh.schemaUnavailable")}</div>;
@@ -470,7 +513,7 @@ export function PiAiProvidersCard(props: {
 		<div className="flex min-w-0 flex-col">
 			<div className="flex shrink-0 items-center gap-2 border-b border-border/40 px-4 py-2">
 				<span className="text-caption font-semibold text-foreground">{namespace.ns}</span>
-				<span className="rounded-full border border-border-subtle px-2 py-0.5 text-micro text-muted-foreground">{t("config.dsh.providersCount", { count: entries.length })}</span>
+				<span className="rounded-full border border-border-subtle px-2 py-0.5 text-micro text-muted-foreground">{t("config.dsh.providersCount", { count: orderedEntries.length })}</span>
 				{error && (
 					<span className="max-w-64 truncate text-micro text-danger" title={error}>
 						{error}
@@ -529,7 +572,7 @@ export function PiAiProvidersCard(props: {
 				</div>
 
 				{/* provider 行列表 */}
-				{entries.map((entry) => {
+				{orderedEntries.map((entry) => {
 					const isOpen = expanded[entry.key] ?? false;
 					// 模型列表：draft 覆盖优先（新增/删除行即时反映），否则用现值
 					const draftModels = entryValue(entry.key, ["models"]);
@@ -553,8 +596,40 @@ export function PiAiProvidersCard(props: {
 					// 生效模型数：自定义 models 非空取自定义数，否则取内置目录数（dsh-web 同语义）
 					const modelCount = models.length > 0 ? models.length : (providerCatalog?.length ?? 0);
 					return (
-						<div key={entry.key} className="rounded-md border border-border-subtle bg-bg-panel">
+						<div key={entry.key} ref={(element) => providerReorder.registerCard(entry.key, element)} className={`relative rounded-md border border-border-subtle bg-bg-panel${providerReorder.draggingName === entry.key ? " opacity-50" : ""}`} {...providerReorder.cardProps(entry.key)}>
+							{/* 拖拽插入指示线：贴卡片内缘 */}
+							{providerReorder.dropTarget?.name === entry.key && <span className={`absolute ${providerReorder.dropTarget.position === "before" ? "top-0" : "bottom-0"} right-0 left-0 z-10 h-0.5 bg-[color:var(--color-accent)]`} />}
 							<ProviderRowHead
+								leading={
+									<>
+										{/* 拖拽手柄：只有按住手柄才能拖动，避免与行内点击折叠抢手势；上移/下移悬停浮现，键盘聚焦也可见 */}
+										<Button type="button" variant="ghost" size="icon-sm" className="size-6 shrink-0 cursor-grab text-muted-foreground active:cursor-grabbing" title={t("config.dragProvider")} {...providerReorder.gripProps(entry.key)}>
+											<GripVertical className="size-3.5" aria-hidden="true" />
+										</Button>
+										<Button
+											type="button"
+											variant="ghost"
+											size="icon-sm"
+											className="size-6 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 disabled:opacity-30"
+											disabled={!providerReorder.canMove(entry.key, -1)}
+											title={t("config.moveProviderUp")}
+											onClick={() => providerReorder.moveBy(entry.key, -1)}
+										>
+											<ArrowUp className="size-3" aria-hidden="true" />
+										</Button>
+										<Button
+											type="button"
+											variant="ghost"
+											size="icon-sm"
+											className="size-6 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 disabled:opacity-30"
+											disabled={!providerReorder.canMove(entry.key, 1)}
+											title={t("config.moveProviderDown")}
+											onClick={() => providerReorder.moveBy(entry.key, 1)}
+										>
+											<ArrowDown className="size-3" aria-hidden="true" />
+										</Button>
+									</>
+								}
 								title={entry.key}
 								badges={[t("config.dsh.modelsCount", { count: modelCount })]}
 								keyDot={<KeyStatusDot state={ops.credentials[keyRef]} />}
@@ -592,7 +667,7 @@ export function PiAiProvidersCard(props: {
 						</div>
 					);
 				})}
-				{entries.length === 0 && <Empty text={t("config.dsh.providersEmpty")} />}
+				{orderedEntries.length === 0 && <Empty text={t("config.dsh.providersEmpty")} />}
 			</div>
 			{removingKey && <ConfirmDialog title={t("common.deleteConfirm")} message={t("common.deleteConfirmMsg", { name: removingKey })} confirmLabel={t("common.delete")} danger onConfirm={confirmRemoveProvider} onCancel={() => setRemovingKey(null)} />}
 		</div>

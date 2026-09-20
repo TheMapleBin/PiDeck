@@ -201,6 +201,9 @@ Gitmoji 对应关系：
 	hiddenProviders: [],
 	hiddenModels: [],
 	hiddenAuthProviders: [],
+	// 供应商卡片自定义顺序：空数组 = 未自定义，按配置原序展示
+	providerOrder: [],
+	dshProviderOrder: [],
 
 	// ── 扩展管理 ──
 	/** 用户手动移除的内置扩展，启动时跳过自动部署 */
@@ -282,6 +285,9 @@ export function migrateUpdateSourceToAtomgit(settings: { updateSource?: unknown;
 	settings.updateSourceAtomgitMigrated = true;
 	return true;
 }
+
+/** 供应商卡片自定义顺序的落盘上限：只防脏数组无限膨胀，正常配置远低于此值 */
+const MAX_PROVIDER_ORDER_ENTRIES = 200;
 
 export class SettingsStore {
 	private readonly filePath = desktopSettingsPath();
@@ -504,6 +510,28 @@ export class SettingsStore {
 			const unchanged = cleaned.length === prev.length && cleaned.every((item, index) => item === prev[index]);
 			if (unchanged) delete safePatch.recentProviders;
 			else safePatch.recentProviders = cleaned;
+		}
+		// 供应商卡片顺序来自渲染层拖拽/上移下移结果，入参不可信：只接受字符串数组，
+		// 去重、去空、按上限截断。内容无变化时从 patch 中剔除——拖拽落在原位置、
+		// 或上移下移撞到列表边界时都会产生「和当前顺序一致的数组」，没必要写盘与刷审计。
+		for (const orderKey of ["providerOrder", "dshProviderOrder"] as const) {
+			if (!(orderKey in safePatch)) continue;
+			const candidate = safePatch[orderKey];
+			const cleaned: string[] = [];
+			const seen = new Set<string>();
+			if (Array.isArray(candidate)) {
+				for (const item of candidate) {
+					if (typeof item === "string" && item.length > 0 && !seen.has(item)) {
+						seen.add(item);
+						cleaned.push(item);
+						if (cleaned.length >= MAX_PROVIDER_ORDER_ENTRIES) break;
+					}
+				}
+			}
+			const prev = this.settings[orderKey] ?? [];
+			const unchanged = cleaned.length === prev.length && cleaned.every((item, index) => item === prev[index]);
+			if (unchanged) delete safePatch[orderKey];
+			else safePatch[orderKey] = cleaned;
 		}
 		// 所有字段都被去重剔除后没有可写内容：直接返回，避免空 patch 仍触发一次写盘。
 		if (Object.keys(safePatch).length === 0) {

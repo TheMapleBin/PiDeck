@@ -10,6 +10,7 @@ import { Label } from "../components/ui-shadcn/label";
 import { ProviderMigrationButton } from "./ProviderMigrationButton";
 import { ProviderUsageInline } from "../components/app/ProviderUsageInline";
 import { UsageQueryEntryButton } from "../components/app/UsageQueryEntryButton";
+import { applyProviderOrder } from "../utils/providerOrder";
 
 // 根据 pi 官方文档支持的供应商列表 (https://pi.dev/docs/latest/providers#auth-file)
 const PRESET_PROVIDERS = [
@@ -64,6 +65,8 @@ export function AuthTab(props: {
 	modelsData?: ModelsFile;
 	/** 用户隐藏的认证供应商列表 */
 	hiddenAuthProviders?: string[];
+	/** 供应商自定义顺序（AppSettings.providerOrder）：与模型页共用同一份排序，两页列表顺序一致。 */
+	providerOrder?: string[];
 	/** 切换认证供应商隐藏状态 */
 	onToggleHiddenAuthProvider?: (name: string) => void;
 	onToggleAuth: (name: string) => void;
@@ -80,7 +83,8 @@ export function AuthTab(props: {
 	onOpenUsageProbeDialog: (providerName: string) => void;
 }) {
 	const { data, expandedAuth, saving, hiddenAuthProviders = [], onToggleHiddenAuthProvider } = props;
-	const allProviders = Object.keys(data);
+	// 供应商顺序沿用模型页的自定义排序：applyProviderOrder 把未列出的供应商按原序追加在后，不会漏项。
+	const allProviders = applyProviderOrder(Object.keys(data), props.providerOrder);
 	const hiddenAuthSet = new Set(hiddenAuthProviders);
 	const visibleProviders = allProviders.filter((name) => !hiddenAuthSet.has(name));
 	const hiddenProviderNames = allProviders.filter((name) => hiddenAuthSet.has(name));
@@ -226,7 +230,7 @@ export function AuthTab(props: {
 									<span>{t("config.authFromModels")}</span>
 									<span className="h-px flex-1 bg-border-subtle" aria-hidden="true" />
 								</div>
-								{Object.keys(props.modelsData.providers).map((providerName) => {
+								{applyProviderOrder(Object.keys(props.modelsData.providers), props.providerOrder).map((providerName) => {
 									const alreadyConfigured = allProviders.includes(providerName);
 									const isSelected = selectedProvider === providerName;
 									return (

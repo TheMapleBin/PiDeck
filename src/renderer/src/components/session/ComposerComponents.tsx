@@ -730,6 +730,8 @@ export function ModelPicker(props: {
 	backend?: UsageProbeBackend;
 	/** 最近使用的供应商 ID 列表（最新在前）：已用过的分组排最前，未用过的按内置置顶+字母序。 */
 	recentProviders?: string[];
+	/** 供应商自定义顺序（模型页排序结果，后端对应数组由宿主选择）：列出的严格按此展示且不再被最近使用覆盖。 */
+	providerOrder?: string[];
 	/** 用户隐藏的供应商 key 列表（Pi 模型页眼睛开关）；Pi 后端按 provider 过滤，DSH 不生效。 */
 	hiddenProviders?: string[];
 	/** 用户隐藏的模型列表（格式："provider/modelId"）；Pi 后端过滤单个模型。 */
@@ -767,9 +769,9 @@ export function ModelPicker(props: {
 	// 全量模型按供应商分组（收藏模型也保留在原分组）；
 	// 搜索交给 cmdk（item 的 value/keywords 同时覆盖 name/id/provider）
 	const groupedModels = groupModelsByProvider(visibleModels);
-	// 最近使用过的供应商排最前（高频免搜索直达），未使用过的按内置置顶 + 字母序；
+	// 供应商分组顺序：用户自定义顺序优先（严格按拖拽结果），其余仍按最近使用 → 内置置顶 → 字母序；
 	// 'other' 是白名单外供应商的兜底组，顺序保持最后。
-	const sortedProviders = orderProviderGroups(Object.keys(groupedModels), props.recentProviders);
+	const sortedProviders = orderProviderGroups(Object.keys(groupedModels), props.recentProviders, props.providerOrder);
 
 	// 默认展开集合（「当前选中模型可见」驱动）：只展开收藏栏 + 当前模型所在提供商，
 	// 其余提供商折叠；无收藏且无当前模型时回退第一个提供商。折叠是派生状态，

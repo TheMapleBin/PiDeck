@@ -584,6 +584,13 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 	const [hiddenModels, setHiddenModels] = useState<string[]>([]);
 	/** 用户隐藏的认证供应商列表（持久化到 AppSettings.hiddenAuthProviders）。 */
 	const [hiddenAuthProviders, setHiddenAuthProviders] = useState<string[]>([]);
+	/**
+	 * 供应商卡片自定义顺序（Pi 页与 DSH 页各存一份，持久化到 AppSettings）。
+	 * 与 hiddenProviders 同类：属于 UI 展示偏好，不写进 models.json / DSH 配置，
+	 * 因此无需担心被外部改写 pi 配置的工具覆盖。
+	 */
+	const [providerOrder, setProviderOrder] = useState<string[]>([]);
+	const [dshProviderOrder, setDshProviderOrder] = useState<string[]>([]);
 	/** 切换供应商隐藏状态：本地立即生效 + 持久化到 AppSettings（不影响 models.json 配置本身）。 */
 	const handleToggleHiddenProvider = useCallback((name: string) => {
 		setHiddenProviders((prev) => {
@@ -609,6 +616,20 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 			return next;
 		});
 	}, []);
+	/**
+	 * 供应商卡片重排：本地立即生效 + 持久化。
+	 * 顺序未变（例如拖回原位）也照常写一次——主进程 SettingsStore 会把无变化的键从 patch 里剔除，
+	 * 这里不再重复一份比较逻辑。
+	 */
+	const handleReorderProviders = useCallback((next: string[]) => {
+		setProviderOrder(next);
+		void api.settings.update({ providerOrder: next }).catch(() => undefined);
+	}, []);
+	/** DSH 模型页的供应商卡片重排（与 Pi 页分开存，两页的供应商集合不同）。 */
+	const handleReorderDshProviders = useCallback((next: string[]) => {
+		setDshProviderOrder(next);
+		void api.settings.update({ dshProviderOrder: next }).catch(() => undefined);
+	}, []);
 	// 打开配置页时读取 AppSettings.hiddenProviders、hiddenModels 与 hiddenAuthProviders
 	useEffect(() => {
 		let cancelled = false;
@@ -619,6 +640,8 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 					setHiddenProviders(settings.hiddenProviders ?? []);
 					setHiddenModels(settings.hiddenModels ?? []);
 					setHiddenAuthProviders(settings.hiddenAuthProviders ?? []);
+					setProviderOrder(settings.providerOrder ?? []);
+					setDshProviderOrder(settings.dshProviderOrder ?? []);
 				}
 			})
 			.catch(() => undefined);
@@ -2318,7 +2341,7 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 				<TabsContent value="dsh" forceMount className="flex min-h-0 min-w-0 flex-1 data-[state=inactive]:hidden">
 					{/* runtime 安装态不再整页替换：概览页内嵌 DshRuntimeSection 状态自适应区块，
 					    未装→安装引导，已装→版本/目录/卸载/导入，一个页面操作完。 */}
-					{dshRuntimeStatus.state !== "checking" ? <DshConfigTab ref={dshConfigRef} onDirtyChange={handleDshDirtyChange} dirtyNavIds={dshDirtyNavIds} onOpenUsageProbeDialog={(provider) => openUsageProbeDialogFor(provider, "dsh")} /> : null}
+					{dshRuntimeStatus.state !== "checking" ? <DshConfigTab ref={dshConfigRef} onDirtyChange={handleDshDirtyChange} dirtyNavIds={dshDirtyNavIds} onOpenUsageProbeDialog={(provider) => openUsageProbeDialogFor(provider, "dsh")} providerOrder={dshProviderOrder} onReorderProviders={handleReorderDshProviders} /> : null}
 				</TabsContent>
 				<TabsContent value="pi" forceMount className="flex min-h-0 min-w-0 flex-1 data-[state=inactive]:hidden">
 					{/* 默认浅色主题整页同底（bg-background），避免顶栏白 / 下方多层灰的割裂感。
@@ -2408,6 +2431,8 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 											providerPageSaveRef={providerPageSaveRef}
 											hiddenProviders={hiddenProviders}
 											onToggleHiddenProvider={handleToggleHiddenProvider}
+											providerOrder={providerOrder}
+											onReorderProviders={handleReorderProviders}
 											hiddenModels={hiddenModels}
 											onToggleHiddenModel={handleToggleHiddenModel}
 											fetchingProvider={fetchingProvider}
@@ -2491,6 +2516,7 @@ function ConfigModalContent(props: ConfigModalContentProps) {
 										saving={saving}
 										modelsData={modelsData}
 										hiddenAuthProviders={hiddenAuthProviders}
+										providerOrder={providerOrder}
 										onToggleHiddenAuthProvider={handleToggleHiddenAuthProvider}
 										onToggleAuth={(name) => setExpandedAuth(expandedAuth === name ? null : name)}
 										onStartAddAuth={() => {
