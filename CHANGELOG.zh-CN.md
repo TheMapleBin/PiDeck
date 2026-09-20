@@ -13,7 +13,7 @@
 - **DSH host 可手动停止（跨重启持久）** — 配置管理概览区新增「停止 host / 启动 host」：停止后 PiDeck 不再自动拉起（重启后依然保持停止），活跃 DSH 会话一并停止，概览区显示「已手动停止」并给出恢复入口；解掉「DSH 命令行端想独占 host，却被前台 PiDeck 抢回去」的死结。
 - **pi 环境引导支持一键安装便携 Node 与 pi CLI** — 环境管理引导按「安装 Node → 确认 npm → 安装 pi」分步给出可执行指引，已经装过的用户走「已经装过 pi？」分支核对；便携 Node 只服务 PiDeck，不改系统 PATH。
 - **DSH runtime 改为单 runner 交叉打包全平台** — 6 个平台的 runtime 归档由单个 runner 交叉打包产出，补发链路更短，不再等每个平台的原生 runner 排队。
-- **模型目录更新到 pi 0.86.0（1438 个模型）** — 目录随上游刷新：对比上一版新增 140 条、移除 56 条、140 条字段变更，新增 radius（27 条）、baseten、cloudflare-ai-gateway 三个供应商，amazon-bedrock 补齐 apac / eu / global / in / us-gov 区域前缀（+42），openrouter 大规模刷新。设置 → 模型目录点「检查更新」即可拉到（分支源与 npm 源任一），不必等下次发版。
+- **模型目录更新到 pi 0.86.1（1443 个模型）** — 目录随上游刷新（对比上一版 0.85.1 快照）：新增 145 条、移除 56 条、140 条字段变更，新增 radius（27 条）、meta（5 条）两个供应商，amazon-bedrock 补齐 apac / eu / global / in / us-gov 区域前缀（+38），openrouter 刷新至 380 条。设置 → 模型目录点「检查更新」即可拉到（分支源与 npm 源任一），不必等下次发版。
 
 ### 🐛 修复
 - **第三方中转站拉不到模型 / 手填模型也用不了已修复** — 两个独立根因。其一，给 pi 子进程注入代理时只写了 `HTTPS_PROXY` 等环境变量，而 pi 的 LLM 调用链走 undici，undici 默认**完全不读**这些变量——用户以为挂了代理，请求其实仍直连，于是需要经代理才能通的网关表现为「拉不到模型、手填模型也报 Connection error」。现在随代理一并注入 `NODE_USE_ENV_PROXY=1`（实测对照：仅 `HTTPS_PROXY` → FAIL；加上开关 → OK models=15），并把组装规则抽成 `sessionProxyPolicy.buildPiProxyEnvPatch`，与 DSH host 共用同一套语义。其二，桌面代理开关关闭时会显式下发 `direct`，等于强制绕过用户操作系统里已配好的代理；改为回退 `system`（沿用系统设置），PiDeck 不再替用户切断网络出口。顺带让拉模型失败可诊断：网关返回 WAF 挑战页 / 非 JSON 正文会提示「请求被网关拦截」并建议切换代理或改用官方客户端 UA，TLS 握手失败与连接超时分别给可操作文案，不再一律报「获取模型失败」。
