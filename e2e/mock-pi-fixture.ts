@@ -48,13 +48,18 @@ export type SeedImageGenConfig = ImageGenConfigFile;
 
 const repoRoot = resolve(__dirname, "..");
 
-export const test = base.extend<MockPiFixture & { seedProjects: SeedProject[] | undefined; seedFeishuBots: SeedFeishuBot[] | undefined; seedSessionFiles: SeedSessionFile[] | undefined; seedSettings: SeedSettings | undefined; seedImageGenConfig: SeedImageGenConfig | undefined }>({
+export const test = base.extend<
+	MockPiFixture & { seedProjects: SeedProject[] | undefined; seedFeishuBots: SeedFeishuBot[] | undefined; seedSessionFiles: SeedSessionFile[] | undefined; seedSettings: SeedSettings | undefined; seedImageGenConfig: SeedImageGenConfig | undefined; launchArgs: string[]; mockSessionInProject: boolean }
+>({
 	seedProjects: [undefined, { option: true }],
 	seedFeishuBots: [undefined, { option: true }],
 	seedSessionFiles: [undefined, { option: true }],
 	seedSettings: [undefined, { option: true }],
 	seedImageGenConfig: [undefined, { option: true }],
-	app: async ({ seedProjects, seedFeishuBots, seedSessionFiles, seedSettings, seedImageGenConfig }, use) => {
+	// Exercise real startup intents with the same isolated profile and mock RPC backend.
+	launchArgs: [[], { option: true }],
+	mockSessionInProject: [false, { option: true }],
+	app: async ({ seedProjects, seedFeishuBots, seedSessionFiles, seedSettings, seedImageGenConfig, launchArgs, mockSessionInProject }, use) => {
 		const userDataRoot = mkdtempSync(join(tmpdir(), "pideck-mockpi-"));
 		try {
 			// Windows 桌面端通过 cmd shim 调起自定义 pi（见 PiLocator.createInvocation），
@@ -150,11 +155,12 @@ export const test = base.extend<MockPiFixture & { seedProjects: SeedProject[] | 
 				CI: "1",
 				// PIDECK_E2E：主进程 isE2E 开关，窗口 showInactive 不抢焦点、不最大化（见 main/index.ts）
 				PIDECK_E2E: "1",
+				PIDECK_MOCK_SESSION_IN_PROJECT: mockSessionInProject ? "1" : "0",
 				...(process.platform === "win32" ? { APPDATA: userDataRoot, USERPROFILE: userDataRoot } : process.platform === "darwin" ? { HOME: userDataRoot } : { XDG_CONFIG_HOME: userDataRoot, HOME: userDataRoot }),
 			};
 			delete env.ELECTRON_RENDERER_URL;
 			const app = await electron.launch({
-				args: [join(repoRoot, "out", "main", "index.js"), `--user-data-dir=${join(userDataRoot, "profile")}`],
+				args: [join(repoRoot, "out", "main", "index.js"), `--user-data-dir=${join(userDataRoot, "profile")}`, ...launchArgs],
 				env,
 			});
 			await use(app);

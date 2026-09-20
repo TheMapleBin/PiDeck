@@ -1,6 +1,18 @@
 import { mainProcessZhCN } from "../../../shared/i18n/mainProcessCopy";
 
 export const zhCN = {
+	"quickTask.title": "PiDeck 小任务",
+	"quickTask.new": "新任务",
+	"quickTask.workbench": "打开完整工作台",
+	"quickTask.closeHint": "关闭小窗口会返回工作台，任务继续运行。只有发送后才执行任务。",
+	"quickTask.pending": "已保留当前任务。要在 {{path}} 新建任务吗？",
+	"quickTask.keep": "保留当前任务",
+	"quickTask.addDescription": "此目录尚未添加为项目。确认添加后即可输入任务。",
+	"quickTask.loading": "准备任务中…",
+	"quickTask.retry": "重试",
+	"quickTask.invalidPath": "无法打开工作目录，请检查目录是否存在及访问权限。",
+	"quickTask.menuTitle": "右键发起小任务",
+	"quickTask.menuDescription": "在 Windows 桌面、文件夹及空白处添加小任务入口。Windows 11 可能需要「显示更多选项」。",
 	"sidebar.pendingConfirmation": "待确认",
 	"sidebar.pendingConfirmationCount": "待确认 ({count})",
 	"sidebar.pendingConfirmationHint": "该项目有 {count} 个待确认的提问",

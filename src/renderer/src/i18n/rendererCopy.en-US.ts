@@ -2,6 +2,18 @@ import { mainProcessEnUS } from "../../../shared/i18n/mainProcessCopy";
 import type { TranslationKey } from "./rendererCopy.zh-CN";
 
 export const enUS: Record<TranslationKey, string> = {
+	"quickTask.title": "PiDeck quick task",
+	"quickTask.new": "New task",
+	"quickTask.workbench": "Open workbench",
+	"quickTask.closeHint": "Closing this window returns to the workbench; tasks keep running. Nothing executes until you send.",
+	"quickTask.pending": "Your current task is preserved. Start a new task in {{path}}?",
+	"quickTask.keep": "Keep current task",
+	"quickTask.addDescription": "This folder is not a project yet. Confirm adding it to enter a task.",
+	"quickTask.loading": "Preparing task…",
+	"quickTask.retry": "Retry",
+	"quickTask.invalidPath": "Cannot open this working directory. Check that it exists and you have access.",
+	"quickTask.menuTitle": "Start quick tasks from Explorer",
+	"quickTask.menuDescription": "Add a quick task entry to the Windows desktop, folders and folder backgrounds. Windows 11 may require Show more options.",
 	"sidebar.pendingConfirmation": "Pending",
 	"sidebar.pendingConfirmationCount": "Pending ({count})",
 	"sidebar.pendingConfirmationHint": "{count} pending confirmation(s) in this project",

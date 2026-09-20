@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, net, protocol, safeStorage, session, shell, Tray, Notification } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, net, protocol, safeStorage, screen, session, shell, Tray, Notification } from "electron";
 import { randomUUID } from "node:crypto";
 import { basename, join } from "node:path";
 import { createWriteStream, existsSync } from "node:fs";
@@ -290,6 +290,8 @@ import { fetchModelList, refreshModelCatalogIfStale, refreshModelList } from "./
 import { registerFilesIpc } from "./ipc/filesIpc";
 import { registerClipboardIpc } from "./ipc/clipboardIpc";
 import { registerShellMenuIpc } from "./ipc/shellMenuIpc";
+import { QuickTaskController } from "./quickTask/QuickTaskController";
+import { registerQuickTaskIpc } from "./ipc/quickTaskIpc";
 import { BROWSER_PANEL_PARTITION as BROWSER_PANEL_PARTITION_SHARED, isAllowedBrowserPanelUrl as isAllowedBrowserPanelUrlShared } from "./browser/browserSecurity";
 import { WebServiceManager } from "./web/WebServiceManager";
 import { preparePreloadPath } from "./preloadPath";
@@ -315,6 +317,13 @@ import { createMacManualUpdateChecker } from "./update/macManualUpdate";
 import { UpdateService } from "./update/UpdateService";
 
 let mainWindow: BrowserWindow | null = null;
+const quickTaskController = new QuickTaskController({
+	getWindow: () => mainWindow,
+	workArea: (bounds) => screen.getDisplayMatching(bounds).workArea,
+	publish: (state) => {
+		if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(ipcChannels.quickTaskChanged, state);
+	},
+});
 let tray: Tray | null = null;
 /** 标记是否由用户主动退出（托盘菜单「退出」），区别于窗口关闭隐藏到托盘 */
 let isQuitting = false;
@@ -1174,6 +1183,11 @@ function handleVersionFocusRequest(payload?: FocusPayload) {
 	const target = extractFocusTargetFromArgv(payload?.argv);
 	const activateSession = async () => {
 		if (!target) return;
+		if (target.quickTaskPath || target.quickTaskDesktop) {
+			await quickTaskController.open(target.quickTaskDesktop ? app.getPath("desktop") : target.quickTaskPath!);
+			return;
+		}
+		if (quickTaskController.isActive()) quickTaskController.exit();
 		// 文件夹右键打开：已收录目录直接跳项目（渲染层 selectProjectCommand）；
 		// 未收录目录推 projectPath，渲染层弹确认框走新增项目流程。
 		if (target.projectPath) {
@@ -1629,13 +1643,18 @@ async function createWindow() {
 	const windowForState = createdWindow;
 	windowForState.on("close", () => {
 		if (!windowForState.isDestroyed()) {
-			const normal = windowForState.isMaximized() || windowForState.isFullScreen() ? windowForState.getNormalBounds() : windowForState.getBounds();
+			const normal = quickTaskController.getWorkbenchBounds() ?? (windowForState.isMaximized() || windowForState.isFullScreen() ? windowForState.getNormalBounds() : windowForState.getBounds());
 			saveLastWindowBounds(app.getPath("userData"), { width: normal.width, height: normal.height });
 		}
 	});
 
 	// 关闭窗口时根据设置决定：隐藏到托盘还是正常退出
 	mainWindow.on("close", (event) => {
+		if (!isQuitting && quickTaskController.isActive()) {
+			event.preventDefault();
+			quickTaskController.exit();
+			return;
+		}
 		if (!isQuitting && settingsStore.get().closeToTray) {
 			event.preventDefault();
 			mainWindow?.hide();
@@ -3054,7 +3073,9 @@ function registerIpc() {
 	registerShellMenuIpc({
 		appLogger,
 		menuTitle: mainCopy("shellMenu.openWithPiDeck"),
+		quickTaskTitle: mainCopy("shellMenu.quickTask"),
 	});
+	registerQuickTaskIpc(quickTaskController);
 }
 
 function sendTelemetryHeartbeat() {
@@ -3994,6 +4015,12 @@ app
 		// 之后不再自动备份。同步快，不挡首帧；失败仅记录，不阻断启动。
 		configBackupManager?.ensureInitialBackups();
 		await createWindow();
+		// Quick tasks should not wait for unrelated WSL/proxy startup probes. The controller
+		// retains validated intent until the renderer subscribes or requests its snapshot.
+		const coldStartTarget = extractFocusTargetFromArgv(process.argv);
+		if (coldStartTarget?.quickTaskPath || coldStartTarget?.quickTaskDesktop) {
+			await quickTaskController.open(coldStartTarget.quickTaskDesktop ? app.getPath("desktop") : coldStartTarget.quickTaskPath!);
+		}
 		setupTray();
 		// 粘贴文件启动清理：删除超过保留期的落盘文件（fire-and-forget，不挡首帧）
 		void cleanupPasteFiles?.().catch((error: unknown) => {
@@ -4138,7 +4165,6 @@ app
 		// 页面仍在加载时直接 send 会丢（preload/React 监听未注册），故走 pending 队列：
 		// did-finish-load 补发一次 + renderer 挂载后主动拉取（见 queueFocusTarget 注释）。
 		// catalog 可能尚未加载完，renderer 侧监听会小间隔重试直到能解析到会话记录。
-		const coldStartTarget = extractFocusTargetFromArgv(process.argv);
 		if (coldStartTarget) {
 			if (coldStartTarget.projectPath) {
 				// 项目表就绪后再判定是否已收录：否则已注册目录也会弹「添加为项目」。
