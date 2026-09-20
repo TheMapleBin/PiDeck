@@ -708,7 +708,7 @@ function EditorWorkbenchTab(props: {
 					aria-label={tab.title ?? tab.label}
 					className={cn(
 						"session-tab group relative flex h-7 shrink-0 cursor-pointer select-none items-center rounded-md border px-2 text-micro transition-[color,background-color,border-color,box-shadow,transform] duration-200",
-						"w-fit max-w-52",
+						"w-fit max-w-44",
 						// hover 底改用 accent-soft（主题淡背景 token，随 data-accent 切换）而非 accent/50：
 						// 半透明的 accent/50 叠在 #ffffff 上 ≈ #eff1f3，浅色主题下几乎看不到底色、只有文字变色，
 						// 鼠标掠过像“闪一下”（用户反馈「悬停太丑」）；opaque 的 accent-soft 底色稳定可辨且不随背景沾染。
@@ -868,8 +868,9 @@ function SessionTab(props: {
 	const title = sessionDisplayName(record?.title, record?.forked) || t("common.untitled");
 	// DSH/生图徽标与计划/目标模式 chip 都是不可压缩的固定宽度内容。
 	// 普通 tab 上限若只有 128px 时标题只能显示 4-5 个字。结合精致 micro 字号（11px），
-	// 普通 tab 上限放宽到 208px（max-w-52），兼顾多 tab 容纳量与长标题可读性（可显示 12-14 个字）；
-	// 有前置徽章时放宽到 256px（max-w-64），给标题留出充足可读空间。
+	// 上限收敛到 176px（max-w-44，约 11 个汉字）与带前置徽章 224px（max-w-56）：比峰值
+	// 208/256 各收窄 32px——长标题不再把整条 Tab 栏拉得过宽（用户反馈「Tab 变长了」），
+	// 同时保留比早期 160/176 更宽松的长标题可读空间。
 	const hasLeadingBadges = Boolean(record?.backend === "dsh" || record?.backend === "imagegen" || runtime?.state?.planModeActive || (runtime?.state?.goal && runtime.state.goal.phase !== "complete"));
 	// Tab 级操作（固定/关闭等）改为右键菜单（ContextMenu，光标处弹出）；Tab 本体点击仍是切换，
 	// 拖拽排序与中键关闭与菜单互不干扰（drag/auxclick 不触发 click）。
@@ -910,7 +911,7 @@ function SessionTab(props: {
 								// 固定 Tab 与普通 Tab 同宽策略（按内容收缩）：固定 Tab 无关闭按钮，
 								// hover 不会因按钮出现而跳动，无需 w-20 占位；固定宽度反而让 Pin 图标挤占标题空间。
 								// 有 DSH/生图徽标或模式 chip 时放宽上限（见上方 hasLeadingBadges 注释）。
-								hasLeadingBadges ? "w-fit max-w-64" : "w-fit max-w-52",
+								hasLeadingBadges ? "w-fit max-w-56" : "w-fit max-w-44",
 								dragging && "opacity-50",
 								// 选中态：灰色柔和实底（bg-accent = --color-bg-active，与左侧 SessionTree 选中行一致），
 								// 背景由下方共享 layoutId 的 motion.span spring 滑到当前 Tab；不做黑色实底/阴影/底部条。
