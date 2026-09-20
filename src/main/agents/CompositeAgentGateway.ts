@@ -1,20 +1,4 @@
-import type {
-	AgentBackend,
-	AgentGatewayCapability,
-	AgentRuntimeState,
-	AgentTab,
-	AvailableModel,
-	ChatMessage,
-	CreateAgentInput,
-	ImageContent,
-	RewindCheckpointPage,
-	RewindCheckpointPageParams,
-	RewindRestoreResult,
-	RewindRestoreScope,
-	SendPromptInput,
-	SendPromptResult,
-	SessionUiResponseInput,
-} from "../../shared/types";
+import type { AgentBackend, AgentGatewayCapability, AgentRuntimeState, AgentTab, AvailableModel, ChatMessage, CreateAgentInput, ImageContent, RewindCheckpointPage, RewindCheckpointPageParams, RewindRestoreResult, RewindRestoreScope, SendPromptInput, SendPromptResult, SessionUiResponseInput } from "../../shared/types";
 import type { SessionAgentGateway } from "../sessions/SessionRuntimeCoordinator";
 
 /**
@@ -80,11 +64,7 @@ export class CompositeAgentGateway implements SessionAgentGateway {
 	}
 
 	/** 可选能力存在性检查（不抽方法，避免丢 this）；缺失时抛与旧行为一致的错误，由 Coordinator 转 SESSION_COMMAND_FAILED。 */
-	private requireCapability(
-		gateway: SessionAgentGateway,
-		method: "getCommands" | "exportHtml" | "editMessage" | "deleteMessage" | "setPermission"
-			| "listCheckpoints" | "getCheckpointDiff" | "restoreCheckpoint",
-	): void {
+	private requireCapability(gateway: SessionAgentGateway, method: "getCommands" | "exportHtml" | "editMessage" | "deleteMessage" | "setPermission" | "listCheckpoints" | "getCheckpointDiff" | "restoreCheckpoint"): void {
 		if (typeof gateway[method] !== "function") {
 			throw new Error(`CompositeAgentGateway: backend "${gateway.backend}" does not support ${method}`);
 		}
@@ -177,10 +157,7 @@ export class CompositeAgentGateway implements SessionAgentGateway {
 		await gateway.deleteMessage?.(agentId, messageId);
 	}
 
-	async listCheckpoints(
-		agentId: string,
-		params?: RewindCheckpointPageParams,
-	): Promise<RewindCheckpointPage> {
+	async listCheckpoints(agentId: string, params?: RewindCheckpointPageParams): Promise<RewindCheckpointPage> {
 		const gateway = this.owner(agentId);
 		this.requireCapability(gateway, "listCheckpoints");
 		return gateway.listCheckpoints!(agentId, params);
@@ -192,11 +169,7 @@ export class CompositeAgentGateway implements SessionAgentGateway {
 		return gateway.getCheckpointDiff!(agentId, checkpointId);
 	}
 
-	async restoreCheckpoint(
-		agentId: string,
-		checkpointId: string,
-		scope: RewindRestoreScope,
-	): Promise<RewindRestoreResult> {
+	async restoreCheckpoint(agentId: string, checkpointId: string, scope: RewindRestoreScope): Promise<RewindRestoreResult> {
 		const gateway = this.owner(agentId);
 		this.requireCapability(gateway, "restoreCheckpoint");
 		return gateway.restoreCheckpoint!(agentId, checkpointId, scope);
@@ -222,17 +195,12 @@ export class CompositeAgentGateway implements SessionAgentGateway {
 		// 必须对象调用：抽成 const mutate = gateway.mutatePersistedSessionMessage 会丢 this，
 		// AgentManager 内部读 this.toSessionHostPath 直接崩（「会话操作失败，请重试」）。
 		if (typeof gateway.mutatePersistedSessionMessage !== "function") {
-			throw new Error(
-				`CompositeAgentGateway: backend "${gateway.backend}" does not support persisted session message mutation`,
-			);
+			throw new Error(`CompositeAgentGateway: backend "${gateway.backend}" does not support persisted session message mutation`);
 		}
 		return gateway.mutatePersistedSessionMessage(sessionPath, messageId, operation, options);
 	}
 
-	async prepareResendFromMessage(
-		agentId: string,
-		messageId: string,
-	): Promise<{ text: string; images?: ImageContent[] }> {
+	async prepareResendFromMessage(agentId: string, messageId: string): Promise<{ text: string; images?: ImageContent[] }> {
 		return this.owner(agentId).prepareResendFromMessage(agentId, messageId);
 	}
 
@@ -268,20 +236,11 @@ export class CompositeAgentGateway implements SessionAgentGateway {
 		return this.owner(agentId).forkSession(agentId, entryId);
 	}
 
-	async sendUIResponse(
-		agentId: string,
-		requestId: string,
-		response: SessionUiResponseInput["response"],
-	): Promise<unknown> {
+	async sendUIResponse(agentId: string, requestId: string, response: SessionUiResponseInput["response"]): Promise<unknown> {
 		return this.owner(agentId).sendUIResponse(agentId, requestId, response);
 	}
 
-	notifyAskPending(
-		agentId: string,
-		sessionId: string,
-		sessionTitle: string,
-		question: string,
-	): void {
+	notifyAskPending(agentId: string, sessionId: string, sessionTitle: string, question: string): void {
 		for (const gateway of this.gateways) {
 			if (gateway.list().some((tab) => tab.id === agentId)) {
 				gateway.notifyAskPending(agentId, sessionId, sessionTitle, question);

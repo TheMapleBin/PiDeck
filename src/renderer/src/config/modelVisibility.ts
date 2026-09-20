@@ -15,10 +15,7 @@ export function toModelKey(provider: string, modelId: string): string {
 }
 
 /** 按隐藏列表拆分供应商名：visible = 主列表展示，hidden = 底部「已隐藏」折叠区。 */
-export function splitVisibleAndHiddenProviders(
-	providerNames: string[],
-	hiddenProviders: string[],
-): { visible: string[]; hidden: string[] } {
+export function splitVisibleAndHiddenProviders(providerNames: string[], hiddenProviders: string[]): { visible: string[]; hidden: string[] } {
 	const hiddenSet = new Set(hiddenProviders);
 	const visible: string[] = [];
 	const hidden: string[] = [];
@@ -30,25 +27,14 @@ export function splitVisibleAndHiddenProviders(
 }
 
 /** 切换单个供应商的隐藏状态：已隐藏则恢复，未隐藏则加入。 */
-export function toggleHiddenProvider(
-	hiddenProviders: string[],
-	name: string,
-): string[] {
-	return hiddenProviders.includes(name)
-		? hiddenProviders.filter((item) => item !== name)
-		: [...hiddenProviders, name];
+export function toggleHiddenProvider(hiddenProviders: string[], name: string): string[] {
+	return hiddenProviders.includes(name) ? hiddenProviders.filter((item) => item !== name) : [...hiddenProviders, name];
 }
 
 /** 切换单个模型的隐藏状态：已隐藏则恢复，未隐藏则加入。 */
-export function toggleHiddenModel(
-	hiddenModels: string[],
-	provider: string,
-	modelId: string,
-): string[] {
+export function toggleHiddenModel(hiddenModels: string[], provider: string, modelId: string): string[] {
 	const key = toModelKey(provider, modelId);
-	return hiddenModels.includes(key)
-		? hiddenModels.filter((item) => item !== key)
-		: [...hiddenModels, key];
+	return hiddenModels.includes(key) ? hiddenModels.filter((item) => item !== key) : [...hiddenModels, key];
 }
 
 /**
@@ -90,11 +76,7 @@ export function splitVisibleAndHiddenModels<T extends { id: string }>(
  * 1. 隐藏 provider 下的所有模型被过滤；
  * 2. 隐藏单个 modelKey ("provider/id") 的模型被过滤。
  */
-export function filterVisibleModels<T extends { provider: string; id: string }>(
-	models: T[],
-	hiddenProviders?: string[],
-	hiddenModels?: string[],
-): T[] {
+export function filterVisibleModels<T extends { provider: string; id: string }>(models: T[], hiddenProviders?: string[], hiddenModels?: string[]): T[] {
 	const hasHiddenProviders = Boolean(hiddenProviders && hiddenProviders.length > 0);
 	const hasHiddenModels = Boolean(hiddenModels && hiddenModels.length > 0);
 	if (!hasHiddenProviders && !hasHiddenModels) {
@@ -114,11 +96,7 @@ export function filterVisibleModels<T extends { provider: string; id: string }>(
  * direction === "up" 时向索引减小方向移动（从 1 到 0）；
  * direction === "down" 时向索引增大方向移动（从 0 到 1）。
  */
-export function moveModelItem<T>(
-	items: T[],
-	fromIndex: number,
-	direction: "up" | "down",
-): T[] {
+export function moveModelItem<T>(items: T[], fromIndex: number, direction: "up" | "down"): T[] {
 	const targetIndex = direction === "up" ? fromIndex - 1 : fromIndex + 1;
 	if (fromIndex < 0 || fromIndex >= items.length) return [...items];
 	if (targetIndex < 0 || targetIndex >= items.length) return [...items];

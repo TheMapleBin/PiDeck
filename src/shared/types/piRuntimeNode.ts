@@ -11,7 +11,6 @@
  * 华为云 → nodejs.org 官方；哈希直接固化在代码里，不需要再维护一份索引清单。
  */
 
-
 import { atomGitFeedUrl, gitHubLatestDownloadBase } from "../updateSources";
 
 /** 引导安装的 Node 版本。与项目 CI / DSH sidecar 对齐的 Node 24 LTS 线。 */
@@ -46,10 +45,7 @@ export function officialPiRuntimeNodeUrl(platform: PiRuntimePlatform, arch: PiRu
  * npmmirror（阿里 binary 镜像）目录与 nodejs.org/dist 完全同构，国内网络首选。
  * 华为云镜像同样同步官方 dist 目录，作为后续回退。
  */
-export const PI_RUNTIME_NODE_MIRRORS = [
-	"https://npmmirror.com/mirrors/node",
-	"https://mirrors.huaweicloud.com/nodejs",
-] as const;
+export const PI_RUNTIME_NODE_MIRRORS = ["https://npmmirror.com/mirrors/node", "https://mirrors.huaweicloud.com/nodejs"] as const;
 
 /**
  * PiDeck 自有 Release 资产（AtomGit/GitHub latest）兜底：DSH runner node 打包流程
@@ -58,10 +54,7 @@ export const PI_RUNTIME_NODE_MIRRORS = [
  */
 export function piRuntimeNodeReleaseAssetUrls(arch: PiRuntimeArch): string[] {
 	const file = piRuntimeNodeArchiveName("win32", arch);
-	return [
-		`${atomGitFeedUrl()}/${encodeURIComponent(file)}`,
-		`${gitHubLatestDownloadBase()}/${encodeURIComponent(file)}`,
-	];
+	return [`${atomGitFeedUrl()}/${encodeURIComponent(file)}`, `${gitHubLatestDownloadBase()}/${encodeURIComponent(file)}`];
 }
 
 /**
@@ -80,9 +73,7 @@ export function piRuntimeNodeDownloadUrls(platform: PiRuntimePlatform, arch: PiR
 
 /** 解压后发行包内层目录名（官方命名，zip/tar 一致）。 */
 export function piRuntimeNodeInnerDir(platform: PiRuntimePlatform, arch: PiRuntimeArch): string {
-	return platform === "win32"
-		? `node-v${PI_RUNTIME_NODE_VERSION}-win-${arch}`
-		: `node-v${PI_RUNTIME_NODE_VERSION}-${platform}-${arch}`;
+	return platform === "win32" ? `node-v${PI_RUNTIME_NODE_VERSION}-win-${arch}` : `node-v${PI_RUNTIME_NODE_VERSION}-${platform}-${arch}`;
 }
 
 /** 平台映射：process.platform → 契约平台；不认识的平台返回 null（不提供引导安装）。 */

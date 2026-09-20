@@ -22,9 +22,7 @@ export function resolveExtensionEntryPoints(dir: string): string[] | null {
 			const pi = isRecord(parsed) && isRecord(parsed.pi) ? parsed.pi : null;
 			const declared = pi?.extensions;
 			if (Array.isArray(declared) && declared.every((entry): entry is string => typeof entry === "string")) {
-				const paths = declared
-					.map((entry) => resolve(dir, entry))
-					.filter(existsSync);
+				const paths = declared.map((entry) => resolve(dir, entry)).filter(existsSync);
 				if (paths.length > 0) return paths;
 			}
 		} catch {

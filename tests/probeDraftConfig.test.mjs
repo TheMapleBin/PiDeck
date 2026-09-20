@@ -11,11 +11,7 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-	buildProbeDraftFiles,
-	PROBE_AGENT_DIR_ENV,
-	toWslAccessiblePath,
-} from "../src/main/pi/probeDraftConfig.ts";
+import { buildProbeDraftFiles, PROBE_AGENT_DIR_ENV, toWslAccessiblePath } from "../src/main/pi/probeDraftConfig.ts";
 
 test("buildProbeDraftFiles: models.json 顶包 providers 且 provider 原样写入", () => {
 	const provider = {

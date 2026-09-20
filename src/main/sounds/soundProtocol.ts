@@ -13,12 +13,18 @@ import { resolveCustomSoundPath } from "./SoundFileStore";
 function mimeOf(file: string): string {
 	const ext = file.slice(file.lastIndexOf(".") + 1).toLowerCase();
 	switch (ext) {
-		case "wav": return "audio/wav";
-		case "mp3": return "audio/mpeg";
-		case "ogg": return "audio/ogg";
-		case "m4a": return "audio/mp4";
-		case "flac": return "audio/flac";
-		default: return "application/octet-stream";
+		case "wav":
+			return "audio/wav";
+		case "mp3":
+			return "audio/mpeg";
+		case "ogg":
+			return "audio/ogg";
+		case "m4a":
+			return "audio/mp4";
+		case "flac":
+			return "audio/flac";
+		default:
+			return "application/octet-stream";
 	}
 }
 

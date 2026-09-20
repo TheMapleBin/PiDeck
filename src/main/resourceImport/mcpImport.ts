@@ -1,27 +1,7 @@
 import type { McpProbeResult, McpServerDefinition, McpServerTransport } from "../../shared/types/mcp";
-import type {
-	ResourceImportCandidate,
-	ResourceImportSourceStatus,
-	StoredResourceImportCandidate,
-} from "../../shared/types/resourceImport";
-import {
-	addUnique,
-	isRecord,
-	redactPreviewArgs,
-	redactPreviewUrl,
-	safeMessage,
-	PROBE_CONCURRENCY,
-	PROBE_TIMEOUT_MS,
-	redactPreviewCommand,
-	redactSensitiveList,
-	redactSensitiveText,
-	PREVIEW_TEXT_MAX,
-} from "./common";
-import {
-	isMcpServerName,
-	normalizeMcpServerDefinition,
-	validateMcpConfigFile,
-} from "../config/mcpConfig";
+import type { ResourceImportCandidate, ResourceImportSourceStatus, StoredResourceImportCandidate } from "../../shared/types/resourceImport";
+import { addUnique, isRecord, redactPreviewArgs, redactPreviewUrl, safeMessage, PROBE_CONCURRENCY, PROBE_TIMEOUT_MS, redactPreviewCommand, redactSensitiveList, redactSensitiveText, PREVIEW_TEXT_MAX } from "./common";
+import { isMcpServerName, normalizeMcpServerDefinition, validateMcpConfigFile } from "../config/mcpConfig";
 import { parseCodexToml } from "./toml";
 
 export type McpSourceParse = Record<string, unknown>;
@@ -37,11 +17,7 @@ function stringRecord(value: unknown): Record<string, string> | undefined {
 }
 
 /** Parse one Claude JSON or Codex TOML source without exposing parse details to the UI. */
-export function parseMcpSource(
-	raw: string,
-	codex: boolean,
-	sourceStatus: ResourceImportSourceStatus,
-): McpSourceParse | null {
+export function parseMcpSource(raw: string, codex: boolean, sourceStatus: ResourceImportSourceStatus): McpSourceParse | null {
 	if (codex) {
 		const parsedToml = parseCodexToml(raw);
 		if (parsedToml.error) {
@@ -69,11 +45,7 @@ export function extractMcpServers(parsed: McpSourceParse, codex: boolean): McpSo
 }
 
 /** Extract servers and, when supplied, report a malformed vendor server map. */
-export function extractMcpServersWithStatus(
-	parsed: McpSourceParse,
-	codex: boolean,
-	status?: ResourceImportSourceStatus,
-): McpSourceEntry[] {
+export function extractMcpServersWithStatus(parsed: McpSourceParse, codex: boolean, status?: ResourceImportSourceStatus): McpSourceEntry[] {
 	const value = parsed[codex ? "mcp_servers" : "mcpServers"];
 	if (isRecord(value)) return Object.entries(value).map(([name, item]) => ({ name, value: item }));
 	if (value !== undefined) {
@@ -84,10 +56,13 @@ export function extractMcpServersWithStatus(
 		// A few Claude exports are a bare map rather than { mcpServers: ... }.
 		const entries = Object.entries(parsed);
 		const transportKeys = ["command", "url", "socket", "type", "args", "env", "headers"];
-		if (entries.length > 0 && entries.every(([, item]) => {
-			if (!isRecord(item)) return false;
-			return transportKeys.some((key) => key in item);
-		})) {
+		if (
+			entries.length > 0 &&
+			entries.every(([, item]) => {
+				if (!isRecord(item)) return false;
+				return transportKeys.some((key) => key in item);
+			})
+		) {
 			return entries.map(([name, item]) => ({ name, value: item }));
 		}
 	}
@@ -95,12 +70,7 @@ export function extractMcpServersWithStatus(
 }
 
 /** Convert a vendor definition to the PiDeck MCP schema. */
-export function convertMcpDefinition(
-	raw: Record<string, unknown>,
-	codex: boolean,
-	warnings: string[],
-	blockers: string[],
-): McpServerDefinition | null {
+export function convertMcpDefinition(raw: Record<string, unknown>, codex: boolean, warnings: string[], blockers: string[]): McpServerDefinition | null {
 	// Claude calls this field `type`; a few Codex exporters use `transport`.  Treat
 	// either spelling as a declaration so an unsupported value gets a useful blocker
 	// instead of the less actionable "transport missing" message.
@@ -265,11 +235,7 @@ export async function probeMcpCandidates(provider: ProbeProvider, candidates: St
 			try {
 				const result = await withTimeout(probeMcpServer.call(provider, candidate.mcpDefinition), PROBE_TIMEOUT_MS);
 				if (!result.ok) {
-					addUnique(candidate.warnings, result.transport === "stdio"
-						? "Command was not found on PATH."
-						: result.transport === "http"
-							? "URL could not be reached during the compatibility check."
-							: "MCP endpoint could not be reached during the compatibility check.");
+					addUnique(candidate.warnings, result.transport === "stdio" ? "Command was not found on PATH." : result.transport === "http" ? "URL could not be reached during the compatibility check." : "MCP endpoint could not be reached during the compatibility check.");
 				}
 			} catch {
 				addUnique(candidate.warnings, "Compatibility check timed out or failed.");
@@ -280,13 +246,7 @@ export async function probeMcpCandidates(provider: ProbeProvider, candidates: St
 }
 
 export function publicMcpCandidate(candidate: StoredResourceImportCandidate): ResourceImportCandidate {
-	const {
-		sourcePath: _sourcePath,
-		sourcePathLexical: _sourcePathLexical,
-		sourceFingerprint: _sourceFingerprint,
-		mcpDefinition: _mcpDefinition,
-		...publicCandidate
-	} = candidate;
+	const { sourcePath: _sourcePath, sourcePathLexical: _sourcePathLexical, sourceFingerprint: _sourceFingerprint, mcpDefinition: _mcpDefinition, ...publicCandidate } = candidate;
 	return {
 		...publicCandidate,
 		name: redactSensitiveText(publicCandidate.name, PREVIEW_TEXT_MAX),
@@ -297,11 +257,11 @@ export function publicMcpCandidate(candidate: StoredResourceImportCandidate): Re
 		blockers: redactSensitiveList(publicCandidate.blockers),
 		preview: candidate.preview
 			? {
-				...candidate.preview,
-				...(candidate.preview.command ? { command: redactPreviewCommand(candidate.preview.command) } : {}),
-				...(candidate.preview.url ? { url: redactPreviewUrl(candidate.preview.url) } : {}),
-				...(candidate.preview.args ? { args: redactPreviewArgs(candidate.preview.args) } : {}),
-			}
+					...candidate.preview,
+					...(candidate.preview.command ? { command: redactPreviewCommand(candidate.preview.command) } : {}),
+					...(candidate.preview.url ? { url: redactPreviewUrl(candidate.preview.url) } : {}),
+					...(candidate.preview.args ? { args: redactPreviewArgs(candidate.preview.args) } : {}),
+				}
 			: undefined,
 	};
 }

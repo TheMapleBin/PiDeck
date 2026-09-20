@@ -86,9 +86,12 @@ test("workbench: 文件预览右上角始终有关闭按钮", async ({ window })
 	await fileRow.click();
 
 	// 右上角关闭按钮存在（修复前 chromeTabsExternal 会隐藏它）
-	const closeBtn = window.locator(".file-diff-header-actions").getByRole("button", {
-		name: "关闭",
-	}).first();
+	const closeBtn = window
+		.locator(".file-diff-header-actions")
+		.getByRole("button", {
+			name: "关闭",
+		})
+		.first();
 	await expect(closeBtn).toBeVisible({ timeout: 15_000 });
 
 	// 点击后关闭整个阅读面（回到无内容状态）

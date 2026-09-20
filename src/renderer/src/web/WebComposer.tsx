@@ -10,12 +10,7 @@ import { useRef, useState } from "react";
 import { Button } from "@/components/ui-shadcn/button";
 import { t } from "@/i18n";
 
-export function WebComposer(props: {
-	disabled: boolean;
-	streaming: boolean;
-	onSend: (text: string) => void;
-	onStop: () => void;
-}) {
+export function WebComposer(props: { disabled: boolean; streaming: boolean; onSend: (text: string) => void; onStop: () => void }) {
 	const [draft, setDraft] = useState("");
 	const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -51,26 +46,13 @@ export function WebComposer(props: {
 					aria-label={t("web.promptPlaceholder")}
 				/>
 				<div className="flex shrink-0 items-center justify-between gap-2 px-3 pb-2.5">
-					<span className="composer-hint min-w-0 truncate text-caption text-muted-foreground">
-						{t("web.composerHint")}
-					</span>
+					<span className="composer-hint min-w-0 truncate text-caption text-muted-foreground">{t("web.composerHint")}</span>
 					{props.streaming ? (
-						<Button
-							type="button"
-							variant="destructive"
-							size="sm"
-							className="h-8 shrink-0"
-							onClick={props.onStop}
-						>
+						<Button type="button" variant="destructive" size="sm" className="h-8 shrink-0" onClick={props.onStop}>
 							{t("app.stop")}
 						</Button>
 					) : (
-						<Button
-							type="submit"
-							size="sm"
-							className="h-8 shrink-0"
-							disabled={props.disabled || !draft.trim()}
-						>
+						<Button type="submit" size="sm" className="h-8 shrink-0" disabled={props.disabled || !draft.trim()}>
 							{t("app.send")}
 						</Button>
 					)}

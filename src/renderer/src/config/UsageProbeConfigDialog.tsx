@@ -16,11 +16,7 @@ import { useAtomValue, useSetAtom } from "jotai";
 import { Bot, Eye, EyeOff } from "lucide-react";
 import { t } from "../i18n";
 import type { TranslationKey } from "../i18n";
-import type {
-	ProviderUsageResult,
-	UsageProbeProviderConfig,
-	UsageProbeTemplateCategory,
-} from "../../../shared/types/providerUsage";
+import type { ProviderUsageResult, UsageProbeProviderConfig, UsageProbeTemplateCategory } from "../../../shared/types/providerUsage";
 import { desktopApi } from "../desktopApi";
 import { showNotice } from "../utils/notice";
 import { invalidateAllProviderUsageAtom, resolveProviderUsageAtom } from "../atoms/provider-usage-atoms";
@@ -72,22 +68,11 @@ const NONE_TEMPLATE = "none";
  * 暗色模式 accent 反转为浅色（默认 #fafafa、blue/amber 等均为亮色），
  * 白字会直接盖在浅底上看不见（与 ComposerPanels 发送按钮同一规则）。 */
 function pillClass(selected: boolean): string {
-	return cn(
-		"h-7 rounded-lg border px-2.5 text-caption",
-		selected
-			? "border-transparent bg-[color:var(--color-accent)] font-medium text-[var(--color-text-inverse)] shadow-sm hover:opacity-90"
-			: "border-border bg-transparent text-text-secondary hover:bg-bg-hover hover:text-foreground",
-	);
+	return cn("h-7 rounded-lg border px-2.5 text-caption", selected ? "border-transparent bg-[color:var(--color-accent)] font-medium text-[var(--color-text-inverse)] shadow-sm hover:opacity-90" : "border-border bg-transparent text-text-secondary hover:bg-bg-hover hover:text-foreground");
 }
 
 /** 数字输入（超时/间隔）：非法值回退默认，不阻塞保存。 */
-function NumberField(props: {
-	label: string;
-	value: number;
-	onChange: (value: number) => void;
-	min: number;
-	max: number;
-}) {
+function NumberField(props: { label: string; value: number; onChange: (value: number) => void; min: number; max: number }) {
 	return (
 		<div className="space-y-1.5">
 			<Label className="text-xs font-medium text-foreground">{props.label}</Label>
@@ -109,23 +94,11 @@ function NumberField(props: {
 }
 
 /** 凭证覆盖输入（通用模板 API Key / 请求地址；可选覆盖，留空用供应商配置）。 */
-function OptionalField(props: {
-	label: string;
-	placeholder: string;
-	value: string;
-	onChange: (value: string) => void;
-	type?: "text" | "password";
-}) {
+function OptionalField(props: { label: string; placeholder: string; value: string; onChange: (value: string) => void; type?: "text" | "password" }) {
 	return (
 		<div className="space-y-1.5">
 			<Label className="text-xs font-medium text-foreground">{props.label}</Label>
-			<Input
-				type={props.type ?? "text"}
-				value={props.value}
-				onChange={(event) => props.onChange(event.target.value)}
-				placeholder={props.placeholder}
-				className="h-9"
-			/>
+			<Input type={props.type ?? "text"} value={props.value} onChange={(event) => props.onChange(event.target.value)} placeholder={props.placeholder} className="h-9" />
 		</div>
 	);
 }
@@ -307,13 +280,7 @@ export function UsageProbeConfigDialog(props: {
 				// 圆环/卡片/选择器三处立刻显示这次测试到的真实数值。
 				resolveUsage(cacheKey, result);
 				const summary = formatUsageBadgeText(result);
-				showNotice(
-					summary
-						? t("config.usageProbe.testSuccessWith", { value: summary })
-						: t("config.usageProbe.testSuccess"),
-					3000,
-					"info",
-				);
+				showNotice(summary ? t("config.usageProbe.testSuccessWith", { value: summary }) : t("config.usageProbe.testSuccess"), 3000, "info");
 			} else {
 				setTestError(result.error ?? t("config.usageProbe.testFailed"));
 				// 主进程带上的排查明细（尝试过的 URL + 状态 + 提示），多行展示方便定位问题。
@@ -351,11 +318,7 @@ export function UsageProbeConfigDialog(props: {
 				if (baseUrl.trim()) config.baseUrl = baseUrl.trim();
 				if (!accessToken.trim() || !userId.trim()) {
 					setSaveState("error");
-					setSaveError(
-						accessToken.trim()
-							? t("config.usageProbe.newApiUserIdRequired")
-							: t("config.usageProbe.newApiTokenRequired"),
-					);
+					setSaveError(accessToken.trim() ? t("config.usageProbe.newApiUserIdRequired") : t("config.usageProbe.newApiTokenRequired"));
 					return;
 				}
 				config.accessToken = accessToken.trim();
@@ -364,13 +327,7 @@ export function UsageProbeConfigDialog(props: {
 				if (baseUrl.trim()) config.baseUrl = baseUrl.trim();
 				if (!cookie.trim() || !cookiePath.trim() || !valuePath.trim()) {
 					setSaveState("error");
-					setSaveError(
-						!cookie.trim()
-							? t("config.usageProbe.cookieRequired")
-							: !cookiePath.trim()
-								? t("config.usageProbe.cookiePathRequired")
-								: t("config.usageProbe.cookieValuePathRequired"),
-					);
+					setSaveError(!cookie.trim() ? t("config.usageProbe.cookieRequired") : !cookiePath.trim() ? t("config.usageProbe.cookiePathRequired") : t("config.usageProbe.cookieValuePathRequired"));
 					return;
 				}
 				config.cookie = cookie.trim();
@@ -456,16 +413,9 @@ export function UsageProbeConfigDialog(props: {
 						<div className="py-4 text-center text-caption text-text-tertiary">{t("common.loading")}</div>
 					) : (
 						<>
-							{loadErrors.length > 0 && (
-								<div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-caption leading-relaxed text-amber-600 dark:text-amber-400">
-									{loadErrors.join("\n")}
-								</div>
-							)}
+							{loadErrors.length > 0 && <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-caption leading-relaxed text-amber-600 dark:text-amber-400">{loadErrors.join("\n")}</div>}
 							{legacyNotice && (
-								<div
-									className="rounded-md border border-sky-500/40 bg-sky-500/10 px-3 py-2 text-caption leading-relaxed text-sky-600 dark:text-sky-400"
-									data-testid="usage-probe-legacy-notice"
-								>
+								<div className="rounded-md border border-sky-500/40 bg-sky-500/10 px-3 py-2 text-caption leading-relaxed text-sky-600 dark:text-sky-400" data-testid="usage-probe-legacy-notice">
 									{legacyNotice}
 								</div>
 							)}
@@ -480,46 +430,21 @@ export function UsageProbeConfigDialog(props: {
 							<section className="space-y-1.5">
 								<p className="text-sm font-medium text-foreground">{t("config.usageProbe.templatesTitle")}</p>
 								<div className="flex flex-wrap gap-1.5">
-									<button
-										type="button"
-										className={pillClass(template === NONE_TEMPLATE)}
-										onClick={() => setTemplate(NONE_TEMPLATE)}
-										data-testid="usage-probe-template-none"
-									>
+									<button type="button" className={pillClass(template === NONE_TEMPLATE)} onClick={() => setTemplate(NONE_TEMPLATE)} data-testid="usage-probe-template-none">
 										{t("config.usageProbe.category.none")}
 									</button>
 									{recognized && (
-										<button
-											type="button"
-											className={pillClass(template === recognized.templateId)}
-											onClick={() => setTemplate(recognized.templateId)}
-											data-testid="usage-probe-template-builtin"
-										>
+										<button type="button" className={pillClass(template === recognized.templateId)} onClick={() => setTemplate(recognized.templateId)} data-testid="usage-probe-template-builtin">
 											{t("config.usageProbe.builtin", { label: t(CATEGORY_LABEL_KEY[recognized.category]) })}
 										</button>
 									)}
-									<button
-										type="button"
-										className={pillClass(template === "general")}
-										onClick={() => setTemplate("general")}
-										data-testid="usage-probe-template-general"
-									>
+									<button type="button" className={pillClass(template === "general")} onClick={() => setTemplate("general")} data-testid="usage-probe-template-general">
 										{t("config.usageProbe.category.general")}
 									</button>
-									<button
-										type="button"
-										className={pillClass(template === "newapi")}
-										onClick={() => setTemplate("newapi")}
-										data-testid="usage-probe-template-newapi"
-									>
+									<button type="button" className={pillClass(template === "newapi")} onClick={() => setTemplate("newapi")} data-testid="usage-probe-template-newapi">
 										{t("config.usageProbe.category.newapi")}
 									</button>
-									<button
-										type="button"
-										className={pillClass(template === "cookie")}
-										onClick={() => setTemplate("cookie")}
-										data-testid="usage-probe-template-cookie"
-									>
+									<button type="button" className={pillClass(template === "cookie")} onClick={() => setTemplate("cookie")} data-testid="usage-probe-template-cookie">
 										{t("config.usageProbe.category.cookie")}
 									</button>
 								</div>
@@ -535,18 +460,11 @@ export function UsageProbeConfigDialog(props: {
 										{recognized && template === recognized.templateId && (
 											/* 已识别供应商徽标（学 cc-switch DeepSeek 蓝标）：明确「预制的是你」，
 											   让「内置模板」与「需要填字段的模板」一眼区分开 */
-											<span
-												className="inline-flex shrink-0 items-center rounded border border-[var(--color-accent)]/40 bg-[var(--color-accent)]/10 px-1.5 py-0.5 font-mono text-micro leading-none tracking-wide text-[var(--color-accent)]"
-												data-testid="usage-probe-recognized-badge"
-											>
+											<span className="inline-flex shrink-0 items-center rounded border border-[var(--color-accent)]/40 bg-[var(--color-accent)]/10 px-1.5 py-0.5 font-mono text-micro leading-none tracking-wide text-[var(--color-accent)]" data-testid="usage-probe-recognized-badge">
 												{props.provider}
 											</span>
 										)}
-										<p className="min-w-0 flex-1 text-caption text-text-tertiary">
-											{recognized && template === recognized.templateId
-												? t("config.usageProbe.builtinHint")
-												: t(hintKey)}
-										</p>
+										<p className="min-w-0 flex-1 text-caption text-text-tertiary">{recognized && template === recognized.templateId ? t("config.usageProbe.builtinHint") : t(hintKey)}</p>
 									</div>
 								)}
 							</section>
@@ -555,60 +473,29 @@ export function UsageProbeConfigDialog(props: {
 							{currentTemplate?.id === "general" && (
 								<section className="space-y-3">
 									<div className="grid grid-cols-2 gap-3">
-										<OptionalField
-											label={t("config.usageProbe.credentialApiKey")}
-											placeholder={t("config.usageProbe.credentialApiKeyPlaceholder")}
-											value={apiKey}
-											onChange={setApiKey}
-										/>
-										<OptionalField
-											label={t("config.usageProbe.credentialBaseUrl")}
-											placeholder={t("config.usageProbe.credentialBaseUrlPlaceholder")}
-											value={baseUrl}
-											onChange={setBaseUrl}
-										/>
+										<OptionalField label={t("config.usageProbe.credentialApiKey")} placeholder={t("config.usageProbe.credentialApiKeyPlaceholder")} value={apiKey} onChange={setApiKey} />
+										<OptionalField label={t("config.usageProbe.credentialBaseUrl")} placeholder={t("config.usageProbe.credentialBaseUrlPlaceholder")} value={baseUrl} onChange={setBaseUrl} />
 									</div>
 								</section>
 							)}
 							{currentTemplate?.id === "newapi" && (
 								<section className="space-y-3">
 									<div className="grid grid-cols-2 gap-3">
-										<OptionalField
-											label={t("config.usageProbe.credentialBaseUrl")}
-											placeholder={t("config.usageProbe.credentialBaseUrlPlaceholder")}
-											value={baseUrl}
-											onChange={setBaseUrl}
-										/>
+										<OptionalField label={t("config.usageProbe.credentialBaseUrl")} placeholder={t("config.usageProbe.credentialBaseUrlPlaceholder")} value={baseUrl} onChange={setBaseUrl} />
 										<div className="space-y-1.5">
 											<div className="flex items-center justify-between">
 												<Label className="text-xs font-medium text-foreground">{t("config.usageProbe.newApiToken")}</Label>
-												<button
-													type="button"
-													className="inline-flex items-center gap-1 text-micro text-text-tertiary transition-colors hover:text-foreground"
-													onClick={() => setShowToken((value) => !value)}
-												>
+												<button type="button" className="inline-flex items-center gap-1 text-micro text-text-tertiary transition-colors hover:text-foreground" onClick={() => setShowToken((value) => !value)}>
 													{showToken ? <EyeOff size={12} /> : <Eye size={12} />}
 													{showToken ? t("config.usageProbe.hideKey") : t("config.usageProbe.showKey")}
 												</button>
 											</div>
-											<Input
-												type={showToken ? "text" : "password"}
-												value={accessToken}
-												onChange={(event) => setAccessToken(event.target.value)}
-												placeholder={t("config.usageProbe.newApiTokenPlaceholder")}
-												className="h-9"
-											/>
+											<Input type={showToken ? "text" : "password"} value={accessToken} onChange={(event) => setAccessToken(event.target.value)} placeholder={t("config.usageProbe.newApiTokenPlaceholder")} className="h-9" />
 										</div>
 									</div>
-									<OptionalField
-										label={t("config.usageProbe.newApiUserId")}
-										placeholder={t("config.usageProbe.newApiUserIdPlaceholder")}
-										value={userId}
-										onChange={setUserId}
-									/>
+									<OptionalField label={t("config.usageProbe.newApiUserId")} placeholder={t("config.usageProbe.newApiUserIdPlaceholder")} value={userId} onChange={setUserId} />
 								</section>
 							)}
-
 
 							{currentTemplate?.id === "cookie" && (
 								<section className="space-y-3">
@@ -616,68 +503,26 @@ export function UsageProbeConfigDialog(props: {
 										<div className="space-y-1.5">
 											<div className="flex items-center justify-between">
 												<Label className="text-xs font-medium text-foreground">{t("config.usageProbe.cookieLabel")}</Label>
-												<button
-													type="button"
-													className="inline-flex items-center gap-1 text-micro text-text-tertiary transition-colors hover:text-foreground"
-													onClick={() => setShowToken((value) => !value)}
-												>
+												<button type="button" className="inline-flex items-center gap-1 text-micro text-text-tertiary transition-colors hover:text-foreground" onClick={() => setShowToken((value) => !value)}>
 													{showToken ? <EyeOff size={12} /> : <Eye size={12} />}
 													{showToken ? t("config.usageProbe.hideKey") : t("config.usageProbe.showKey")}
 												</button>
 											</div>
-											<Input
-												type={showToken ? "text" : "password"}
-												value={cookie}
-												onChange={(event) => setCookie(event.target.value)}
-												placeholder={t("config.usageProbe.cookiePlaceholder")}
-												className="h-9"
-											/>
+											<Input type={showToken ? "text" : "password"} value={cookie} onChange={(event) => setCookie(event.target.value)} placeholder={t("config.usageProbe.cookiePlaceholder")} className="h-9" />
 										</div>
-										<OptionalField
-											label={t("config.usageProbe.credentialBaseUrl")}
-											placeholder={t("config.usageProbe.credentialBaseUrlPlaceholder")}
-											value={baseUrl}
-											onChange={setBaseUrl}
-										/>
+										<OptionalField label={t("config.usageProbe.credentialBaseUrl")} placeholder={t("config.usageProbe.credentialBaseUrlPlaceholder")} value={baseUrl} onChange={setBaseUrl} />
 									</div>
-									<OptionalField
-										label={t("config.usageProbe.cookiePathLabel")}
-										placeholder={t("config.usageProbe.cookiePathPlaceholder")}
-										value={cookiePath}
-										onChange={setCookiePath}
-									/>
+									<OptionalField label={t("config.usageProbe.cookiePathLabel")} placeholder={t("config.usageProbe.cookiePathPlaceholder")} value={cookiePath} onChange={setCookiePath} />
 									<div className="grid grid-cols-2 gap-3">
-										<OptionalField
-											label={t("config.usageProbe.cookieValuePathLabel")}
-											placeholder={t("config.usageProbe.cookieValuePathPlaceholder")}
-											value={valuePath}
-											onChange={setValuePath}
-										/>
-										<OptionalField
-											label={t("config.usageProbe.cookieCurrencyPathLabel")}
-											placeholder={t("config.usageProbe.cookieCurrencyPathPlaceholder")}
-											value={currencyPath}
-											onChange={setCurrencyPath}
-										/>
+										<OptionalField label={t("config.usageProbe.cookieValuePathLabel")} placeholder={t("config.usageProbe.cookieValuePathPlaceholder")} value={valuePath} onChange={setValuePath} />
+										<OptionalField label={t("config.usageProbe.cookieCurrencyPathLabel")} placeholder={t("config.usageProbe.cookieCurrencyPathPlaceholder")} value={currencyPath} onChange={setCurrencyPath} />
 									</div>
 								</section>
 							)}
 							{/* 超时 / 自动查询间隔（cc-switch 同款两列） */}
 							<div className="grid grid-cols-2 gap-3">
-								<NumberField
-									label={t("config.usageProbe.timeout")}
-									value={timeoutSecs}
-									onChange={setTimeoutSecs}
-									min={1}
-									max={300}
-								/>
-								<NumberField
-									label={t("config.usageProbe.interval")}
-									value={intervalMinutes}
-									onChange={setIntervalMinutes}
-									min={0}
-									max={1440}
-								/>
+								<NumberField label={t("config.usageProbe.timeout")} value={timeoutSecs} onChange={setTimeoutSecs} min={1} max={300} />
+								<NumberField label={t("config.usageProbe.interval")} value={intervalMinutes} onChange={setIntervalMinutes} min={0} max={1440} />
 							</div>
 
 							{/* 测试（cc-switch 测试按钮 + 内联结果）：成功即写缓存热更三处 */}
@@ -709,9 +554,7 @@ export function UsageProbeConfigDialog(props: {
 								{testState === "error" && testDetail && (
 									// 失败明细：URL/状态/提示多行列表（已脱敏），平铺展示便于排查地址与鉴权问题。
 									<div className="w-full overflow-hidden rounded-md border border-border/60 bg-background/60 px-2 py-1.5" data-testid="usage-probe-test-detail">
-										<pre className="max-h-44 overflow-auto whitespace-pre-wrap break-all font-mono text-micro leading-relaxed text-text-secondary">
-											{testDetail}
-										</pre>
+										<pre className="max-h-44 overflow-auto whitespace-pre-wrap break-all font-mono text-micro leading-relaxed text-text-secondary">{testDetail}</pre>
 									</div>
 								)}
 							</section>

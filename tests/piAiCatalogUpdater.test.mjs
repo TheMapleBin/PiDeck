@@ -14,9 +14,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
-const { PiAiCatalogUpdater, CATALOG_UPDATE_ALLOWED_BRANCHES } = loadTsCommonJs(
-	"src/main/pi/PiAiCatalogUpdater.ts",
-);
+const { PiAiCatalogUpdater, CATALOG_UPDATE_ALLOWED_BRANCHES } = loadTsCommonJs("src/main/pi/PiAiCatalogUpdater.ts");
 
 function sha256(text) {
 	return createHash("sha256").update(text, "utf8").digest("hex");

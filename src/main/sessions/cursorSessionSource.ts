@@ -37,9 +37,7 @@ export function readNumber(value: unknown): number {
 }
 
 export function readRecord(value: unknown): Record<string, unknown> {
-	return value && typeof value === "object" && !Array.isArray(value)
-		? (value as Record<string, unknown>)
-		: {};
+	return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
 export function normalizePath(path?: string): string {
@@ -77,11 +75,7 @@ export function getProjectSessionDir(piRoot: string, projectPath: string): strin
 	return join(piRoot, safePathToken(projectPath));
 }
 
-export function getCursorTargetPath(
-	piRoot: string,
-	projectPath: string,
-	session: ParsedCursorSession,
-): string {
+export function getCursorTargetPath(piRoot: string, projectPath: string, session: ParsedCursorSession): string {
 	const id = session.meta.sessionId.replace(/[^a-zA-Z0-9_-]/g, "-");
 	return join(getProjectSessionDir(piRoot, projectPath), `cursor_${id}.jsonl`);
 }
@@ -151,9 +145,7 @@ export function joinCursorTextBlocks(content: unknown): string {
  * 没有 user_query 时只剥 timestamp，其余原文保留，避免误删。
  */
 export function extractCursorUserText(raw: string): string {
-	const queries = [...raw.matchAll(/<user_query\b[^>]*>([\s\S]*?)<\/user_query>/gi)]
-		.map((match) => match[1].trim())
-		.filter(Boolean);
+	const queries = [...raw.matchAll(/<user_query\b[^>]*>([\s\S]*?)<\/user_query>/gi)].map((match) => match[1].trim()).filter(Boolean);
 	if (queries.length > 0) return queries.join("\n\n");
 	return raw.replace(/<timestamp\b[^>]*>[\s\S]*?<\/timestamp>/gi, "").trim();
 }
@@ -195,10 +187,7 @@ export function parseCursorTimestampFromText(raw: string): number {
  * 只有「是否有对话」与时间戳依赖内容，头部足够近似。
  * 这样扫描内存占用与 transcript 体积解耦（源文件可达几十 MB~GB，整读会 abort 主进程）。
  */
-export async function readCursorSessionHead(
-	root: string,
-	filePath: string,
-): Promise<ParsedCursorSession> {
+export async function readCursorSessionHead(root: string, filePath: string): Promise<ParsedCursorSession> {
 	assertCursorSourcePath(root, filePath);
 	const { head, size, mtimeMs, truncated } = await readSessionSourceHead(filePath);
 
@@ -238,11 +227,7 @@ export async function readCursorSessionHead(
 			sessionId,
 			cwd: dirname(dirname(filePath)),
 			firstTimestamp,
-			lastTimestamp: truncated
-				? mtimeMs
-				: timestamps.length > 0
-					? Math.max(...timestamps)
-					: mtimeMs,
+			lastTimestamp: truncated ? mtimeMs : timestamps.length > 0 ? Math.max(...timestamps) : mtimeMs,
 		},
 		entries,
 		sourcePath: filePath,
@@ -251,11 +236,8 @@ export async function readCursorSessionHead(
 	};
 }
 
-
 /** 读取导入产物头部的 import 标记（有界读头部，不再整读会话文件——见 importMetaHead）。 */
-export async function readCursorImportMeta(
-	targetPath: string,
-): Promise<CursorImportMeta | undefined> {
+export async function readCursorImportMeta(targetPath: string): Promise<CursorImportMeta | undefined> {
 	return readImportMetaHead(targetPath, "cursor_import");
 }
 

@@ -42,10 +42,7 @@ function loadTranspiledModule(filePath, overrides = new Map()) {
 
 function loadSessionScanner(homePath) {
 	const codexMeta = loadTranspiledModule("src/shared/codexSessionMeta.ts");
-	const messageContent = loadTranspiledModule(
-		"src/main/pi/messageContent.ts",
-		new Map([["../feishu/docActions", { stripFeishuDocActionHint: (text) => text }]]),
-	);
+	const messageContent = loadTranspiledModule("src/main/pi/messageContent.ts", new Map([["../feishu/docActions", { stripFeishuDocActionHint: (text) => text }]]));
 	const fsRetry = loadTranspiledModule("src/main/utils/fsRetry.ts");
 	const sessionSummaryCache = loadTranspiledModule(
 		"src/main/sessions/sessionSummaryCache.ts",
@@ -133,10 +130,7 @@ test("inferSessionNameFromFile falls back to the first user text for a new pi se
 	const { SessionScanner: Scanner } = loadSessionScanner(home);
 	try {
 		const file = join(home, ".pi", "agent", "sessions", "--C--Users-14012-pi-desktop-dev--", "2026-08-22T04-22-29-162Z_abc.jsonl");
-		writeSession(file, [
-			makeHeader("abc"),
-			makeUser("u1", "修复侧栏标题：未打开的会话要显示首条消息，而不是永远 Untitled"),
-		]);
+		writeSession(file, [makeHeader("abc"), makeUser("u1", "修复侧栏标题：未打开的会话要显示首条消息，而不是永远 Untitled")]);
 		const scanner = new Scanner();
 		const name = await scanner.inferSessionNameFromFile(file);
 		// 优先级与 readSummary 一致：首条 user 文本，保留完整标题；侧栏只做视觉钳制。
@@ -151,11 +145,7 @@ test("inferSessionNameFromFile prefers session_info name over the first user tex
 	const { SessionScanner: Scanner } = loadSessionScanner(home);
 	try {
 		const file = join(home, ".pi", "agent", "sessions", "--C--Users-14012-pi-desktop-dev--", "2026-08-22T04-22-29-162Z_abc.jsonl");
-		writeSession(file, [
-			makeHeader("abc"),
-			makeUser("u1", "这是一段用户消息，不应该成为标题"),
-			{ type: "session_info", id: "i1", parentId: "u1", timestamp: "2026-08-22T04:23:00.000Z", name: "用户手动改名后的标题" },
-		]);
+		writeSession(file, [makeHeader("abc"), makeUser("u1", "这是一段用户消息，不应该成为标题"), { type: "session_info", id: "i1", parentId: "u1", timestamp: "2026-08-22T04:23:00.000Z", name: "用户手动改名后的标题" }]);
 		const scanner = new Scanner();
 		const name = await scanner.inferSessionNameFromFile(file);
 		assert.equal(name, "用户手动改名后的标题");
@@ -170,10 +160,7 @@ test("inferSessionNameFromFile preserves a long physical fork title", async () =
 	try {
 		const file = join(home, ".pi", "agent", "sessions", "--C--Users-14012-pi-desktop-dev--", "2026-08-22T04-22-29-162Z_abc.jsonl");
 		const title = "复制后的长标题：这个名称超过三十二字符并且必须保留末尾身份标记 (fork)";
-		writeSession(file, [
-			makeHeader("abc"),
-			{ type: "session_info", id: "i1", parentId: "abc", timestamp: "2026-08-22T04:23:00.000Z", name: title },
-		]);
+		writeSession(file, [makeHeader("abc"), { type: "session_info", id: "i1", parentId: "abc", timestamp: "2026-08-22T04:23:00.000Z", name: title }]);
 		const scanner = new Scanner();
 		assert.equal(await scanner.inferSessionNameFromFile(file), title);
 		assert.equal((await scanner.inferSessionNameAndValidity(file)).name, title);
@@ -188,12 +175,7 @@ test("inferSessionNameFromFile reads the latest session_info appended beyond the
 	try {
 		const file = join(home, ".pi", "agent", "sessions", "--C--Users-14012-pi-desktop-dev--", "2026-08-22T04-22-29-162Z_abc.jsonl");
 		const padding = "x".repeat(70 * 1024);
-		writeSession(file, [
-			makeHeader("abc"),
-			makeUser("u1", "文件头里的旧回退标题"),
-			makeAssistant("a1", padding),
-			{ type: "session_info", id: "i1", parentId: "a1", timestamp: "2026-08-22T04:23:00.000Z", name: "pi-tui 在文件末尾追加的新标题" },
-		]);
+		writeSession(file, [makeHeader("abc"), makeUser("u1", "文件头里的旧回退标题"), makeAssistant("a1", padding), { type: "session_info", id: "i1", parentId: "a1", timestamp: "2026-08-22T04:23:00.000Z", name: "pi-tui 在文件末尾追加的新标题" }]);
 		const scanner = new Scanner();
 		const name = await scanner.inferSessionNameFromFile(file);
 		assert.equal(name, "pi-tui 在文件末尾追加的新标题");
@@ -214,13 +196,7 @@ test("inferSessionNameAndValidity marks first-message fallback as non-authoritat
 		// 会话变大（用户第二轮）：session_info 被挤到头部/尾部窗口之外的中间盲区。
 		// 头部窗口读不到 session_info，名称只能回退到首条消息文本——弱信号，不得覆盖已有标题。
 		const padding = "x".repeat(70 * 1024);
-		writeSession(file, [
-			makeHeader("abc"),
-			makeUser("u1", "首条消息：可以当弱标题但不能覆盖真实标题"),
-			makeAssistant("a1", padding),
-			{ type: "session_info", id: "i1", parentId: "a1", timestamp: "2026-08-22T04:23:00.000Z", name: "自动生成的真实标题" },
-			makeAssistant("a2", padding),
-		]);
+		writeSession(file, [makeHeader("abc"), makeUser("u1", "首条消息：可以当弱标题但不能覆盖真实标题"), makeAssistant("a1", padding), { type: "session_info", id: "i1", parentId: "a1", timestamp: "2026-08-22T04:23:00.000Z", name: "自动生成的真实标题" }, makeAssistant("a2", padding)]);
 		const scanner = new Scanner();
 		const inferred = await scanner.inferSessionNameAndValidity(file);
 		// 窗口盲区：只能回退到首条 user 文本，且必须标记为非权威。
@@ -237,11 +213,7 @@ test("inferSessionNameFromFile skips pi timestamp stems and untitled text", asyn
 	try {
 		const file = join(home, ".pi", "agent", "sessions", "--C--Users-14012-pi-desktop-dev--", "2026-08-22T04-22-29-162Z_abc.jsonl");
 		// 首条 user 是时间戳文件名（pi 默认 sessionName 的镜像场景），应回退到 assistant 文本。
-		writeSession(file, [
-			makeHeader("abc"),
-			makeUser("u1", "2026-08-22T04-22-29-162Z_abc"),
-			makeAssistant("a1", "好的，我来查看这个会话文件。"),
-		]);
+		writeSession(file, [makeHeader("abc"), makeUser("u1", "2026-08-22T04-22-29-162Z_abc"), makeAssistant("a1", "好的，我来查看这个会话文件。")]);
 		const scanner = new Scanner();
 		const name = await scanner.inferSessionNameFromFile(file);
 		assert.equal(name, "好的，我来查看这个会话文件。");
@@ -256,10 +228,7 @@ test("inferSessionNameFromFile returns undefined for files without inferable mes
 	try {
 		const file = join(home, ".pi", "agent", "sessions", "--C--Users-14012-pi-desktop-dev--", "2026-08-22T04-22-29-162Z_abc.jsonl");
 		// 只有 session 头与 model_change，没有任何 user/assistant 消息。
-		writeSession(file, [
-			makeHeader("abc"),
-			{ type: "model_change", id: "m1", parentId: null, timestamp: "2026-08-22T04:22:30.000Z", provider: "x", modelId: "y" },
-		]);
+		writeSession(file, [makeHeader("abc"), { type: "model_change", id: "m1", parentId: null, timestamp: "2026-08-22T04:22:30.000Z", provider: "x", modelId: "y" }]);
 		const scanner = new Scanner();
 		assert.equal(await scanner.inferSessionNameFromFile(file), undefined);
 		assert.equal(await scanner.inferSessionNameFromFile(join(home, ".pi", "agent", "sessions", "missing.jsonl")), undefined);

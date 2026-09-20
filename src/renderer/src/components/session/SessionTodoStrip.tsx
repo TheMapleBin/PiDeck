@@ -1,27 +1,12 @@
 import { useAtomValue } from "jotai";
 import { useId, useMemo, useState } from "react";
 import { ChevronDown, ChevronUp, ListChecks, X } from "lucide-react";
-import {
-	sessionRuntimeBySessionIdAtomFamily,
-	sessionRuntimeUiBySessionIdAtomFamily,
-} from "../../atoms";
+import { sessionRuntimeBySessionIdAtomFamily, sessionRuntimeUiBySessionIdAtomFamily } from "../../atoms";
 import { t } from "../../i18n";
 import { Button } from "../ui-shadcn/button";
-import {
-	isCoherentComposerRuntimeUi,
-	type RuntimeHandle,
-} from "./ComposerRuntimeIntegrations";
-import {
-	ComposerWidgetFrame,
-	useComposerWidgetCollapsed,
-} from "./ComposerWidgetLayout";
-import {
-	parseAgentTodoItems,
-	runtimeTodosToItems,
-	sessionTodoSnapshotToItems,
-	stripPiDeckTodoWidgetMetadata,
-	type AgentTodoItem,
-} from "./agentTodoParser";
+import { isCoherentComposerRuntimeUi, type RuntimeHandle } from "./ComposerRuntimeIntegrations";
+import { ComposerWidgetFrame, useComposerWidgetCollapsed } from "./ComposerWidgetLayout";
+import { parseAgentTodoItems, runtimeTodosToItems, sessionTodoSnapshotToItems, stripPiDeckTodoWidgetMetadata, type AgentTodoItem } from "./agentTodoParser";
 import { useSessionTodoSnapshot } from "../../hooks/useSessionTodoSnapshot";
 
 /**
@@ -65,24 +50,12 @@ export function widgetDismissalId(sessionId: string, widgetKey: string): string 
  * 是否保持隐藏：已手动关闭且内容指纹未变 → 永久隐藏；
  * 工具再次调用使列表变化（指纹不同）→ 视为新内容，重新显示。
  */
-export function isWidgetDismissed(
-	dismissed: DismissedWidgets,
-	sessionId: string,
-	widgetKey: string,
-	lines: readonly string[],
-): boolean {
-	return (
-		dismissed[widgetDismissalId(sessionId, widgetKey)] ===
-		widgetLinesSignature(lines)
-	);
+export function isWidgetDismissed(dismissed: DismissedWidgets, sessionId: string, widgetKey: string, lines: readonly string[]): boolean {
+	return dismissed[widgetDismissalId(sessionId, widgetKey)] === widgetLinesSignature(lines);
 }
 
 /** Record every visible source so a manual close is reversible on content changes. */
-export function dismissWidgetEntries(
-	dismissed: DismissedWidgets,
-	sessionId: string,
-	widgets: readonly WidgetLines[],
-): DismissedWidgets {
+export function dismissWidgetEntries(dismissed: DismissedWidgets, sessionId: string, widgets: readonly WidgetLines[]): DismissedWidgets {
 	const next = { ...dismissed };
 	for (const widget of widgets) {
 		next[widgetDismissalId(sessionId, widget.key)] = widgetLinesSignature(widget.lines);
@@ -101,9 +74,7 @@ function saveDismissedWidgets(dismissed: DismissedWidgets): void {
 function loadDismissedWidgets(): DismissedWidgets {
 	try {
 		const parsed = JSON.parse(localStorage.getItem(DISMISSED_WIDGETS_KEY) ?? "{}");
-		return parsed && typeof parsed === "object"
-			? parsed as DismissedWidgets
-			: {};
+		return parsed && typeof parsed === "object" ? (parsed as DismissedWidgets) : {};
 	} catch {
 		return {};
 	}
@@ -164,11 +135,7 @@ export function progressLabel(items: AgentTodoItem[]): string {
 	const active = items.filter((item) => item.status === "in-progress").length;
 	const pending = items.length - done - active;
 	// 段间用 en-space（U+2002）：HTML 会折叠连续 ASCII 空格，宽空格保留呼吸感
-	return [
-		done > 0 ? t("sessionTodo.done", { done }) : null,
-		active > 0 ? t("sessionTodo.active", { active }) : null,
-		pending > 0 ? t("sessionTodo.pending", { pending }) : null,
-	].filter(Boolean).join("\u2002·\u2002");
+	return [done > 0 ? t("sessionTodo.done", { done }) : null, active > 0 ? t("sessionTodo.active", { active }) : null, pending > 0 ? t("sessionTodo.pending", { pending }) : null].filter(Boolean).join("\u2002·\u2002");
 }
 
 /** TodoItem → 行式（☑/◐/☐ 前缀）：DSH 与历史快照都归一化成与 Pi widget 同构的文本行，
@@ -181,18 +148,11 @@ function todoItemsToLines(items: readonly AgentTodoItem[]): string[] {
 }
 
 export function SessionTodoStrip(props: { sessionId: string }) {
-	const runtime = useAtomValue(
-		sessionRuntimeBySessionIdAtomFamily(props.sessionId),
-	);
-	const runtimeUi = useAtomValue(
-		sessionRuntimeUiBySessionIdAtomFamily(props.sessionId),
-	);
+	const runtime = useAtomValue(sessionRuntimeBySessionIdAtomFamily(props.sessionId));
+	const runtimeUi = useAtomValue(sessionRuntimeUiBySessionIdAtomFamily(props.sessionId));
 	// dismiss records are loaded once, then updated locally when the user closes this strip.
 	const [dismissed, setDismissed] = useState(loadDismissedWidgets);
-	const { collapsed, toggleCollapsed } = useComposerWidgetCollapsed(
-		`todo:${props.sessionId}`,
-		true,
-	);
+	const { collapsed, toggleCollapsed } = useComposerWidgetCollapsed(`todo:${props.sessionId}`, true);
 
 	const runtimeHandle: RuntimeHandle | undefined = runtime?.agentId
 		? {
@@ -200,9 +160,7 @@ export function SessionTodoStrip(props: { sessionId: string }) {
 				runtimeGeneration: runtime.runtimeGeneration,
 			}
 		: undefined;
-	const coherent = isCoherentComposerRuntimeUi(runtimeHandle, runtimeUi)
-		? runtimeUi
-		: undefined;
+	const coherent = isCoherentComposerRuntimeUi(runtimeHandle, runtimeUi) ? runtimeUi : undefined;
 	const widgets = coherent?.widgets ?? {};
 
 	// 会话级 todo 快照：仅历史会话（无 coherent runtime）拉取，避免活会话多余 IPC
@@ -219,9 +177,7 @@ export function SessionTodoStrip(props: { sessionId: string }) {
 		}
 		if (!coherent) {
 			const snapshot = sessionTodoSnapshotToItems(todoSnapshot);
-			return snapshot.length > 0
-				? [{ key: "snapshot", lines: todoItemsToLines(snapshot) }]
-				: [];
+			return snapshot.length > 0 ? [{ key: "snapshot", lines: todoItemsToLines(snapshot) }] : [];
 		}
 		const result: WidgetLines[] = [];
 		for (const key of ["pi-deck-todo", "pi-deck-plan-todos"]) {
@@ -233,21 +189,12 @@ export function SessionTodoStrip(props: { sessionId: string }) {
 
 	// A source stays dismissed only while its raw lines stay identical. Keep raw metadata here
 	// until after the decision so a new plan with matching tasks becomes visible again.
-	const visibleWidgets = useMemo(
-		() => linesByKey.filter(
-			(w) => !isWidgetDismissed(dismissed, props.sessionId, w.key, w.lines),
-		),
-		[linesByKey, dismissed, props.sessionId],
-	);
+	const visibleWidgets = useMemo(() => linesByKey.filter((w) => !isWidgetDismissed(dismissed, props.sessionId, w.key, w.lines)), [linesByKey, dismissed, props.sessionId]);
 
 	const items = useMemo(() => {
 		const lines: string[] = [];
 		for (const widget of visibleWidgets) {
-			lines.push(
-				...(widget.key === "pi-deck-todo"
-					? stripPiDeckTodoWidgetMetadata(widget.lines)
-					: widget.lines),
-			);
+			lines.push(...(widget.key === "pi-deck-todo" ? stripPiDeckTodoWidgetMetadata(widget.lines) : widget.lines));
 		}
 		return parseAgentTodoItems(lines);
 	}, [visibleWidgets]);
@@ -261,46 +208,24 @@ export function SessionTodoStrip(props: { sessionId: string }) {
 	if (items.length === 0) return null;
 
 	return (
-		<ComposerWidgetFrame
-			data-testid="session-todo-strip"
-			aria-label={t("sessionTodo.title")}
-		>
+		<ComposerWidgetFrame data-testid="session-todo-strip" aria-label={t("sessionTodo.title")}>
 			<div className="flex h-9 w-full items-center gap-2.5 px-3">
-				<button
-					type="button"
-					className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
-					aria-expanded={!collapsed}
-					onClick={toggleCollapsed}
-				>
+				<button type="button" className="flex min-w-0 flex-1 items-center gap-2.5 text-left" aria-expanded={!collapsed} onClick={toggleCollapsed}>
 					<ListChecks size={14} aria-hidden="true" className="shrink-0 text-text-tertiary" />
-					<span className="shrink-0 text-[13px] font-medium leading-6 text-foreground">
-						{t("sessionTodo.title")}
-					</span>
-					<span className="min-w-0 flex-1 truncate text-[13px] leading-5 text-text-tertiary">
-						{progressLabel(items)}
-					</span>
+					<span className="shrink-0 text-[13px] font-medium leading-6 text-foreground">{t("sessionTodo.title")}</span>
+					<span className="min-w-0 flex-1 truncate text-[13px] leading-5 text-text-tertiary">{progressLabel(items)}</span>
 					<span className="shrink-0 text-text-tertiary" aria-hidden="true">
 						{collapsed ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
 					</span>
 				</button>
-				<Button
-					variant="ghost"
-					size="icon-xs"
-					className="size-7 shrink-0 rounded-full text-text-tertiary hover:bg-muted/70 hover:text-foreground"
-					aria-label={t("sessionTodo.dismiss")}
-					title={t("sessionTodo.dismiss")}
-					onClick={dismissVisibleWidgets}
-				>
+				<Button variant="ghost" size="icon-xs" className="size-7 shrink-0 rounded-full text-text-tertiary hover:bg-muted/70 hover:text-foreground" aria-label={t("sessionTodo.dismiss")} title={t("sessionTodo.dismiss")} onClick={dismissVisibleWidgets}>
 					<X size={14} aria-hidden="true" />
 				</Button>
 			</div>
 			{!collapsed && (
 				<ul className="mb-2 flex max-h-[180px] flex-col gap-2 overflow-y-auto overscroll-contain [contain:layout_paint] px-3 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-100 motion-reduce:animate-none">
 					{items.map((item) => (
-						<li
-							key={item.id}
-							className="flex min-w-0 items-center gap-2.5 text-[13px] leading-5 text-text-secondary"
-						>
+						<li key={item.id} className="flex min-w-0 items-center gap-2.5 text-[13px] leading-5 text-text-secondary">
 							<span className="grid size-4 shrink-0 place-items-center" aria-hidden="true">
 								<StatusGlyph status={item.status} />
 							</span>

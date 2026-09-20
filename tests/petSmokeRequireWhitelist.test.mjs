@@ -43,10 +43,5 @@ test("契约: pet-smoke 白名单覆盖 PetWindow 的全部运行时 import", ()
 		if (specifier.startsWith("node:")) return !smokeScript.includes('id.startsWith("node:")');
 		return !smokeScript.includes(specifier);
 	});
-	assert.deepEqual(
-		missing,
-		[],
-		`PetWindow.ts 的运行时 import 未被 pet-smoke.cjs 白名单覆盖：${missing.join(", ")}。`
-			+ "新增依赖若是纯常量/纯函数模块，用 loadPureTsModule 分支；有副作用的模块加 stub 分支。",
-	);
+	assert.deepEqual(missing, [], `PetWindow.ts 的运行时 import 未被 pet-smoke.cjs 白名单覆盖：${missing.join(", ")}。` + "新增依赖若是纯常量/纯函数模块，用 loadPureTsModule 分支；有副作用的模块加 stub 分支。");
 });

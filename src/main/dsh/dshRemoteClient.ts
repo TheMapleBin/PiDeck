@@ -49,29 +49,31 @@ export type DshHistoryPage = {
 export type DshMuxFrame = { rpcId?: string; payload: Record<string, unknown> };
 
 /** $events ready 帧携带的 clientId（瀑布应答必须回传）。 */
-type RemoteEventDownlink = {
-	type: "ready";
-	clientId: string;
-	host: unknown;
-} | {
-	type: "emit";
-	event: string;
-	args: readonly unknown[];
-} | {
-	type: "waterfall";
-	event: string;
-	eventId: string;
-	agentId: string;
-	request: Record<string, unknown>;
-} | {
-	type: "cancel";
-	eventId: string;
-};
+type RemoteEventDownlink =
+	| {
+			type: "ready";
+			clientId: string;
+			host: unknown;
+	  }
+	| {
+			type: "emit";
+			event: string;
+			args: readonly unknown[];
+	  }
+	| {
+			type: "waterfall";
+			event: string;
+			eventId: string;
+			agentId: string;
+			request: Record<string, unknown>;
+	  }
+	| {
+			type: "cancel";
+			eventId: string;
+	  };
 
 /** 会话分页地址（普通会话 / 直接子代理）。 */
-type SessionAddress =
-	| { kind: "session"; sessionId: string }
-	| { kind: "subagent"; parentSessionId: string; childSessionId: string; mode: "one-shot" | "continuable" };
+type SessionAddress = { kind: "session"; sessionId: string } | { kind: "subagent"; parentSessionId: string; childSessionId: string; mode: "one-shot" | "continuable" };
 
 /** 通过地址分页（follow 快照 / page 端点共用）。 */
 function addressOf(sessionId: string): SessionAddress {
@@ -133,24 +135,21 @@ export class DshRemoteClient {
 		return { result: { ok: true, value: { events, hasMore: value.hasMore } } };
 	}
 
-	async sessionsPrompt(input: {
-		sessionId: string;
-		mode: "queue" | "steer";
-		content: unknown[];
-		clientTimeZone?: string;
-	}): Promise<DshEnvelope> {
+	async sessionsPrompt(input: { sessionId: string; mode: "queue" | "steer"; content: unknown[]; clientTimeZone?: string }): Promise<DshEnvelope> {
 		const { sessionId, mode, content, clientTimeZone } = input;
-		return envelope(this.rpc.call("session/prompt", {
-			request: {
-				// requestId 是 host 的幂等键（重复发送同 id 直接返回 accepted）并用于绑定
-				// 附件收据；描述符里为必填，缺失会被 gateway 边界校验拒绝。
-				requestId: randomUUID(),
-				sessionId,
-				mode,
-				content,
-				...(clientTimeZone ? { clientTimeZone } : {}),
-			},
-		}));
+		return envelope(
+			this.rpc.call("session/prompt", {
+				request: {
+					// requestId 是 host 的幂等键（重复发送同 id 直接返回 accepted）并用于绑定
+					// 附件收据；描述符里为必填，缺失会被 gateway 边界校验拒绝。
+					requestId: randomUUID(),
+					sessionId,
+					mode,
+					content,
+					...(clientTimeZone ? { clientTimeZone } : {}),
+				},
+			}),
+		);
 	}
 
 	async sessionsCancel(input: { sessionId: string }): Promise<DshEnvelope> {
@@ -161,35 +160,36 @@ export class DshRemoteClient {
 		return envelope(this.rpc.call("session/rename", { request: { sessionId: input.sessionId, title: input.title } }));
 	}
 
-	async sessionsCreate(input: {
-		workspaceId?: string;
-		cwd?: string;
-		sessionId?: string;
-		agentPreset?: string;
-	}): Promise<DshEnvelope> {
-		return envelope(this.rpc.call("session/create", {
-			request: {
-				...(input.workspaceId !== undefined ? { workspaceId: input.workspaceId } : {}),
-				...(input.cwd !== undefined ? { cwd: input.cwd } : {}),
-				...(input.sessionId !== undefined ? { sessionId: input.sessionId } : {}),
-				...(input.agentPreset !== undefined ? { agentPreset: input.agentPreset } : {}),
-			},
-		}));
+	async sessionsCreate(input: { workspaceId?: string; cwd?: string; sessionId?: string; agentPreset?: string }): Promise<DshEnvelope> {
+		return envelope(
+			this.rpc.call("session/create", {
+				request: {
+					...(input.workspaceId !== undefined ? { workspaceId: input.workspaceId } : {}),
+					...(input.cwd !== undefined ? { cwd: input.cwd } : {}),
+					...(input.sessionId !== undefined ? { sessionId: input.sessionId } : {}),
+					...(input.agentPreset !== undefined ? { agentPreset: input.agentPreset } : {}),
+				},
+			}),
+		);
 	}
 
 	async sessionsFork(input: { sessionId: string; atSeq?: number }): Promise<DshEnvelope> {
-		return envelope(this.rpc.call("session/fork", {
-			request: {
-				sessionId: input.sessionId,
-				...(input.atSeq !== undefined ? { atSeq: input.atSeq } : {}),
-			},
-		}));
+		return envelope(
+			this.rpc.call("session/fork", {
+				request: {
+					sessionId: input.sessionId,
+					...(input.atSeq !== undefined ? { atSeq: input.atSeq } : {}),
+				},
+			}),
+		);
 	}
 
 	async sessionsAttachment(input: { sessionId: string; attachmentId: string }): Promise<DshEnvelope> {
-		return envelope(this.rpc.call("session/attachment", {
-			request: { sessionId: input.sessionId, attachmentId: input.attachmentId },
-		}));
+		return envelope(
+			this.rpc.call("session/attachment", {
+				request: { sessionId: input.sessionId, attachmentId: input.attachmentId },
+			}),
+		);
 	}
 
 	async sessionsSearch(input: { query: string }, signal?: AbortSignal): Promise<DshEnvelope> {
@@ -201,20 +201,17 @@ export class DshRemoteClient {
 		return envelope(this.rpc.call("session/modelCatalog", {}));
 	}
 
-	async sessionsSelectModel(input: {
-		sessionId: string;
-		provider: string;
-		model: string;
-		reasoningEffort?: string;
-	}): Promise<DshEnvelope> {
-		return envelope(this.rpc.call("session/selectModel", {
-			request: {
-				sessionId: input.sessionId,
-				provider: input.provider,
-				model: input.model,
-				...(input.reasoningEffort !== undefined ? { reasoningEffort: input.reasoningEffort } : {}),
-			},
-		}));
+	async sessionsSelectModel(input: { sessionId: string; provider: string; model: string; reasoningEffort?: string }): Promise<DshEnvelope> {
+		return envelope(
+			this.rpc.call("session/selectModel", {
+				request: {
+					sessionId: input.sessionId,
+					provider: input.provider,
+					model: input.model,
+					...(input.reasoningEffort !== undefined ? { reasoningEffort: input.reasoningEffort } : {}),
+				},
+			}),
+		);
 	}
 
 	/**
@@ -222,10 +219,7 @@ export class DshRemoteClient {
 	 * {payload:{sessionId, type:'session/event', event, view}}；follow 快照的
 	 * projections 转成一条 'session/projection' 帧（下游 applyProjectionFrame 复用）。
 	 */
-	async *sessionsFollow(
-		input: { sessionId: string },
-		signal: AbortSignal,
-	): AsyncGenerator<DshMuxFrame> {
+	async *sessionsFollow(input: { sessionId: string }, signal: AbortSignal): AsyncGenerator<DshMuxFrame> {
 		const sessionId = input.sessionId;
 		const items = this.rpc.openStream(
 			"session/follow",
@@ -347,27 +341,16 @@ export class DshRemoteClient {
 	 * 旧 value 形状 {sessionId, approvalId, outcome} / {sessionId, answer} →
 	 * $events/result 的 outcome {kind:'result', value: ApprovalOutcome | answer}。
 	 */
-	async respond(message: {
-		type: string;
-		rpcId: string;
-		result: { ok: boolean; value?: unknown };
-	}): Promise<DshEnvelope> {
+	async respond(message: { type: string; rpcId: string; result: { ok: boolean; value?: unknown } }): Promise<DshEnvelope> {
 		const clientId = this.eventClientId;
 		if (!clientId) {
 			return { result: { ok: false, error: { code: "internal", message: "no active $events stream (clientId unknown)", details: {} } } };
 		}
-		const value = message.result?.value as
-			| { outcome?: unknown; answer?: unknown }
-			| undefined;
+		const value = message.result?.value as { outcome?: unknown; answer?: unknown } | undefined;
 		// 旧载荷槽位区分：approval 带 outcome（ApprovalOutcome 字符串），question 带 answer。
 		const outcomeValue = value?.outcome;
 		const answer = value?.answer;
-		const outcome: { kind: "result"; value?: unknown } =
-			value && outcomeValue !== undefined
-				? { kind: "result", value: outcomeValue }
-				: answer !== undefined
-					? { kind: "result", value: answer }
-					: { kind: "result", value: "rejected" };
+		const outcome: { kind: "result"; value?: unknown } = value && outcomeValue !== undefined ? { kind: "result", value: outcomeValue } : answer !== undefined ? { kind: "result", value: answer } : { kind: "result", value: "rejected" };
 		return envelope(this.rpc.respondRemoteEvent(clientId, message.rpcId, outcome));
 	}
 
@@ -375,13 +358,15 @@ export class DshRemoteClient {
 
 	async goalsCreate(input: { sessionId: string; objective: string; maxGoalRounds?: number }): Promise<DshEnvelope> {
 		const { sessionId, objective, maxGoalRounds } = input;
-		return envelope(this.rpc.call("goals/create", {
-			agentId: sessionId,
-			request: {
-				objective,
-				...(maxGoalRounds !== undefined ? { maxGoalRounds } : {}),
-			},
-		}));
+		return envelope(
+			this.rpc.call("goals/create", {
+				agentId: sessionId,
+				request: {
+					objective,
+					...(maxGoalRounds !== undefined ? { maxGoalRounds } : {}),
+				},
+			}),
+		);
 	}
 
 	private async goalRefAction(endpoint: string, input: { sessionId: string; ref: unknown }): Promise<DshEnvelope> {
@@ -459,19 +444,23 @@ export class DshRemoteClient {
 	}
 
 	async settingsUpdate(input: { ns: string; patch: unknown; expectedRevision?: number }): Promise<DshEnvelope> {
-		return envelope(this.rpc.call("settings/update", {
-			ns: input.ns,
-			patch: input.patch,
-			...(input.expectedRevision !== undefined ? { expectedRevision: input.expectedRevision } : {}),
-		}));
+		return envelope(
+			this.rpc.call("settings/update", {
+				ns: input.ns,
+				patch: input.patch,
+				...(input.expectedRevision !== undefined ? { expectedRevision: input.expectedRevision } : {}),
+			}),
+		);
 	}
 
 	async settingsMutate(input: { ns: string; ops: unknown; expectedRevision?: number }): Promise<DshEnvelope> {
-		return envelope(this.rpc.call("settings/mutate", {
-			ns: input.ns,
-			ops: input.ops,
-			...(input.expectedRevision !== undefined ? { expectedRevision: input.expectedRevision } : {}),
-		}));
+		return envelope(
+			this.rpc.call("settings/mutate", {
+				ns: input.ns,
+				ops: input.ops,
+				...(input.expectedRevision !== undefined ? { expectedRevision: input.expectedRevision } : {}),
+			}),
+		);
 	}
 
 	async settingsOpenDocument(signal?: AbortSignal): Promise<DshEnvelope> {
@@ -494,22 +483,18 @@ export class DshRemoteClient {
 		return envelope(this.rpc.call("llm/listProviders", {}));
 	}
 
-	async llmDiscoverModels(input: {
-		settingsNs: string;
-		provider?: string;
-		baseURL?: string;
-		api?: string;
-		apiKey?: string;
-	}): Promise<DshEnvelope> {
-		return envelope(this.rpc.call("llm/discoverModels", {
-			settingsNs: input.settingsNs,
-			request: {
-				...(input.provider !== undefined ? { provider: input.provider } : {}),
-				...(input.baseURL !== undefined ? { baseURL: input.baseURL } : {}),
-				...(input.api !== undefined ? { api: input.api } : {}),
-				...(input.apiKey !== undefined ? { apiKey: input.apiKey } : {}),
-			},
-		}));
+	async llmDiscoverModels(input: { settingsNs: string; provider?: string; baseURL?: string; api?: string; apiKey?: string }): Promise<DshEnvelope> {
+		return envelope(
+			this.rpc.call("llm/discoverModels", {
+				settingsNs: input.settingsNs,
+				request: {
+					...(input.provider !== undefined ? { provider: input.provider } : {}),
+					...(input.baseURL !== undefined ? { baseURL: input.baseURL } : {}),
+					...(input.api !== undefined ? { api: input.api } : {}),
+					...(input.apiKey !== undefined ? { apiKey: input.apiKey } : {}),
+				},
+			}),
+		);
 	}
 
 	async agentPresetsList(): Promise<DshEnvelope> {

@@ -62,7 +62,7 @@ export function useScratchPad(): UseScratchPadResult {
 			}
 			// 如果当前选中的草稿不存在了（已被删除），切换到第一个
 			if (list.length > 0 && currentDraftPathRef.current) {
-				const stillExists = list.some(d => d.path === currentDraftPathRef.current);
+				const stillExists = list.some((d) => d.path === currentDraftPathRef.current);
 				if (!stillExists) {
 					const first = list[0];
 					setCurrentDraftPath(first.path);
@@ -97,20 +97,23 @@ export function useScratchPad(): UseScratchPadResult {
 	}, [loadDrafts, loadContent]);
 
 	/** 立即保存指定草稿 */
-	const flushSave = useCallback(async (draftPath: string, value: string) => {
-		if (!window.piDesktop?.scratchPad || !draftPath) return;
-		setIsSaving(true);
-		setHasError(false);
-		try {
-			await window.piDesktop.scratchPad.save(draftPath, value, 0);
-			// 保存后刷新列表以更新 updatedAt 时间
-			void loadDrafts();
-		} catch {
-			setHasError(true);
-		} finally {
-			setIsSaving(false);
-		}
-	}, [loadDrafts]);
+	const flushSave = useCallback(
+		async (draftPath: string, value: string) => {
+			if (!window.piDesktop?.scratchPad || !draftPath) return;
+			setIsSaving(true);
+			setHasError(false);
+			try {
+				await window.piDesktop.scratchPad.save(draftPath, value, 0);
+				// 保存后刷新列表以更新 updatedAt 时间
+				void loadDrafts();
+			} catch {
+				setHasError(true);
+			} finally {
+				setIsSaving(false);
+			}
+		},
+		[loadDrafts],
+	);
 
 	const setContent = useCallback(
 		(value: string) => {
@@ -170,17 +173,20 @@ export function useScratchPad(): UseScratchPadResult {
 	}, [saveNow]);
 
 	/** 切换草稿：先保存当前，再加载新草稿 */
-	const selectDraft = useCallback(async (draftPath: string) => {
-		if (draftPath === currentDraftPathRef.current) return;
-		// 先保存当前草稿
-		const currentPath = currentDraftPathRef.current;
-		const currentValue = contentRef.current;
-		if (currentPath && currentValue) {
-			await flushSave(currentPath, currentValue);
-		}
-		setCurrentDraftPath(draftPath);
-		await loadContent(draftPath);
-	}, [flushSave, loadContent]);
+	const selectDraft = useCallback(
+		async (draftPath: string) => {
+			if (draftPath === currentDraftPathRef.current) return;
+			// 先保存当前草稿
+			const currentPath = currentDraftPathRef.current;
+			const currentValue = contentRef.current;
+			if (currentPath && currentValue) {
+				await flushSave(currentPath, currentValue);
+			}
+			setCurrentDraftPath(draftPath);
+			await loadContent(draftPath);
+		},
+		[flushSave, loadContent],
+	);
 
 	/** 创建新草稿 */
 	const createDraft = useCallback(async () => {
@@ -193,31 +199,34 @@ export function useScratchPad(): UseScratchPadResult {
 			await flushSave(currentPath, currentValue);
 		}
 		const newDraft = await window.piDesktop.scratchPad.create();
-		setDrafts(prev => [newDraft, ...prev]);
+		setDrafts((prev) => [newDraft, ...prev]);
 		setCurrentDraftPath(newDraft.path);
 		setContentState("");
 	}, [flushSave]);
 
 	/** 删除草稿 */
-	const deleteDraft = useCallback(async (draftPath: string) => {
-		if (!window.piDesktop?.scratchPad) return;
-		await window.piDesktop.scratchPad.delete(draftPath);
-		// 本地更新列表
-		setDrafts(prev => prev.filter(d => d.path !== draftPath));
-		// 如果删除的是当前草稿，切换到第一个可用草稿
-		if (draftPath === currentDraftPathRef.current) {
-			// 读取最新状态中的列表
-			const updatedList = drafts.filter(d => d.path !== draftPath);
-			if (updatedList.length > 0) {
-				const first = updatedList[0];
-				setCurrentDraftPath(first.path);
-				await loadContent(first.path);
-			} else {
-				setCurrentDraftPath(null);
-				setContentState("");
+	const deleteDraft = useCallback(
+		async (draftPath: string) => {
+			if (!window.piDesktop?.scratchPad) return;
+			await window.piDesktop.scratchPad.delete(draftPath);
+			// 本地更新列表
+			setDrafts((prev) => prev.filter((d) => d.path !== draftPath));
+			// 如果删除的是当前草稿，切换到第一个可用草稿
+			if (draftPath === currentDraftPathRef.current) {
+				// 读取最新状态中的列表
+				const updatedList = drafts.filter((d) => d.path !== draftPath);
+				if (updatedList.length > 0) {
+					const first = updatedList[0];
+					setCurrentDraftPath(first.path);
+					await loadContent(first.path);
+				} else {
+					setCurrentDraftPath(null);
+					setContentState("");
+				}
 			}
-		}
-	}, [drafts, loadContent]);
+		},
+		[drafts, loadContent],
+	);
 
 	// 应用退出前保存
 	useEffect(() => {
@@ -235,9 +244,12 @@ export function useScratchPad(): UseScratchPadResult {
 	const setModeValue = useCallback((m: UseScratchPadMode) => setMode(m), []);
 
 	/* 切换指定行（task list 项）的选中状态：直接根据源 markdown 行号反转 */
-	const toggleTaskCheckbox = useCallback((lineIndex: number) => {
-		setContent(toggleTaskLine(content, lineIndex));
-	}, [content, setContent]);
+	const toggleTaskCheckbox = useCallback(
+		(lineIndex: number) => {
+			setContent(toggleTaskLine(content, lineIndex));
+		},
+		[content, setContent],
+	);
 
 	return {
 		isOpen,

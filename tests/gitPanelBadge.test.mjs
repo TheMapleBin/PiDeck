@@ -16,23 +16,20 @@ import test from "node:test";
 const source = readFileSync("src/renderer/src/components/app/GitPanel.tsx", "utf8");
 
 test("git panel ahead/behind badges use --color-info background and inverse text", () => {
-  // 领先（ahead）与落后（behind）角标：各自只出现一次角标样式
-  const badgeMarkers = [
-    "领先角标：本地上游提交数",
-    "落后角标：远程领先本地的提交数",
-  ];
-  for (const marker of badgeMarkers) {
-    // 角标 className 在注释之后最近的一处 span className
-    const after = source.slice(source.indexOf(marker));
-    const match = after.match(/className="([^"]*rounded-full[^"]*)"/);
-    assert.ok(match, `应找到角标 className（${marker}）`);
-    const cls = match[1];
-    // 背景必须用 info 语义色，文字用 inverse token（暗色翻转近黑），明暗两套主题下都保证可读
-    assert.match(cls, /bg-\[var\(--color-info\)\]/, "角标背景应为 --color-info");
-    // accent 暗色反转为近白，白字在其上不可读——禁止回退
-    assert.doesNotMatch(cls, /bg-\[var\(--color-accent\)\]/, "角标背景不得使用 --color-accent");
-    // 固定白字只在浅色 info 上对比稳定，暗色 info 是亮蓝——必须走 inverse token
-    assert.match(cls, /text-\[var\(--color-text-inverse\)\]/, "角标文字应为 --color-text-inverse");
-    assert.doesNotMatch(cls, /text-white/, "角标文字禁止写死白色");
-  }
+	// 领先（ahead）与落后（behind）角标：各自只出现一次角标样式
+	const badgeMarkers = ["领先角标：本地上游提交数", "落后角标：远程领先本地的提交数"];
+	for (const marker of badgeMarkers) {
+		// 角标 className 在注释之后最近的一处 span className
+		const after = source.slice(source.indexOf(marker));
+		const match = after.match(/className="([^"]*rounded-full[^"]*)"/);
+		assert.ok(match, `应找到角标 className（${marker}）`);
+		const cls = match[1];
+		// 背景必须用 info 语义色，文字用 inverse token（暗色翻转近黑），明暗两套主题下都保证可读
+		assert.match(cls, /bg-\[var\(--color-info\)\]/, "角标背景应为 --color-info");
+		// accent 暗色反转为近白，白字在其上不可读——禁止回退
+		assert.doesNotMatch(cls, /bg-\[var\(--color-accent\)\]/, "角标背景不得使用 --color-accent");
+		// 固定白字只在浅色 info 上对比稳定，暗色 info 是亮蓝——必须走 inverse token
+		assert.match(cls, /text-\[var\(--color-text-inverse\)\]/, "角标文字应为 --color-text-inverse");
+		assert.doesNotMatch(cls, /text-white/, "角标文字禁止写死白色");
+	}
 });

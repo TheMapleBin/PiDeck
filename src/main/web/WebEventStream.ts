@@ -58,9 +58,7 @@ export class PiEventToUiMessageStream {
 			const role = event.message?.role;
 			if (role === "assistant" && !this.finished) {
 				if (!this.currentMessageId) {
-					this.currentMessageId = String(
-						(event.message?.id as string | undefined) ?? `msg_${Date.now()}`,
-					);
+					this.currentMessageId = String((event.message?.id as string | undefined) ?? `msg_${Date.now()}`);
 					frames.push({ type: "start", messageId: this.currentMessageId });
 				} else {
 					// 工具循环的下一跳：同一条 UI 消息里开新 step，不要再发 start 拆气泡。
@@ -110,9 +108,7 @@ export class PiEventToUiMessageStream {
 		return this.finished;
 	}
 
-	private handleAssistantMessageEvent(
-		ev: Record<string, unknown>,
-	): UiMessageStreamFrame[] {
+	private handleAssistantMessageEvent(ev: Record<string, unknown>): UiMessageStreamFrame[] {
 		const frames: UiMessageStreamFrame[] = [];
 		const eventType = ev.type;
 
@@ -136,9 +132,7 @@ export class PiEventToUiMessageStream {
 		// 思考：同样 start/delta/end；thinking_end 可能带完整 content（已含全部增量）。
 		if (eventType === "thinking_delta" || eventType === "thinking_end") {
 			const delta = String(ev.delta ?? ev.thinking ?? "");
-			const finalContent = eventType === "thinking_end"
-				? String(ev.content ?? "")
-				: "";
+			const finalContent = eventType === "thinking_end" ? String(ev.content ?? "") : "";
 			if (!this.reasoningBlockId) {
 				this.reasoningBlockId = `reasoning_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 				frames.push({ type: "reasoning-start", id: this.reasoningBlockId });
@@ -205,9 +199,7 @@ export class PiEventToUiMessageStream {
 
 	private startTool(event: PiEvent): UiMessageStreamFrame[] {
 		const toolName = typeof event.toolName === "string" ? event.toolName : "tool";
-		const toolCallId = typeof event.toolCallId === "string"
-			? event.toolCallId
-			: `tool_${toolName}_${Date.now()}`;
+		const toolCallId = typeof event.toolCallId === "string" ? event.toolCallId : `tool_${toolName}_${Date.now()}`;
 		this.startedToolCallIds.add(toolCallId);
 		return [
 			{ type: "tool-input-start", toolCallId, toolName },
@@ -216,9 +208,7 @@ export class PiEventToUiMessageStream {
 	}
 
 	private endTool(event: PiEvent): UiMessageStreamFrame[] {
-		const toolCallId = typeof event.toolCallId === "string"
-			? event.toolCallId
-			: undefined;
+		const toolCallId = typeof event.toolCallId === "string" ? event.toolCallId : undefined;
 		if (!toolCallId) return [];
 		// 容错：若当前流中途建立或跨端并发输入，未见证过 tool_execution_start，
 		// 过滤孤儿 tool_execution_end，防止 AI SDK 抛出 "No tool invocation found for tool call ID" 导致告警红条。
@@ -227,11 +217,13 @@ export class PiEventToUiMessageStream {
 		}
 		this.startedToolCallIds.delete(toolCallId);
 		if (event.isError) {
-			return [{
-				type: "tool-output-error",
-				toolCallId,
-				errorText: "Tool failed",
-			}];
+			return [
+				{
+					type: "tool-output-error",
+					toolCallId,
+					errorText: "Tool failed",
+				},
+			];
 		}
 		return [{ type: "tool-output-available", toolCallId, output: {} }];
 	}
@@ -255,9 +247,7 @@ export class PiEventToUiMessageStream {
 		this.finished = true;
 		const frames = this.closeOpenBlocks();
 		if (event.error !== undefined) {
-			const errorText = typeof event.error === "string"
-				? event.error
-				: "Agent 运行失败";
+			const errorText = typeof event.error === "string" ? event.error : "Agent 运行失败";
 			frames.push({ type: "error", errorText });
 		}
 		frames.push({ type: "finish" });
@@ -303,12 +293,7 @@ export class WebEventStreamRouter {
 	constructor(private readonly resolveSession: AgentToSessionRouter) {}
 
 	/** 注册一个 session 的 SSE 连接。返回关闭函数。 */
-	add(
-		sessionId: string,
-		writeRaw: (wire: string) => boolean,
-		onClose: () => void,
-		onFinish?: () => void,
-	): () => void {
+	add(sessionId: string, writeRaw: (wire: string) => boolean, onClose: () => void, onFinish?: () => void): () => void {
 		const entry: SessionStreamEntry = {
 			sessionId,
 			adapter: new PiEventToUiMessageStream(),
@@ -387,10 +372,7 @@ export class WebEventStreamRouter {
 }
 
 /** 生成 SSE 响应头。 */
-export function writeSseHeaders(
-	setHeader: (name: string, value: string) => void,
-	writeHead: (status: number, headers: Record<string, string>) => void,
-): void {
+export function writeSseHeaders(setHeader: (name: string, value: string) => void, writeHead: (status: number, headers: Record<string, string>) => void): void {
 	writeHead(200, {
 		"Content-Type": "text/event-stream",
 		"Cache-Control": "no-cache, no-transform",

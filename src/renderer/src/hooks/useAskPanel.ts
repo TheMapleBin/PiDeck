@@ -1,11 +1,6 @@
 import { useCallback } from "react";
 import { useAtom, useAtomValue, useStore } from "jotai";
-import {
-	askPanelCreatingAtom,
-	askPanelOpenAtom,
-	askPanelOriginSessionIdAtom,
-	askPanelSessionIdAtom,
-} from "../atoms/ask-panel-atoms";
+import { askPanelCreatingAtom, askPanelOpenAtom, askPanelOriginSessionIdAtom, askPanelSessionIdAtom } from "../atoms/ask-panel-atoms";
 import { effectiveAgentBackendAtom } from "../atoms/app-ui-atoms";
 import { sessionRecordsAtom } from "../atoms/session-atoms";
 import { sessionRuntimeBySessionIdAtomFamily } from "../atoms/session-selectors";
@@ -109,11 +104,7 @@ export function useAskPanel() {
 	);
 
 	const sendToAsk = useCallback(
-		async (
-			projectId: string,
-			text: string,
-			options?: { context?: string; originSessionId?: string },
-		): Promise<boolean> => {
+		async (projectId: string, text: string, options?: { context?: string; originSessionId?: string }): Promise<boolean> => {
 			const id = await ensureSession(projectId);
 			if (!id) return false;
 			// 胶囊先显示：会话创建/启动需要数秒，先给用户即时反馈（创建中/等待响应状态）

@@ -1,11 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
 import type { ProjectFileAccessScope } from "../../../../shared/types";
-import {
-	getFilePathVerdict,
-	requestFilePathVerdicts,
-	subscribeFilePathVerdicts,
-} from "../../utils/filePathVerdictStore";
+import { getFilePathVerdict, requestFilePathVerdicts, subscribeFilePathVerdicts } from "../../utils/filePathVerdictStore";
 import { resolveFileLinkPath } from "../../utils/filePathLinks";
 
 type FileLinkBase = {
@@ -22,12 +18,7 @@ type FileLinkBase = {
  */
 const FileLinkBaseContext = createContext<FileLinkBase>({});
 
-export function FileLinkBaseProvider(props: {
-	baseDir: string | undefined;
-	projectRoot?: string;
-	projectId?: string;
-	children: ReactNode;
-}) {
+export function FileLinkBaseProvider(props: { baseDir: string | undefined; projectRoot?: string; projectId?: string; children: ReactNode }) {
 	const value = useMemo<FileLinkBase>(
 		() => ({
 			baseDir: props.baseDir,
@@ -36,11 +27,7 @@ export function FileLinkBaseProvider(props: {
 		}),
 		[props.baseDir, props.projectId, props.projectRoot],
 	);
-	return (
-		<FileLinkBaseContext.Provider value={value}>
-			{props.children}
-		</FileLinkBaseContext.Provider>
-	);
+	return <FileLinkBaseContext.Provider value={value}>{props.children}</FileLinkBaseContext.Provider>;
 }
 
 export function useFileLinkBaseDir(): string | undefined {
@@ -64,16 +51,11 @@ export function useFilePathExists(rawPath: string | undefined): boolean | undefi
 	const { baseDir, projectRoot, scope } = useContext(FileLinkBaseContext);
 	// resolveFileLinkPath 返回 null = 无法解析或越出本栏项目边界：
 	// 不发 stat，更不能让主进程按进程 cwd 猜测相对路径。
-	const absPath = rawPath === undefined
-		? undefined
-		: resolveFileLinkPath(rawPath, baseDir, projectRoot);
+	const absPath = rawPath === undefined ? undefined : resolveFileLinkPath(rawPath, baseDir, projectRoot);
 	const resolvable = typeof absPath === "string";
 	useEffect(() => {
 		if (!rawPath || !resolvable || absPath === undefined) return;
 		requestFilePathVerdicts([absPath], scope);
 	}, [absPath, rawPath, resolvable, scope]);
-	return useSyncExternalStore(
-		subscribeFilePathVerdicts,
-		() => (resolvable ? getFilePathVerdict(absPath, scope) : undefined),
-	);
+	return useSyncExternalStore(subscribeFilePathVerdicts, () => (resolvable ? getFilePathVerdict(absPath, scope) : undefined));
 }

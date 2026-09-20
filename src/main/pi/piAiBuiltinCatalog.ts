@@ -36,9 +36,7 @@ export type PiAiCatalogIndex = {
 
 /** 正整数容量；listing / catalog 里 0、小数、非数字一律视为未提供 */
 export function positiveInt(value: unknown): number | undefined {
-	return typeof value === "number" && Number.isInteger(value) && value > 0
-		? value
-		: undefined;
+	return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : undefined;
 }
 
 function pushIndex(map: Map<string, PiAiCatalogEntry[]>, key: string, entry: PiAiCatalogEntry): void {
@@ -88,10 +86,7 @@ export function modelIdTail(modelId: string): string {
  * 同 id 多条时优先本 provider，其次带 contextWindow 的条目。
  * 网关（opencode / copilot）会复用官方 id，容量通常一致。
  */
-function pickEntry(
-	candidates: readonly PiAiCatalogEntry[] | undefined,
-	providerName: string,
-): PiAiCatalogEntry | undefined {
+function pickEntry(candidates: readonly PiAiCatalogEntry[] | undefined, providerName: string): PiAiCatalogEntry | undefined {
 	if (!candidates || candidates.length === 0) return undefined;
 	if (candidates.length === 1) return candidates[0];
 	const named = candidates.find((entry) => entry.provider === providerName);
@@ -111,11 +106,7 @@ function lookupExact(index: PiAiCatalogIndex, providerName: string, modelId: str
  * 按模型 id 查 pi-ai 目录。顺序：本 provider 精确 → 全局精确 → 大小写 → 路径尾段。
  * 不做子串/前缀模糊匹配。
  */
-export function lookupPiAiCatalogEntry(
-	index: PiAiCatalogIndex,
-	providerName: string,
-	modelId: string,
-): PiAiCatalogEntry | undefined {
+export function lookupPiAiCatalogEntry(index: PiAiCatalogIndex, providerName: string, modelId: string): PiAiCatalogEntry | undefined {
 	const id = modelId.trim();
 	if (!id) return undefined;
 	const direct = lookupExact(index, providerName, id);
@@ -157,9 +148,7 @@ function catalogEntryFromArtifact(model: Record<string, unknown>): PiAiCatalogEn
 	const contextWindow = positiveInt(model.contextWindow);
 	const maxTokens = positiveInt(model.maxTokens);
 	const reasoning = typeof model.reasoning === "boolean" ? model.reasoning : undefined;
-	const input = Array.isArray(model.input)
-		? model.input.filter((item): item is "text" | "image" => item === "text" || item === "image")
-		: undefined;
+	const input = Array.isArray(model.input) ? model.input.filter((item): item is "text" | "image" => item === "text" || item === "image") : undefined;
 	const thinkingLevelMap = parseThinkingLevelMap(model.thinkingLevelMap);
 	const api = nonEmptyString(model.api);
 	const baseUrl = nonEmptyString(model.baseUrl);
@@ -186,14 +175,9 @@ function isValidCatalogManifest(manifest: unknown, catalogRaw: string, entryCoun
 	if (manifest.catalogSha256 !== catalogSha256(catalogRaw) || manifest.entryCount !== entryCount) return false;
 	const source = manifest.source;
 	if (!isRecord(source)) return false;
-	return source.packageName === "@earendil-works/pi-ai"
-		&& typeof source.packageVersion === "string"
-		&& source.packageVersion.length > 0
-		&& typeof source.dataSha256 === "string"
-		&& /^[a-f0-9]{64}$/.test(source.dataSha256)
-		&& typeof source.fileCount === "number"
-		&& Number.isInteger(source.fileCount)
-		&& source.fileCount > 0;
+	return (
+		source.packageName === "@earendil-works/pi-ai" && typeof source.packageVersion === "string" && source.packageVersion.length > 0 && typeof source.dataSha256 === "string" && /^[a-f0-9]{64}$/.test(source.dataSha256) && typeof source.fileCount === "number" && Number.isInteger(source.fileCount) && source.fileCount > 0
+	);
 }
 
 /**
@@ -258,13 +242,7 @@ export function readBuiltinPiAiCatalogVersion(): string | undefined {
 	if (!builtin) return undefined;
 	try {
 		const manifest: unknown = JSON.parse(readFileSync(builtin.manifestPath, "utf8"));
-		if (
-			typeof manifest === "object" &&
-			manifest !== null &&
-			"source" in manifest &&
-			typeof (manifest as { source?: unknown }).source === "object" &&
-			(manifest as { source?: unknown }).source !== null
-		) {
+		if (typeof manifest === "object" && manifest !== null && "source" in manifest && typeof (manifest as { source?: unknown }).source === "object" && (manifest as { source?: unknown }).source !== null) {
 			const packageVersion = (manifest as { source?: { packageVersion?: unknown } }).source?.packageVersion;
 			return typeof packageVersion === "string" ? packageVersion : undefined;
 		}
@@ -293,9 +271,7 @@ export function resolvePiAiCatalogArtifactPaths(): PiAiCatalogArtifactPaths | un
 	return resolvePiAiCatalogArtifactCandidates()[0];
 }
 
-export function loadPiAiCatalogEntries(
-	paths: PiAiCatalogArtifactPaths | undefined | readonly PiAiCatalogArtifactPaths[] = resolvePiAiCatalogArtifactCandidates(),
-): PiAiCatalogEntry[] {
+export function loadPiAiCatalogEntries(paths: PiAiCatalogArtifactPaths | undefined | readonly PiAiCatalogArtifactPaths[] = resolvePiAiCatalogArtifactCandidates()): PiAiCatalogEntry[] {
 	const list = paths ? (Array.isArray(paths) ? paths : [paths]) : [];
 	if (list.length === 0) {
 		console.error("[pi-ai-catalog] generated artifact not found");
@@ -304,10 +280,7 @@ export function loadPiAiCatalogEntries(
 	for (let index = 0; index < list.length; index += 1) {
 		const artifact = list[index];
 		try {
-			const entries = parsePiAiCatalogArtifact(
-				readFileSync(artifact.catalogPath, "utf8"),
-				readFileSync(artifact.manifestPath, "utf8"),
-			);
+			const entries = parsePiAiCatalogArtifact(readFileSync(artifact.catalogPath, "utf8"), readFileSync(artifact.manifestPath, "utf8"));
 			if (entries.length > 0) return entries;
 			if (index === 0) console.warn("[pi-ai-catalog] artifact candidate invalid, trying next", artifact.catalogPath);
 		} catch (error) {

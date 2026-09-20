@@ -1,9 +1,6 @@
 import type { AgentBackend, AvailableModel } from "../../../shared/types";
 
-export type ChatSessionBootstrapAction =
-  | { kind: "none" }
-  | { kind: "load" }
-  | { kind: "wait" };
+export type ChatSessionBootstrapAction = { kind: "none" } | { kind: "load" } | { kind: "wait" };
 
 /**
  * 引导页空白输入框的 renderer-only 虚拟会话 ID：无会话打开时（启动 / 清空 Tab /
@@ -22,42 +19,44 @@ export const WELCOME_BACKEND_KEY = "pideck:welcome-backend";
 
 /** 读取欢迎页最后显式切换的后端（仅认 pi/dsh；无则 undefined）。 */
 export function readWelcomeBackendPreference(): AgentBackend | undefined {
-  try {
-    const raw = localStorage.getItem(WELCOME_BACKEND_KEY);
-    // imagegen 是模式不是后端切换器的取值，历史脏数据一律忽略。
-    if (raw === "pi" || raw === "dsh") return raw;
-  } catch {
-    // localStorage 不可用时视为无偏好
-  }
-  return undefined;
+	try {
+		const raw = localStorage.getItem(WELCOME_BACKEND_KEY);
+		// imagegen 是模式不是后端切换器的取值，历史脏数据一律忽略。
+		if (raw === "pi" || raw === "dsh") return raw;
+	} catch {
+		// localStorage 不可用时视为无偏好
+	}
+	return undefined;
 }
 
 /** 读取欢迎页最后选择的模型偏好（无则 undefined）。 */
-export function readWelcomeModelPreference(): {
-  model: { provider: string; modelId: string };
-} | undefined {
-  try {
-    const raw = localStorage.getItem(WELCOME_MODEL_KEY);
-    if (!raw) return undefined;
-    const parsed = JSON.parse(raw) as { provider?: string; modelId?: string };
-    if (typeof parsed.provider === "string" && typeof parsed.modelId === "string") {
-      return { model: { provider: parsed.provider, modelId: parsed.modelId } };
-    }
-  } catch {
-    // 解析失败视为无偏好
-  }
-  return undefined;
+export function readWelcomeModelPreference():
+	| {
+			model: { provider: string; modelId: string };
+	  }
+	| undefined {
+	try {
+		const raw = localStorage.getItem(WELCOME_MODEL_KEY);
+		if (!raw) return undefined;
+		const parsed = JSON.parse(raw) as { provider?: string; modelId?: string };
+		if (typeof parsed.provider === "string" && typeof parsed.modelId === "string") {
+			return { model: { provider: parsed.provider, modelId: parsed.modelId } };
+		}
+	} catch {
+		// 解析失败视为无偏好
+	}
+	return undefined;
 }
 
 /** 读取欢迎页最后选择的思考级别（无则 undefined）。 */
 export function readWelcomeThinkingPreference(): { thinkingLevel: string } | undefined {
-  try {
-    const level = localStorage.getItem(WELCOME_THINKING_KEY);
-    if (level) return { thinkingLevel: level };
-  } catch {
-    // 读取失败视为无偏好
-  }
-  return undefined;
+	try {
+		const level = localStorage.getItem(WELCOME_THINKING_KEY);
+		if (level) return { thinkingLevel: level };
+	} catch {
+		// 读取失败视为无偏好
+	}
+	return undefined;
 }
 
 /**
@@ -67,15 +66,10 @@ export function readWelcomeThinkingPreference(): { thinkingLevel: string } | und
  * 让显示回落到主进程解析的启动默认（launchDefaults 已校验 models.json 存在性）。
  * 目录未就绪（models 为空）时不判定——避免误清仍有效的偏好（目录加载失败场景）。
  */
-export function isWelcomeModelLost(
-  welcomeModel: { provider: string; modelId: string } | undefined,
-  models: AvailableModel[],
-): boolean {
-  if (!welcomeModel) return false;
-  if (models.length === 0) return false;
-  return !models.some(
-    (model) => model.provider === welcomeModel.provider && model.id === welcomeModel.modelId,
-  );
+export function isWelcomeModelLost(welcomeModel: { provider: string; modelId: string } | undefined, models: AvailableModel[]): boolean {
+	if (!welcomeModel) return false;
+	if (models.length === 0) return false;
+	return !models.some((model) => model.provider === welcomeModel.provider && model.id === welcomeModel.modelId);
 }
 
 /**
@@ -93,17 +87,17 @@ export function isWelcomeModelLost(
  * 误删的代价比历史上更大，因此这里宁可不删（残留项由展示层忽略 + 主进程创建时兜底丢弃）。
  */
 export function shouldClearWelcomePreference(input: {
-  welcomeModel: { provider: string; modelId: string } | undefined;
-  models: AvailableModel[];
-  /** 目录是否来自一次成功的完整加载（ModelListReport.ok === true）。 */
-  catalogLoaded: boolean;
-  /** 目录是否按全局范围加载（未传 projectId）。 */
-  catalogIsGlobal: boolean;
+	welcomeModel: { provider: string; modelId: string } | undefined;
+	models: AvailableModel[];
+	/** 目录是否来自一次成功的完整加载（ModelListReport.ok === true）。 */
+	catalogLoaded: boolean;
+	/** 目录是否按全局范围加载（未传 projectId）。 */
+	catalogIsGlobal: boolean;
 }): boolean {
-  const { welcomeModel, models, catalogLoaded, catalogIsGlobal } = input;
-  if (!welcomeModel) return false;
-  if (!catalogLoaded || !catalogIsGlobal) return false;
-  return isWelcomeModelLost(welcomeModel, models);
+	const { welcomeModel, models, catalogLoaded, catalogIsGlobal } = input;
+	if (!welcomeModel) return false;
+	if (!catalogLoaded || !catalogIsGlobal) return false;
+	return isWelcomeModelLost(welcomeModel, models);
 }
 
 /**
@@ -111,22 +105,18 @@ export function shouldClearWelcomePreference(input: {
  * opening the app must not add an unrequested row to history. This renderer-
  * only ID is promoted to a Catalog record only when the user sends.
  */
-export function resolveChatSessionBootstrap(input: {
-  isChatProject: boolean;
-  currentSessionId?: string;
-  catalogStatus?: "idle" | "loading" | "ready" | "error";
-}): ChatSessionBootstrapAction {
-  if (!input.isChatProject || input.currentSessionId) return { kind: "none" };
-  // The Chat project can remain collapsed in the sidebar, so it cannot rely on
-  // the normal expanded-project scan to reach `ready`. Loading its empty catalog
-  // gives the sidebar a deterministic point to list history without creating a
-  // durable entry or starting pi.
-  if (input.catalogStatus === "idle" || input.catalogStatus === "error" || !input.catalogStatus) {
-    return { kind: "load" };
-  }
-  if (input.catalogStatus !== "ready") return { kind: "wait" };
-  // 不再自动选中 renderer-only 虚拟会话：聊天项目点开后与普通项目一致，
-  // 先显示统一引导页（新建 Agent / 匿名聊天），用户主动选择后才进入 composer。
-  // 避免“聊天项目直接落大输入框、普通项目落引导页”的行为分叉。
-  return { kind: "none" };
+export function resolveChatSessionBootstrap(input: { isChatProject: boolean; currentSessionId?: string; catalogStatus?: "idle" | "loading" | "ready" | "error" }): ChatSessionBootstrapAction {
+	if (!input.isChatProject || input.currentSessionId) return { kind: "none" };
+	// The Chat project can remain collapsed in the sidebar, so it cannot rely on
+	// the normal expanded-project scan to reach `ready`. Loading its empty catalog
+	// gives the sidebar a deterministic point to list history without creating a
+	// durable entry or starting pi.
+	if (input.catalogStatus === "idle" || input.catalogStatus === "error" || !input.catalogStatus) {
+		return { kind: "load" };
+	}
+	if (input.catalogStatus !== "ready") return { kind: "wait" };
+	// 不再自动选中 renderer-only 虚拟会话：聊天项目点开后与普通项目一致，
+	// 先显示统一引导页（新建 Agent / 匿名聊天），用户主动选择后才进入 composer。
+	// 避免“聊天项目直接落大输入框、普通项目落引导页”的行为分叉。
+	return { kind: "none" };
 }

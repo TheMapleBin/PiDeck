@@ -37,31 +37,12 @@ function seedOpenCodeDb(dbPath, projectPath) {
 		CREATE TABLE part (id text primary key, message_id text, session_id text, time_created integer, time_updated integer, data text);
 	`);
 	db.prepare("insert into project (id, worktree) values (?, ?)").run("proj", projectPath);
-	db.prepare(
-		"insert into session (id, project_id, directory, title, time_created, time_updated, model) values (?, ?, ?, ?, ?, ?, ?)",
-	).run("sess_1", "proj", projectPath, "工具栏", T0, T0 + 1000, JSON.stringify({ providerID: "opencode", modelID: "test" }));
-	db.prepare(
-		"insert into message (id, session_id, time_created, time_updated, data) values (?, ?, ?, ?, ?)",
-	).run("m_user", "sess_1", T0, T0, JSON.stringify({ role: "user" }));
-	db.prepare(
-		"insert into part (id, message_id, session_id, time_created, time_updated, data) values (?, ?, ?, ?, ?, ?)",
-	).run("p_user", "m_user", "sess_1", T0, T0, JSON.stringify({ type: "text", text: "列一下目录" }));
-	db.prepare(
-		"insert into part (id, message_id, session_id, time_created, time_updated, data) values (?, ?, ?, ?, ?, ?)",
-	).run(
-		"p_file",
-		"m_user",
-		"sess_1",
-		T0,
-		T0,
-		JSON.stringify({ type: "file", filename: "shot.png", mime: "image/png" }),
-	);
-	db.prepare(
-		"insert into message (id, session_id, time_created, time_updated, data) values (?, ?, ?, ?, ?)",
-	).run("m_asst", "sess_1", T0 + 100, T0 + 200, JSON.stringify({ role: "assistant", finish: "tool-calls" }));
-	db.prepare(
-		"insert into part (id, message_id, session_id, time_created, time_updated, data) values (?, ?, ?, ?, ?, ?)",
-	).run(
+	db.prepare("insert into session (id, project_id, directory, title, time_created, time_updated, model) values (?, ?, ?, ?, ?, ?, ?)").run("sess_1", "proj", projectPath, "工具栏", T0, T0 + 1000, JSON.stringify({ providerID: "opencode", modelID: "test" }));
+	db.prepare("insert into message (id, session_id, time_created, time_updated, data) values (?, ?, ?, ?, ?)").run("m_user", "sess_1", T0, T0, JSON.stringify({ role: "user" }));
+	db.prepare("insert into part (id, message_id, session_id, time_created, time_updated, data) values (?, ?, ?, ?, ?, ?)").run("p_user", "m_user", "sess_1", T0, T0, JSON.stringify({ type: "text", text: "列一下目录" }));
+	db.prepare("insert into part (id, message_id, session_id, time_created, time_updated, data) values (?, ?, ?, ?, ?, ?)").run("p_file", "m_user", "sess_1", T0, T0, JSON.stringify({ type: "file", filename: "shot.png", mime: "image/png" }));
+	db.prepare("insert into message (id, session_id, time_created, time_updated, data) values (?, ?, ?, ?, ?)").run("m_asst", "sess_1", T0 + 100, T0 + 200, JSON.stringify({ role: "assistant", finish: "tool-calls" }));
+	db.prepare("insert into part (id, message_id, session_id, time_created, time_updated, data) values (?, ?, ?, ?, ?, ?)").run(
 		"p_tool",
 		"m_asst",
 		"sess_1",

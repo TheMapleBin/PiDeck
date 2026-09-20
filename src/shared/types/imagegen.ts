@@ -51,9 +51,7 @@ export type ImageGenErrorCode =
 	| "referenceUnsupported";
 
 /** 生图结果：ok=true 时 image 为可直接进附件栏的 base64 图片 */
-export type ImageGenResult =
-	| { ok: true; image: ImageContent }
-	| { ok: false; error: ImageGenErrorCode; detail?: string };
+export type ImageGenResult = { ok: true; image: ImageContent } | { ok: false; error: ImageGenErrorCode; detail?: string };
 
 /**
  * 生图消息的渲染元数据（存在 ChatMessage.meta.imageGen）：
@@ -70,9 +68,7 @@ export type ImageGenMeta = {
 	errorDetail?: string;
 };
 
-export type ImageGenSaveResult =
-	| { ok: true; config: ImageGenConfigFile }
-	| { ok: false; error: string };
+export type ImageGenSaveResult = { ok: true; config: ImageGenConfigFile } | { ok: false; error: string };
 
 /**
  * 按需取回的落盘图片字节（imagegen:read-image-blob）。

@@ -21,20 +21,12 @@ import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 const { applyDshBillBackfillPatch } = loadTsCommonJs("src/main/dsh/dshBillBackfillPatch.ts");
 
 /** 官方 dsh-bill@0.14 lifecycle 链（不含 apply 方法的闭合括号，来自 node_modules 实测）。 */
-const OFFICIAL_CHAIN = [
-	"hostkitReady",
-	"\t.then(() => loadPrefs())",
-	"\t.then(() => loadRollup())",
-	"\t.then(() => loadPersisted())",
-	"\t.then(() => { loading = false; persist() })",
-	"\t.then(() => Promise.all([ensurePricingLoaded(), ensureFxLoaded()]))",
-	"\t.then(() => backfillFromLog())",
-	"\t.catch(() => {})",
-].join("\n");
+const OFFICIAL_CHAIN = ["hostkitReady", "\t.then(() => loadPrefs())", "\t.then(() => loadRollup())", "\t.then(() => loadPersisted())", "\t.then(() => { loading = false; persist() })", "\t.then(() => Promise.all([ensurePricingLoaded(), ensureFxLoaded()]))", "\t.then(() => backfillFromLog())", "\t.catch(() => {})"].join(
+	"\n",
+);
 
 /** 把 lifecycle 链包进真实的 apply() 结构（中括号平衡，可过 new Function 语法检查）。 */
-const wrapApply = (chain) =>
-	`const hostkitReady = Promise.resolve();\nconst plugin = {\n\tapply() {\n${chain}\n\t},\n};\n`;
+const wrapApply = (chain) => `const hostkitReady = Promise.resolve();\nconst plugin = {\n\tapply() {\n${chain}\n\t},\n};\n`;
 
 /** 官方形态完整夹具（语法合法）。 */
 const OFFICIAL_LIFECYCLE = wrapApply(OFFICIAL_CHAIN);
@@ -73,9 +65,15 @@ test("补丁：官方 0.14 lifecycle 片段被替换为 env 守卫（默认不�
 test("补丁幂等：已打补丁的文件再次应用返回 false 且内容不变", () => {
 	const { root, entry } = makeFakeDshBill(OFFICIAL_LIFECYCLE);
 	try {
-		assert.equal(applyDshBillBackfillPatch(entry, () => {}), true);
+		assert.equal(
+			applyDshBillBackfillPatch(entry, () => {}),
+			true,
+		);
 		const once = readFileSync(entry, "utf8");
-		assert.equal(applyDshBillBackfillPatch(entry, () => {}), false);
+		assert.equal(
+			applyDshBillBackfillPatch(entry, () => {}),
+			false,
+		);
 		assert.equal(readFileSync(entry, "utf8"), once);
 	} finally {
 		rmSync(root, { recursive: true, force: true });
@@ -86,7 +84,10 @@ test("补丁容错：目标串缺失（未来版本）不写文件且不抛错",
 	const { root, entry } = makeFakeDshBill("hostkitReady.then(() => loadPrefs())\n");
 	const logs = [];
 	try {
-		assert.equal(applyDshBillBackfillPatch(entry, (message) => logs.push(message)), false);
+		assert.equal(
+			applyDshBillBackfillPatch(entry, (message) => logs.push(message)),
+			false,
+		);
 		assert.equal(readFileSync(entry, "utf8"), "hostkitReady.then(() => loadPrefs())\n");
 		assert.ok(logs.some((line) => line.includes("未找到目标代码")));
 	} finally {
@@ -98,7 +99,10 @@ test("补丁容错：目标串出现多次（压缩产物）不盲改", () => {
 	const body = `const a = ${OFFICIAL_LIFECYCLE}\nconst b = ${OFFICIAL_LIFECYCLE}\n`;
 	const { root, entry } = makeFakeDshBill(body);
 	try {
-		assert.equal(applyDshBillBackfillPatch(entry, () => {}), false);
+		assert.equal(
+			applyDshBillBackfillPatch(entry, () => {}),
+			false,
+		);
 		assert.equal(readFileSync(entry, "utf8"), body);
 	} finally {
 		rmSync(root, { recursive: true, force: true });
@@ -110,7 +114,10 @@ test("补丁解析：从包 main 入口向上定位包根，lib/index.js 优先�
 	// 也能命中：入口即 lib/index.js 的标准布局本就由候选 1 覆盖。
 	const { root, entry } = makeFakeDshBill(OFFICIAL_LIFECYCLE);
 	try {
-		assert.equal(applyDshBillBackfillPatch(entry, () => {}), true);
+		assert.equal(
+			applyDshBillBackfillPatch(entry, () => {}),
+			true,
+		);
 		assert.ok(readFileSync(join(root, "lib", "index.js"), "utf8").includes("DSH_BILL_BACKFILL"));
 	} finally {
 		rmSync(root, { recursive: true, force: true });
@@ -119,7 +126,10 @@ test("补丁解析：从包 main 入口向上定位包根，lib/index.js 优先�
 
 test("补丁容错：入口文件不存在时不抛错返回 false", () => {
 	const logs = [];
-	assert.equal(applyDshBillBackfillPatch(join(tmpdir(), "pideck-nonexistent", "index.js"), (message) => logs.push(message)), false);
+	assert.equal(
+		applyDshBillBackfillPatch(join(tmpdir(), "pideck-nonexistent", "index.js"), (message) => logs.push(message)),
+		false,
+	);
 	assert.ok(logs.some((line) => line.includes("入口文件不存在")));
 });
 
@@ -128,7 +138,7 @@ test("接线：DshHost.start 在 fork 前对 host 实际加载的 dsh-bill 应�
 	// 补丁调用点必须在 start() 内、且晚于 runtimeRoot 解析（require 锚点与
 	// hostEntry 的 require.resolve("dsh-bill") 同源）。
 	const startIdx = source.indexOf("private async start()");
-	const patchIdx = source.indexOf("applyDshBillBackfillPatch(require.resolve(\"dsh-bill\")");
+	const patchIdx = source.indexOf('applyDshBillBackfillPatch(require.resolve("dsh-bill")');
 	const runtimeRootIdx = source.indexOf("const runtimeRoot = this.resolveRuntimeAppRoot");
 	assert.ok(startIdx >= 0, "start() 存在");
 	assert.ok(runtimeRootIdx > startIdx, "runtimeRoot 在 start() 内解析");

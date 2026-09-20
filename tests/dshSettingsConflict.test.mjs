@@ -21,10 +21,7 @@ test("isDshSettingsConflict: 下划线/大写 code 变体命中（容错 host �
 });
 
 test("isDshSettingsConflict: 无 code 但消息含 changed since it was read 命中", () => {
-	assert.equal(
-		isDshSettingsConflict({ message: 'settings namespace "ns" changed since it was read (expected 0, now 1)' }),
-		true,
-	);
+	assert.equal(isDshSettingsConflict({ message: 'settings namespace "ns" changed since it was read (expected 0, now 1)' }), true);
 });
 
 test("isDshSettingsConflict: 非冲突错误不命中", () => {

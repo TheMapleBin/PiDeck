@@ -16,32 +16,32 @@ const ciYml = readFileSync(".github/workflows/ci.yml", "utf8");
 const pkg = JSON.parse(readFileSync("package.json", "utf8"));
 
 test("ci.yml 接入全部 check:* 守卫，且位于 npm ci 之后、Build 之前", () => {
- const guardScripts = [
-  "check:announcements",
-  "check:pi-ai-catalog",
-  "check:extensions-manifest",
-  "check:prompts-manifest",
-  "check:skills-manifest",
- ];
- for (const script of guardScripts) {
-  assert.ok(pkg.scripts[script], `package.json 缺少 ${script}`);
-  assert.ok(
-   ciYml.includes(`npm run ${script}`),
-   `ci.yml 缺少守卫命令 npm run ${script}`,
-  );
- }
- // check:xueprompts 已内联在 npm run build 脚本链里，不重复接入
+	const guardScripts = ["check:announcements", "check:pi-ai-catalog", "check:extensions-manifest", "check:prompts-manifest", "check:skills-manifest"];
+	for (const script of guardScripts) {
+		assert.ok(pkg.scripts[script], `package.json 缺少 ${script}`);
+		assert.ok(ciYml.includes(`npm run ${script}`), `ci.yml 缺少守卫命令 npm run ${script}`);
+	}
+	// check:xueprompts 已内联在 npm run build 脚本链里，不重复接入
 
- const guardStepIndex = ciYml.indexOf("Check generated artifacts drift");
- const npmCiIndex = ciYml.indexOf("run: npm ci");
- const buildIndex = ciYml.indexOf("run: npm run build");
- assert.ok(guardStepIndex >= 0, "ci.yml 缺少守卫步骤 Check generated artifacts drift");
- assert.ok(
-  guardStepIndex > npmCiIndex,
-  "守卫步骤必须在 npm ci 之后（check 脚本可能依赖 node_modules）",
- );
- assert.ok(
-  guardStepIndex < buildIndex,
-  "守卫步骤必须在 Build 之前（build 链会静默再生成清单，mask 已提交漂移）",
- );
+	const guardStepIndex = ciYml.indexOf("Check generated artifacts drift");
+	const npmCiIndex = ciYml.indexOf("run: npm ci");
+	const buildIndex = ciYml.indexOf("run: npm run build");
+	assert.ok(guardStepIndex >= 0, "ci.yml 缺少守卫步骤 Check generated artifacts drift");
+	assert.ok(guardStepIndex > npmCiIndex, "守卫步骤必须在 npm ci 之后（check 脚本可能依赖 node_modules）");
+	assert.ok(guardStepIndex < buildIndex, "守卫步骤必须在 Build 之前（build 链会静默再生成清单，mask 已提交漂移）");
+});
+
+test("ci.yml 接入 biome 格式门禁，且位于 npm ci 之后、Build 之前", () => {
+	// 格式化基线（chore/formatter-baseline）：与 check:* 同一职责，防止未格式化代码直入 main。
+	// 本地等价命令 npm run check:format；修复用 npm run format。
+	assert.ok(pkg.scripts.format, "package.json 缺少 format 脚本");
+	assert.ok(pkg.scripts["check:format"], "package.json 缺少 check:format 脚本");
+	assert.ok(ciYml.includes("npm run check:format"), "ci.yml 缺少 npm run check:format");
+	assert.match(pkg.devDependencies["@biomejs/biome"], /^\d+\.\d+\.\d+$/, "biome 必须固定版本（格式基线不能被小版本升级悄悄改变）");
+	const formatStepIndex = ciYml.indexOf("Check formatting");
+	const npmCiIndex = ciYml.indexOf("run: npm ci");
+	const buildIndex = ciYml.indexOf("run: npm run build");
+	assert.ok(formatStepIndex >= 0, "ci.yml 缺少格式门禁步骤 Check formatting");
+	assert.ok(formatStepIndex > npmCiIndex, "格式门禁必须在 npm ci 之后（biome 来自 devDependencies）");
+	assert.ok(formatStepIndex < buildIndex, "格式门禁应在 Build 之前，尽早报错");
 });

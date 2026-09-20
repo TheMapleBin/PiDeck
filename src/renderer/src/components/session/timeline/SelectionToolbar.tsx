@@ -2,19 +2,8 @@ import { useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useAtomValue, useSetAtom } from "jotai";
 import { Quote } from "lucide-react";
-import {
-	sessionDraftByIdAtom,
-	setSessionDraftAtom,
-	setSessionQuotesAtom,
-} from "../../../atoms";
-import {
-	buildDraftWithAppendedQuote,
-	buildQuoteToken,
-	createQuoteId,
-	extractQuoteTokens,
-	pruneUnreferencedQuotes,
-	type QuoteSnippet,
-} from "../composer/quoteChip";
+import { sessionDraftByIdAtom, setSessionDraftAtom, setSessionQuotesAtom } from "../../../atoms";
+import { buildDraftWithAppendedQuote, buildQuoteToken, createQuoteId, extractQuoteTokens, pruneUnreferencedQuotes, type QuoteSnippet } from "../composer/quoteChip";
 import { computeToolbarPosition } from "./selectionToolbarPolicy";
 import type { TimelineSelectionQuote } from "../../../hooks/useTimelineSelection";
 import { t } from "../../../i18n";
@@ -30,11 +19,7 @@ const TOOLBAR_HEIGHT = 28;
  * 2. 草稿末尾追加 #q<id> token（composer 内渲染为 ❝ 引用 chip）；
  * 3. 清除浏览器选区并聚焦本栏 composer。
  */
-export function SelectionToolbar(props: {
-	quote: TimelineSelectionQuote | null;
-	sessionId: string;
-	onConsume: () => void;
-}) {
+export function SelectionToolbar(props: { quote: TimelineSelectionQuote | null; sessionId: string; onConsume: () => void }) {
 	const drafts = useAtomValue(sessionDraftByIdAtom);
 	const setDraft = useSetAtom(setSessionDraftAtom);
 	const setQuotes = useSetAtom(setSessionQuotesAtom);
@@ -42,11 +27,7 @@ export function SelectionToolbar(props: {
 
 	const position = useMemo(() => {
 		if (!quote) return null;
-		return computeToolbarPosition(
-			quote.rect,
-			{ width: window.innerWidth, height: window.innerHeight },
-			{ width: TOOLBAR_WIDTH, height: TOOLBAR_HEIGHT },
-		);
+		return computeToolbarPosition(quote.rect, { width: window.innerWidth, height: window.innerHeight }, { width: TOOLBAR_WIDTH, height: TOOLBAR_HEIGHT });
 	}, [quote]);
 
 	if (!quote || !position) return null;
@@ -58,13 +39,8 @@ export function SelectionToolbar(props: {
 			messageId: quote.messageId,
 			createdAt: Date.now(),
 		};
-		const nextDraft = buildDraftWithAppendedQuote(
-			drafts[props.sessionId] ?? "",
-			buildQuoteToken(snippet.id),
-		);
-		const referencedIds = new Set(
-			extractQuoteTokens(nextDraft).map((occurrence) => occurrence.id),
-		);
+		const nextDraft = buildDraftWithAppendedQuote(drafts[props.sessionId] ?? "", buildQuoteToken(snippet.id));
+		const referencedIds = new Set(extractQuoteTokens(nextDraft).map((occurrence) => occurrence.id));
 		setQuotes({
 			sessionId: props.sessionId,
 			value: (current) => ({
@@ -77,11 +53,7 @@ export function SelectionToolbar(props: {
 		window.getSelection()?.removeAllRanges();
 		props.onConsume();
 		// 聚焦本栏输入框（SurfaceComponents「编辑重发」同款作用域选择器）
-		document
-			.querySelector<HTMLElement>(
-				".composer-box .tiptap-composer-host [contenteditable], .composer-box textarea",
-			)
-			?.focus();
+		document.querySelector<HTMLElement>(".composer-box .tiptap-composer-host [contenteditable], .composer-box textarea")?.focus();
 	};
 
 	return createPortal(

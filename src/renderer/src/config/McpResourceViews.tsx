@@ -1,11 +1,7 @@
 import { Fragment, useState } from "react";
 import { t } from "../i18n";
 import { Button } from "../components/ui-shadcn/button";
-import type {
-	McpServerDefinition,
-	McpServerListItem,
-	McpServerTransport,
-} from "../../../shared/types/mcp";
+import type { McpServerDefinition, McpServerListItem, McpServerTransport } from "../../../shared/types/mcp";
 import type { ResourceScope } from "./ResourceScopeSelector";
 
 const ADAPTER_INSTALL_SOURCE = "npm:pi-mcp-adapter";
@@ -65,51 +61,31 @@ export function McpAdapterGuide(props: { onInstalled: () => void }) {
 		<div className="rounded-md border border-border-subtle bg-bg-panel p-4">
 			<p className="text-control text-muted-foreground">{t("config.mcp.notInstalled.desc")}</p>
 			<div className="mt-3 flex flex-wrap items-center gap-2">
-				<Button
-					variant="default"
-					size="sm"
-					onClick={() => void install()}
-					disabled={installing}
-					loading={installing}
-				>
+				<Button variant="default" size="sm" onClick={() => void install()} disabled={installing} loading={installing}>
 					{installing ? t("config.mcp.notInstalled.installing") : t("config.mcp.notInstalled.install")}
 				</Button>
-				<code className="rounded-sm border border-border-subtle bg-bg-hover px-2 py-1 font-mono text-micro">
-					{installCmd}
-				</code>
+				<code className="rounded-sm border border-border-subtle bg-bg-hover px-2 py-1 font-mono text-micro">{installCmd}</code>
 				<Button variant="ghost" size="sm" onClick={() => void copyCommand()}>
 					{copied ? t("config.mcp.notInstalled.copied") : t("config.mcp.notInstalled.copyCmd")}
 				</Button>
 			</div>
-			{installFailed ? (
-				<p className="mt-2 text-micro text-danger">{t("config.mcp.notInstalled.installFailed")}</p>
-			) : null}
+			{installFailed ? <p className="mt-2 text-micro text-danger">{t("config.mcp.notInstalled.installFailed")}</p> : null}
 			<p className="mt-2 text-micro text-muted-foreground">{t("config.mcp.notInstalled.restartHint")}</p>
 		</div>
 	);
 }
 
 /** Scope-aware MCP source list. Project scope groups project definitions before inherited globals. */
-export function McpServerListPane(props: {
-	scope: ResourceScope;
-	projectLayerPaths: readonly string[];
-	servers: McpServerListItem[];
-	selected: string | null;
-	creating: boolean;
-	onSelect: (name: string) => void;
-}) {
-	const projectServers = props.servers.filter((item) =>
-		props.projectLayerPaths.some((path) => pathsEqual(item.originPath, path)),
-	);
-	const globalServers = props.servers.filter((item) =>
-		!props.projectLayerPaths.some((path) => pathsEqual(item.originPath, path)),
-	);
-	const groups = props.scope === "project"
-		? [
-			{ key: "project", label: t("config.resourceGroup.project"), items: projectServers },
-			{ key: "global", label: t("config.resourceGroup.global"), items: globalServers },
-		]
-		: [{ key: "global", label: t("config.resourceGroup.global"), items: globalServers }];
+export function McpServerListPane(props: { scope: ResourceScope; projectLayerPaths: readonly string[]; servers: McpServerListItem[]; selected: string | null; creating: boolean; onSelect: (name: string) => void }) {
+	const projectServers = props.servers.filter((item) => props.projectLayerPaths.some((path) => pathsEqual(item.originPath, path)));
+	const globalServers = props.servers.filter((item) => !props.projectLayerPaths.some((path) => pathsEqual(item.originPath, path)));
+	const groups =
+		props.scope === "project"
+			? [
+					{ key: "project", label: t("config.resourceGroup.project"), items: projectServers },
+					{ key: "global", label: t("config.resourceGroup.global"), items: globalServers },
+				]
+			: [{ key: "global", label: t("config.resourceGroup.global"), items: globalServers }];
 
 	return (
 		<div className="flex min-h-0 flex-col gap-1 overflow-auto rounded-md border border-border-subtle bg-bg-panel p-1.5">
@@ -118,11 +94,7 @@ export function McpServerListPane(props: {
 			) : (
 				groups.map((group) => (
 					<Fragment key={group.key}>
-						{props.scope === "project" && group.items.length > 0 ? (
-							<div className="px-2 pb-1 pt-2 text-micro font-semibold text-muted-foreground">
-								{group.label}
-							</div>
-						) : null}
+						{props.scope === "project" && group.items.length > 0 ? <div className="px-2 pb-1 pt-2 text-micro font-semibold text-muted-foreground">{group.label}</div> : null}
 						{group.items.map((item) => {
 							const disabled = isMcpServerDisabled(item.definition);
 							return (
@@ -143,9 +115,7 @@ export function McpServerListPane(props: {
 					</Fragment>
 				))
 			)}
-			{props.creating ? (
-				<div className="rounded-sm bg-accent/40 px-2 py-1.5 text-control font-medium">{t("config.mcp.newServer")}</div>
-			) : null}
+			{props.creating ? <div className="rounded-sm bg-accent/40 px-2 py-1.5 text-control font-medium">{t("config.mcp.newServer")}</div> : null}
 		</div>
 	);
 }

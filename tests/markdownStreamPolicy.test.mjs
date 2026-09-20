@@ -2,13 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
-const {
-	STREAM_LIGHT_MAX_CHARS,
-	STREAM_UNFREEZABLE_MIN_CHARS,
-	SETTLE_FULL_MAX_CHARS,
-	shouldRenderStreamPlain,
-	shouldKeepLightOnSettle,
-} = loadTsCommonJs("src/renderer/src/components/session/markdownStreamPolicy.ts");
+const { STREAM_LIGHT_MAX_CHARS, STREAM_UNFREEZABLE_MIN_CHARS, SETTLE_FULL_MAX_CHARS, shouldRenderStreamPlain, shouldKeepLightOnSettle } = loadTsCommonJs("src/renderer/src/components/session/markdownStreamPolicy.ts");
 
 test("阈值常量存在且符合治理口径", () => {
 	assert.equal(STREAM_LIGHT_MAX_CHARS, 40_000);

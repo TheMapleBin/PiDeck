@@ -30,160 +30,139 @@ import { isLiveRuntimeStatus, resolveProxyApplyStrategy, toSessionRuntimeTarget 
 import type { SessionProxyMode } from "../../../../shared/types/session";
 
 const PROXY_OPTIONS: Array<{
-  id: SessionProxyMode;
-  icon: typeof Globe;
-  labelKey: "sessionProxy.follow" | "sessionProxy.on" | "sessionProxy.off";
-  descKey: "sessionProxy.followDesc" | "sessionProxy.onDesc" | "sessionProxy.offDesc";
+	id: SessionProxyMode;
+	icon: typeof Globe;
+	labelKey: "sessionProxy.follow" | "sessionProxy.on" | "sessionProxy.off";
+	descKey: "sessionProxy.followDesc" | "sessionProxy.onDesc" | "sessionProxy.offDesc";
 }> = [
-  { id: "follow", icon: Globe, labelKey: "sessionProxy.follow", descKey: "sessionProxy.followDesc" },
-  { id: "on", icon: PlugZap, labelKey: "sessionProxy.on", descKey: "sessionProxy.onDesc" },
-  { id: "off", icon: Unplug, labelKey: "sessionProxy.off", descKey: "sessionProxy.offDesc" },
+	{ id: "follow", icon: Globe, labelKey: "sessionProxy.follow", descKey: "sessionProxy.followDesc" },
+	{ id: "on", icon: PlugZap, labelKey: "sessionProxy.on", descKey: "sessionProxy.onDesc" },
+	{ id: "off", icon: Unplug, labelKey: "sessionProxy.off", descKey: "sessionProxy.offDesc" },
 ];
 
 export function SessionProxyDialog(props: { sessionId: string; onClose: () => void }) {
-  const record = useAtomValue(sessionRecordByIdAtomFamily(props.sessionId));
-  const upsertSession = useSetAtom(upsertSessionAtom);
-  const store = useStore();
-  // 订阅本会话 runtime：用于展示「保存即重启生效」提示（保存动作本身读 store 快照）。
-  const liveRuntime = useAtomValue(sessionRuntimeBySessionIdAtomFamily(props.sessionId));
-  const [saving, setSaving] = useState(false);
-  const [globalProxy, setGlobalProxy] = useState<{ enabled: boolean; url: string; providers: string[] } | null>(null);
+	const record = useAtomValue(sessionRecordByIdAtomFamily(props.sessionId));
+	const upsertSession = useSetAtom(upsertSessionAtom);
+	const store = useStore();
+	// 订阅本会话 runtime：用于展示「保存即重启生效」提示（保存动作本身读 store 快照）。
+	const liveRuntime = useAtomValue(sessionRuntimeBySessionIdAtomFamily(props.sessionId));
+	const [saving, setSaving] = useState(false);
+	const [globalProxy, setGlobalProxy] = useState<{ enabled: boolean; url: string; providers: string[] } | null>(null);
 
-  // 当前生效模式：会话记录覆盖 > 跟随全局（缺省）
-  const currentMode: SessionProxyMode = record?.proxy?.mode ?? "follow";
-  const isDsh = record?.backend === "dsh";
-  const provider = record?.model?.provider;
-  /** 该会话当前是否有存活进程：决定「保存即生效」还是「下次启动生效」。 */
-  const isSessionLive = isLiveRuntimeStatus(liveRuntime?.status);
+	// 当前生效模式：会话记录覆盖 > 跟随全局（缺省）
+	const currentMode: SessionProxyMode = record?.proxy?.mode ?? "follow";
+	const isDsh = record?.backend === "dsh";
+	const provider = record?.model?.provider;
+	/** 该会话当前是否有存活进程：决定「保存即生效」还是「下次启动生效」。 */
+	const isSessionLive = isLiveRuntimeStatus(liveRuntime?.status);
 
-  useEffect(() => {
-    let cancelled = false;
-    // 打开时拉一次全局代理状态，用于展示「启用代理」时的地址来源与空地址告警
-    void desktopApi.settings.get().then((settings) => {
-      if (cancelled) return;
-      setGlobalProxy({ enabled: settings.piProxyEnabled, url: settings.piProxyUrl, providers: settings.piProxyProviders ?? [] });
-    }).catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+	useEffect(() => {
+		let cancelled = false;
+		// 打开时拉一次全局代理状态，用于展示「启用代理」时的地址来源与空地址告警
+		void desktopApi.settings
+			.get()
+			.then((settings) => {
+				if (cancelled) return;
+				setGlobalProxy({ enabled: settings.piProxyEnabled, url: settings.piProxyUrl, providers: settings.piProxyProviders ?? [] });
+			})
+			.catch(() => undefined);
+		return () => {
+			cancelled = true;
+		};
+	}, []);
 
-  const save = async (mode: SessionProxyMode) => {
-    if (saving) return;
-    setSaving(true);
-    try {
-      const updated = await desktopApi.sessions.updateRecord(props.sessionId, { proxy: { mode } });
-      upsertSession(updated);
+	const save = async (mode: SessionProxyMode) => {
+		if (saving) return;
+		setSaving(true);
+		try {
+			const updated = await desktopApi.sessions.updateRecord(props.sessionId, { proxy: { mode } });
+			upsertSession(updated);
 
-      // 代理写在 spawn env 上：进程不重建就不会重新读。因此保存后若该会话仍在运行，
-      // 直接在这里重启其进程，把「改设置 + 停止 + 启动」三步压成一步。
-      // 判定收敛在纯函数里（含 DSH 共享 host 不能按会话重启的规则），见 sessionCommands。
-      // 读的是 store 快照而非 React state，避免与本组件渲染时机耦合。
-      const runtime = store.get(sessionRuntimeBySessionIdAtomFamily(props.sessionId));
-      const target = toSessionRuntimeTarget(props.sessionId, runtime);
-      const strategy = resolveProxyApplyStrategy({
-        backend: record?.backend,
-        hasBinding: Boolean(target),
-        isLive: isLiveRuntimeStatus(runtime?.status),
-      });
+			// 代理写在 spawn env 上：进程不重建就不会重新读。因此保存后若该会话仍在运行，
+			// 直接在这里重启其进程，把「改设置 + 停止 + 启动」三步压成一步。
+			// 判定收敛在纯函数里（含 DSH 共享 host 不能按会话重启的规则），见 sessionCommands。
+			// 读的是 store 快照而非 React state，避免与本组件渲染时机耦合。
+			const runtime = store.get(sessionRuntimeBySessionIdAtomFamily(props.sessionId));
+			const target = toSessionRuntimeTarget(props.sessionId, runtime);
+			const strategy = resolveProxyApplyStrategy({
+				backend: record?.backend,
+				hasBinding: Boolean(target),
+				isLive: isLiveRuntimeStatus(runtime?.status),
+			});
 
-      if (strategy === "restart-now" && target) {
-        showNotice(t("sessionProxy.restartingForApply"), 3000);
-        const result = await desktopApi.sessions.restartRuntime(target);
-        if (!result.ok) {
-          // 重启失败不回滚已保存的设置：设置本身是用户意图，下次启动仍会生效；
-          // 只是「立即生效」这一步没成功，明确告知避免用户以为代理已生效。
-          showNotice(t("sessionProxy.savedRestartFailed"), 5000);
-          setSaving(false);
-          return;
-        }
-        showNotice(t("sessionProxy.savedApplied"), 3000);
-      } else {
-        showNotice(
-          strategy === "dsh-host-restart"
-            ? t("sessionProxy.dshSavedNotice")
-            : t("sessionProxy.savedNotice"),
-          3000,
-        );
-      }
-      props.onClose();
-    } catch (error) {
-      showNotice(error instanceof Error ? error.message : String(error), 4000);
-      setSaving(false);
-    }
-  };
+			if (strategy === "restart-now" && target) {
+				showNotice(t("sessionProxy.restartingForApply"), 3000);
+				const result = await desktopApi.sessions.restartRuntime(target);
+				if (!result.ok) {
+					// 重启失败不回滚已保存的设置：设置本身是用户意图，下次启动仍会生效；
+					// 只是「立即生效」这一步没成功，明确告知避免用户以为代理已生效。
+					showNotice(t("sessionProxy.savedRestartFailed"), 5000);
+					setSaving(false);
+					return;
+				}
+				showNotice(t("sessionProxy.savedApplied"), 3000);
+			} else {
+				showNotice(strategy === "dsh-host-restart" ? t("sessionProxy.dshSavedNotice") : t("sessionProxy.savedNotice"), 3000);
+			}
+			props.onClose();
+		} catch (error) {
+			showNotice(error instanceof Error ? error.message : String(error), 4000);
+			setSaving(false);
+		}
+	};
 
-  const globalUrlEmpty = globalProxy !== null && !globalProxy.url.trim();
+	const globalUrlEmpty = globalProxy !== null && !globalProxy.url.trim();
 
-  return (
-    <Dialog open onOpenChange={(next) => { if (!next) props.onClose(); }}>
-      <DialogContent
-        showCloseButton={false}
-        className="flex max-h-[min(560px,calc(100vh-48px))] w-[min(420px,calc(100vw-48px))] flex-col gap-0 p-0"
-      >
-        {/* 头部 */}
-        <div className="flex flex-col gap-1 border-b border-border/60 px-4 py-3">
-          <h2 className="text-control font-semibold text-foreground">{t("sessionProxy.title")}</h2>
-          <p className="text-micro text-muted-foreground/80">{t("sessionProxy.manageHint")}</p>
-        </div>
+	return (
+		<Dialog
+			open
+			onOpenChange={(next) => {
+				if (!next) props.onClose();
+			}}
+		>
+			<DialogContent showCloseButton={false} className="flex max-h-[min(560px,calc(100vh-48px))] w-[min(420px,calc(100vw-48px))] flex-col gap-0 p-0">
+				{/* 头部 */}
+				<div className="flex flex-col gap-1 border-b border-border/60 px-4 py-3">
+					<h2 className="text-control font-semibold text-foreground">{t("sessionProxy.title")}</h2>
+					<p className="text-micro text-muted-foreground/80">{t("sessionProxy.manageHint")}</p>
+				</div>
 
-        {/* 三选一开关 */}
-        <div className="flex flex-col gap-1 px-2 py-2">
-          {PROXY_OPTIONS.map((option) => {
-            const selected = currentMode === option.id;
-            const Icon = option.icon;
-            return (
-              <Button
-                key={option.id}
-                type="button"
-                variant="ghost"
-                disabled={saving}
-                onClick={() => void save(option.id)}
-                className="flex h-auto min-h-11 w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left hover:bg-muted/60"
-              >
-                <span className={`grid size-6 shrink-0 place-items-center rounded-md ${selected ? "bg-primary/12 text-primary" : "bg-muted text-muted-foreground"}`}>
-                  <Icon size={14} aria-hidden="true" />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-control font-semibold text-foreground">{t(option.labelKey)}</span>
-                  <span className="block text-micro text-muted-foreground/75">{t(option.descKey)}</span>
-                </span>
-                {selected ? <Check size={15} className="shrink-0 text-primary" aria-hidden="true" /> : null}
-              </Button>
-            );
-          })}
-        </div>
+				{/* 三选一开关 */}
+				<div className="flex flex-col gap-1 px-2 py-2">
+					{PROXY_OPTIONS.map((option) => {
+						const selected = currentMode === option.id;
+						const Icon = option.icon;
+						return (
+							<Button key={option.id} type="button" variant="ghost" disabled={saving} onClick={() => void save(option.id)} className="flex h-auto min-h-11 w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left hover:bg-muted/60">
+								<span className={`grid size-6 shrink-0 place-items-center rounded-md ${selected ? "bg-primary/12 text-primary" : "bg-muted text-muted-foreground"}`}>
+									<Icon size={14} aria-hidden="true" />
+								</span>
+								<span className="min-w-0 flex-1">
+									<span className="block text-control font-semibold text-foreground">{t(option.labelKey)}</span>
+									<span className="block text-micro text-muted-foreground/75">{t(option.descKey)}</span>
+								</span>
+								{selected ? <Check size={15} className="shrink-0 text-primary" aria-hidden="true" /> : null}
+							</Button>
+						);
+					})}
+				</div>
 
-        {/* 全局代理状态 + 生效边界提示 */}
-        <div className="flex flex-col gap-1.5 border-t border-border/60 px-4 py-3 text-micro text-muted-foreground/80">
-          <p>
-            {t("sessionProxy.globalStatus", {
-              status: globalProxy === null
-                ? "…"
-                : globalProxy.enabled
-                  ? t("sessionProxy.globalOn", { url: globalProxy.url })
-                  : t("sessionProxy.globalOff"),
-            })}
-          </p>
-          {globalUrlEmpty && (
-            <p className="text-warning">{t("sessionProxy.globalEmptyWarn")}</p>
-          )}
-          {/* 按供应商过滤的生效提示：仅当 follow 时才会被白名单覆盖，显式 on/off 最高优 */}
-          {globalProxy && globalProxy.providers.length > 0 && currentMode === "follow" && provider && (
-            globalProxy.providers.includes(provider)
-              ? <p className="text-primary/80">{t("sessionProxy.providerFilterMatched", { provider })}</p>
-              : <p>{t("sessionProxy.providerFilterNotMatched", { provider })}</p>
-          )}
-          {globalProxy && globalProxy.providers.length > 0 && (
-            <p className="text-muted-foreground/60">{t("sessionProxy.providerFilterHint")}</p>
-          )}
-          {isDsh && <p className="text-muted-foreground/70">{t("sessionProxy.dshShareHint")}</p>}
-          {/* pi 会话运行中：保存即自动重启进程让代理生效，提前告知避免用户以为要手动重启 */}
-          {!isDsh && isSessionLive && (
-            <p className="text-primary/80">{t("sessionProxy.autoRestartHint")}</p>
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
+				{/* 全局代理状态 + 生效边界提示 */}
+				<div className="flex flex-col gap-1.5 border-t border-border/60 px-4 py-3 text-micro text-muted-foreground/80">
+					<p>
+						{t("sessionProxy.globalStatus", {
+							status: globalProxy === null ? "…" : globalProxy.enabled ? t("sessionProxy.globalOn", { url: globalProxy.url }) : t("sessionProxy.globalOff"),
+						})}
+					</p>
+					{globalUrlEmpty && <p className="text-warning">{t("sessionProxy.globalEmptyWarn")}</p>}
+					{/* 按供应商过滤的生效提示：仅当 follow 时才会被白名单覆盖，显式 on/off 最高优 */}
+					{globalProxy && globalProxy.providers.length > 0 && currentMode === "follow" && provider && (globalProxy.providers.includes(provider) ? <p className="text-primary/80">{t("sessionProxy.providerFilterMatched", { provider })}</p> : <p>{t("sessionProxy.providerFilterNotMatched", { provider })}</p>)}
+					{globalProxy && globalProxy.providers.length > 0 && <p className="text-muted-foreground/60">{t("sessionProxy.providerFilterHint")}</p>}
+					{isDsh && <p className="text-muted-foreground/70">{t("sessionProxy.dshShareHint")}</p>}
+					{/* pi 会话运行中：保存即自动重启进程让代理生效，提前告知避免用户以为要手动重启 */}
+					{!isDsh && isSessionLive && <p className="text-primary/80">{t("sessionProxy.autoRestartHint")}</p>}
+				</div>
+			</DialogContent>
+		</Dialog>
+	);
 }

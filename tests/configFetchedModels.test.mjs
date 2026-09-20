@@ -15,15 +15,7 @@ function loadModelsTabModule() {
 test("builds multiple fetched models and skips duplicates", () => {
 	const { buildModelsFromFetchedSelection } = loadModelsTabModule();
 
-	const models = buildModelsFromFetchedSelection(
-		[
-			{ id: "gpt-4o", name: "GPT 4o" },
-			{ id: "gpt-4o-mini", name: "GPT 4o mini" },
-			{ id: "reasoner" },
-		],
-		["gpt-4o", "gpt-4o-mini", "gpt-4o", "already-added"],
-		[{ id: "already-added" }],
-	);
+	const models = buildModelsFromFetchedSelection([{ id: "gpt-4o", name: "GPT 4o" }, { id: "gpt-4o-mini", name: "GPT 4o mini" }, { id: "reasoner" }], ["gpt-4o", "gpt-4o-mini", "gpt-4o", "already-added"], [{ id: "already-added" }]);
 
 	assert.deepEqual(JSON.parse(JSON.stringify(models)), [
 		{ id: "gpt-4o", name: "GPT 4o" },

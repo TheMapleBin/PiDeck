@@ -1,44 +1,50 @@
 import { useState, useRef, useEffect, useMemo, type ReactNode } from "react";
-import { Archive, Boxes, Check, CircleAlert, CircleDot, CircleStop, Clock, Code2, Copy, Download, FileDown, FileText, Filter, Fingerprint, Folder, FolderSearch, GitBranch, Link2, List, LoaderCircle, MessageCircle, Pencil, Pin, PinOff, Play, Plus, Power, Radio, RefreshCw, RotateCw, ScrollText, Settings2, SquarePen, Trash2, UserPlus, XCircle } from "lucide-react";
+import {
+	Archive,
+	Boxes,
+	Check,
+	CircleAlert,
+	CircleDot,
+	CircleStop,
+	Clock,
+	Code2,
+	Copy,
+	Download,
+	FileDown,
+	FileText,
+	Filter,
+	Fingerprint,
+	Folder,
+	FolderSearch,
+	GitBranch,
+	Link2,
+	List,
+	LoaderCircle,
+	MessageCircle,
+	Pencil,
+	Pin,
+	PinOff,
+	Play,
+	Plus,
+	Power,
+	Radio,
+	RefreshCw,
+	RotateCw,
+	ScrollText,
+	Settings2,
+	SquarePen,
+	Trash2,
+	UserPlus,
+	XCircle,
+} from "lucide-react";
 import { t } from "../../i18n";
 import { copyTextWithCopiedNotice } from "../../utils/clipboardNotice";
-import {
-	canRunSessionAction,
-	type SessionRunAction,
-	type SessionRunCapabilities,
-} from "../../utils/sessionCommands";
-import {
-	AlertDialog,
-	AlertDialogAction,
-	AlertDialogCancel,
-	AlertDialogContent,
-	AlertDialogDescription,
-	AlertDialogFooter,
-	AlertDialogHeader,
-	AlertDialogTitle,
-} from "../ui-shadcn/alert-dialog";
-import {
-	Dialog,
-	DialogClose,
-	DialogContent,
-	DialogFooter,
-	DialogHeader,
-	DialogTitle,
-} from "../ui-shadcn/dialog";
+import { canRunSessionAction, type SessionRunAction, type SessionRunCapabilities } from "../../utils/sessionCommands";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "../ui-shadcn/alert-dialog";
+import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "../ui-shadcn/dialog";
 import { X } from "lucide-react";
 import { cn } from "../../lib/utils";
-import {
-	DropdownMenu,
-	DropdownMenuCheckboxItem,
-	DropdownMenuContent,
-	DropdownMenuItem,
-	DropdownMenuLabel,
-	DropdownMenuSeparator,
-	DropdownMenuSub,
-	DropdownMenuSubContent,
-	DropdownMenuSubTrigger,
-	DropdownMenuTrigger,
-} from "../ui-shadcn/dropdown-menu";
+import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "../ui-shadcn/dropdown-menu";
 import { Button } from "../ui-shadcn/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui-shadcn/table";
 import type { SessionSummary, Project, AgentTab, ArchivedDshSession, ArchivedPiSession } from "../../../../shared/types";
@@ -47,25 +53,8 @@ import { SessionSourceBadge, SessionBackendMark, DshSourceBadge, ImageGenSourceB
 import { Checkbox } from "../ui-shadcn/checkbox";
 import { Input } from "../ui-shadcn/input";
 import { Label } from "../../components/ui-shadcn/label";
-import {
-	SESSION_FILTER_PILLS,
-	filterSessionsByPills,
-	pillsPresentIn,
-	type SessionFilterPill,
-} from "../../sessionFilterPills";
-import {
-	archivedDshWorkspaceLabel,
-	archivedPiWorkspaceLabel,
-	filterArchivedDshByFamily,
-	filterArchivedPiByFamily,
-	managerArchivedDshLabel,
-	managerArchivedRowKey,
-	mergeManagerArchived,
-	sessionManagerRowKey,
-	sessionWorkspaceLabel,
-	worktreeFamilyProjects,
-	type ManagerArchivedRow,
-} from "../../sessionManagerModel";
+import { SESSION_FILTER_PILLS, filterSessionsByPills, pillsPresentIn, type SessionFilterPill } from "../../sessionFilterPills";
+import { archivedDshWorkspaceLabel, archivedPiWorkspaceLabel, filterArchivedDshByFamily, filterArchivedPiByFamily, managerArchivedDshLabel, managerArchivedRowKey, mergeManagerArchived, sessionManagerRowKey, sessionWorkspaceLabel, worktreeFamilyProjects, type ManagerArchivedRow } from "../../sessionManagerModel";
 
 /**
  * 工作区标签（会话管理弹窗内复用）：worktree 家族聚合后，非主工作区会话
@@ -73,10 +62,7 @@ import {
  */
 function WorkspaceTag(props: { label: string }) {
 	return (
-		<span
-			className="inline-flex shrink-0 items-center gap-0.5 rounded-[4px] border border-border-subtle bg-bg-muted px-1 py-px text-micro text-muted-foreground"
-			title={t("sessionManager.workspaceTag", { name: props.label })}
-		>
+		<span className="inline-flex shrink-0 items-center gap-0.5 rounded-[4px] border border-border-subtle bg-bg-muted px-1 py-px text-micro text-muted-foreground" title={t("sessionManager.workspaceTag", { name: props.label })}>
 			<GitBranch size={10} strokeWidth={2} aria-hidden="true" />
 			<span className="max-w-24 truncate">{props.label}</span>
 		</span>
@@ -109,10 +95,7 @@ export function SessionManagerModal(props: {
 	deleteArchivedDsh: (dshSessionId: string) => Promise<void>;
 }) {
 	// 弹窗项目上下文 = 整个 worktree 家族（根 + 全部子工作区），与侧栏工作区树语义一致。
-	const family = useMemo(
-		() => worktreeFamilyProjects(props.projects, props.projectId),
-		[props.projects, props.projectId],
-	);
+	const family = useMemo(() => worktreeFamilyProjects(props.projects, props.projectId), [props.projects, props.projectId]);
 	// 过滤 pill 集合：来源（pi/codex/claude/opencode）+ DSH 后端。
 	// DSH 会话 source 恒为 "pi"，归属判定必须按 backend 优先（见 sessionFilterPills）。
 	const [activePills, setActivePills] = useState<Set<SessionFilterPill>>(new Set(SESSION_FILTER_PILLS));
@@ -128,10 +111,7 @@ export function SessionManagerModal(props: {
 	const [pendingDeleteArchived, setPendingDeleteArchived] = useState<ManagerArchivedRow[] | null>(null);
 
 	// 按 pill 过滤（一个会话只归属一个 pill，DSH 不与 Pi 重复计数）
-	const filteredSessions = useMemo(
-		() => filterSessionsByPills(props.sessions, activePills),
-		[props.sessions, activePills],
-	);
+	const filteredSessions = useMemo(() => filterSessionsByPills(props.sessions, activePills), [props.sessions, activePills]);
 
 	const togglePill = (pill: SessionFilterPill) => {
 		setActivePills((prev) => {
@@ -181,10 +161,7 @@ export function SessionManagerModal(props: {
 	const loadArchivedRows = () => {
 		void Promise.all([props.listArchived(), props.listArchivedDsh()])
 			.then(([piSessions, dshItems]) => {
-				setArchivedRows(mergeManagerArchived(
-					filterArchivedPiByFamily(piSessions, family),
-					filterArchivedDshByFamily(dshItems, family),
-				));
+				setArchivedRows(mergeManagerArchived(filterArchivedPiByFamily(piSessions, family), filterArchivedDshByFamily(dshItems, family)));
 				// 数据刷新后清空选中，避免删除/恢复后残留全选或计数。
 				setArchivedSelected(new Set());
 				setArchivedSelectAll(false);
@@ -205,7 +182,8 @@ export function SessionManagerModal(props: {
 	const handleToggleArchived = (key: string) => {
 		setArchivedSelected((prev) => {
 			const next = new Set(prev);
-			if (next.has(key)) next.delete(key); else next.add(key);
+			if (next.has(key)) next.delete(key);
+			else next.add(key);
 			setArchivedSelectAll(next.size === (archivedRows?.length ?? 0));
 			return next;
 		});
@@ -234,274 +212,243 @@ export function SessionManagerModal(props: {
 						</DialogClose>
 					</div>
 				</DialogHeader>
-			<div className="flex min-h-0 flex-1 flex-col overflow-hidden border-none bg-transparent shadow-none">
-				<div className="flex shrink-0 items-center justify-between border-b border-border-subtle bg-bg-muted px-5 py-2.5">
-					<div className="flex items-center gap-3.5">
-						{!showArchived && (
-							<>
+				<div className="flex min-h-0 flex-1 flex-col overflow-hidden border-none bg-transparent shadow-none">
+					<div className="flex shrink-0 items-center justify-between border-b border-border-subtle bg-bg-muted px-5 py-2.5">
+						<div className="flex items-center gap-3.5">
+							{!showArchived && (
+								<>
+									<Label className="flex cursor-pointer items-center gap-2 text-control text-text-secondary select-none">
+										<Checkbox checked={selectAll} onCheckedChange={handleToggleAll} className="m-0 size-[15px] cursor-pointer accent-[var(--color-accent)]" />
+										{t("common.selectAll")}
+									</Label>
+									<div className="flex items-center gap-1">
+										{/* 只渲染当前会话实际存在的类别（Chat 区通常只有 pi/生图，不摆空导入 pill） */}
+										{pillsPresentIn(props.sessions).map((pill) => (
+											<Button
+												key={pill}
+												variant="outline"
+												size="sm"
+												className={`h-auto rounded-full border border-border-subtle bg-transparent px-3 py-1 text-caption font-medium text-text-tertiary transition-all duration-150 hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]${activePills.has(pill) ? " border-[var(--color-accent)] bg-bg-active font-semibold text-[var(--color-accent)]" : ""}`}
+												onClick={() => togglePill(pill)}
+											>
+												{t(pill === "dsh" ? "sessionBackend.dsh" : pill === "imagegen" ? "sessionBackend.imagegen" : `sessionSource.${pill}`)}
+											</Button>
+										))}
+									</div>
+								</>
+							)}
+							{showArchived && (
 								<Label className="flex cursor-pointer items-center gap-2 text-control text-text-secondary select-none">
-									<Checkbox
-										checked={selectAll}
-										onCheckedChange={handleToggleAll}
-									className="m-0 size-[15px] cursor-pointer accent-[var(--color-accent)]" />
+									<Checkbox checked={archivedSelectAll} onCheckedChange={handleToggleAllArchived} className="m-0 size-[15px] cursor-pointer accent-[var(--color-accent)]" />
 									{t("common.selectAll")}
 								</Label>
-								<div className="flex items-center gap-1">
-									{/* 只渲染当前会话实际存在的类别（Chat 区通常只有 pi/生图，不摆空导入 pill） */}
-									{pillsPresentIn(props.sessions).map((pill) => (
-										<Button
-											key={pill}
-											variant="outline"
-											size="sm"
-											className={`h-auto rounded-full border border-border-subtle bg-transparent px-3 py-1 text-caption font-medium text-text-tertiary transition-all duration-150 hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]${activePills.has(pill) ? " border-[var(--color-accent)] bg-bg-active font-semibold text-[var(--color-accent)]" : ""}`}
-											onClick={() => togglePill(pill)}
-										>
-											{t(pill === "dsh" ? "sessionBackend.dsh" : pill === "imagegen" ? "sessionBackend.imagegen" : `sessionSource.${pill}`)}
-										</Button>
-									))}
-								</div>
-							</>
-						)}
-						{showArchived && (
-							<Label className="flex cursor-pointer items-center gap-2 text-control text-text-secondary select-none">
-								<Checkbox
-									checked={archivedSelectAll}
-									onCheckedChange={handleToggleAllArchived}
-									className="m-0 size-[15px] cursor-pointer accent-[var(--color-accent)]" />
-								{t("common.selectAll")}
-							</Label>
-						)}
-					</div>
-					<div className="flex items-center gap-2">
-						{!showArchived && selected.size > 0 && (
+							)}
+						</div>
+						<div className="flex items-center gap-2">
+							{!showArchived && selected.size > 0 && (
+								<Button
+									variant="outline"
+									size="sm"
+									className="h-auto gap-1 border border-border-subtle px-3 py-1 text-caption font-medium text-text-tertiary transition-all duration-150 hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
+									onClick={() => {
+										// 批量归档选中行（与删除同粒度）；运行中会话由主进程拒绝并提示
+										const toArchive = props.sessions.filter((s) => selected.has(s.id));
+										if (toArchive.length > 0) props.onArchive(toArchive);
+									}}
+								>
+									{t("sessionManager.archiveSelected", { count: selected.size })}
+								</Button>
+							)}
+							{!showArchived && selected.size > 0 && (
+								<Button
+									variant="outline"
+									size="sm"
+									className="h-auto gap-1 border border-[color-mix(in_srgb,var(--color-danger)_28%,transparent)] px-3 py-1 text-caption font-medium text-[var(--color-danger)] shadow-none transition-all duration-150 hover:border-[var(--color-danger)] hover:bg-[var(--color-danger-soft)]"
+									onClick={handleDeleteSelected}
+								>
+									{t("common.deleteSelected", { count: selected.size })}
+								</Button>
+							)}
+							{showArchived && archivedSelected.size > 0 && (
+								<Button
+									variant="outline"
+									size="sm"
+									className="h-auto gap-1 border border-[color-mix(in_srgb,var(--color-danger)_28%,transparent)] px-3 py-1 text-caption font-medium text-[var(--color-danger)] shadow-none transition-all duration-150 hover:border-[var(--color-danger)] hover:bg-[var(--color-danger-soft)]"
+									onClick={handleDeleteArchivedSelected}
+								>
+									{t("common.deleteSelected", { count: archivedSelected.size })}
+								</Button>
+							)}
 							<Button
-								variant="outline" size="sm" className="h-auto gap-1 border border-border-subtle px-3 py-1 text-caption font-medium text-text-tertiary transition-all duration-150 hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
+								variant="outline"
+								size="sm"
+								className={`h-auto gap-1 rounded-full border border-border-subtle bg-transparent px-3 py-1 text-caption font-medium transition-all duration-150 hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]${showArchived ? " border-[var(--color-accent)] bg-bg-active font-semibold text-[var(--color-accent)]" : " text-text-tertiary"}`}
 								onClick={() => {
-									// 批量归档选中行（与删除同粒度）；运行中会话由主进程拒绝并提示
-									const toArchive = props.sessions.filter((s) => selected.has(s.id));
-									if (toArchive.length > 0) props.onArchive(toArchive);
+									if (showArchived) {
+										setShowArchived(false);
+										// 离开归档视图清空选中，避免下次进来残留高亮/批量计数。
+										setArchivedSelected(new Set());
+										setArchivedSelectAll(false);
+									} else {
+										// 打开归档视图时懒加载归档列表（pi 文件归档 + DSH host 目录归档）
+										if (archivedRows === null) loadArchivedRows();
+										setShowArchived(true);
+									}
 								}}
 							>
-								{t("sessionManager.archiveSelected", { count: selected.size })}
+								<Archive size={13} aria-hidden="true" />
+								{t("sessionManager.archived")}
 							</Button>
+						</div>
+					</div>
+
+					<div className="flex-1 overflow-y-auto bg-bg-muted [scrollbar-gutter:stable]">
+						{showArchived ? (
+							<Table>
+								<TableHeader>
+									<TableRow className="bg-bg-muted hover:bg-bg-muted">
+										<TableHead className="w-10" />
+										<TableHead className="w-full">{t("sessionManager.session")}</TableHead>
+										<TableHead className="w-40 text-right">{t("sessionManager.actions")}</TableHead>
+									</TableRow>
+								</TableHeader>
+								<TableBody>
+									{archivedRows === null ? (
+										<TableRow>
+											<TableCell colSpan={3} className="py-6 text-center text-caption text-muted-foreground">
+												…
+											</TableCell>
+										</TableRow>
+									) : archivedRows.length === 0 ? (
+										<TableRow>
+											<TableCell colSpan={3} className="py-6 text-center text-caption text-muted-foreground">
+												{t("sessionManager.archivedEmpty")}
+											</TableCell>
+										</TableRow>
+									) : (
+										archivedRows.map((row) => {
+											// 归档行工作区标签：worktree 子项目会话打「目录名」标（与主列表同策略），主工作区不打。
+											const workspaceLabel = row.kind === "pi" ? archivedPiWorkspaceLabel(row.item, family) : archivedDshWorkspaceLabel(row.item, family);
+											const rowKey = managerArchivedRowKey(row);
+											const isChecked = archivedSelected.has(rowKey);
+											return (
+												<TableRow key={rowKey} className="group bg-bg-panel" data-state={isChecked ? "selected" : undefined}>
+													<TableCell className="w-10">
+														<Label className="flex shrink-0 cursor-pointer items-center">
+															<Checkbox checked={isChecked} onCheckedChange={() => handleToggleArchived(rowKey)} className="m-0 size-[15px] cursor-pointer accent-[var(--color-accent)]" />
+														</Label>
+													</TableCell>
+													<TableCell className="w-full max-w-0">
+														{row.kind === "pi" ? (
+															<div className="flex min-w-0 items-center gap-2">
+																<span className="truncate text-control text-text-primary">{row.item.summary.name || row.item.summary.preview?.slice(0, 60) || t("common.untitled")}</span>
+																{workspaceLabel && <WorkspaceTag label={workspaceLabel} />}
+																{row.item.summary.source && row.item.summary.source !== "pi" && <SessionSourceBadge source={row.item.summary.source} />}
+															</div>
+														) : (
+															// DSH 归档行：manifest/日志折叠标题 > cwd 末段 > host id（managerArchivedDshLabel 纯策略）。
+															// 不展示 cwd 路径（同家族下路径信息无益；cwd 末段兜底已含区分能力）。
+															<div className="flex min-w-0 items-center gap-2">
+																<span className="truncate text-control text-text-primary">
+																	<span className="font-medium">{managerArchivedDshLabel(row)}</span>
+																</span>
+																{workspaceLabel && <WorkspaceTag label={workspaceLabel} />}
+																<SessionBackendMark backend="dsh" />
+															</div>
+														)}
+													</TableCell>
+													<TableCell className="w-40 text-right">
+														<div className="flex items-center justify-end gap-0.5">
+															<Button
+																variant="ghost"
+																size="sm"
+																className="h-auto gap-[3px] rounded-[4px] px-2 text-caption text-text-tertiary transition-all duration-150 hover:bg-bg-hover hover:text-[var(--color-accent)]"
+																onClick={() => {
+																	// 恢复后重新拉取归档列表（主列表由 catalog refresh 自动更新）
+																	const restored = row.kind === "pi" ? props.onUnarchive(row.item.summary) : props.onUnarchiveDsh(row.item.dshSessionId);
+																	void restored.then(loadArchivedRows);
+																}}
+																title={t("sessionManager.restore")}
+															>
+																{t("sessionManager.restore")}
+															</Button>
+															<Button variant="ghost" size="sm" className="h-auto gap-[3px] rounded-[4px] px-2 text-caption text-text-tertiary transition-all duration-150 hover:bg-[var(--color-danger-soft)] hover:text-[var(--color-danger)]" onClick={() => setPendingDeleteArchived([row])} title={t("common.delete")}>
+																<Trash2 size={12} aria-hidden="true" />
+																{t("common.delete")}
+															</Button>
+														</div>
+													</TableCell>
+												</TableRow>
+											);
+										})
+									)}
+								</TableBody>
+							</Table>
+						) : (
+							<Table>
+								<TableHeader>
+									<TableRow className="bg-bg-muted hover:bg-bg-muted">
+										<TableHead className="w-10" />
+										<TableHead className="w-full">{t("sessionManager.session")}</TableHead>
+										<TableHead className="w-40 text-right">{t("sessionManager.actions")}</TableHead>
+									</TableRow>
+								</TableHeader>
+								<TableBody>
+									{filteredSessions.map((session) => {
+										const isChecked = selected.has(session.id);
+										return (
+											<TableRow key={sessionManagerRowKey(session)} className="group bg-bg-panel" data-state={isChecked ? "selected" : undefined}>
+												<TableCell className="w-10">
+													<Label className="flex shrink-0 cursor-pointer items-center">
+														<Checkbox checked={isChecked} onCheckedChange={() => handleToggle(session.id)} className="m-0 size-[15px] cursor-pointer accent-[var(--color-accent)]" />
+													</Label>
+												</TableCell>
+												<TableCell className="w-full max-w-0">
+													<div className="flex min-w-0 cursor-pointer items-center gap-2" onClick={() => handleToggle(session.id)}>
+														<span className="truncate text-control text-text-primary">{session.name || session.preview?.slice(0, 60) || t("common.untitled")}</span>
+														{/* worktree 家族聚合：非主工作区会话打目录名标签，让用户一眼区分会话属于哪个工作区 */}
+														{sessionWorkspaceLabel(session.projectId, family) && <WorkspaceTag label={sessionWorkspaceLabel(session.projectId, family)!} />}
+														{session.backend === "dsh" || session.backend === "imagegen" ? (
+															// DSH/生图会话无来源徽标（source 恒为 pi），用后端徽标区分（与侧栏树一致）
+															<SessionBackendMark backend={session.backend} />
+														) : (
+															session.source && session.source !== "pi" && <SessionSourceBadge source={session.source} />
+														)}
+													</div>
+												</TableCell>
+												<TableCell className="w-40 text-right">
+													<div className="flex items-center justify-end gap-0.5">
+														<Button variant="ghost" size="sm" className="h-auto gap-[3px] rounded-[4px] px-2 text-caption text-text-tertiary transition-all duration-150 hover:bg-bg-hover hover:text-[var(--color-accent)]" onClick={() => props.onRename(session)} title={t("common.rename")}>
+															{t("common.rename")}
+														</Button>
+														<Button variant="ghost" size="sm" className="h-auto gap-[3px] rounded-[4px] px-2 text-caption text-text-tertiary transition-all duration-150 hover:bg-bg-hover hover:text-[var(--color-accent)]" onClick={() => props.onExport(session)} title={t("menu.exportHtml")}>
+															{t("menu.exportHtml")}
+														</Button>
+														<Button variant="ghost" size="sm" className="h-auto gap-[3px] rounded-[4px] px-2 text-caption text-text-tertiary transition-all duration-150 hover:bg-bg-hover hover:text-[var(--color-accent)]" onClick={() => props.onArchive([session])} title={t("sessionManager.archiveAction")}>
+															<Archive size={12} aria-hidden="true" />
+															{t("sessionManager.archiveAction")}
+														</Button>
+														<Button variant="ghost" size="sm" className="h-auto gap-[3px] rounded-[4px] px-2 text-caption text-text-tertiary transition-all duration-150 hover:bg-[var(--color-danger-soft)] hover:text-[var(--color-danger)]" onClick={() => props.onDelete([session])} title={t("common.delete")}>
+															{t("common.delete")}
+														</Button>
+													</div>
+												</TableCell>
+											</TableRow>
+										);
+									})}
+								</TableBody>
+							</Table>
 						)}
-						{!showArchived && selected.size > 0 && (
-							<Button
-								variant="outline" size="sm" className="h-auto gap-1 border border-[color-mix(in_srgb,var(--color-danger)_28%,transparent)] px-3 py-1 text-caption font-medium text-[var(--color-danger)] shadow-none transition-all duration-150 hover:border-[var(--color-danger)] hover:bg-[var(--color-danger-soft)]"
-								onClick={handleDeleteSelected}
-							>
-								{t("common.deleteSelected", { count: selected.size })}
-							</Button>
-						)}
-						{showArchived && archivedSelected.size > 0 && (
-							<Button
-								variant="outline" size="sm" className="h-auto gap-1 border border-[color-mix(in_srgb,var(--color-danger)_28%,transparent)] px-3 py-1 text-caption font-medium text-[var(--color-danger)] shadow-none transition-all duration-150 hover:border-[var(--color-danger)] hover:bg-[var(--color-danger-soft)]"
-								onClick={handleDeleteArchivedSelected}
-							>
-								{t("common.deleteSelected", { count: archivedSelected.size })}
-							</Button>
-						)}
-						<Button
-							variant="outline"
-							size="sm"
-							className={`h-auto gap-1 rounded-full border border-border-subtle bg-transparent px-3 py-1 text-caption font-medium transition-all duration-150 hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]${showArchived ? " border-[var(--color-accent)] bg-bg-active font-semibold text-[var(--color-accent)]" : " text-text-tertiary"}`}
-							onClick={() => {
-								if (showArchived) {
-									setShowArchived(false);
-									// 离开归档视图清空选中，避免下次进来残留高亮/批量计数。
-									setArchivedSelected(new Set());
-									setArchivedSelectAll(false);
-								} else {
-									// 打开归档视图时懒加载归档列表（pi 文件归档 + DSH host 目录归档）
-									if (archivedRows === null) loadArchivedRows();
-									setShowArchived(true);
-								}
-							}}
-						>
-							<Archive size={13} aria-hidden="true" />
-							{t("sessionManager.archived")}
-						</Button>
 					</div>
 				</div>
-
-				<div className="flex-1 overflow-y-auto bg-bg-muted [scrollbar-gutter:stable]">
-					{showArchived ? (
-						<Table>
-							<TableHeader>
-								<TableRow className="bg-bg-muted hover:bg-bg-muted">
-									<TableHead className="w-10" />
-									<TableHead className="w-full">{t("sessionManager.session")}</TableHead>
-									<TableHead className="w-40 text-right">{t("sessionManager.actions")}</TableHead>
-								</TableRow>
-							</TableHeader>
-							<TableBody>
-								{archivedRows === null ? (
-									<TableRow><TableCell colSpan={3} className="py-6 text-center text-caption text-muted-foreground">…</TableCell></TableRow>
-								) : archivedRows.length === 0 ? (
-									<TableRow><TableCell colSpan={3} className="py-6 text-center text-caption text-muted-foreground">{t("sessionManager.archivedEmpty")}</TableCell></TableRow>
-								) : archivedRows.map((row) => {
-						// 归档行工作区标签：worktree 子项目会话打「目录名」标（与主列表同策略），主工作区不打。
-						const workspaceLabel = row.kind === "pi"
-							? archivedPiWorkspaceLabel(row.item, family)
-							: archivedDshWorkspaceLabel(row.item, family);
-						const rowKey = managerArchivedRowKey(row);
-						const isChecked = archivedSelected.has(rowKey);
-						return (
-						<TableRow key={rowKey} className="group bg-bg-panel" data-state={isChecked ? "selected" : undefined}>
-							<TableCell className="w-10">
-								<Label className="flex shrink-0 cursor-pointer items-center">
-									<Checkbox
-										checked={isChecked}
-										onCheckedChange={() => handleToggleArchived(rowKey)}
-										className="m-0 size-[15px] cursor-pointer accent-[var(--color-accent)]"
-									/>
-								</Label>
-							</TableCell>
-							<TableCell className="w-full max-w-0">
-								{row.kind === "pi" ? (
-									<div className="flex min-w-0 items-center gap-2">
-										<span className="truncate text-control text-text-primary">
-											{row.item.summary.name || row.item.summary.preview?.slice(0, 60) || t("common.untitled")}
-										</span>
-										{workspaceLabel && <WorkspaceTag label={workspaceLabel} />}
-										{row.item.summary.source && row.item.summary.source !== "pi" && <SessionSourceBadge source={row.item.summary.source} />}
-									</div>
-								) : (
-									// DSH 归档行：manifest/日志折叠标题 > cwd 末段 > host id（managerArchivedDshLabel 纯策略）。
-									// 不展示 cwd 路径（同家族下路径信息无益；cwd 末段兜底已含区分能力）。
-									<div className="flex min-w-0 items-center gap-2">
-										<span className="truncate text-control text-text-primary">
-											<span className="font-medium">{managerArchivedDshLabel(row)}</span>
-										</span>
-										{workspaceLabel && <WorkspaceTag label={workspaceLabel} />}
-										<SessionBackendMark backend="dsh" />
-									</div>
-								)}
-							</TableCell>
-							<TableCell className="w-40 text-right">
-								<div className="flex items-center justify-end gap-0.5">
-									<Button
-											variant="ghost" size="sm" className="h-auto gap-[3px] rounded-[4px] px-2 text-caption text-text-tertiary transition-all duration-150 hover:bg-bg-hover hover:text-[var(--color-accent)]"
-											onClick={() => {
-											// 恢复后重新拉取归档列表（主列表由 catalog refresh 自动更新）
-											const restored = row.kind === "pi"
-												? props.onUnarchive(row.item.summary)
-												: props.onUnarchiveDsh(row.item.dshSessionId);
-											void restored.then(loadArchivedRows);
-										}}
-											title={t("sessionManager.restore")}
-										>
-											{t("sessionManager.restore")}
-										</Button>
-										<Button
-											variant="ghost" size="sm" className="h-auto gap-[3px] rounded-[4px] px-2 text-caption text-text-tertiary transition-all duration-150 hover:bg-[var(--color-danger-soft)] hover:text-[var(--color-danger)]"
-											onClick={() => setPendingDeleteArchived([row])}
-											title={t("common.delete")}
-										>
-											<Trash2 size={12} aria-hidden="true" />
-											{t("common.delete")}
-										</Button>
-								</div>
-							</TableCell>
-						</TableRow>
-					);
-					})}
-							</TableBody>
-						</Table>
-					) : (
-						<Table>
-						<TableHeader>
-							<TableRow className="bg-bg-muted hover:bg-bg-muted">
-								<TableHead className="w-10" />
-								<TableHead className="w-full">{t("sessionManager.session")}</TableHead>
-								<TableHead className="w-40 text-right">{t("sessionManager.actions")}</TableHead>
-							</TableRow>
-						</TableHeader>
-						<TableBody>
-							{filteredSessions.map((session) => {
-								const isChecked = selected.has(session.id);
-								return (
-									<TableRow
-										key={sessionManagerRowKey(session)}
-										className="group bg-bg-panel"
-										data-state={isChecked ? "selected" : undefined}
-									>
-										<TableCell className="w-10">
-											<Label className="flex shrink-0 cursor-pointer items-center">
-												<Checkbox
-													checked={isChecked}
-													onCheckedChange={() => handleToggle(session.id)}
-													className="m-0 size-[15px] cursor-pointer accent-[var(--color-accent)]"
-												/>
-											</Label>
-										</TableCell>
-										<TableCell className="w-full max-w-0">
-											<div
-												className="flex min-w-0 cursor-pointer items-center gap-2"
-												onClick={() => handleToggle(session.id)}
-											>
-												<span className="truncate text-control text-text-primary">
-													{session.name || session.preview?.slice(0, 60) || t("common.untitled")}
-												</span>
-												{/* worktree 家族聚合：非主工作区会话打目录名标签，让用户一眼区分会话属于哪个工作区 */}
-												{sessionWorkspaceLabel(session.projectId, family) && (
-													<WorkspaceTag label={sessionWorkspaceLabel(session.projectId, family)!} />
-												)}
-												{session.backend === "dsh" || session.backend === "imagegen" ? (
-													// DSH/生图会话无来源徽标（source 恒为 pi），用后端徽标区分（与侧栏树一致）
-													<SessionBackendMark backend={session.backend} />
-												) : session.source && session.source !== "pi" && (
-													<SessionSourceBadge source={session.source} />
-												)}
-											</div>
-										</TableCell>
-										<TableCell className="w-40 text-right">
-											<div className="flex items-center justify-end gap-0.5">
-												<Button
-													variant="ghost" size="sm" className="h-auto gap-[3px] rounded-[4px] px-2 text-caption text-text-tertiary transition-all duration-150 hover:bg-bg-hover hover:text-[var(--color-accent)]"
-													onClick={() => props.onRename(session)}
-													title={t("common.rename")}
-												>
-													{t("common.rename")}
-												</Button>
-												<Button
-													variant="ghost" size="sm" className="h-auto gap-[3px] rounded-[4px] px-2 text-caption text-text-tertiary transition-all duration-150 hover:bg-bg-hover hover:text-[var(--color-accent)]"
-													onClick={() => props.onExport(session)}
-													title={t("menu.exportHtml")}
-												>
-													{t("menu.exportHtml")}
-												</Button>
-												<Button
-													variant="ghost" size="sm" className="h-auto gap-[3px] rounded-[4px] px-2 text-caption text-text-tertiary transition-all duration-150 hover:bg-bg-hover hover:text-[var(--color-accent)]"
-													onClick={() => props.onArchive([session])}
-													title={t("sessionManager.archiveAction")}
-												>
-													<Archive size={12} aria-hidden="true" />
-													{t("sessionManager.archiveAction")}
-												</Button>
-												<Button
-													variant="ghost" size="sm" className="h-auto gap-[3px] rounded-[4px] px-2 text-caption text-text-tertiary transition-all duration-150 hover:bg-[var(--color-danger-soft)] hover:text-[var(--color-danger)]"
-													onClick={() => props.onDelete([session])}
-													title={t("common.delete")}
-												>
-													{t("common.delete")}
-												</Button>
-											</div>
-										</TableCell>
-									</TableRow>
-								);
-							})}
-						</TableBody>
-						</Table>
-					)}
-				</div>
-			</div>
 			</DialogContent>
 			{/* 已归档行「删除」确认：删除不可恢复，danger 强调；确认后删除并刷新归档列表。
 			    单行/批量统一收敛到数组：length===1 显示会话名，多条显示计数。 */}
 			<AlertDialog
 				open={pendingDeleteArchived !== null}
-				onOpenChange={(next) => { if (!next) setPendingDeleteArchived(null); }}
+				onOpenChange={(next) => {
+					if (!next) setPendingDeleteArchived(null);
+				}}
 			>
 				<AlertDialogContent>
 					<AlertDialogHeader>
@@ -510,13 +457,13 @@ export function SessionManagerModal(props: {
 							{pendingDeleteArchived !== null && pendingDeleteArchived.length > 1
 								? t("sessionManager.deleteArchivedBodyMany", { count: pendingDeleteArchived.length })
 								: t("sessionManager.deleteArchivedBody", {
-									name: pendingDeleteArchived === null || pendingDeleteArchived.length === 0 ? ""
-										: pendingDeleteArchived[0].kind === "pi"
-											? (pendingDeleteArchived[0].item.summary.name
-													|| pendingDeleteArchived[0].item.summary.preview?.slice(0, 60)
-													|| t("common.untitled"))
-											: managerArchivedDshLabel(pendingDeleteArchived[0]),
-								})}
+										name:
+											pendingDeleteArchived === null || pendingDeleteArchived.length === 0
+												? ""
+												: pendingDeleteArchived[0].kind === "pi"
+													? pendingDeleteArchived[0].item.summary.name || pendingDeleteArchived[0].item.summary.preview?.slice(0, 60) || t("common.untitled")
+													: managerArchivedDshLabel(pendingDeleteArchived[0]),
+									})}
 						</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
@@ -527,9 +474,7 @@ export function SessionManagerModal(props: {
 								const pending = pendingDeleteArchived;
 								setPendingDeleteArchived(null);
 								if (!pending || pending.length === 0) return;
-								const deleting = Promise.all(pending.map((row) => row.kind === "pi"
-									? props.deleteArchived(row.item.summary.filePath)
-									: props.deleteArchivedDsh(row.item.dshSessionId)));
+								const deleting = Promise.all(pending.map((row) => (row.kind === "pi" ? props.deleteArchived(row.item.summary.filePath) : props.deleteArchivedDsh(row.item.dshSessionId))));
 								void deleting.then(loadArchivedRows).catch(() => loadArchivedRows());
 							}}
 						>
@@ -550,12 +495,13 @@ export function SessionManagerModal(props: {
  */
 function MenuShell(props: { x: number; y: number; onClose: () => void; className?: string; children: ReactNode }) {
 	return (
-		<DropdownMenu open onOpenChange={(open) => { if (!open) props.onClose(); }}>
-			<DropdownMenuTrigger
-				aria-hidden
-				tabIndex={-1}
-				style={{ position: "fixed", left: props.x, top: props.y, width: 0, height: 0, padding: 0, border: 0, background: "transparent", pointerEvents: "none" }}
-			/>
+		<DropdownMenu
+			open
+			onOpenChange={(open) => {
+				if (!open) props.onClose();
+			}}
+		>
+			<DropdownMenuTrigger aria-hidden tabIndex={-1} style={{ position: "fixed", left: props.x, top: props.y, width: 0, height: 0, padding: 0, border: 0, background: "transparent", pointerEvents: "none" }} />
 			<DropdownMenuContent align="start" side="bottom" className={props.className}>
 				{props.children}
 			</DropdownMenuContent>
@@ -563,13 +509,7 @@ function MenuShell(props: { x: number; y: number; onClose: () => void; className
 	);
 }
 
-export function SessionSourceFilterMenu(props: {
-	menu: { projectId: string; x: number; y: number };
-	filter: ReadonlySet<SessionFilterPill> | null;
-	onToggleSource: (source: SessionFilterPill) => void;
-	onClear: () => void;
-	onClose: () => void;
-}) {
+export function SessionSourceFilterMenu(props: { menu: { projectId: string; x: number; y: number }; filter: ReadonlySet<SessionFilterPill> | null; onToggleSource: (source: SessionFilterPill) => void; onClear: () => void; onClose: () => void }) {
 	// 过滤类别 = 来源 + DSH 后端（DSH 会话 source 恒为 pi，必须按 backend 独立归类，
 	// 否则「只选 Pi」会继续显示 DSH 会话，用户无法单独过滤）。
 	const sources = SESSION_FILTER_PILLS;
@@ -593,25 +533,16 @@ export function SessionSourceFilterMenu(props: {
 			<DropdownMenuCheckboxItem
 				checked={props.filter === null}
 				onSelect={(event) => event.preventDefault()}
-				onCheckedChange={(checked) => { if (checked) props.onClear(); }}
+				onCheckedChange={(checked) => {
+					if (checked) props.onClear();
+				}}
 			>
 				{t("menu.filterSourceAll")}
 			</DropdownMenuCheckboxItem>
 			<DropdownMenuSeparator />
 			{sources.map((pill) => (
-				<DropdownMenuCheckboxItem
-					key={pill}
-					checked={props.filter !== null && props.filter.has(pill)}
-					onSelect={(event) => event.preventDefault()}
-					onCheckedChange={() => props.onToggleSource(pill)}
-				>
-					{pill === "dsh" ? (
-						<DshSourceBadge />
-					) : pill === "imagegen" ? (
-						<ImageGenSourceBadge />
-					) : (
-						<SessionSourceBadge source={pill} />
-					)}
+				<DropdownMenuCheckboxItem key={pill} checked={props.filter !== null && props.filter.has(pill)} onSelect={(event) => event.preventDefault()} onCheckedChange={() => props.onToggleSource(pill)}>
+					{pill === "dsh" ? <DshSourceBadge /> : pill === "imagegen" ? <ImageGenSourceBadge /> : <SessionSourceBadge source={pill} />}
 					<span className="text-body">{pillLabels[pill]}</span>
 				</DropdownMenuCheckboxItem>
 			))}
@@ -734,24 +665,12 @@ export function ProjectContextMenu(props: {
 							{t("menu.importSessions")}
 						</DropdownMenuSubTrigger>
 						<DropdownMenuSubContent>
-							<DropdownMenuItem onSelect={props.onImportCodexSessions}>
-								{t("menu.importCodex")}
-							</DropdownMenuItem>
-							<DropdownMenuItem onSelect={props.onImportClaudeSessions}>
-								{t("menu.importClaude")}
-							</DropdownMenuItem>
-							<DropdownMenuItem onSelect={props.onImportOpenCodeSessions}>
-								{t("menu.importOpenCode")}
-							</DropdownMenuItem>
-							<DropdownMenuItem onSelect={props.onImportZCodeSessions}>
-								{t("menu.importZCode")}
-							</DropdownMenuItem>
-							<DropdownMenuItem onSelect={props.onImportWorkBuddySessions}>
-								{t("menu.importWorkBuddy")}
-							</DropdownMenuItem>
-							<DropdownMenuItem onSelect={props.onImportCursorSessions}>
-								{t("menu.importCursor")}
-							</DropdownMenuItem>
+							<DropdownMenuItem onSelect={props.onImportCodexSessions}>{t("menu.importCodex")}</DropdownMenuItem>
+							<DropdownMenuItem onSelect={props.onImportClaudeSessions}>{t("menu.importClaude")}</DropdownMenuItem>
+							<DropdownMenuItem onSelect={props.onImportOpenCodeSessions}>{t("menu.importOpenCode")}</DropdownMenuItem>
+							<DropdownMenuItem onSelect={props.onImportZCodeSessions}>{t("menu.importZCode")}</DropdownMenuItem>
+							<DropdownMenuItem onSelect={props.onImportWorkBuddySessions}>{t("menu.importWorkBuddy")}</DropdownMenuItem>
+							<DropdownMenuItem onSelect={props.onImportCursorSessions}>{t("menu.importCursor")}</DropdownMenuItem>
 						</DropdownMenuSubContent>
 					</DropdownMenuSub>
 					<DropdownMenuSeparator />
@@ -803,11 +722,7 @@ function SidebarRunControlItems(props: { runControl: SidebarRunControl }) {
 	const abortDisabled = disabled || !canRunSessionAction(capabilities, "abort");
 	const reloadDisabled = disabled || !canRunSessionAction(capabilities, "reload");
 
-	const primaryLabel = runControl.isRestarting
-		? t("app.restarting")
-		: capabilities.primaryAction === "start"
-			? t("menu.startAgent")
-			: t("menu.restartSession");
+	const primaryLabel = runControl.isRestarting ? t("app.restarting") : capabilities.primaryAction === "start" ? t("menu.startAgent") : t("menu.restartSession");
 
 	// 先取成局部常量：直接在 onSelect 闭包里读 runControl.agentId 会丢掉窄化
 	const agentId = runControl.agentId;
@@ -815,17 +730,9 @@ function SidebarRunControlItems(props: { runControl: SidebarRunControl }) {
 	return (
 		<>
 			<DropdownMenuSeparator />
-			<DropdownMenuItem
-				disabled={primaryDisabled}
-				style={primaryDisabled ? { opacity: 0.4 } : undefined}
-				onSelect={() => runControl.onAction(capabilities.primaryAction)}
-			>
+			<DropdownMenuItem disabled={primaryDisabled} style={primaryDisabled ? { opacity: 0.4 } : undefined} onSelect={() => runControl.onAction(capabilities.primaryAction)}>
 				<span className="inline-flex items-center gap-2">
-					{capabilities.primaryAction === "start" ? (
-						<Play className="size-3.5" aria-hidden="true" />
-					) : (
-						<RotateCw className="size-3.5" aria-hidden="true" />
-					)}
+					{capabilities.primaryAction === "start" ? <Play className="size-3.5" aria-hidden="true" /> : <RotateCw className="size-3.5" aria-hidden="true" />}
 					{primaryLabel}
 				</span>
 			</DropdownMenuItem>
@@ -842,11 +749,7 @@ function SidebarRunControlItems(props: { runControl: SidebarRunControl }) {
 					{t("menu.stopAnswer")}
 				</span>
 			</DropdownMenuItem>
-			<DropdownMenuItem
-				disabled={reloadDisabled}
-				style={reloadDisabled ? { opacity: 0.4 } : undefined}
-				onSelect={() => runControl.onAction("reload")}
-			>
+			<DropdownMenuItem disabled={reloadDisabled} style={reloadDisabled ? { opacity: 0.4 } : undefined} onSelect={() => runControl.onAction("reload")}>
 				<span className="inline-flex items-center gap-2">
 					<RefreshCw className="size-3.5" aria-hidden="true" />
 					{t("menu.reloadSession")}
@@ -903,9 +806,7 @@ export function AgentContextMenu(props: {
 			</DropdownMenuItem>
 			{props.onTogglePinned && (
 				<DropdownMenuItem disabled={busy} onSelect={props.onTogglePinned}>
-					{props.isPinned
-						? <PinOff className="size-3.5" aria-hidden="true" />
-						: <Pin className="size-3.5" aria-hidden="true" />}
+					{props.isPinned ? <PinOff className="size-3.5" aria-hidden="true" /> : <Pin className="size-3.5" aria-hidden="true" />}
 					{t(props.isPinned ? "menu.unpinSession" : "menu.pinSession")}
 				</DropdownMenuItem>
 			)}
@@ -964,12 +865,7 @@ export function AgentContextMenu(props: {
 				</DropdownMenuItem>
 			)}
 			<DropdownMenuSeparator />
-			<DropdownMenuItem
-				variant="destructive"
-				disabled={busy}
-				title={t("menu.closeAgentHint")}
-				onSelect={props.onCloseAgent}
-			>
+			<DropdownMenuItem variant="destructive" disabled={busy} title={t("menu.closeAgentHint")} onSelect={props.onCloseAgent}>
 				<XCircle className="size-3.5" aria-hidden="true" />
 				{t("menu.closeAgent")}
 			</DropdownMenuItem>
@@ -1046,9 +942,7 @@ export function SessionContextMenu(props: {
 			</DropdownMenuItem>
 			{props.onTogglePinned && (
 				<DropdownMenuItem disabled={busy} onSelect={props.onTogglePinned}>
-					{props.isPinned
-						? <PinOff className="size-3.5" aria-hidden="true" />
-						: <Pin className="size-3.5" aria-hidden="true" />}
+					{props.isPinned ? <PinOff className="size-3.5" aria-hidden="true" /> : <Pin className="size-3.5" aria-hidden="true" />}
 					{t(props.isPinned ? "menu.unpinSession" : "menu.pinSession")}
 				</DropdownMenuItem>
 			)}
@@ -1120,33 +1014,11 @@ export function SessionContextMenu(props: {
 		</MenuShell>
 	);
 }
-export function ProjectAvatar(props: {
-	name: string;
-	kind?: "chat" | "project";
-	status?: "idle" | "running" | "starting" | "error";
-}) {
-	const StatusIcon = props.status === "running"
-		? LoaderCircle
-		: props.status === "starting"
-			? CircleDot
-			: props.status === "error"
-				? CircleAlert
-				: null;
+export function ProjectAvatar(props: { name: string; kind?: "chat" | "project"; status?: "idle" | "running" | "starting" | "error" }) {
+	const StatusIcon = props.status === "running" ? LoaderCircle : props.status === "starting" ? CircleDot : props.status === "error" ? CircleAlert : null;
 	return (
-		<div
-			className={cn(
-				"conversation-avatar project-avatar relative",
-				props.kind === "chat" && "chat-avatar",
-				props.status && `avatar-status-${props.status}`,
-			)}
-			title={t("app.projectAvatarTitle", { name: props.name })}
-			data-avatar-status={props.status ?? "idle"}
-		>
-			{props.kind === "chat" ? (
-				<MessageCircle size={16} strokeWidth={1.9} />
-			) : (
-				<Folder size={16} strokeWidth={1.8} />
-			)}
+		<div className={cn("conversation-avatar project-avatar relative", props.kind === "chat" && "chat-avatar", props.status && `avatar-status-${props.status}`)} title={t("app.projectAvatarTitle", { name: props.name })} data-avatar-status={props.status ?? "idle"}>
+			{props.kind === "chat" ? <MessageCircle size={16} strokeWidth={1.9} /> : <Folder size={16} strokeWidth={1.8} />}
 			{StatusIcon && (
 				<span className="avatar-status-indicator" aria-label={props.status}>
 					<StatusIcon size={8} strokeWidth={2.5} className={props.status === "running" ? "animate-pideck-spin" : undefined} />
@@ -1162,12 +1034,7 @@ type EntryAction = {
 	onClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
 	icon: ReactNode;
 };
-export function WorktreeCreateDialog(props: {
-	projectId: string;
-	creating: boolean;
-	onCreate: (branchName: string) => void;
-	onClose: () => void;
-}) {
+export function WorktreeCreateDialog(props: { projectId: string; creating: boolean; onCreate: (branchName: string) => void; onClose: () => void }) {
 	const [name, setName] = useState("");
 	const inputRef = useRef<HTMLInputElement>(null);
 
@@ -1181,7 +1048,12 @@ export function WorktreeCreateDialog(props: {
 
 	// #115 U5：外壳换 shadcn Dialog；分支名预览逻辑不变
 	return (
-		<Dialog open onOpenChange={(open) => { if (!open) props.onClose(); }}>
+		<Dialog
+			open
+			onOpenChange={(open) => {
+				if (!open) props.onClose();
+			}}
+		>
 			<DialogContent className="sm:max-w-sm worktree-create-dialog">
 				<DialogHeader>
 					<DialogTitle>{t("app.worktreeCreateTitle")}</DialogTitle>
@@ -1201,19 +1073,12 @@ export function WorktreeCreateDialog(props: {
 					}}
 					disabled={props.creating}
 				/>
-				{name.trim() && (
-					<p className="worktree-create-preview">
-						{t("app.worktreeBranchPreview", { name: previewSlug })}
-					</p>
-				)}
+				{name.trim() && <p className="worktree-create-preview">{t("app.worktreeBranchPreview", { name: previewSlug })}</p>}
 				<DialogFooter>
 					<Button variant="outline" onClick={props.onClose} disabled={props.creating}>
 						{t("common.cancel")}
 					</Button>
-					<Button
-						disabled={!name.trim() || props.creating}
-						onClick={() => props.onCreate(name.trim())}
-					>
+					<Button disabled={!name.trim() || props.creating} onClick={() => props.onCreate(name.trim())}>
 						{props.creating ? t("app.worktreeCreating") : t("app.worktreeCreate")}
 					</Button>
 				</DialogFooter>
@@ -1226,24 +1091,22 @@ export function WorktreeCreateDialog(props: {
  * RPC 日志已打开提醒弹框：开启记录后告知用户已可查看，
  * “查看日志”直接打开实时日志查看弹窗（RpcLogViewer）。
  */
-export function RpcLogOpenedDialog(props: {
-	onView: () => void;
-	onClose: () => void;
-}) {
+export function RpcLogOpenedDialog(props: { onView: () => void; onClose: () => void }) {
 	return (
-		<AlertDialog open onOpenChange={(open) => { if (!open) props.onClose(); }}>
+		<AlertDialog
+			open
+			onOpenChange={(open) => {
+				if (!open) props.onClose();
+			}}
+		>
 			<AlertDialogContent>
 				<AlertDialogHeader>
 					<AlertDialogTitle>{t("rpc.logOpenedTitle")}</AlertDialogTitle>
 					<AlertDialogDescription>{t("rpc.logOpenedDescription")}</AlertDialogDescription>
 				</AlertDialogHeader>
 				<AlertDialogFooter>
-					<AlertDialogCancel onClick={props.onClose}>
-						{t("common.cancel")}
-					</AlertDialogCancel>
-					<AlertDialogAction onClick={props.onView}>
-						{t("rpc.logViewNow")}
-					</AlertDialogAction>
+					<AlertDialogCancel onClick={props.onClose}>{t("common.cancel")}</AlertDialogCancel>
+					<AlertDialogAction onClick={props.onView}>{t("rpc.logViewNow")}</AlertDialogAction>
 				</AlertDialogFooter>
 			</AlertDialogContent>
 		</AlertDialog>

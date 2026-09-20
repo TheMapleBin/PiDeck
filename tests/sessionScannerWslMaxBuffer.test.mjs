@@ -23,7 +23,7 @@ function loadTranspiledModule(filePath, overrides = new Map()) {
 		// jsonlLineStream（会话 JSONL 流式扫描）运行时需要 Buffer
 		Buffer,
 		process,
-		require: (id) => overrides.has(id) ? overrides.get(id) : require(id),
+		require: (id) => (overrides.has(id) ? overrides.get(id) : require(id)),
 		setTimeout,
 	};
 	vm.runInNewContext(outputText, sandbox, { filename: filePath });
@@ -65,10 +65,7 @@ function loadSessionScanner(homePath, execFileMock, wslHostRoot) {
 		},
 	});
 	const codexMeta = loadCodexMetaModule();
-	const messageContent = loadTranspiledModule(
-		"src/main/pi/messageContent.ts",
-		new Map([["../feishu/docActions", { stripFeishuDocActionHint: (text) => text }]]),
-	);
+	const messageContent = loadTranspiledModule("src/main/pi/messageContent.ts", new Map([["../feishu/docActions", { stripFeishuDocActionHint: (text) => text }]]));
 	const fsRetry = loadTranspiledModule("src/main/utils/fsRetry.ts");
 	const sessionSummaryCache = loadTranspiledModule(
 		"src/main/sessions/sessionSummaryCache.ts",
@@ -82,13 +79,13 @@ function loadSessionScanner(homePath, execFileMock, wslHostRoot) {
 	const wslPathsReal = loadTranspiledModule("src/main/wsl/WslPaths.ts");
 	const wslPaths = wslHostRoot
 		? {
-			...wslPathsReal,
-			toWindowsHostPath: (linuxPath) => {
-				const raw = String(linuxPath);
-				if (!raw.startsWith("/")) return raw;
-				return join(wslHostRoot, ...raw.replace(/^\/+/, "").split("/"));
-			},
-		}
+				...wslPathsReal,
+				toWindowsHostPath: (linuxPath) => {
+					const raw = String(linuxPath);
+					if (!raw.startsWith("/")) return raw;
+					return join(wslHostRoot, ...raw.replace(/^\/+/, "").split("/"));
+				},
+			}
 		: wslPathsReal;
 	const sessionIdentity = loadTranspiledModule("src/shared/sessionIdentity.ts");
 	// SessionScanner 新增的自包含块折叠（无依赖纯函数）
@@ -295,11 +292,7 @@ test("WSL 重命名超过 1MB 的会话不报错且追加 session_info（#147 �
 		await scanner.rename(BIG_PATH, "renamed");
 
 		// 改造后：WSL 会话文件读写走 UNC 宿主路径，不再经过 wsl cat/dd 的 maxBuffer 通道
-		assert.equal(
-			mock.calls.filter((call) => call.args.includes("cat")).length,
-			0,
-			"重命名不应再整文件 cat（maxBuffer 通道）",
-		);
+		assert.equal(mock.calls.filter((call) => call.args.includes("cat")).length, 0, "重命名不应再整文件 cat（maxBuffer 通道）");
 		const written = readFileSync(hostFilePath, "utf8");
 		assert.equal(piSessionName(written.split(/\r?\n/)), "renamed");
 	} finally {
@@ -328,11 +321,7 @@ test("WSL 引用消息与整文件读取走 UNC 流式通道（不再 cat 整份
 		const raw = await scanner.readSessionRawText(BIG_PATH);
 		assert.equal(raw.length, bigContent.length);
 
-		assert.equal(
-			mock.calls.filter((call) => call.args.includes("cat")).length,
-			0,
-			"会话文件本体不应再走 wsl cat（maxBuffer 通道）",
-		);
+		assert.equal(mock.calls.filter((call) => call.args.includes("cat")).length, 0, "会话文件本体不应再走 wsl cat（maxBuffer 通道）");
 	} finally {
 		rmSync(home, { recursive: true, force: true });
 		rmSync(wslHostRoot, { recursive: true, force: true });

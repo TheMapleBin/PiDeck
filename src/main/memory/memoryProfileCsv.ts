@@ -48,13 +48,11 @@ export interface ProfileRowData {
 	streaming: number | null;
 }
 
-export const MEMORY_PROFILE_HEADER =
-	"ts,type,pid,label,rssKB,privateKB,sharedKB,peakRssKB,heapUsedKB,jsHeapKB,totalJSHeapKB,domNodes,imgCount,imgPixels,canvasPixels,workerCount,workerJSHeapKB,streaming";
+export const MEMORY_PROFILE_HEADER = "ts,type,pid,label,rssKB,privateKB,sharedKB,peakRssKB,heapUsedKB,jsHeapKB,totalJSHeapKB,domNodes,imgCount,imgPixels,canvasPixels,workerCount,workerJSHeapKB,streaming";
 
 /** 把一行数据序列化为 CSV 文本（null 输出空串，label 转义逗号/引号）。 */
 export function toProfileCsvRow(row: ProfileRowData): string {
-	const esc = (v: string): string =>
-		v.includes(",") || v.includes('"') ? `"${v.replaceAll('"', '""')}"` : v;
+	const esc = (v: string): string => (v.includes(",") || v.includes('"') ? `"${v.replaceAll('"', '""')}"` : v);
 	return [
 		row.ts,
 		esc(row.type),
@@ -94,37 +92,15 @@ export function parseMemoryCsv(text: string): ParsedProfileRow[] {
 		if (![10, 11, 14, 15, 17, 18].includes(fields.length)) {
 			throw new Error(`memory profile row malformed (${fields.length} fields): ${line.slice(0, 80)}`);
 		}
-		const num = (v: string | null): number | null =>
-			v === null || v === "" ? null : Number(v);
-		const [
-			ts,
-			type,
-			pid,
-			label,
-			rssKB,
-			privateKB,
-			sharedKB,
-			peakRssKB,
-			heapUsedKB,
-			jsHeapKB,
-			...rest
-		] = fields;
+		const num = (v: string | null): number | null => (v === null || v === "" ? null : Number(v));
+		const [ts, type, pid, label, rssKB, privateKB, sharedKB, peakRssKB, heapUsedKB, jsHeapKB, ...rest] = fields;
 		// 后加列在不同版本插入位置不同（totalJSHeapKB 插在 jsHeapKB 与 domNodes 之间），
 		// 不能按固定索引解构，必须按列数分支：
 		//   11 列: [domNodes]
 		//   14 列: [domNodes, imgCount, imgPixels, canvasPixels]
 		//   15 列: [totalJSHeapKB, domNodes, imgCount, imgPixels, canvasPixels]
 		//   17 列: 15 列 + [workerCount, workerJSHeapKB]
-		const [
-			totalJSHeapKB,
-			domNodes,
-			imgCount,
-			imgPixels,
-			canvasPixels,
-			workerCount,
-			workerJSHeapKB,
-			streaming,
-		] = rest.length === 1 || rest.length === 4 ? [null, ...rest] : rest;
+		const [totalJSHeapKB, domNodes, imgCount, imgPixels, canvasPixels, workerCount, workerJSHeapKB, streaming] = rest.length === 1 || rest.length === 4 ? [null, ...rest] : rest;
 		rows.push({
 			ts: Number(ts),
 			type,
@@ -296,7 +272,5 @@ export function totalRssSeries(rows: ParsedProfileRow[]): { ts: number; totalKB:
 		if (!cleanSet.get(r.pid)?.has(r.rssKB)) continue; // 异常读数不计入总和
 		byTs.set(r.ts, (byTs.get(r.ts) ?? 0) + r.rssKB);
 	}
-	return [...byTs.entries()]
-		.map(([ts, totalKB]) => ({ ts, totalKB }))
-		.sort((a, b) => a.ts - b.ts);
+	return [...byTs.entries()].map(([ts, totalKB]) => ({ ts, totalKB })).sort((a, b) => a.ts - b.ts);
 }

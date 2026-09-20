@@ -50,10 +50,7 @@ export function isAgentOwnerKey(ownerKey: string): boolean {
 	return ownerKey.startsWith("agent:");
 }
 
-export function getTerminalShellCandidates(
-	platform: NodeJS.Platform,
-	env: NodeJS.ProcessEnv,
-): TerminalShellCandidate[] {
+export function getTerminalShellCandidates(platform: NodeJS.Platform, env: NodeJS.ProcessEnv): TerminalShellCandidate[] {
 	if (platform === "win32") {
 		const candidates: TerminalShellCandidate[] = [
 			{ shell: "pwsh", command: "pwsh.exe", args: [] },
@@ -61,10 +58,7 @@ export function getTerminalShellCandidates(
 			{ shell: "cmd", command: "cmd.exe", args: [] },
 		];
 		// 检测 Git Bash（常见安装路径）
-		const gitBashPaths = [
-			"C:\\Program Files\\Git\\bin\\bash.exe",
-			"C:\\Program Files (x86)\\Git\\bin\\bash.exe",
-		];
+		const gitBashPaths = ["C:\\Program Files\\Git\\bin\\bash.exe", "C:\\Program Files (x86)\\Git\\bin\\bash.exe"];
 		for (const p of gitBashPaths) {
 			if (existsSync(p)) {
 				candidates.push({ shell: "git-bash", command: p, args: ["--login", "-i"] });
@@ -85,27 +79,18 @@ export function getTerminalShellCandidates(
 		if (userShell) candidates.push(userShell);
 		// macOS GUI 应用拿到的进程环境通常不是用户登录 shell 环境；
 		// 用登录 shell 启动可以让 zsh/bash 初始化 TTY 与用户 PATH，行为更接近 Terminal.app。
-		candidates.push(
-			{ shell: "zsh", command: "/bin/zsh", args: ["-l"] },
-			{ shell: "bash", command: "/bin/bash", args: ["-l"] },
-			{ shell: "sh", command: "/bin/sh", args: [] },
-		);
+		candidates.push({ shell: "zsh", command: "/bin/zsh", args: ["-l"] }, { shell: "bash", command: "/bin/bash", args: ["-l"] }, { shell: "sh", command: "/bin/sh", args: [] });
 		return dedupeShellCandidates(candidates);
 	}
 
 	const userShell = normalizePosixShell(env.SHELL);
 	const candidates: TerminalShellCandidate[] = [];
 	if (userShell) candidates.push(userShell);
-	candidates.push(
-		{ shell: "bash", command: "bash", args: [] },
-		{ shell: "sh", command: "sh", args: [] },
-	);
+	candidates.push({ shell: "bash", command: "bash", args: [] }, { shell: "sh", command: "sh", args: [] });
 	return dedupeShellCandidates(candidates);
 }
 
-function normalizePosixShell(
-	shellPath: string | undefined,
-): TerminalShellCandidate | null {
+function normalizePosixShell(shellPath: string | undefined): TerminalShellCandidate | null {
 	if (!shellPath) return null;
 	const name = shellPath.split(/[\\/]/).pop();
 	if (name === "zsh") return { shell: "zsh", command: shellPath, args: ["-l"] };
@@ -146,9 +131,7 @@ export class TerminalSessionManager {
 	}
 
 	list(target: TerminalTarget) {
-		return [...(this.runtimes.get(this.ownerKey(target))?.values() ?? [])].map(
-			(runtime) => this.snapshot(runtime),
-		);
+		return [...(this.runtimes.get(this.ownerKey(target))?.values() ?? [])].map((runtime) => this.snapshot(runtime));
 	}
 
 	/**
@@ -295,12 +278,7 @@ export class TerminalSessionManager {
 	private spawnShell(cwd: string, preferredShell?: TerminalShell): { shell: TerminalShell; pty: pty.IPty } {
 		const candidates = this.shellCandidates();
 		// 如果有首选 shell，先在候选列表中查找匹配项
-		const ordered = preferredShell
-			? [
-					...candidates.filter((c) => c.shell === preferredShell),
-					...candidates.filter((c) => c.shell !== preferredShell),
-			  ]
-			: candidates;
+		const ordered = preferredShell ? [...candidates.filter((c) => c.shell === preferredShell), ...candidates.filter((c) => c.shell !== preferredShell)] : candidates;
 		log(`spawnShell: preferred=${preferredShell}, ordered=${ordered.map((c) => c.shell).join(", ")}`);
 		let lastError: unknown;
 		for (const candidate of ordered) {
@@ -317,11 +295,7 @@ export class TerminalSessionManager {
 				// WSL 终端：--cd 用 Linux 路径，PTY 的 cwd 仍必须是 Windows 主机路径。
 				if (wsl?.wslEnabled && wsl.wslDistro && wsl.wslUser) {
 					try {
-						args = [
-							...args,
-							"--cd",
-							toWslLinuxPath(cwd, { distro: wsl.wslDistro }),
-						];
+						args = [...args, "--cd", toWslLinuxPath(cwd, { distro: wsl.wslDistro })];
 						spawnCwd = toWindowsHostPath(cwd, { distro: wsl.wslDistro });
 					} catch (error) {
 						log(`Failed to convert WSL terminal cwd: ${error instanceof Error ? error.message : String(error)}`);
@@ -340,20 +314,13 @@ export class TerminalSessionManager {
 				log(`Failed to spawn ${candidate.shell} (${candidate.command}): ${error instanceof Error ? error.message : String(error)}`);
 			}
 		}
-		throw lastError instanceof Error
-			? lastError
-			: new Error("No supported shell found");
+		throw lastError instanceof Error ? lastError : new Error("No supported shell found");
 	}
 
 	private shellCandidates(): TerminalShellCandidate[] {
 		const candidates = getTerminalShellCandidates(process.platform, process.env);
 		const settings = this.getSettings();
-		if (
-			process.platform !== "win32" ||
-			!settings.wslEnabled ||
-			!settings.wslDistro ||
-			!settings.wslUser
-		) {
+		if (process.platform !== "win32" || !settings.wslEnabled || !settings.wslDistro || !settings.wslUser) {
 			return candidates;
 		}
 		const wslExe = getWslExe();

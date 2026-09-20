@@ -11,14 +11,8 @@ function put(path, content) {
 }
 
 function skillPackage(root, packageRoot, name) {
-	put(
-		join(packageRoot, "package.json"),
-		JSON.stringify({ name, pi: { skills: ["skills/"] } }),
-	);
-	put(
-		join(packageRoot, "skills", name, "SKILL.md"),
-		`---\nname: ${name}\ndescription: ${name} description\n---\n\n# ${name}\n`,
-	);
+	put(join(packageRoot, "package.json"), JSON.stringify({ name, pi: { skills: ["skills/"] } }));
+	put(join(packageRoot, "skills", name, "SKILL.md"), `---\nname: ${name}\ndescription: ${name} description\n---\n\n# ${name}\n`);
 }
 
 test("discoverSkills covers packages, explicit settings paths, and ancestor .agents/skills", () => {
@@ -30,15 +24,9 @@ test("discoverSkills covers packages, explicit settings paths, and ancestor .age
 		const packageRoot = join(root, "pkg");
 		const explicitSkillDir = join(root, "explicit-skills");
 		skillPackage(root, packageRoot, "pkg-skill");
-		put(
-			join(explicitSkillDir, "custom-skill", "SKILL.md"),
-			"---\nname: custom-skill\ndescription: custom description\n---\n\n# custom-skill\n",
-		);
+		put(join(explicitSkillDir, "custom-skill", "SKILL.md"), "---\nname: custom-skill\ndescription: custom description\n---\n\n# custom-skill\n");
 		// Ancestor .agents/skills (parent of the project cwd).
-		put(
-			join(root, ".agents", "skills", "ancestor-skill", "SKILL.md"),
-			"---\nname: ancestor-skill\ndescription: ancestor description\n---\n\n# ancestor-skill\n",
-		);
+		put(join(root, ".agents", "skills", "ancestor-skill", "SKILL.md"), "---\nname: ancestor-skill\ndescription: ancestor description\n---\n\n# ancestor-skill\n");
 		put(
 			join(agentDir, "settings.json"),
 			JSON.stringify({
@@ -53,10 +41,12 @@ test("discoverSkills covers packages, explicit settings paths, and ancestor .age
 			includeProjectResources: true,
 			disabledSkillNames: [],
 		});
-		const names = Array.from(skills
-			.filter((skill) => skill.path.startsWith(root))
-			.map((skill) => skill.name)
-			.sort());
+		const names = Array.from(
+			skills
+				.filter((skill) => skill.path.startsWith(root))
+				.map((skill) => skill.name)
+				.sort(),
+		);
 		assert.deepEqual(names, ["ancestor-skill", "custom-skill", "pkg-skill"]);
 		const byName = new Map(skills.map((skill) => [skill.name, skill]));
 		assert.equal(byName.get("pkg-skill").sourceId, "package-user");
@@ -78,10 +68,7 @@ test("discoverPrompts and discoverExtensions list package and settings sources",
 		const agentDir = join(home, ".pi", "agent");
 		const projectDir = join(root, "project");
 		const packageRoot = join(root, "pkg");
-		put(
-			join(packageRoot, "package.json"),
-			JSON.stringify({ name: "pkg", pi: { prompts: ["prompts/"], extensions: ["extensions/"] } }),
-		);
+		put(join(packageRoot, "package.json"), JSON.stringify({ name: "pkg", pi: { prompts: ["prompts/"], extensions: ["extensions/"] } }));
 		put(join(packageRoot, "prompts", "pkg-prompt.md"), "---\ndescription: pkg prompt\n---\n\nbody\n");
 		put(join(packageRoot, "extensions", "pkg-ext.ts"), "export default () => {};\n");
 		put(
@@ -120,10 +107,7 @@ test("discovery respects disabled lists and includeProjectResources=false", () =
 		const agentDir = join(home, ".pi", "agent");
 		const projectDir = join(root, "project");
 		const explicitSkillDir = join(root, "explicit-skills");
-		put(
-			join(explicitSkillDir, "custom-skill", "SKILL.md"),
-			"---\nname: custom-skill\ndescription: custom description\n---\n\n# custom-skill\n",
-		);
+		put(join(explicitSkillDir, "custom-skill", "SKILL.md"), "---\nname: custom-skill\ndescription: custom description\n---\n\n# custom-skill\n");
 		put(join(agentDir, "settings.json"), JSON.stringify({ skills: [explicitSkillDir] }));
 		const { discoverSkills } = loadTsCommonJs("src/main/resourceDiscovery.ts");
 		const disabled = discoverSkills({

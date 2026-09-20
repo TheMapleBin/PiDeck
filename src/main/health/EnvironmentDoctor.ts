@@ -7,25 +7,8 @@ import type { PiLocator } from "../pi/PiLocator";
 import { readSingleInstancePreference } from "../settings/SettingsStore";
 import type { SettingsStore } from "../settings/SettingsStore";
 import { inspectInstanceLocks, locksDirIn } from "../instanceLockFile";
-import type {
-	HealthEnvironment,
-	HealthLogFile,
-	HealthLogLine,
-	HealthReport,
-} from "../../shared/types";
-import {
-	checkAppMemory,
-	checkConfigParsable,
-	checkDiskSpace,
-	checkInstanceLocks,
-	checkLogErrors,
-	checkPiInstalled,
-	checkProxyConfig,
-	checkWslConfig,
-	sortChecksBySeverity,
-	toConfigDiagnostics,
-	type InstanceLockSummary,
-} from "./healthProbes";
+import type { HealthEnvironment, HealthLogFile, HealthLogLine, HealthReport } from "../../shared/types";
+import { checkAppMemory, checkConfigParsable, checkDiskSpace, checkInstanceLocks, checkLogErrors, checkPiInstalled, checkProxyConfig, checkWslConfig, sortChecksBySeverity, toConfigDiagnostics, type InstanceLockSummary } from "./healthProbes";
 import { createPathMasker, redactSecrets, truncateText } from "./redact";
 
 /** 日志统计窗口：只看最近 7 天，更早的日志对「现在出问题」几乎没有诊断价值。 */
@@ -57,11 +40,7 @@ export class EnvironmentDoctor {
 	/** 跑一次完整体检。任一项采集失败都降级为「该项 skipped」，不让整体失败。 */
 	async run(): Promise<HealthReport> {
 		const generatedAt = Date.now();
-		const [environment, logSummary, logFiles] = await Promise.all([
-			this.collectEnvironment(),
-			this.collectLogSummary(),
-			this.collectLogFiles(),
-		]);
+		const [environment, logSummary, logFiles] = await Promise.all([this.collectEnvironment(), this.collectLogSummary(), this.collectLogFiles()]);
 		const checks = sortChecksBySeverity([
 			checkPiInstalled(environment.pi),
 			checkConfigParsable(await this.collectConfigDiagnostics()),
@@ -69,11 +48,7 @@ export class EnvironmentDoctor {
 			checkDiskSpace(environment.dataDirFreeBytes),
 			checkAppMemory(environment.appRssBytes),
 			checkProxyConfig(this.deps.settingsStore.get()),
-			checkWslConfig(
-				this.deps.settingsStore.get(),
-				environment.platform,
-				Boolean(environment.pi?.installed),
-			),
+			checkWslConfig(this.deps.settingsStore.get(), environment.platform, Boolean(environment.pi?.installed)),
 			checkInstanceLocks(this.collectInstanceLocks(), {
 				ownPid: process.pid,
 				singleInstanceEnabled: readSingleInstancePreference(),
@@ -89,9 +64,7 @@ export class EnvironmentDoctor {
 		const maskPath = createPathMasker(home);
 		const userDataDir = app.getPath("userData");
 		const memory = process.memoryUsage();
-		const pi = await piLocator
-			.check(settings.customPiPath, settings.wslEnabled, settings.wslDistro, settings.wslUser)
-			.catch(() => null);
+		const pi = await piLocator.check(settings.customPiPath, settings.wslEnabled, settings.wslDistro, settings.wslUser).catch(() => null);
 		return {
 			appVersion: app.getVersion(),
 			platform: process.platform,
@@ -162,14 +135,12 @@ export class EnvironmentDoctor {
 	private async collectConfigDiagnostics(): Promise<Array<{ fileName: string; message: string }>> {
 		const { configManager } = this.deps;
 		try {
-			const [models, auth, piSettings] = await Promise.all([
-				configManager.getModelsConfig().catch(() => null),
-				configManager.getAuthConfig().catch(() => null),
-				configManager.getSettingsConfig().catch(() => null),
-			]);
-			return toConfigDiagnostics([models, auth, piSettings].filter(Boolean) as Array<{
-				diagnostic?: import("../../shared/types").ConfigFileDiagnostic | null;
-			}>);
+			const [models, auth, piSettings] = await Promise.all([configManager.getModelsConfig().catch(() => null), configManager.getAuthConfig().catch(() => null), configManager.getSettingsConfig().catch(() => null)]);
+			return toConfigDiagnostics(
+				[models, auth, piSettings].filter(Boolean) as Array<{
+					diagnostic?: import("../../shared/types").ConfigFileDiagnostic | null;
+				}>,
+			);
 		} catch {
 			return [];
 		}
@@ -195,16 +166,15 @@ export class EnvironmentDoctor {
 			recent: [] as HealthLogLine[],
 		};
 		try {
-			const [all, errors, warns, todayErrors, todayWarns, recentErrors, recentWarns] =
-				await Promise.all([
-					appLogger.listPage({ level: "all", from, page: 0, pageSize: 1 }),
-					appLogger.listPage({ level: "error", from, page: 0, pageSize: 1 }),
-					appLogger.listPage({ level: "warn", from, page: 0, pageSize: 1 }),
-					appLogger.listPage({ level: "error", from: todayFrom, page: 0, pageSize: 1 }),
-					appLogger.listPage({ level: "warn", from: todayFrom, page: 0, pageSize: 1 }),
-					appLogger.listPage({ level: "error", from, page: 0, pageSize: MAX_RECENT_PER_LEVEL }),
-					appLogger.listPage({ level: "warn", from, page: 0, pageSize: MAX_RECENT_PER_LEVEL }),
-				]);
+			const [all, errors, warns, todayErrors, todayWarns, recentErrors, recentWarns] = await Promise.all([
+				appLogger.listPage({ level: "all", from, page: 0, pageSize: 1 }),
+				appLogger.listPage({ level: "error", from, page: 0, pageSize: 1 }),
+				appLogger.listPage({ level: "warn", from, page: 0, pageSize: 1 }),
+				appLogger.listPage({ level: "error", from: todayFrom, page: 0, pageSize: 1 }),
+				appLogger.listPage({ level: "warn", from: todayFrom, page: 0, pageSize: 1 }),
+				appLogger.listPage({ level: "error", from, page: 0, pageSize: MAX_RECENT_PER_LEVEL }),
+				appLogger.listPage({ level: "warn", from, page: 0, pageSize: MAX_RECENT_PER_LEVEL }),
+			]);
 			// 只保留 time/level/scope/message：detail 里可能含完整路径或用户内容，一律不带出。
 			const recent = [...recentErrors.entries, ...recentWarns.entries]
 				.map((entry) => ({

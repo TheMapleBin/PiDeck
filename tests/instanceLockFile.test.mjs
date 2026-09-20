@@ -15,18 +15,7 @@ import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
  * 这里用真实临时目录 + /proc 夹具（JSON/stat 文本）验证判定规则，
  * 不依赖真实 /proc、不启动 Electron，也不依赖执行顺序。
  */
-const {
-	assessLockOwner,
-	claimVersionLock,
-	collectStaleLockFiles,
-	focusPathIn,
-	inspectInstanceLocks,
-	lockPathIn,
-	locksDirIn,
-	markLockReady,
-	readLockPayload,
-	sanitizeVersion,
-} = loadTsCommonJs("src/main/instanceLockFile.ts");
+const { assessLockOwner, claimVersionLock, collectStaleLockFiles, focusPathIn, inspectInstanceLocks, lockPathIn, locksDirIn, markLockReady, readLockPayload, sanitizeVersion } = loadTsCommonJs("src/main/instanceLockFile.ts");
 
 /** 夹具里的系统启动时刻（秒）；所有 payload.at 都以它为基准，避免依赖真实时钟。 */
 const BOOT_SECONDS = 1_700_000_000;
@@ -67,30 +56,21 @@ function writeLockFile(lockPath, payload) {
 
 test("proc 里已经没有该 pid 时判定为 dead（残留锁可抢占）", (t) => {
 	const { procRoot } = makeFixture(t);
-	const assessment = assessLockOwner(
-		{ pid: 424242, version: "0.7.5", at: BOOT_SECONDS * 1000 + 60_000 },
-		linuxOptions(procRoot),
-	);
+	const assessment = assessLockOwner({ pid: 424242, version: "0.7.5", at: BOOT_SECONDS * 1000 + 60_000 }, linuxOptions(procRoot));
 	assert.equal(assessment.verdict, "dead");
 });
 
 test("僵尸进程即使 signal 0 能命中也算死锁", (t) => {
 	const { procRoot } = makeFixture(t);
 	writeProcStat(procRoot, 777, { state: "Z", startTicks: ticksFor(10) });
-	const assessment = assessLockOwner(
-		{ pid: 777, version: "0.7.5", at: BOOT_SECONDS * 1000 + 30_000, procStartTicks: ticksFor(10) },
-		linuxOptions(procRoot, { isPidAlive: () => true }),
-	);
+	const assessment = assessLockOwner({ pid: 777, version: "0.7.5", at: BOOT_SECONDS * 1000 + 30_000, procStartTicks: ticksFor(10) }, linuxOptions(procRoot, { isPidAlive: () => true }));
 	assert.equal(assessment.verdict, "zombie");
 });
 
 test("startTicks 与锁里记录不一致时判定为 recycled（PID 复用）", (t) => {
 	const { procRoot } = makeFixture(t);
 	writeProcStat(procRoot, 888, { startTicks: ticksFor(9_999) });
-	const assessment = assessLockOwner(
-		{ pid: 888, version: "0.7.5", at: BOOT_SECONDS * 1000 + 30_000, procStartTicks: ticksFor(10) },
-		linuxOptions(procRoot),
-	);
+	const assessment = assessLockOwner({ pid: 888, version: "0.7.5", at: BOOT_SECONDS * 1000 + 30_000, procStartTicks: ticksFor(10) }, linuxOptions(procRoot));
 	assert.equal(assessment.verdict, "recycled");
 });
 
@@ -98,20 +78,14 @@ test("旧版锁（无 procStartTicks）遇到启动更晚的同 PID 进程也判
 	const { procRoot } = makeFixture(t);
 	// 0.7.5 及以前写入的锁没有进程身份字段，只能靠「写锁时刻 vs 进程启动时刻」反推
 	writeProcStat(procRoot, 3679, { startTicks: ticksFor(3_000) });
-	const assessment = assessLockOwner(
-		{ pid: 3679, version: "0.7.5", at: BOOT_SECONDS * 1000 + 1_000 },
-		linuxOptions(procRoot),
-	);
+	const assessment = assessLockOwner({ pid: 3679, version: "0.7.5", at: BOOT_SECONDS * 1000 + 1_000 }, linuxOptions(procRoot));
 	assert.equal(assessment.verdict, "recycled");
 });
 
 test("身份自洽的持有者判定为 live", (t) => {
 	const { procRoot } = makeFixture(t);
 	writeProcStat(procRoot, 555, { startTicks: ticksFor(5) });
-	const assessment = assessLockOwner(
-		{ pid: 555, version: "0.7.5", at: BOOT_SECONDS * 1000 + 600_000, procStartTicks: ticksFor(5) },
-		linuxOptions(procRoot),
-	);
+	const assessment = assessLockOwner({ pid: 555, version: "0.7.5", at: BOOT_SECONDS * 1000 + 600_000, procStartTicks: ticksFor(5) }, linuxOptions(procRoot));
 	assert.equal(assessment.verdict, "live");
 });
 
@@ -215,12 +189,10 @@ test("collectStaleLockFiles 只回收死锁与过期孤儿文件", (t) => {
 	// loadTsCommonJs 在独立 VM realm 执行，跨 realm 数组原型不同，统一用 JSON 比较
 	assert.deepEqual(JSON.parse(JSON.stringify(removedNames)), ["0.6.8.lock", "0.7.5.focus", "0.7.5.lock"].sort());
 	// 活着的其它版本实例（并行运行能力）不能被误删
-	assert.equal(inspectInstanceLocks(locksDir, linuxOptions(procRoot)).locks.find(
-		(item) => item.fileName === "0.7.4.lock",
-	).stale, false);
+	assert.equal(inspectInstanceLocks(locksDir, linuxOptions(procRoot)).locks.find((item) => item.fileName === "0.7.4.lock").stale, false);
 	// 刚写坏的文件处于宽限期内，不删（可能是别的进程正在写）
-	const corruptState = inspectInstanceLocks(locksDir, linuxOptions(procRoot)).locks
-		.filter((item) => item.fileName === "0.6.9.lock")
+	const corruptState = inspectInstanceLocks(locksDir, linuxOptions(procRoot))
+		.locks.filter((item) => item.fileName === "0.6.9.lock")
 		.map((item) => item.stale);
 	assert.deepEqual(JSON.parse(JSON.stringify(corruptState)), [false]);
 	assert.equal(existsSync(liveLock), true);

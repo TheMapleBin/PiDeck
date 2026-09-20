@@ -82,9 +82,7 @@ function extractEntriesFromFile(fileName: string, content: string): Record<strin
 	try {
 		parsed = JSON.parse(content);
 	} catch (error) {
-		throw new Error(
-			`failed to parse pi-ai catalog file ${fileName}: ${error instanceof Error ? error.message : String(error)}`,
-		);
+		throw new Error(`failed to parse pi-ai catalog file ${fileName}: ${error instanceof Error ? error.message : String(error)}`);
 	}
 	if (!isRecord(parsed)) throw new Error(`invalid pi-ai catalog root in ${fileName}`);
 	const entries: Record<string, unknown>[] = [];
@@ -124,10 +122,7 @@ function serializeJson(value: unknown): string {
  * 从来源文件集合生成 catalog + manifest artifact。
  * 文件须按 build 脚本相同顺序（localeCompare）传入，才能得到逐字节一致的输出。
  */
-export function generatePiAiCatalogFromFiles(
-	files: readonly CatalogSourceFile[],
-	packageVersion: string,
-): GeneratedCatalogArtifact {
+export function generatePiAiCatalogFromFiles(files: readonly CatalogSourceFile[], packageVersion: string): GeneratedCatalogArtifact {
 	const entries: Record<string, unknown>[] = [];
 	const sorted = [...files].sort((left, right) => left.name.localeCompare(right.name));
 	for (const file of sorted) {

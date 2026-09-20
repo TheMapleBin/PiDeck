@@ -22,12 +22,7 @@ import { inspect } from "node:util";
 import * as tar from "tar";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
-const defaultArchive = join(
-	scriptDir,
-	"..",
-	"dist-runtime",
-	`dsh-runtime-${process.platform}-${process.arch}.tgz`,
-);
+const defaultArchive = join(scriptDir, "..", "dist-runtime", `dsh-runtime-${process.platform}-${process.arch}.tgz`);
 
 const [rawPath] = process.argv.slice(2);
 const archivePath = rawPath ? resolve(rawPath) : defaultArchive;
@@ -39,12 +34,29 @@ if (!existsSync(archivePath)) {
 
 // 镜像 hostEntry 的 agent plane 禁用名单（dsh-base 的进程级全局工具）
 const DSH_WEB_AGENT_PLANE_DISABLED = [
-	"tool-bash", "tool-pwsh", "tool-jobs", "tool-fs", "tool-fs-search",
-	"tool-str-replace-editor", "skill-filesystem", "tool-skill", "tool-goal",
-	"plan-mode", "compaction-basic", "command-compact", "tool-result-pruner",
-	"tool-subagent-control", "tool-subagent-list-agents", "tool-subagent",
-	"tool-subagent-fork", "workflow-worker-thread", "tool-workflow", "tool-ralph",
-	"agent-instructions", "tool-todo", "tool-web",
+	"tool-bash",
+	"tool-pwsh",
+	"tool-jobs",
+	"tool-fs",
+	"tool-fs-search",
+	"tool-str-replace-editor",
+	"skill-filesystem",
+	"tool-skill",
+	"tool-goal",
+	"plan-mode",
+	"compaction-basic",
+	"command-compact",
+	"tool-result-pruner",
+	"tool-subagent-control",
+	"tool-subagent-list-agents",
+	"tool-subagent",
+	"tool-subagent-fork",
+	"workflow-worker-thread",
+	"tool-workflow",
+	"tool-ralph",
+	"agent-instructions",
+	"tool-todo",
+	"tool-web",
 ];
 
 const tmpRoot = mkdtempSync(join(tmpdir(), "dsh-boot-check-"));
@@ -67,19 +79,7 @@ try {
 	// hostEntry 会写入 configDir 的 app 本地插件（directoryPicker 是 dsh-host-apiproxy
 	// 激活的前置服务，不补 host 会停在 pending；其余两个是行为插件，与 runtime 无关
 	// 但保持与真实 host 相同的组合以贴近实际加载路径）。
-	writeFileSync(
-		join(configDir, "pideck-directory-picker.js"),
-		[
-			"export default {",
-			"  apply(ctx) {",
-			"    ctx.provide('directoryPicker', {",
-			"      capability() { return { kind: 'none' }; },",
-			"    });",
-			"  },",
-			"};",
-			"",
-		].join("\n"),
-	);
+	writeFileSync(join(configDir, "pideck-directory-picker.js"), ["export default {", "  apply(ctx) {", "    ctx.provide('directoryPicker', {", "      capability() { return { kind: 'none' }; },", "    });", "  },", "};", ""].join("\n"));
 	writeFileSync(join(configDir, "pideck-slash-bridge.js"), "export default { apply() {} };\n");
 	writeFileSync(join(configDir, "pideck-minimal-tool-filter.js"), "export default { apply() {} };\n");
 
@@ -89,10 +89,7 @@ try {
 	const requireRt = createRequire(join(nmRoot, "package.json"));
 	const importFromRt = (specifier) => import(pathToFileURL(requireRt.resolve(specifier)).href);
 
-	const [{ boot, loadOverlayPatches }, { provideCmdline }] = await Promise.all([
-		importFromRt("@deepseek-ai/dsh-app-boot"),
-		importFromRt("@deepseek-ai/dsh-cmdline"),
-	]);
+	const [{ boot, loadOverlayPatches }, { provideCmdline }] = await Promise.all([importFromRt("@deepseek-ai/dsh-app-boot"), importFromRt("@deepseek-ai/dsh-cmdline")]);
 
 	const basePatchPath = requireRt.resolve("@deepseek-ai/dsh-base/cordis.patch.yml");
 	const patches = loadOverlayPatches("pideck-dsh", basePatchPath);

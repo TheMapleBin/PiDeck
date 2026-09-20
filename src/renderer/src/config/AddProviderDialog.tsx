@@ -14,18 +14,8 @@ import type { ModelItem, ProviderCompat } from "./configTypes";
 import { ModelsTable } from "./ModelsTable";
 import { ProviderConnectionForm, type ProviderTestResult } from "./ProviderConnectionForm";
 import { buildProviderConfigFromDraft, resolveInitialReasoningContentReplay, type AddProviderDraft } from "./addProviderDraft";
-import {
-	applyModelPatches,
-	applyAdaptiveTemplateReset,
-	computeModelSpecPatches,
-	mergeAdaptiveModelTemplate,
-} from "../utils/modelSpecAutoFill";
-import {
-	countSelectedModelIndexes,
-	removeSelectedModelIndexes,
-	toggleAllModelIndexes,
-	toggleModelIndex,
-} from "./modelBatchSelection";
+import { applyModelPatches, applyAdaptiveTemplateReset, computeModelSpecPatches, mergeAdaptiveModelTemplate } from "../utils/modelSpecAutoFill";
+import { countSelectedModelIndexes, removeSelectedModelIndexes, toggleAllModelIndexes, toggleModelIndex } from "./modelBatchSelection";
 
 /**
  * 新增/编辑供应商页（Pi 模型页的「下一页」）：
@@ -167,11 +157,7 @@ export function AddProviderDialog(props: {
 			showNotice(t("config.modelsAlreadyConfigured"));
 			return;
 		}
-		const results = await Promise.all(
-			baseModels.map((m) =>
-				desktopApi.projects.getModelSpec(name.trim() || "draft", m.id, m.name).catch(() => null),
-			),
-		);
+		const results = await Promise.all(baseModels.map((m) => desktopApi.projects.getModelSpec(name.trim() || "draft", m.id, m.name).catch(() => null)));
 		let filledCount = 0;
 		const newModels = baseModels.map((m, i) => {
 			const updates = computeModelSpecPatches(m, results[i]);
@@ -181,12 +167,7 @@ export function AddProviderDialog(props: {
 		});
 		setModels((prev) => [...prev, ...newModels]);
 		setSelectedFetchedIds([]);
-		showNotice(
-			filledCount > 0
-				? t("config.modelsSavedWithSpecs", { count: filledCount })
-				: t("config.modelsSavedFromFetch", { count: newModels.length }),
-			filledCount > 0 ? 3000 : undefined,
-		);
+		showNotice(filledCount > 0 ? t("config.modelsSavedWithSpecs", { count: filledCount }) : t("config.modelsSavedFromFetch", { count: newModels.length }), filledCount > 0 ? 3000 : undefined);
 	};
 
 	/**
@@ -201,28 +182,16 @@ export function AddProviderDialog(props: {
 		try {
 			let listing: FetchedModel | undefined;
 			if (baseUrl.trim() && apiKey.trim()) {
-				const result = await desktopApi.config.fetchModels(
-					baseUrl.trim(),
-					apiKey.trim(),
-					api || undefined,
-					userAgent.trim() ? { "User-Agent": userAgent.trim() } : undefined,
-				);
+				const result = await desktopApi.config.fetchModels(baseUrl.trim(), apiKey.trim(), api || undefined, userAgent.trim() ? { "User-Agent": userAgent.trim() } : undefined);
 				if (result.success && result.models) {
 					listing = result.models.find((item) => item.id === model.id);
 				}
 			}
-			const spec = await desktopApi.projects
-				.getModelSpec(name.trim() || "draft", model.id, model.name)
-				.catch(() => null);
+			const spec = await desktopApi.projects.getModelSpec(name.trim() || "draft", model.id, model.name).catch(() => null);
 			const template = mergeAdaptiveModelTemplate(listing, spec, model.id);
 			const nextModel = applyAdaptiveTemplateReset(model, template);
 			setModels((prev) => prev.map((m, j) => (j === index ? nextModel : m)));
-			showNotice(
-				template.matchedId
-					? t("config.modelResetAdaptiveDone", { model: template.matchedId })
-					: t("config.modelResetAdaptiveKept"),
-				3000,
-			);
+			showNotice(template.matchedId ? t("config.modelResetAdaptiveDone", { model: template.matchedId }) : t("config.modelResetAdaptiveKept"), 3000);
 		} finally {
 			setResettingModelKey(null);
 		}
@@ -291,13 +260,7 @@ export function AddProviderDialog(props: {
 				compat,
 				models: models.length > 0 ? models : [{ id: modelId, name: modelId }],
 			});
-			const result = await desktopApi.config.testProvider(
-				providerName,
-				modelId,
-				probeProvider,
-				apiKey.trim(),
-				testProxyMode,
-			);
+			const result = await desktopApi.config.testProvider(providerName, modelId, probeProvider, apiKey.trim(), testProxyMode);
 			setTestResult(result);
 		} catch (error) {
 			setTestResult({ success: false, error: error instanceof Error ? error.message : String(error) });
@@ -331,25 +294,17 @@ export function AddProviderDialog(props: {
 		<div className="flex h-full min-h-0 flex-col">
 			{/* 页面头部：返回按钮 + 标题（对齐设置界面头部形态） */}
 			<div className="flex shrink-0 items-center gap-2 border-b border-border-subtle px-4 py-2.5">
-				<Button type="button" variant="ghost" size="icon-sm" className="size-7 shrink-0 text-muted-foreground hover:text-foreground"
-					onClick={props.onBack}
-					title={t("common.back")}
-					aria-label={t("common.back")}
-				>
+				<Button type="button" variant="ghost" size="icon-sm" className="size-7 shrink-0 text-muted-foreground hover:text-foreground" onClick={props.onBack} title={t("common.back")} aria-label={t("common.back")}>
 					<ArrowLeft size={16} />
 				</Button>
-				<span className="text-control font-semibold text-foreground">
-					{props.mode === "edit" ? t("config.editProviderDialogTitle") : t("config.addProviderDialogTitle")}
-				</span>
+				<span className="text-control font-semibold text-foreground">{props.mode === "edit" ? t("config.editProviderDialogTitle") : t("config.addProviderDialogTitle")}</span>
 			</div>
 
 			{/* 内容区：配置字段 + 获取模型 + 模型列表（可滚动） */}
 			<div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
 				<div className="config-provider-form grid gap-2.5">
 					<div className="grid grid-cols-[90px_1fr] items-start gap-2.5">
-						<Label className="pl-0.5 pt-1.5 text-left text-xs font-medium text-text-secondary">
-							{t("config.addProviderName")}
-						</Label>
+						<Label className="pl-0.5 pt-1.5 text-left text-xs font-medium text-text-secondary">{t("config.addProviderName")}</Label>
 						<div className="flex min-w-0 flex-col gap-1">
 							<Input
 								value={name}
@@ -361,12 +316,8 @@ export function AddProviderDialog(props: {
 									if (e.key === "Enter") submit();
 								}}
 							/>
-							{trimmedName !== "" && !nameValid && (
-								<span className="text-[11px] leading-relaxed text-destructive">{t("config.providerNameRule")}</span>
-							)}
-							{duplicate && (
-								<span className="text-[11px] leading-relaxed text-destructive">{t("config.providerNameDuplicate")}</span>
-							)}
+							{trimmedName !== "" && !nameValid && <span className="text-[11px] leading-relaxed text-destructive">{t("config.providerNameRule")}</span>}
+							{duplicate && <span className="text-[11px] leading-relaxed text-destructive">{t("config.providerNameDuplicate")}</span>}
 						</div>
 					</div>
 					{/* 连接字段 + 测试连接 + 兼容性：与模型页展开卡片同一套组件（ProviderConnectionForm） */}
@@ -390,11 +341,7 @@ export function AddProviderDialog(props: {
 						testProxyMode={testProxyMode}
 						onChangeTestProxyMode={setTestProxyMode}
 						testResult={testResult}
-						testHint={t(
-							(fetchedModels?.length ?? 0) > 0
-								? "config.testFailedButModelsFetched"
-								: "config.testConnectionHint",
-						)}
+						testHint={t((fetchedModels?.length ?? 0) > 0 ? "config.testFailedButModelsFetched" : "config.testConnectionHint")}
 					/>
 				</div>
 
@@ -421,19 +368,8 @@ export function AddProviderDialog(props: {
 								<RefreshCw size={13} className={fetching ? "animate-pideck-spin" : ""} aria-hidden="true" />
 								{fetching ? t("config.fetchingModels") : t("config.fetchModels")}
 							</Button>
-							<Button
-								type="button"
-								variant={modelBatchMode ? "secondary" : "outline"}
-								size="sm"
-								className={`h-7${modelBatchMode ? "" : " text-destructive hover:bg-destructive/10 hover:text-destructive"}`}
-								onClick={toggleModelBatch}
-								disabled={models.length === 0}
-							>
-								{modelBatchMode ? (
-									<X className="size-3.5" aria-hidden="true" />
-								) : (
-									<Trash2 className="size-3.5" aria-hidden="true" />
-								)}
+							<Button type="button" variant={modelBatchMode ? "secondary" : "outline"} size="sm" className={`h-7${modelBatchMode ? "" : " text-destructive hover:bg-destructive/10 hover:text-destructive"}`} onClick={toggleModelBatch} disabled={models.length === 0}>
+								{modelBatchMode ? <X className="size-3.5" aria-hidden="true" /> : <Trash2 className="size-3.5" aria-hidden="true" />}
 								{modelBatchMode ? t("common.cancel") : t("common.deleteBatch")}
 							</Button>
 							{modelBatchMode && (
@@ -458,12 +394,7 @@ export function AddProviderDialog(props: {
 					{/* 获取结果勾选（拉取成功才显示） */}
 					{fetchedModels && fetchedModels.length > 0 && (
 						<div className="mb-2 flex flex-col gap-2 rounded-md border border-border-subtle bg-bg-subtle p-2.5">
-							<FetchedModelCombobox
-								models={fetchedModels}
-								value={selectedFetchedIds}
-								existingModelIds={models.map((model) => model.id)}
-								onChange={setSelectedFetchedIds}
-							/>
+							<FetchedModelCombobox models={fetchedModels} value={selectedFetchedIds} existingModelIds={models.map((model) => model.id)} onChange={setSelectedFetchedIds} />
 							<div className="flex justify-end border-t border-border-subtle pt-2">
 								<Button type="button" variant="default" size="sm" disabled={selectedFetchedIds.length === 0} onClick={saveSelectedFetched}>
 									{t("config.saveSelectedModels")}
@@ -471,15 +402,11 @@ export function AddProviderDialog(props: {
 							</div>
 						</div>
 					)}
-					{fetchError && (
-						<div className="mb-2 rounded-sm border border-danger/20 bg-danger-soft px-3 py-2 text-[11px] leading-relaxed text-danger whitespace-pre-line">{fetchError}</div>
-					)}
+					{fetchError && <div className="mb-2 rounded-sm border border-danger/20 bg-danger-soft px-3 py-2 text-[11px] leading-relaxed text-danger whitespace-pre-line">{fetchError}</div>}
 					{/* 已配置模型列表：与展开卡片同款模型表格（页内草稿管理，确认时随 provider 一起提交） */}
 					<ModelsTable
 						models={models}
-						onUpdateModel={(index, field, value) =>
-							setModels((prev) => prev.map((m, j) => (j === index ? { ...m, [field]: value } : m)))
-						}
+						onUpdateModel={(index, field, value) => setModels((prev) => prev.map((m, j) => (j === index ? { ...m, [field]: value } : m)))}
 						onUpdateModelThinkingLevel={(index, key, value) => {
 							// 思考级别写入模型草稿 thinkingLevelMap/reasoning，并同步 compat.supportsReasoningEffort
 							// （与 ConfigModal 的 handleUpdateModelThinkingLevel 语义一致）
@@ -508,12 +435,8 @@ export function AddProviderDialog(props: {
 						onBlurAutoFill={applyModelSpecAutoFill}
 						batchMode={modelBatchMode}
 						selectedIndexes={selectedModelIndexes}
-						onToggleSelectIndex={(index) =>
-							setSelectedModelIndexes((current) => toggleModelIndex(current, index))
-						}
-						onToggleAll={(total) =>
-							setSelectedModelIndexes((current) => toggleAllModelIndexes(current, total))
-						}
+						onToggleSelectIndex={(index) => setSelectedModelIndexes((current) => toggleModelIndex(current, index))}
+						onToggleAll={(total) => setSelectedModelIndexes((current) => toggleAllModelIndexes(current, total))}
 						focusModelKey={pendingModelFocusKey}
 						onFocusHandled={() => setPendingModelFocusKey(null)}
 					/>

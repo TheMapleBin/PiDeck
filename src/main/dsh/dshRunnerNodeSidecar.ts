@@ -40,10 +40,7 @@ export interface ResolveDshRunnerNodeSidecarInput {
 }
 
 /** userData 里 PiDeck 专用 node.exe（一键下载产物）。 */
-export function dshRunnerNodeUserDataSidecar(
-	userDataPath: string,
-	platform: NodeJS.Platform = "win32",
-): string {
+export function dshRunnerNodeUserDataSidecar(userDataPath: string, platform: NodeJS.Platform = "win32"): string {
 	return join(userDataPath, DSH_RUNNER_NODE_DIRNAME, dshRunnerNodeFileName(platform));
 }
 
@@ -51,9 +48,7 @@ export function dshRunnerNodeUserDataSidecar(
  * 只解析「已落盘的专用副本」（userData / 旧包残留），不含 env 与用户配置。
  * 给自动探测用：配置路径另外处理，避免坏配置把 sidecar 盖掉。
  */
-export function resolveInstalledDshRunnerNodeSidecar(
-	input: Pick<ResolveDshRunnerNodeSidecarInput, "platform" | "resourcesPath" | "appPath" | "userDataPath">,
-): string | undefined {
+export function resolveInstalledDshRunnerNodeSidecar(input: Pick<ResolveDshRunnerNodeSidecarInput, "platform" | "resourcesPath" | "appPath" | "userDataPath">): string | undefined {
 	const platform = input.platform ?? "win32";
 	if (platform !== "win32") return undefined;
 	const fileName = dshRunnerNodeFileName(platform);
@@ -61,9 +56,7 @@ export function resolveInstalledDshRunnerNodeSidecar(
 		const fromUserData = dshRunnerNodeUserDataSidecar(input.userDataPath, platform);
 		if (existsSync(fromUserData)) return fromUserData;
 	}
-	const packaged = input.resourcesPath
-		? join(input.resourcesPath, DSH_RUNNER_NODE_DIRNAME, fileName)
-		: undefined;
+	const packaged = input.resourcesPath ? join(input.resourcesPath, DSH_RUNNER_NODE_DIRNAME, fileName) : undefined;
 	if (packaged && existsSync(packaged)) return packaged;
 	if (input.appPath) {
 		const fromApp = join(input.appPath, "resources", DSH_RUNNER_NODE_DIRNAME, fileName);

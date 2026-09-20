@@ -24,23 +24,11 @@ import { dshRunnerNodeUserDataSidecar } from "./dshRunnerNodeSidecar";
 
 const execFileAsync = promisify(execFile);
 
-export {
-	DSH_RUNNER_NODE_SIDECAR_VERSION,
-	dshRunnerNodeSidecarArch,
-	dshRunnerNodeZipInnerDir,
-	dshRunnerNodeZipName,
-};
+export { DSH_RUNNER_NODE_SIDECAR_VERSION, dshRunnerNodeSidecarArch, dshRunnerNodeZipInnerDir, dshRunnerNodeZipName };
 
-export type DshRunnerNodeDownloader = (
-	url: string,
-	destPath: string,
-	onProgress?: (received: number, total?: number) => void,
-	signal?: AbortSignal,
-) => Promise<void>;
+export type DshRunnerNodeDownloader = (url: string, destPath: string, onProgress?: (received: number, total?: number) => void, signal?: AbortSignal) => Promise<void>;
 
-export type DshRunnerNodeIndexFetcher = (
-	url: string,
-) => Promise<DshRunnerNodeReleaseIndex | null>;
+export type DshRunnerNodeIndexFetcher = (url: string) => Promise<DshRunnerNodeReleaseIndex | null>;
 
 export type InstallDshRunnerNodeInput = {
 	userDataPath: string;
@@ -67,11 +55,7 @@ function resolveSystemTar(): string | null {
 }
 
 /** 用系统 tar 只抽出 zip 里的 node.exe，不解整个发行包。 */
-export async function extractNodeExeFromZip(
-	zipPath: string,
-	destDir: string,
-	innerExeRel: string,
-): Promise<string> {
+export async function extractNodeExeFromZip(zipPath: string, destDir: string, innerExeRel: string): Promise<string> {
 	const tarBin = resolveSystemTar();
 	if (!tarBin) throw new Error("系统 tar 不可用，无法解压 Node 压缩包");
 	mkdirSync(destDir, { recursive: true });
@@ -100,22 +84,14 @@ async function defaultSha256(filePath: string): Promise<string> {
  * 把索引条目的 url 改成当前更新源 latest 应用 Release 的资产。
  * 打包脚本写的是 nodejs.org 占位；客户端永远按 latest 拉，国内默认 AtomGit。
  */
-export function resolveDshRunnerNodeReleaseUrl(
-	release: DshRunnerNodeRelease,
-	source: UpdateSourceId,
-	arch: DshRunnerNodeArch,
-	version: string,
-): string {
+export function resolveDshRunnerNodeReleaseUrl(release: DshRunnerNodeRelease, source: UpdateSourceId, arch: DshRunnerNodeArch, version: string): string {
 	if (release.url.startsWith("file:") || /^[a-zA-Z]:[\\/]/.test(release.url) || release.url.startsWith("/")) {
 		return release.url;
 	}
 	return dshRunnerNodeAssetDownloadUrl(source, dshRunnerNodeZipName(version, arch));
 }
 
-export function resolveDshRunnerNodeIndexUrl(input: {
-	indexUrl?: string;
-	updateSource?: UpdateSourceId;
-}): string {
+export function resolveDshRunnerNodeIndexUrl(input: { indexUrl?: string; updateSource?: UpdateSourceId }): string {
 	const override = input.indexUrl?.trim();
 	if (override) return override;
 	return defaultDshRunnerNodeIndexUrl(input.updateSource ?? "atomgit");
@@ -125,9 +101,7 @@ export function resolveDshRunnerNodeIndexUrl(input: {
  * 下载 Node 24 的 CUI node.exe 到 `<userData>/dsh-runner-node/`。
  * 源是当前 latest 应用 Release（AtomGit/GitHub），不改 PATH、不直连 nodejs.org。
  */
-export async function installDshRunnerNodeSidecar(
-	input: InstallDshRunnerNodeInput,
-): Promise<DshRunnerNodeInstallResult> {
+export async function installDshRunnerNodeSidecar(input: InstallDshRunnerNodeInput): Promise<DshRunnerNodeInstallResult> {
 	const platform = input.platform ?? process.platform;
 	if (platform !== "win32") {
 		return { ok: false, error: "仅 Windows 需要单独的 Node 24 沙箱副本" };

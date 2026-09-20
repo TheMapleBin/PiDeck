@@ -1,25 +1,12 @@
 import assert from "node:assert/strict";
-import {
-	lstatSync,
-	mkdtempSync,
-	mkdirSync,
-	rmSync,
-	symlinkSync,
-	writeFileSync,
-} from "node:fs";
+import { lstatSync, mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
-const {
-	FILE_OUTSIDE_PROJECT_ERROR,
-	assertProjectFilePathInsideRoot,
-	assertProjectFileReadPath,
-	createProjectFileReadBoundary,
-	resolveProjectFileWritePath,
-} = loadTsCommonJs("src/main/files/projectFileAccess.ts");
+const { FILE_OUTSIDE_PROJECT_ERROR, assertProjectFilePathInsideRoot, assertProjectFileReadPath, createProjectFileReadBoundary, resolveProjectFileWritePath } = loadTsCommonJs("src/main/files/projectFileAccess.ts");
 
 test("project file access accepts a real file inside the project", async () => {
 	const fixture = mkdtempSync(join(tmpdir(), "pideck-project-file-access-"));
@@ -37,14 +24,8 @@ test("project file access accepts a real file inside the project", async () => {
 
 test("project file access rejects lexical traversal and prefix collisions", () => {
 	const root = join(tmpdir(), "pideck-project");
-	assert.throws(
-		() => assertProjectFilePathInsideRoot(root, join(root, "..", "secret.txt")),
-		new RegExp(FILE_OUTSIDE_PROJECT_ERROR),
-	);
-	assert.throws(
-		() => assertProjectFilePathInsideRoot(root, join(`${root}-other`, "secret.txt")),
-		new RegExp(FILE_OUTSIDE_PROJECT_ERROR),
-	);
+	assert.throws(() => assertProjectFilePathInsideRoot(root, join(root, "..", "secret.txt")), new RegExp(FILE_OUTSIDE_PROJECT_ERROR));
+	assert.throws(() => assertProjectFilePathInsideRoot(root, join(`${root}-other`, "secret.txt")), new RegExp(FILE_OUTSIDE_PROJECT_ERROR));
 });
 
 test("project writes reject a dangling file symlink", async (t) => {
@@ -76,10 +57,7 @@ test("project writes reject a dangling file symlink", async (t) => {
 			return;
 		}
 		const boundary = await createProjectFileReadBoundary(root);
-		await assert.rejects(
-			() => resolveProjectFileWritePath(boundary, link),
-			new RegExp(FILE_OUTSIDE_PROJECT_ERROR),
-		);
+		await assert.rejects(() => resolveProjectFileWritePath(boundary, link), new RegExp(FILE_OUTSIDE_PROJECT_ERROR));
 	} finally {
 		rmSync(fixture, { recursive: true, force: true });
 	}
@@ -104,10 +82,7 @@ test("project writes reject a dangling intermediate directory symlink or junctio
 		}
 		rmSync(outsideDir, { recursive: true, force: true });
 		const boundary = await createProjectFileReadBoundary(root);
-		await assert.rejects(
-			() => resolveProjectFileWritePath(boundary, join(link, "future.txt")),
-			new RegExp(FILE_OUTSIDE_PROJECT_ERROR),
-		);
+		await assert.rejects(() => resolveProjectFileWritePath(boundary, join(link, "future.txt")), new RegExp(FILE_OUTSIDE_PROJECT_ERROR));
 	} finally {
 		rmSync(fixture, { recursive: true, force: true });
 	}
@@ -134,10 +109,7 @@ test("project file access rejects a symlink that resolves outside the project", 
 			}
 			throw error;
 		}
-		await assert.rejects(
-			() => assertProjectFileReadPath(root, linkedFile),
-			new RegExp(FILE_OUTSIDE_PROJECT_ERROR),
-		);
+		await assert.rejects(() => assertProjectFileReadPath(root, linkedFile), new RegExp(FILE_OUTSIDE_PROJECT_ERROR));
 	} finally {
 		rmSync(fixture, { recursive: true, force: true });
 	}

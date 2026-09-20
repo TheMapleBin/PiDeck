@@ -5,14 +5,7 @@ import type { Project } from "../../../../shared/types";
 import { t } from "../../i18n";
 import { Alert, AlertDescription } from "../ui-shadcn/alert";
 import { Button } from "../ui-shadcn/button";
-import {
-	Dialog,
-	DialogClose,
-	DialogContent,
-	DialogDescription,
-	DialogHeader,
-	DialogTitle,
-} from "../ui-shadcn/dialog";
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../ui-shadcn/dialog";
 
 /**
  * Project-context resource manager.
@@ -20,19 +13,12 @@ import {
  * Settings share the same list/store/editor behavior. This shell only fixes the
  * project scope and keeps the project selector out of the context-menu flow.
  */
-export function ProjectResourcesModal(props: {
-	project: Project;
-	onClose: () => void;
-}) {
+export function ProjectResourcesModal(props: { project: Project; onClose: () => void }) {
 	const chatProject = isChatProject(props.project);
 
 	return (
 		<Dialog open onOpenChange={(next) => !next && props.onClose()}>
-			<DialogContent
-				showCloseButton={false}
-				stagger
-				className="config-modal flex h-[min(760px,calc(100vh-32px))] w-[80vw] max-w-[80vw] flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(1300px,80vw)] [--wallpaper-dialog-alpha:var(--wallpaper-panel-alpha,30%)]"
-			>
+			<DialogContent showCloseButton={false} stagger className="config-modal flex h-[min(760px,calc(100vh-32px))] w-[80vw] max-w-[80vw] flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(1300px,80vw)] [--wallpaper-dialog-alpha:var(--wallpaper-panel-alpha,30%)]">
 				<DialogHeader className="shrink-0 gap-1 border-b border-border-subtle px-6 py-4 text-left">
 					<div className="flex items-start justify-between gap-4">
 						<div className="min-w-0">
@@ -61,15 +47,7 @@ export function ProjectResourcesModal(props: {
 						</Alert>
 					</div>
 				) : (
-					<ConfigPane
-						resourceOnly
-						projectId={props.project.id}
-						projectKind={props.project.kind}
-						projectName={props.project.name}
-						projects={[props.project]}
-						onClose={props.onClose}
-						onSaved={() => undefined}
-					/>
+					<ConfigPane resourceOnly projectId={props.project.id} projectKind={props.project.kind} projectName={props.project.name} projects={[props.project]} onClose={props.onClose} onSaved={() => undefined} />
 				)}
 			</DialogContent>
 		</Dialog>

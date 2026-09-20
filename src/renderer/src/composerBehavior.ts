@@ -1,7 +1,4 @@
-export type SendShortcut =
-	| "enter-send"
-	| "ctrl-enter-send"
-	| "shift-enter-send";
+export type SendShortcut = "enter-send" | "ctrl-enter-send" | "shift-enter-send";
 
 export type ComposerEnterIntent = "ignore" | "newline" | "send";
 
@@ -87,7 +84,10 @@ export function parseArgumentHint(content: string): string | undefined {
 		if (idx === -1) continue;
 		const key = line.slice(0, idx).trim();
 		if (key === "argument-hint") {
-			return line.slice(idx + 1).trim().replace(/^['"]|['"]$/g, "");
+			return line
+				.slice(idx + 1)
+				.trim()
+				.replace(/^['"]|['"]$/g, "");
 		}
 	}
 	// 兜底：从内容正文中扫描 ${name} / ${name:default} 模式，按首次出现顺序推断提示
@@ -130,7 +130,7 @@ const BUILTIN_PROMPT_DESC_CN: Record<string, string> = {
 	fix: "调试并修复问题，包含根因分析",
 	refactor: "重构代码以提升可读性和可维护性",
 	doc: "添加或改进文档和注释",
-explain: "用简洁的语言解释代码或架构",
+	explain: "用简洁的语言解释代码或架构",
 	commit: "根据暂存更改生成约定式提交信息",
 	"commit-own": "只提交自己修改的文件和代码（跳过无关改动）",
 	"commit-split": "提交所有改动，按功能拆分为多个 commit",
@@ -157,14 +157,10 @@ const BUILTIN_PROMPT_DESC_EN: Record<string, string> = {
  * 翻译内置 prompt 模板的 description（UI 展示用）。
  * 非内置模板保持原样。
  */
-export function translateBuiltinPromptDescription(
-	template: PromptTemplateInfo,
-): string {
+export function translateBuiltinPromptDescription(template: PromptTemplateInfo): string {
 	if (!template.path.startsWith("builtin://")) return template.description;
 	// 根据 html[data-theme] 判断语言环境——中文用 CN 映射，其余用 EN
-	const isChinese =
-		typeof document !== "undefined" &&
-		document.documentElement.lang?.startsWith("zh");
+	const isChinese = typeof document !== "undefined" && document.documentElement.lang?.startsWith("zh");
 	const map = isChinese ? BUILTIN_PROMPT_DESC_CN : BUILTIN_PROMPT_DESC_EN;
 	return map[template.name] ?? template.description;
 }
@@ -196,10 +192,7 @@ function stripFrontmatter(raw: string): string {
  * - 展开结果写成自包含 `<prompt_template>` 块：模型仍读完整模板正文，气泡可在重启、
  *   模板改名或删除后稳定还原为 `/模板名` chip（不依赖当前模板列表）
  */
-export function expandPromptTemplates(
-	message: string,
-	templates: PromptTemplateInfo[],
-): { message: string; description?: string; emptyTemplateName?: string } {
+export function expandPromptTemplates(message: string, templates: PromptTemplateInfo[]): { message: string; description?: string; emptyTemplateName?: string } {
 	if (!templates.length || !message.includes("/")) return { message };
 
 	// 按 name 长度降序排序，确保正则交替时最长匹配优先
@@ -213,13 +206,8 @@ export function expandPromptTemplates(
 	let emptyTemplateName: string | undefined;
 
 	// 构建 /name1|/name2|/name3 的单一正则，捕获命令前后的空白分隔符
-	const escapedNames = sorted.map((t) =>
-		t.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
-	);
-	const regex = new RegExp(
-		`(^|\\s)/(${escapedNames.join("|")})(\\s|$)`,
-		"g",
-	);
+	const escapedNames = sorted.map((t) => t.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+	const regex = new RegExp(`(^|\\s)/(${escapedNames.join("|")})(\\s|$)`, "g");
 
 	const expanded = message.replace(regex, (_match, prefix, name, suffix) => {
 		matchedName = name;
@@ -246,7 +234,6 @@ export function expandPromptTemplates(
 	};
 }
 
-
 /** DSH 当前目标投影（只取派生模式/首轮 /goal 需要的字段）。 */
 export type DshGoalModeSnapshot = {
 	phase?: "active" | "paused" | "blocked" | "complete";
@@ -256,12 +243,7 @@ export type DshGoalModeSnapshot = {
  * 桌面端派生 composer 模式。DSH：plan 由 host 持有；goal 由本地选择或进行中/阻塞的目标驱动。
  * 切回普通会把本地 mode 写成 normal，因此 paused 目标不会把选择器锁在目标模式。
  */
-export function deriveComposerAgentMode(input: {
-	backend?: AgentBackend;
-	localMode?: ComposerAgentMode;
-	planModeActive?: boolean;
-	goalPhase?: DshGoalModeSnapshot["phase"];
-}): ComposerAgentMode {
+export function deriveComposerAgentMode(input: { backend?: AgentBackend; localMode?: ComposerAgentMode; planModeActive?: boolean; goalPhase?: DshGoalModeSnapshot["phase"] }): ComposerAgentMode {
 	const localMode = input.localMode;
 	// imagegen 是独立后端：会话为生图后端时恒为生图模式（无 LLM mode 概念）
 	if (input.backend === "imagegen") return "imagegen";
@@ -281,11 +263,7 @@ export function deriveComposerAgentMode(input: {
  * DSH 没有 pi 的隐藏 agentMessage。首次进入目标且还没有 goal 时，把用户原文改写成 host `/goal`。
  * 已有未完成目标时保持原文，由 resume IPC + 普通 prompt 推进。
  */
-export function applyDshGoalSendTransform(input: {
-	message: string;
-	mode: ComposerAgentMode;
-	goal?: DshGoalModeSnapshot;
-}): string {
+export function applyDshGoalSendTransform(input: { message: string; mode: ComposerAgentMode; goal?: DshGoalModeSnapshot }): string {
 	if (input.mode !== "goal") return input.message;
 	const trimmed = input.message.trim();
 	if (!trimmed || trimmed.startsWith("/")) return input.message;
@@ -295,13 +273,15 @@ export function applyDshGoalSendTransform(input: {
 }
 
 /** 解析 pi-deck-goal-mode widget 行：`phase · rounds/max` + 目标 + 可选阻塞原因。 */
-export function parsePiGoalWidget(lines: readonly string[] | undefined): {
-	phase: "active" | "paused" | "blocked" | "complete";
-	objective: string;
-	roundsStarted: number;
-	maxGoalRounds: number;
-	blockReason?: string;
-} | undefined {
+export function parsePiGoalWidget(lines: readonly string[] | undefined):
+	| {
+			phase: "active" | "paused" | "blocked" | "complete";
+			objective: string;
+			roundsStarted: number;
+			maxGoalRounds: number;
+			blockReason?: string;
+	  }
+	| undefined {
 	if (!lines || lines.length < 2) return undefined;
 	const header = lines[0]?.trim() ?? "";
 	const match = header.match(/^(active|paused|blocked|complete)\s*·\s*(\d+)\s*\/\s*(\d+)\s*$/);
@@ -309,12 +289,7 @@ export function parsePiGoalWidget(lines: readonly string[] | undefined): {
 	const objective = lines[1]?.trim() ?? "";
 	if (!objective) return undefined;
 	const phaseToken = match[1];
-	if (
-		phaseToken !== "active" &&
-		phaseToken !== "paused" &&
-		phaseToken !== "blocked" &&
-		phaseToken !== "complete"
-	) {
+	if (phaseToken !== "active" && phaseToken !== "paused" && phaseToken !== "blocked" && phaseToken !== "complete") {
 		return undefined;
 	}
 	return {
@@ -326,10 +301,7 @@ export function parsePiGoalWidget(lines: readonly string[] | undefined): {
 	};
 }
 
-export function buildComposerPromptSubmission(
-	message: string,
-	mode: ComposerAgentMode,
-): ComposerPromptSubmission {
+export function buildComposerPromptSubmission(message: string, mode: ComposerAgentMode): ComposerPromptSubmission {
 	const trimmed = message.trim();
 	// 斜线命令原样发送，让 pi 解析执行——plan/goal 模式下也能用 /plan off、/goal pause。
 	// 否则隐藏标记前缀会把命令变成普通消息发给 LLM。
@@ -339,15 +311,7 @@ export function buildComposerPromptSubmission(
 		const visibleInstruction = trimmed || "请根据已附加的图片或上下文先制定实施计划。";
 		return {
 			message,
-			agentMessage: [
-				PI_DECK_PLAN_MODE_MARKER,
-				visibleInstruction,
-				"",
-				"请先只做只读分析，不要修改文件。最后必须输出以 `Plan:` 开头的编号计划，格式如下：",
-				"Plan:",
-				"1. 第一步",
-				"2. 第二步",
-			].join("\n"),
+			agentMessage: [PI_DECK_PLAN_MODE_MARKER, visibleInstruction, "", "请先只做只读分析，不要修改文件。最后必须输出以 `Plan:` 开头的编号计划，格式如下：", "Plan:", "1. 第一步", "2. 第二步"].join("\n"),
 		};
 	}
 
@@ -382,19 +346,11 @@ type ComposerKeyboardState = {
  * IME 回车确认会先发出 composing 状态的 Enter，这时必须交给输入法处理，
  * 否则中文输入法里选择英文候选也会被误判为发送消息。
  */
-export function getComposerEnterIntent(
-	event: ComposerKeyboardState,
-	sendShortcut: SendShortcut,
-): ComposerEnterIntent {
+export function getComposerEnterIntent(event: ComposerKeyboardState, sendShortcut: SendShortcut): ComposerEnterIntent {
 	if (event.key !== "Enter") return "ignore";
 	if (isComposingKeyboardEvent(event)) return "ignore";
 
-	const shouldSend =
-		sendShortcut === "enter-send"
-			? !event.ctrlKey && !event.metaKey && !event.shiftKey
-			: sendShortcut === "ctrl-enter-send"
-				? event.ctrlKey || event.metaKey
-				: event.shiftKey;
+	const shouldSend = sendShortcut === "enter-send" ? !event.ctrlKey && !event.metaKey && !event.shiftKey : sendShortcut === "ctrl-enter-send" ? event.ctrlKey || event.metaKey : event.shiftKey;
 
 	if (shouldSend) return "send";
 	return "newline";
@@ -428,15 +384,7 @@ export function isComposingKeyboardEvent(event: ComposerKeyboardState) {
 	// Shift+Enter 不可能是 IME 合成，直接跳过检测
 	if (event.shiftKey) return false;
 	// keyCode/which=229 是部分 Chromium/macOS 输入法在 composition 期间的兼容信号。
-	return Boolean(
-		event.isComposing ||
-			event.nativeEvent?.isComposing ||
-			event.key === "Process" ||
-			event.keyCode === 229 ||
-			event.which === 229 ||
-			event.nativeEvent?.keyCode === 229 ||
-			event.nativeEvent?.which === 229,
-	);
+	return Boolean(event.isComposing || event.nativeEvent?.isComposing || event.key === "Process" || event.keyCode === 229 || event.which === 229 || event.nativeEvent?.keyCode === 229 || event.nativeEvent?.which === 229);
 }
 
 /**
@@ -446,11 +394,7 @@ export function isComposingKeyboardEvent(event: ComposerKeyboardState) {
  * 因此 ArrowUp 闭包里的 renderedPrompt 可能停留在上次 chips/空状态翻转时。
  * 必须优先读 live ref，否则按上键再按下键时会丢掉中间继续输入的部分。
  */
-export function resolveComposerHistoryDraft(params: {
-	activeAgentId: string | null | undefined;
-	livePromptByAgent: Record<string, string>;
-	renderedPrompt: string;
-}): string {
+export function resolveComposerHistoryDraft(params: { activeAgentId: string | null | undefined; livePromptByAgent: Record<string, string>; renderedPrompt: string }): string {
 	const { activeAgentId, livePromptByAgent, renderedPrompt } = params;
 	if (!activeAgentId) return renderedPrompt;
 	return livePromptByAgent[activeAgentId] ?? renderedPrompt;
@@ -460,10 +404,7 @@ export function resolveComposerHistoryDraft(params: {
  * 判断光标是否在第一行/最后一行。
  * 历史导航只在单行边界触发，避免多行编辑时 ArrowUp/Down 抢走光标移动。
  */
-export function getComposerHistoryLineBounds(
-	text: string,
-	cursorPos: number,
-): { isFirstLine: boolean; isLastLine: boolean } {
+export function getComposerHistoryLineBounds(text: string, cursorPos: number): { isFirstLine: boolean; isLastLine: boolean } {
 	const safePos = Math.max(0, Math.min(cursorPos, text.length));
 	const textBeforeCursor = text.substring(0, safePos);
 	const textAfterCursor = text.substring(safePos);
@@ -480,24 +421,17 @@ export function getComposerHistoryLineBounds(
  * 以区分「点叉取消」与「选否」。桌面端若按普通 select 渲染，会误加自定义输入框。
  * 规则：恰好两项，且归一化后恰好覆盖 {yes,no}，不含其它文案。
  */
-export function isYesNoConfirmOptions(
-	options: Array<string | { label?: string; value?: string }> | undefined | null,
-): boolean {
+export function isYesNoConfirmOptions(options: Array<string | { label?: string; value?: string }> | undefined | null): boolean {
 	if (!Array.isArray(options) || options.length !== 2) return false;
 	const labels = options.map((opt) => {
-		const raw =
-			typeof opt === "string"
-				? opt
-				: String(opt?.label ?? opt?.value ?? "");
+		const raw = typeof opt === "string" ? opt : String(opt?.label ?? opt?.value ?? "");
 		return raw.trim().toLowerCase();
 	});
 	// 过滤自定义入口标记，防止异常数据混入后仍被当 confirm
 	if (labels.some((l) => l.startsWith("✎") || l === "__other__")) return false;
 	const yesSet = new Set(["是", "yes", "y", "true", "确认", "ok", "okay"]);
 	const noSet = new Set(["否", "no", "n", "false", "取消"]);
-	const kinds = labels.map((l) =>
-		yesSet.has(l) ? "yes" : noSet.has(l) ? "no" : "other",
-	);
+	const kinds = labels.map((l) => (yesSet.has(l) ? "yes" : noSet.has(l) ? "no" : "other"));
 	return kinds.includes("yes") && kinds.includes("no") && !kinds.includes("other");
 }
 
@@ -510,10 +444,7 @@ export function isYesNoConfirmOptions(
  * 规则：只取 user 角色且有实质文本的消息；跳过空文本与 "!" 开头命令（与
  * recordPromptHistory 的过滤一致）；截断到 limit 条（默认 50，与发送历史一致）。
  */
-export function extractUserPrompts(
-	messages: ReadonlyArray<{ role: string; text: string }>,
-	limit = 50,
-): string[] {
+export function extractUserPrompts(messages: ReadonlyArray<{ role: string; text: string }>, limit = 50): string[] {
 	const prompts: string[] = [];
 	// 消息按时间正序，从后往前取保证最新在前
 	for (let i = messages.length - 1; i >= 0 && prompts.length < limit; i--) {
@@ -534,11 +465,7 @@ export function extractUserPrompts(
  *   （激活前后重复发送同一条时不出现两条）；
  * - 截断到 limit 条（默认 50，与 recordPromptHistory 一致）。
  */
-export function mergePromptHistory(
-	runtimePrompts: readonly string[],
-	sessionPrompts: readonly string[],
-	limit = 50,
-): string[] {
+export function mergePromptHistory(runtimePrompts: readonly string[], sessionPrompts: readonly string[], limit = 50): string[] {
 	const seen = new Set<string>();
 	const merged: string[] = [];
 	for (const prompt of [...runtimePrompts, ...[...sessionPrompts].reverse()]) {

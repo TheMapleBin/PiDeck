@@ -32,8 +32,8 @@ export const MIN_PI_MINOR_VERSION_FOR_PROMPT_WHITELIST = 60;
  * 从 pi 版本串（如 "0.82.1" / "v0.60.0"）解析次版本号；解析失败返回 null（视为版本未知）。
  */
 export function parsePiMinorVersion(version: string | null | undefined): number | null {
-  if (!version) return null;
-  const match = /^v?(\d+)\.(\d+)/.exec(version.trim());
-  if (!match) return null;
-  return Number.parseInt(match[2], 10);
+	if (!version) return null;
+	const match = /^v?(\d+)\.(\d+)/.exec(version.trim());
+	if (!match) return null;
+	return Number.parseInt(match[2], 10);
 }

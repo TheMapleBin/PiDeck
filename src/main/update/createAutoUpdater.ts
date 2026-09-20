@@ -37,11 +37,7 @@ export const FALLBACK_APP_UPDATE_CONFIG_FILENAME = "pideck-fallback-app-update.y
  * 缺失会导致 ENOENT: no such file or directory, open '...resources/app-update.yml' 错误。
  * 在此动态生成合法的 GitHub provider 兜底配置。
  */
-export function generateFallbackAppUpdateConfigYaml(options?: {
-	owner?: string;
-	repo?: string;
-	updaterCacheDirName?: string;
-}): string {
+export function generateFallbackAppUpdateConfigYaml(options?: { owner?: string; repo?: string; updaterCacheDirName?: string }): string {
 	const owner = options?.owner ?? UPDATE_REPO_OWNER;
 	const repo = options?.repo ?? UPDATE_REPO;
 	const cacheDirName = options?.updaterCacheDirName ?? DEFAULT_UPDATER_CACHE_DIR_NAME;
@@ -53,14 +49,8 @@ export function generateFallbackAppUpdateConfigYaml(options?: {
  * - 打包环境：resources/app-update.yml
  * - 开发环境：dev-app-update.yml
  */
-export function resolveDefaultAppUpdateConfigPath(
-	isPackaged: boolean,
-	resourcesPath: string,
-	appPath: string,
-): string {
-	return isPackaged
-		? join(resourcesPath, "app-update.yml")
-		: join(appPath, "dev-app-update.yml");
+export function resolveDefaultAppUpdateConfigPath(isPackaged: boolean, resourcesPath: string, appPath: string): string {
+	return isPackaged ? join(resourcesPath, "app-update.yml") : join(appPath, "dev-app-update.yml");
 }
 
 export type EnsureAppUpdateConfigDeps = {
@@ -81,11 +71,7 @@ export type EnsureAppUpdateConfigDeps = {
  * 若默认配置已存在，返回 null。
  */
 export function ensureAppUpdateConfig(deps: EnsureAppUpdateConfigDeps): string | null {
-	const defaultPath = resolveDefaultAppUpdateConfigPath(
-		deps.isPackaged,
-		deps.resourcesPath,
-		deps.appPath,
-	);
+	const defaultPath = resolveDefaultAppUpdateConfigPath(deps.isPackaged, deps.resourcesPath, deps.appPath);
 	if (deps.existsSync(defaultPath)) {
 		return null;
 	}
@@ -112,11 +98,7 @@ export function ensureAppUpdateConfig(deps: EnsureAppUpdateConfigDeps): string |
  *    尝试差量下载只会造成无意义的 blockmap 请求失败和额外开销，直接下载完整安装包最可靠。
  * 2. E2E 测试环境同样禁用差量下载。
  */
-export function shouldDisableDifferentialDownload(options: {
-	isPortable?: boolean;
-	hasDefaultConfig?: boolean;
-	isE2E?: boolean;
-}): boolean {
+export function shouldDisableDifferentialDownload(options: { isPortable?: boolean; hasDefaultConfig?: boolean; isE2E?: boolean }): boolean {
 	if (options.isE2E) return true;
 	if (options.isPortable) return true;
 	if (options.hasDefaultConfig === false) return true;
@@ -127,10 +109,7 @@ export function shouldDisableDifferentialDownload(options: {
  * 创建真实 electron-updater 包装。
  * @param options.environment 测试注入的 feed URL（development 构建可用）。
  */
-export function createRealAutoUpdater(options?: {
-	feedUrl?: string;
-	isAutoDownloadEnabled?: () => boolean;
-}): AutoUpdaterLike {
+export function createRealAutoUpdater(options?: { feedUrl?: string; isAutoDownloadEnabled?: () => boolean }): AutoUpdaterLike {
 	// 延迟 require：模块顶层 import electron-updater 会在纯 Node 测试进程崩。
 	// eslint-disable-next-line @typescript-eslint/no-require-imports
 	// eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -139,11 +118,7 @@ export function createRealAutoUpdater(options?: {
 	};
 
 	// 1. 挂载兜底配置（必须在 setFeedURL 之前，避免 updateConfigPath setter 将 clientPromise 置空）
-	const defaultAppUpdateConfigPath = resolveDefaultAppUpdateConfigPath(
-		app.isPackaged,
-		process.resourcesPath,
-		app.getAppPath(),
-	);
+	const defaultAppUpdateConfigPath = resolveDefaultAppUpdateConfigPath(app.isPackaged, process.resourcesPath, app.getAppPath());
 	const hasDefaultConfig = existsSync(defaultAppUpdateConfigPath);
 
 	if (process.env.PIDECK_E2E === "1") {
@@ -151,11 +126,7 @@ export function createRealAutoUpdater(options?: {
 		const feedUrl = options?.feedUrl ?? process.env[UPDATE_FEED_URL_ENV];
 		const configPath = join(app.getPath("userData"), "pideck-e2e-app-update.yml");
 		mkdirSync(app.getPath("userData"), { recursive: true });
-		writeFileSync(
-			configPath,
-			`provider: generic\nurl: ${feedUrl}\nupdaterCacheDirName: pideck-e2e-updater\n`,
-			"utf8",
-		);
+		writeFileSync(configPath, `provider: generic\nurl: ${feedUrl}\nupdaterCacheDirName: pideck-e2e-updater\n`, "utf8");
 		autoUpdater.updateConfigPath = configPath;
 	} else if (!hasDefaultConfig) {
 		// Windows 便携版或缺失 app-update.yml 的打包体：自动在 userData 生成兜底配置
@@ -233,34 +204,24 @@ export function createRealAutoUpdater(options?: {
 			// electron-updater 在未激活（dev 未切镜像源）时默认静默返回 null。把它提升为错误，
 			// 避免 UpdateService 把「根本未检查」误报成「已是最新」；文案给出可操作指引。
 			if (!result) {
-				throw new Error(
-					"更新检查未激活：开发模式下默认不检查，请在设置中选择镜像更新源后重试",
-				);
+				throw new Error("更新检查未激活：开发模式下默认不检查，请在设置中选择镜像更新源后重试");
 			}
 		},
 		downloadUpdate: () => autoUpdater.downloadUpdate().then(() => undefined),
 		quitAndInstall: () => autoUpdater.quitAndInstall(false, true),
 		onEvents: (handlers: AutoUpdaterEventHandlers) => {
 			const onChecking = () => handlers.onChecking?.();
-			const onAvailable = (info: { version?: string }) =>
-				handlers.onUpdateAvailable?.(info.version ?? "", autoUpdater.autoDownload !== false);
-			const onProgress = (progress: {
-				percent?: number;
-				bytesPerSecond?: number;
-				transferred?: number;
-				total?: number;
-			}) =>
+			const onAvailable = (info: { version?: string }) => handlers.onUpdateAvailable?.(info.version ?? "", autoUpdater.autoDownload !== false);
+			const onProgress = (progress: { percent?: number; bytesPerSecond?: number; transferred?: number; total?: number }) =>
 				handlers.onDownloadProgress?.({
 					percent: progress.percent ?? 0,
 					bytesPerSecond: progress.bytesPerSecond ?? 0,
 					transferred: progress.transferred ?? 0,
 					total: progress.total ?? 0,
 				});
-			const onDownloaded = (info: { version?: string }) =>
-				handlers.onUpdateDownloaded?.(info.version ?? "");
+			const onDownloaded = (info: { version?: string }) => handlers.onUpdateDownloaded?.(info.version ?? "");
 			const onNotAvailable = () => handlers.onUpdateNotAvailable?.();
-			const onErrorEvent = (error: Error) =>
-				handlers.onError?.(error instanceof Error ? error.message : String(error));
+			const onErrorEvent = (error: Error) => handlers.onError?.(error instanceof Error ? error.message : String(error));
 			autoUpdater.on("checking-for-update", onChecking);
 			autoUpdater.on("update-available", onAvailable);
 			autoUpdater.on("download-progress", onProgress);

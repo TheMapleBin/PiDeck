@@ -25,7 +25,11 @@ function loadTsModule(filePath, deps) {
 		{
 			module,
 			exports: module.exports,
-			require: (name) => deps[name] ?? (() => { throw new Error(`unexpected require: ${name}`); })(),
+			require: (name) =>
+				deps[name] ??
+				(() => {
+					throw new Error(`unexpected require: ${name}`);
+				})(),
 			console,
 			AbortSignal, // vm 沙箱默认无 AbortSignal，probeMirrorHealth 用 AbortSignal.timeout
 		},
@@ -38,14 +42,7 @@ const shared = loadTsModule("src/shared/updateSources.ts", {});
 const mirrorHealth = loadTsModule("src/main/update/mirrorHealth.ts", {
 	"../../shared/updateSources": shared,
 });
-const {
-	probeMirrorHealth,
-	probeAllMirrors,
-	resolveProbeFileName,
-	SLOW_THRESHOLD_KBPS,
-	PROBE_RANGE_BYTES,
-	PROBE_TIMEOUT_MS,
-} = mirrorHealth;
+const { probeMirrorHealth, probeAllMirrors, resolveProbeFileName, SLOW_THRESHOLD_KBPS, PROBE_RANGE_BYTES, PROBE_TIMEOUT_MS } = mirrorHealth;
 
 const MIRROR = { id: "atomgit", host: "https://atomgit.com" };
 
@@ -54,15 +51,7 @@ const MIRROR = { id: "atomgit", host: "https://atomgit.com" };
  * 返回 { fetchImpl, clock }；clock.now 记录「当前时刻」，测速 = 分片字节数 / 分片耗时。
  */
 function makeFetch(options = {}) {
-	const {
-		ymlStatus = 200,
-		ymlBody = "version: 0.7.3\nreleaseDate: 2026-09-03T16:04:00.000Z\n",
-		dlStatus = 206,
-		dlBytes = PROBE_RANGE_BYTES,
-		ymlDelay = 100,
-		dlDelay = 500,
-		throwError = null,
-	} = options;
+	const { ymlStatus = 200, ymlBody = "version: 0.7.3\nreleaseDate: 2026-09-03T16:04:00.000Z\n", dlStatus = 206, dlBytes = PROBE_RANGE_BYTES, ymlDelay = 100, dlDelay = 500, throwError = null } = options;
 	const clock = { now: 0 };
 	const fetchImpl = async (url, _opts) => {
 		if (throwError) {

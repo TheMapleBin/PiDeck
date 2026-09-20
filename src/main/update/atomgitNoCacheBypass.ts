@@ -37,24 +37,21 @@ export const UPDATER_PARTITION_NAME = "electron-updater";
  * 需要剥除 noCache 的下载路径前缀。
  * AtomGit 资产 browser_download_url 会 302 到 gitcode.com，两个 host 都拦。
  */
-export const ATOMGIT_DOWNLOAD_PATH_PREFIXES: readonly string[] = [
-  "https://atomgit.com/ayuayue/PiDeck/releases/download/",
-  "https://gitcode.com/ayuayue/PiDeck/releases/download/",
-];
+export const ATOMGIT_DOWNLOAD_PATH_PREFIXES: readonly string[] = ["https://atomgit.com/ayuayue/PiDeck/releases/download/", "https://gitcode.com/ayuayue/PiDeck/releases/download/"];
 
 /**
  * 从 URL 中剥离 noCache 参数（electron-updater 的缓存穿透参数，AtomGit 平台
  * 不识别任何 query）。其余参数保留；URL 非法/无该参数时原样返回。
  */
 export function stripNoCacheQuery(rawUrl: string): string {
-  try {
-    const parsed = new URL(rawUrl);
-    parsed.searchParams.delete("noCache");
-    return parsed.toString();
-  } catch {
-    // 非 URL（理论不会发生）直接放行，让原请求自然失败而不是吞掉错误
-    return rawUrl;
-  }
+	try {
+		const parsed = new URL(rawUrl);
+		parsed.searchParams.delete("noCache");
+		return parsed.toString();
+	} catch {
+		// 非 URL（理论不会发生）直接放行，让原请求自然失败而不是吞掉错误
+		return rawUrl;
+	}
 }
 
 /**
@@ -62,13 +59,12 @@ export function stripNoCacheQuery(rawUrl: string): string {
  * 快速路径（includes）先过滤掉绝大多数无关请求，减少 URL 解析开销。
  */
 export function shouldStripNoCache(rawUrl: string): boolean {
-  if (!rawUrl.includes("noCache=")) return false;
-  return ATOMGIT_DOWNLOAD_PATH_PREFIXES.some((prefix) => rawUrl.startsWith(prefix));
+	if (!rawUrl.includes("noCache=")) return false;
+	return ATOMGIT_DOWNLOAD_PATH_PREFIXES.some((prefix) => rawUrl.startsWith(prefix));
 }
 
 /** webRequest filter 的 urls 模式：`*` 尾部可匹配完整 URL（含 query）。 */
-export const ATOMGIT_DOWNLOAD_URL_PATTERNS: readonly string[] =
-  ATOMGIT_DOWNLOAD_PATH_PREFIXES.map((prefix) => `${prefix}*`);
+export const ATOMGIT_DOWNLOAD_URL_PATTERNS: readonly string[] = ATOMGIT_DOWNLOAD_PATH_PREFIXES.map((prefix) => `${prefix}*`);
 
 // 幂等标记：webRequest 监听不可移除，重复注册会累积（见模块头注释）
 let bypassInstalled = false;
@@ -81,18 +77,15 @@ let bypassInstalled = false;
  *   避免模块加载期访问 electron；不得传 defaultSession（updater 不用它）。
  */
 export function installAtomgitNoCacheBypass(getUpdaterSession: () => Session): void {
-  if (bypassInstalled) return;
-  bypassInstalled = true;
-  const updaterSession = getUpdaterSession();
-  updaterSession.webRequest.onBeforeRequest(
-    { urls: [...ATOMGIT_DOWNLOAD_URL_PATTERNS] },
-    (details, callback) => {
-      if (!shouldStripNoCache(details.url)) {
-        callback({});
-        return;
-      }
-      // 重定向到剥离 noCache 的 URL：新请求重新走拦截器，命中后放行，无循环风险
-      callback({ redirectURL: stripNoCacheQuery(details.url) });
-    },
-  );
+	if (bypassInstalled) return;
+	bypassInstalled = true;
+	const updaterSession = getUpdaterSession();
+	updaterSession.webRequest.onBeforeRequest({ urls: [...ATOMGIT_DOWNLOAD_URL_PATTERNS] }, (details, callback) => {
+		if (!shouldStripNoCache(details.url)) {
+			callback({});
+			return;
+		}
+		// 重定向到剥离 noCache 的 URL：新请求重新走拦截器，命中后放行，无循环风险
+		callback({ redirectURL: stripNoCacheQuery(details.url) });
+	});
 }

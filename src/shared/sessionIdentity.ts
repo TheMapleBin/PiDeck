@@ -17,9 +17,7 @@ export type SessionOriginInput = {
 export function looksLikePiSessionFileStem(title: string): boolean {
 	const trimmed = title.replace(/\s+/g, " ").trim();
 	// 秒后的毫秒在文件名里是 `-239`，不是 ISO 的 `.239`。
-	return /^\d{4}-\d{2}-\d{2}T\d{2}[-:]\d{2}[-:]\d{2}(?:[.,-]\d+)?Z(?:_[A-Za-z0-9-]+)?$/.test(
-		trimmed,
-	);
+	return /^\d{4}-\d{2}-\d{2}T\d{2}[-:]\d{2}[-:]\d{2}(?:[.,-]\d+)?Z(?:_[A-Za-z0-9-]+)?$/.test(trimmed);
 }
 
 /** pi-subagents 产物目录名：artifactDir="session"（默认）把子代理输入/输出/转储写进父会话同级目录。 */
@@ -71,44 +69,26 @@ export function isInSubagentArtifactsDir(filePath: string): boolean {
 	return filePath.replace(/\\/g, "/").split("/").includes(SUBAGENT_ARTIFACTS_DIR_NAME);
 }
 
-export function canonicalizeSessionPath(
-	filePath: string,
-	environment: SessionEnvironment,
-): string {
+export function canonicalizeSessionPath(filePath: string, environment: SessionEnvironment): string {
 	const normalized = filePath.replace(/\\/g, "/").replace(/\/+$/, "");
 	return environment === "native" ? normalized.toLowerCase() : normalized;
 }
 
-export function getSessionEnvironment(
-	summary: Pick<SessionSummary, "wsl">,
-): SessionEnvironment {
+export function getSessionEnvironment(summary: Pick<SessionSummary, "wsl">): SessionEnvironment {
 	return summary.wsl ? "wsl" : "native";
 }
 
-export function getImportedSessionSourceId(
-	summary: Pick<SessionSummary, "source" | "codexSessionId">,
-): string | undefined {
+export function getImportedSessionSourceId(summary: Pick<SessionSummary, "source" | "codexSessionId">): string | undefined {
 	return summary.source === "codex" ? summary.codexSessionId : undefined;
 }
 
 export function buildSessionOriginKey(input: SessionOriginInput): string {
-	const environmentKey = input.environment === "wsl"
-		? `wsl:${input.wslDistro ?? "unknown"}:${input.wslUser ?? "unknown"}`
-		: "native";
-	const importedKey = input.importedSourceId
-		? `:${encodeURIComponent(input.importedSourceId)}`
-		: "";
-	return [
-		input.source,
-		environmentKey,
-		canonicalizeSessionPath(input.filePath, input.environment),
-	].join(":") + importedKey;
+	const environmentKey = input.environment === "wsl" ? `wsl:${input.wslDistro ?? "unknown"}:${input.wslUser ?? "unknown"}` : "native";
+	const importedKey = input.importedSourceId ? `:${encodeURIComponent(input.importedSourceId)}` : "";
+	return [input.source, environmentKey, canonicalizeSessionPath(input.filePath, input.environment)].join(":") + importedKey;
 }
 
-export function buildSummaryOriginKey(
-	summary: SessionSummary,
-	options?: { wslDistro?: string; wslUser?: string },
-): string {
+export function buildSummaryOriginKey(summary: SessionSummary, options?: { wslDistro?: string; wslUser?: string }): string {
 	return buildSessionOriginKey({
 		source: summary.source ?? "pi",
 		environment: getSessionEnvironment(summary),
@@ -123,11 +103,7 @@ export function buildSummaryOriginKey(
 function isAbsolutePath(filePath: string, environment: SessionEnvironment): boolean {
 	if (environment === "wsl") return filePath.startsWith("/");
 	// native：盘符开头、根前缀（如 \\server\share 或 /rooted）。
-	return (
-		/^[A-Za-z]:[\\/]/.test(filePath) ||
-		filePath.startsWith("/") ||
-		filePath.startsWith("\\")
-	);
+	return /^[A-Za-z]:[\\/]/.test(filePath) || filePath.startsWith("/") || filePath.startsWith("\\");
 }
 
 /**
@@ -155,11 +131,7 @@ function windowsPathToWslBase(path: string): string {
  *
  * WSL 环境按 Linux 路径语义处理：相对路径解析到 /mnt/<drive>/… 基址。
  */
-export function toAbsoluteSessionPath(
-	filePath: string,
-	projectPath: string,
-	environment: SessionEnvironment,
-): string {
+export function toAbsoluteSessionPath(filePath: string, projectPath: string, environment: SessionEnvironment): string {
 	if (isAbsolutePath(filePath, environment)) return filePath;
 	const base = environment === "wsl" ? windowsPathToWslBase(projectPath) : projectPath;
 	const joined = `${base.replace(/[\\/]+$/, "")}/${filePath.replace(/^[\\/]+/, "")}`;
@@ -180,10 +152,7 @@ export type SessionTreeNode = {
  * pi-subagents / Claude 式子会话都落在这个 sibling-dir 里；扫描器归档/删除父文件时
  * 会把整个目录一起搬走，但 catalog.remove(id) 以前只摘父条目，目录里的子条目会变成幽灵行。
  */
-function sessionSiblingDirPrefix(
-	filePath: string,
-	environment: SessionEnvironment,
-): string | undefined {
+function sessionSiblingDirPrefix(filePath: string, environment: SessionEnvironment): string | undefined {
 	const canonical = canonicalizeSessionPath(filePath, environment);
 	const jsonl = canonical.match(/\.jsonl$/i);
 	if (!jsonl) return undefined;
@@ -199,18 +168,12 @@ function sessionSiblingDirPrefix(
  *
  * 匿名会话/草稿没有 filePath，不能仅凭同项目就当成子会话，否则归档父会话会误伤它们。
  */
-export function isSessionDescendantOf(
-	candidate: SessionTreeNode,
-	ancestor: SessionTreeNode,
-): boolean {
+export function isSessionDescendantOf(candidate: SessionTreeNode, ancestor: SessionTreeNode): boolean {
 	if (candidate.id === ancestor.id) return false;
 	if (!ancestor.filePath) return false;
 	const environment = ancestor.environment ?? candidate.environment ?? "native";
 	const ancestorPath = canonicalizeSessionPath(ancestor.filePath, environment);
-	if (
-		candidate.parentSessionPath &&
-		canonicalizeSessionPath(candidate.parentSessionPath, environment) === ancestorPath
-	) {
+	if (candidate.parentSessionPath && canonicalizeSessionPath(candidate.parentSessionPath, environment) === ancestorPath) {
 		return true;
 	}
 	if (!candidate.filePath) return false;
@@ -223,10 +186,7 @@ export function isSessionDescendantOf(
  * 收集 parent 及其全部后代 id（含 parent 自身）。
  * 闭包迭代：parentSessionPath 链接的孙会话即使不在 sibling-dir 里也能被收进来。
  */
-export function collectSessionSubtreeIds(
-	sessions: SessionTreeNode[],
-	parent: SessionTreeNode,
-): string[] {
+export function collectSessionSubtreeIds(sessions: SessionTreeNode[], parent: SessionTreeNode): string[] {
 	const byId = new Map<string, SessionTreeNode>();
 	for (const session of sessions) {
 		if (session.id) byId.set(session.id, session);

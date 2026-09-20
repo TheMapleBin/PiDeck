@@ -19,13 +19,8 @@ function stableRouteDigest(value: string): string {
 }
 
 /** From provider profile and route id derive the credential reference DSH stores. */
-export function credentialRefFor(
-	profile: { apiKeyEnv?: unknown } | undefined,
-	routeId: string,
-): string {
-	const explicit = typeof profile?.apiKeyEnv === "string" && profile.apiKeyEnv.trim()
-		? profile.apiKeyEnv.trim()
-		: "";
+export function credentialRefFor(profile: { apiKeyEnv?: unknown } | undefined, routeId: string): string {
+	const explicit = typeof profile?.apiKeyEnv === "string" && profile.apiKeyEnv.trim() ? profile.apiKeyEnv.trim() : "";
 	if (explicit) return explicit;
 
 	if (PROVIDER_NAME_PATTERN.test(routeId)) {

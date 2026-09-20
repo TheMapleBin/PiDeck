@@ -12,17 +12,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import {
-	collectLockClosure,
-	isActivePackageEntry,
-	isPlatformGatedEntry,
-	npmPlatformArgs,
-	parseLockKey,
-	normalizeTarget,
-	pinnedDependenciesFromClosure,
-	resolveLinkEntry,
-	resolveLockPackageKey,
-} from "../scripts/dshRuntimeLockClosure.mjs";
+import { collectLockClosure, isActivePackageEntry, isPlatformGatedEntry, npmPlatformArgs, parseLockKey, normalizeTarget, pinnedDependenciesFromClosure, resolveLinkEntry, resolveLockPackageKey } from "../scripts/dshRuntimeLockClosure.mjs";
 
 /**
  * 最小可用的 lock packages fixture：
@@ -68,11 +58,7 @@ function buildFixtureLock() {
 	};
 }
 
-const SEEDS = [
-	"@deepseek-ai/dsh",
-	"@deepseek-ai/dsh-attachment-local",
-	"dsh-tool-pwsh-persistent",
-];
+const SEEDS = ["@deepseek-ai/dsh", "@deepseek-ai/dsh-attachment-local", "dsh-tool-pwsh-persistent"];
 
 test("parseLockKey：非 node_modules 条目返回 null", () => {
 	assert.equal(parseLockKey(""), null);
@@ -88,24 +74,15 @@ test("isActivePackageEntry：link 条目不算活包", () => {
 
 test("resolveLockPackageKey：顶层依赖命中顶层条目", () => {
 	const lock = buildFixtureLock();
-	assert.equal(
-		resolveLockPackageKey("node_modules/@deepseek-ai/dsh", "@deepseek-ai/dsh-base", lock, "^0.1.5-rc.1"),
-		"node_modules/@deepseek-ai/dsh-base",
-	);
+	assert.equal(resolveLockPackageKey("node_modules/@deepseek-ai/dsh", "@deepseek-ai/dsh-base", lock, "^0.1.5-rc.1"), "node_modules/@deepseek-ai/dsh-base");
 });
 
 test("resolveLockPackageKey：同名多版本按声明范围选嵌套条目（node-pty 回归锚点）", () => {
 	const lock = buildFixtureLock();
 	// dsh-subprocess-local 要求 node-pty@1.2.0-beta.15 精确版本，顶层 1.1.0 不满足
-	assert.equal(
-		resolveLockPackageKey("node_modules/@deepseek-ai/dsh-subprocess-local", "node-pty", lock, "1.2.0-beta.15"),
-		"node_modules/@deepseek-ai/dsh-subprocess-local/node_modules/node-pty",
-	);
+	assert.equal(resolveLockPackageKey("node_modules/@deepseek-ai/dsh-subprocess-local", "node-pty", lock, "1.2.0-beta.15"), "node_modules/@deepseek-ai/dsh-subprocess-local/node_modules/node-pty");
 	// file: 包要求 ^1.1.0，顶层满足
-	assert.equal(
-		resolveLockPackageKey("node_modules/dsh-tool-pwsh-persistent", "node-pty", lock, "^1.1.0"),
-		"node_modules/node-pty",
-	);
+	assert.equal(resolveLockPackageKey("node_modules/dsh-tool-pwsh-persistent", "node-pty", lock, "^1.1.0"), "node_modules/node-pty");
 });
 
 test("resolveLockPackageKey：候选不存在返回 null（peer 由宿主提供）", () => {
@@ -125,13 +102,7 @@ test("collectLockClosure：遍历 dependencies+optionalDependencies，含嵌套�
 	const lock = buildFixtureLock();
 	const { keys, versions } = collectLockClosure(lock, SEEDS);
 	const names = new Set(versions.keys());
-	for (const expected of [
-		"@deepseek-ai/dsh-base",
-		"@deepseek-ai/dsh-subprocess-local",
-		"@deepseek-ai/dsh-attachment-local",
-		"koffi",
-		"node-pty",
-	]) {
+	for (const expected of ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-subprocess-local", "@deepseek-ai/dsh-attachment-local", "koffi", "node-pty"]) {
 		assert.ok(names.has(expected), `闭包缺少 ${expected}`);
 	}
 	// file: 包被解引用进闭包
@@ -163,7 +134,12 @@ test("collectLockClosure：种子缺失不抛错（由调用方报错）", () =>
 });
 
 test("pinnedDependenciesFromClosure：输出精确版本表", () => {
-	const deps = pinnedDependenciesFromClosure(new Map([["b", "2.0.0"], ["a", "1.0.0"]]));
+	const deps = pinnedDependenciesFromClosure(
+		new Map([
+			["b", "2.0.0"],
+			["a", "1.0.0"],
+		]),
+	);
 	assert.deepEqual(deps, { a: "1.0.0", b: "2.0.0" });
 });
 
@@ -193,12 +169,6 @@ test("normalizeTarget：非法值与非 linux 的 libc 报错", () => {
 });
 
 test("npmPlatformArgs：输出 --os/--cpu/--ignore-scripts，linux 追加 --libc", () => {
-	assert.deepEqual(
-		npmPlatformArgs({ os: "win32", arch: "x64", libc: undefined }),
-		["--os", "win32", "--cpu", "x64", "--ignore-scripts", "--omit=dev"],
-	);
-	assert.deepEqual(
-		npmPlatformArgs({ os: "linux", arch: "x64", libc: "glibc" }),
-		["--os", "linux", "--cpu", "x64", "--ignore-scripts", "--omit=dev", "--libc", "glibc"],
-	);
+	assert.deepEqual(npmPlatformArgs({ os: "win32", arch: "x64", libc: undefined }), ["--os", "win32", "--cpu", "x64", "--ignore-scripts", "--omit=dev"]);
+	assert.deepEqual(npmPlatformArgs({ os: "linux", arch: "x64", libc: "glibc" }), ["--os", "linux", "--cpu", "x64", "--ignore-scripts", "--omit=dev", "--libc", "glibc"]);
 });

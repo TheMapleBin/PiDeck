@@ -7,13 +7,7 @@ import { Textarea } from "../../ui-shadcn/textarea";
 /** 已修改但未保存的字段标记：在标签右侧显示一个黄色圆点 */
 export function DirtyMarker(props: { dirty: boolean; label: string }) {
 	if (!props.dirty) return null;
-	return (
-		<span
-			className="setting-dirty-marker"
-			title={t("settings.dirtyTooltip")}
-			aria-label={props.label}
-		/>
-	);
+	return <span className="setting-dirty-marker" title={t("settings.dirtyTooltip")} aria-label={props.label} />;
 }
 
 /**
@@ -21,11 +15,7 @@ export function DirtyMarker(props: { dirty: boolean; label: string }) {
  * 四角圆弧、极淡底色（bg-muted 30%）+ 淡边框；行间分隔线由 SettingRow 自身提供。
  */
 export function SettingBox(props: { children: ReactNode }) {
-	return (
-		<div className="rounded-lg border border-border-subtle/70 bg-bg-muted/30 px-1 pb-1">
-			{props.children}
-		</div>
-	);
+	return <div className="rounded-lg border border-border-subtle/70 bg-bg-muted/30 px-1 pb-1">{props.children}</div>;
 }
 
 /**
@@ -59,41 +49,12 @@ export function SettingRow(props: {
 }) {
 	const level = props.level ?? 2;
 	return (
-		<div
-			id={props.anchor ? `settings-section-${props.anchor}` : undefined}
-			className={cn(
-				"grid gap-6 border-t border-border-subtle/60 py-1.5 first:border-t-0",
-				level === 1 ? "px-0.5" : "px-1",
-				props.stacked
-					? "min-h-0 grid-cols-1 items-start"
-					: "min-h-[54px] grid-cols-[minmax(0,1fr)_260px] items-center",
-			)}
-		>
+		<div id={props.anchor ? `settings-section-${props.anchor}` : undefined} className={cn("grid gap-6 border-t border-border-subtle/60 py-1.5 first:border-t-0", level === 1 ? "px-0.5" : "px-1", props.stacked ? "min-h-0 grid-cols-1 items-start" : "min-h-[54px] grid-cols-[minmax(0,1fr)_260px] items-center")}>
 			<span className="min-w-0">
-				<span
-					className={cn(
-						"inline-flex items-center gap-1.5 text-foreground",
-						level === 1
-							? "text-body font-bold"
-							: "text-control font-medium",
-					)}
-				>
-					{props.title}
-				</span>
-				{props.description && (
-					<small className="mt-0.5 block text-caption leading-relaxed text-muted-foreground">
-						{props.description}
-					</small>
-				)}
+				<span className={cn("inline-flex items-center gap-1.5 text-foreground", level === 1 ? "text-body font-bold" : "text-control font-medium")}>{props.title}</span>
+				{props.description && <small className="mt-0.5 block text-caption leading-relaxed text-muted-foreground">{props.description}</small>}
 			</span>
-			<span
-				className={cn(
-					"min-w-0",
-					!props.stacked && (props.alignEnd ?? true) && "flex justify-end",
-				)}
-			>
-				{props.children}
-			</span>
+			<span className={cn("min-w-0", !props.stacked && (props.alignEnd ?? true) && "flex justify-end")}>{props.children}</span>
 		</div>
 	);
 }
@@ -112,8 +73,7 @@ export function SettingSwitchRow(props: {
 	anchor?: string;
 	onChange: (checked: boolean) => void;
 }) {
-	const dirtyLabel =
-		props.dirtyLabel ?? (typeof props.title === "string" ? props.title : "");
+	const dirtyLabel = props.dirtyLabel ?? (typeof props.title === "string" ? props.title : "");
 	return (
 		<SettingRow
 			anchor={props.anchor}
@@ -125,11 +85,7 @@ export function SettingSwitchRow(props: {
 			}
 			description={props.description}
 		>
-			<Switch
-				checked={props.checked}
-				disabled={props.disabled}
-				onCheckedChange={props.onChange}
-			/>
+			<Switch checked={props.checked} disabled={props.disabled} onCheckedChange={props.onChange} />
 		</SettingRow>
 	);
 }
@@ -145,8 +101,7 @@ export function SettingTextarea(props: {
 	/** 深链锚点 slug，见 SettingRow.anchor */
 	anchor?: string;
 }) {
-	const dirtyLabel =
-		props.dirtyLabel ?? (typeof props.title === "string" ? props.title : "");
+	const dirtyLabel = props.dirtyLabel ?? (typeof props.title === "string" ? props.title : "");
 	return (
 		<SettingRow
 			anchor={props.anchor}
@@ -159,12 +114,7 @@ export function SettingTextarea(props: {
 			description={props.description}
 			stacked
 		>
-			<Textarea
-				value={props.value}
-				rows={8}
-				onChange={(event) => props.onChange(event.target.value)}
-				className="min-h-24 w-full resize-y border-border-subtle bg-bg-input px-3 py-2 font-mono text-sm leading-relaxed text-foreground"
-			/>
+			<Textarea value={props.value} rows={8} onChange={(event) => props.onChange(event.target.value)} className="min-h-24 w-full resize-y border-border-subtle bg-bg-input px-3 py-2 font-mono text-sm leading-relaxed text-foreground" />
 		</SettingRow>
 	);
 }

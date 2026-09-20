@@ -12,14 +12,7 @@
  *    Ctrl+Shift+I/J（macOS ⌘⌥I/J），用户自定义后只认新绑定，避免两套规则并存。
  */
 
-import {
-	getShortcutDef,
-	matchesAccelerator,
-	resolveDefaultAccelerator,
-	resolveShortcutBindings,
-	type ShortcutId,
-	type ShortcutInput,
-} from "../shared/shortcuts";
+import { getShortcutDef, matchesAccelerator, resolveDefaultAccelerator, resolveShortcutBindings, type ShortcutId, type ShortcutInput } from "../shared/shortcuts";
 
 /** 当前生效的快捷键绑定（id → accelerator），null = 尚未刷新（此时按全默认匹配）。 */
 let activeBindings: Record<ShortcutId, string> | null = null;

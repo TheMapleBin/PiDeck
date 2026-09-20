@@ -5,10 +5,7 @@ import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 const MAX_JSON_BODY_BYTES = 2 * 1024 * 1024;
 
 async function withServer(run) {
-	const { WebServiceManager } = loadTsCommonJs(
-		"src/main/web/WebServiceManager.ts",
-		{ globals: { fetch: globalThis.fetch } },
-	);
+	const { WebServiceManager } = loadTsCommonJs("src/main/web/WebServiceManager.ts", { globals: { fetch: globalThis.fetch } });
 	const calls = [];
 	const manager = new WebServiceManager({
 		subscribePiEvents: () => () => undefined,

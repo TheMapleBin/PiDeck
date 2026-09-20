@@ -35,11 +35,7 @@ async function launchApp(userDataRoot: string): Promise<ElectronApplication> {
 	const env = {
 		...process.env,
 		CI: "1",
-		...(process.platform === "win32"
-			? { APPDATA: userDataRoot }
-			: process.platform === "darwin"
-				? { HOME: userDataRoot }
-				: { XDG_CONFIG_HOME: userDataRoot, HOME: userDataRoot }),
+		...(process.platform === "win32" ? { APPDATA: userDataRoot } : process.platform === "darwin" ? { HOME: userDataRoot } : { XDG_CONFIG_HOME: userDataRoot, HOME: userDataRoot }),
 	};
 	delete env.ELECTRON_RENDERER_URL;
 	return electron.launch({
@@ -57,10 +53,7 @@ test("history restore: close app and reopen recovers prior session", async () =>
 	const scriptPath = join(repoRoot, "e2e", "mock-pi.cjs");
 	writeFileSync(shimPath, `@echo off\r\n"${process.execPath}" "${scriptPath}" %*\r\n`);
 	mkdirSync(join(userDataRoot, "profile"), { recursive: true });
-	writeFileSync(
-		join(userDataRoot, "profile", "settings.json"),
-		JSON.stringify({ customPiPath: shimPath, piEnvironmentChecked: true }),
-	);
+	writeFileSync(join(userDataRoot, "profile", "settings.json"), JSON.stringify({ customPiPath: shimPath, piEnvironmentChecked: true }));
 
 	let app1: ElectronApplication | undefined;
 	let app2: ElectronApplication | undefined;
@@ -75,8 +68,7 @@ test("history restore: close app and reopen recovers prior session", async () =>
 		await composer.click();
 		await window1.keyboard.type("历史恢复锚点");
 		await window1.keyboard.press("Enter");
-		await expect(window1.locator(".message-timeline"))
-			.toContainText("Mock 回复：「历史恢复锚点」流式渲染验证完成", { timeout: 20_000 });
+		await expect(window1.locator(".message-timeline")).toContainText("Mock 回复：「历史恢复锚点」流式渲染验证完成", { timeout: 20_000 });
 
 		await app1.close();
 		app1 = undefined;
@@ -93,15 +85,25 @@ test("history restore: close app and reopen recovers prior session", async () =>
 		await historyRow.click();
 
 		// 点开后时间线恢复原文（不依赖再 spawn agent 也能读历史 JSONL）
-		await expect(window2.locator(".message-timeline"))
-			.toContainText("历史恢复锚点", { timeout: 20_000 });
-		await expect(window2.locator(".message-timeline"))
-			.toContainText("Mock 回复：「历史恢复锚点」流式渲染验证完成", { timeout: 20_000 });
+		await expect(window2.locator(".message-timeline")).toContainText("历史恢复锚点", { timeout: 20_000 });
+		await expect(window2.locator(".message-timeline")).toContainText("Mock 回复：「历史恢复锚点」流式渲染验证完成", { timeout: 20_000 });
 	} finally {
-		try { await app1?.close(); } catch { /* ignore */ }
-		try { await app2?.close(); } catch { /* ignore */ }
+		try {
+			await app1?.close();
+		} catch {
+			/* ignore */
+		}
+		try {
+			await app2?.close();
+		} catch {
+			/* ignore */
+		}
 		if (!process.env.PIDECK_E2E_KEEP) {
-			try { rmSync(userDataRoot, { recursive: true, force: true }); } catch { /* ignore */ }
+			try {
+				rmSync(userDataRoot, { recursive: true, force: true });
+			} catch {
+				/* ignore */
+			}
 		} else {
 			console.log("[history-restore] kept userDataRoot:", userDataRoot);
 		}

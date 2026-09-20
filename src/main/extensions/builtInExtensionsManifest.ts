@@ -88,9 +88,7 @@ export function parseBuiltInExtensionsManifest(raw: string): BuiltInExtensionsMa
 	return {
 		schemaVersion: EXTENSIONS_MANIFEST_SCHEMA_VERSION,
 		version,
-		bundleSha256: typeof bundleSha256 === "string" && SHA256_PATTERN.test(bundleSha256)
-			? bundleSha256.toLowerCase()
-			: "",
+		bundleSha256: typeof bundleSha256 === "string" && SHA256_PATTERN.test(bundleSha256) ? bundleSha256.toLowerCase() : "",
 		// fileCount 由 files 长度推出，不信任清单里的自报值
 		fileCount: files.length,
 		files,

@@ -92,9 +92,7 @@ export class AutomationStore {
 		return cloneSerializable({
 			revision: this.state.revision,
 			settings: this.state.settings,
-			tasks: this.state.tasks
-				.map((task) => summarizeTask(task, now))
-				.sort((left, right) => left.name.localeCompare(right.name)),
+			tasks: this.state.tasks.map((task) => summarizeTask(task, now)).sort((left, right) => left.name.localeCompare(right.name)),
 			runs: [...this.state.runs].sort((left, right) => right.updatedAt - left.updatedAt),
 		});
 	}
@@ -139,29 +137,26 @@ export class AutomationStore {
 		return cloneSerializable(task);
 	}
 
-	async updateTask(
-		taskId: string,
-		patch: UpdateAutomationTaskInput,
-		now = Date.now(),
-	): Promise<AutomationTask> {
+	async updateTask(taskId: string, patch: UpdateAutomationTaskInput, now = Date.now()): Promise<AutomationTask> {
 		const index = this.state.tasks.findIndex((candidate) => candidate.id === taskId);
 		if (index < 0) throw new Error("Automation task not found");
 		const current = this.state.tasks[index];
-		const merged = normalizeTaskInput({
-			name: patch.name ?? current.name,
-			projectId: patch.projectId ?? current.projectId,
-			prompt: patch.prompt ?? current.prompt,
-			schedule: patch.schedule ?? current.schedule,
-			enabled: patch.enabled ?? current.enabled,
-			backend: patch.backend === undefined ? current.backend : patch.backend,
-			model: patch.model === undefined ? current.model : patch.model,
-			thinkingLevel: patch.thinkingLevel === undefined ? current.thinkingLevel : patch.thinkingLevel,
-			mode: patch.mode === undefined ? current.mode : patch.mode,
-			permissionPreset: patch.permissionPreset === undefined
-				? current.permissionPreset
-				: patch.permissionPreset,
-			budget: { ...current.budget, ...(patch.budget ?? {}) },
-		}, now);
+		const merged = normalizeTaskInput(
+			{
+				name: patch.name ?? current.name,
+				projectId: patch.projectId ?? current.projectId,
+				prompt: patch.prompt ?? current.prompt,
+				schedule: patch.schedule ?? current.schedule,
+				enabled: patch.enabled ?? current.enabled,
+				backend: patch.backend === undefined ? current.backend : patch.backend,
+				model: patch.model === undefined ? current.model : patch.model,
+				thinkingLevel: patch.thinkingLevel === undefined ? current.thinkingLevel : patch.thinkingLevel,
+				mode: patch.mode === undefined ? current.mode : patch.mode,
+				permissionPreset: patch.permissionPreset === undefined ? current.permissionPreset : patch.permissionPreset,
+				budget: { ...current.budget, ...(patch.budget ?? {}) },
+			},
+			now,
+		);
 		// 预算用持久化层语义重归一化：{ ...current.budget, ...patch.budget } 已完整表达
 		// 「最终预算」，缺失键只可能是 current 本来就没有（= 用户留空的不限任务）——
 		// 再走输入层 normalizeBudget 会把缺失键用 DEFAULT 兜底填回默认值，导致
@@ -178,11 +173,7 @@ export class AutomationStore {
 			updatedAt: now,
 			// A schedule edit or resume starts a fresh scheduling window; intentionally
 			// do not catch up occurrences from the old expression or paused interval.
-			...(scheduleChanged || reEnabled
-				? { lastScheduledAt: now }
-				: current.lastScheduledAt !== undefined
-					? { lastScheduledAt: current.lastScheduledAt }
-					: {}),
+			...(scheduleChanged || reEnabled ? { lastScheduledAt: now } : current.lastScheduledAt !== undefined ? { lastScheduledAt: current.lastScheduledAt } : {}),
 		};
 		await this.mutate(() => {
 			this.state.tasks[index] = updated;
@@ -218,14 +209,17 @@ export class AutomationStore {
 		});
 	}
 
-	async createRun(input: {
-		task: AutomationTask;
-		trigger: AutomationRun["trigger"];
-		scheduledFor?: number;
-		status?: AutomationRunStatus;
-		error?: string;
-		skippedReason?: AutomationRun["skippedReason"];
-	}, now = Date.now()): Promise<AutomationRun> {
+	async createRun(
+		input: {
+			task: AutomationTask;
+			trigger: AutomationRun["trigger"];
+			scheduledFor?: number;
+			status?: AutomationRunStatus;
+			error?: string;
+			skippedReason?: AutomationRun["skippedReason"];
+		},
+		now = Date.now(),
+	): Promise<AutomationRun> {
 		const status = input.status ?? "queued";
 		const run: AutomationRun = {
 			id: randomUUID(),
@@ -283,11 +277,7 @@ export class AutomationStore {
 		return deleted;
 	}
 
-	async updateRun(
-		runId: string,
-		patch: RunPatch,
-		event?: { type: AutomationRunEventType; message?: string; at?: number },
-	): Promise<AutomationRun | undefined> {
+	async updateRun(runId: string, patch: RunPatch, event?: { type: AutomationRunEventType; message?: string; at?: number }): Promise<AutomationRun | undefined> {
 		let updated: AutomationRun | undefined;
 		await this.mutate(() => {
 			const run = this.state.runs.find((candidate) => candidate.id === runId);
@@ -350,12 +340,8 @@ function createEmptyState(): PersistedAutomationState {
 
 function normalizePersistedState(value: unknown): { state: PersistedAutomationState; changed: boolean } {
 	if (!isRecord(value)) return { state: createEmptyState(), changed: true };
-	const tasks = Array.isArray(value.tasks)
-		? value.tasks.map(normalizePersistedTask).filter((task): task is AutomationTask => task !== undefined)
-		: [];
-	const runs = Array.isArray(value.runs)
-		? value.runs.map(normalizePersistedRun).filter((run): run is AutomationRun => run !== undefined)
-		: [];
+	const tasks = Array.isArray(value.tasks) ? value.tasks.map(normalizePersistedTask).filter((task): task is AutomationTask => task !== undefined) : [];
+	const runs = Array.isArray(value.runs) ? value.runs.map(normalizePersistedRun).filter((run): run is AutomationRun => run !== undefined) : [];
 	const state: PersistedAutomationState = {
 		version: SCHEMA_VERSION,
 		revision: finiteInteger(value.revision, 0, 0),
@@ -363,9 +349,7 @@ function normalizePersistedState(value: unknown): { state: PersistedAutomationSt
 		tasks,
 		runs,
 	};
-	const changed = value.version !== SCHEMA_VERSION
-		|| tasks.length !== (Array.isArray(value.tasks) ? value.tasks.length : 0)
-		|| runs.length !== (Array.isArray(value.runs) ? value.runs.length : 0);
+	const changed = value.version !== SCHEMA_VERSION || tasks.length !== (Array.isArray(value.tasks) ? value.tasks.length : 0) || runs.length !== (Array.isArray(value.runs) ? value.runs.length : 0);
 	return { state, changed };
 }
 
@@ -373,19 +357,22 @@ function normalizePersistedTask(value: unknown): AutomationTask | undefined {
 	if (!isRecord(value) || typeof value.id !== "string") return undefined;
 	try {
 		const createdAt = finiteNumber(value.createdAt, Date.now(), 0);
-		const normalized = normalizeTaskInput({
-			name: value.name,
-			projectId: value.projectId,
-			prompt: value.prompt,
-			schedule: value.schedule,
-			enabled: value.enabled,
-			backend: value.backend,
-			model: value.model,
-			thinkingLevel: value.thinkingLevel,
-			mode: value.mode,
-			permissionPreset: value.permissionPreset,
-			budget: value.budget,
-		}, createdAt);
+		const normalized = normalizeTaskInput(
+			{
+				name: value.name,
+				projectId: value.projectId,
+				prompt: value.prompt,
+				schedule: value.schedule,
+				enabled: value.enabled,
+				backend: value.backend,
+				model: value.model,
+				thinkingLevel: value.thinkingLevel,
+				mode: value.mode,
+				permissionPreset: value.permissionPreset,
+				budget: value.budget,
+			},
+			createdAt,
+		);
 		return {
 			id: value.id,
 			...normalized,
@@ -394,9 +381,7 @@ function normalizePersistedTask(value: unknown): AutomationTask | undefined {
 			budget: normalizePersistedBudget(value.budget),
 			createdAt,
 			updatedAt: finiteNumber(value.updatedAt, createdAt, 0),
-			...(typeof value.lastScheduledAt === "number" && Number.isFinite(value.lastScheduledAt)
-				? { lastScheduledAt: value.lastScheduledAt }
-				: {}),
+			...(typeof value.lastScheduledAt === "number" && Number.isFinite(value.lastScheduledAt) ? { lastScheduledAt: value.lastScheduledAt } : {}),
 		};
 	} catch {
 		return undefined;
@@ -405,8 +390,7 @@ function normalizePersistedTask(value: unknown): AutomationTask | undefined {
 
 function normalizePersistedRun(value: unknown): AutomationRun | undefined {
 	if (!isRecord(value)) return undefined;
-	if (typeof value.id !== "string" || typeof value.taskId !== "string"
-		|| typeof value.taskName !== "string" || typeof value.projectId !== "string") return undefined;
+	if (typeof value.id !== "string" || typeof value.taskId !== "string" || typeof value.taskName !== "string" || typeof value.projectId !== "string") return undefined;
 	if (!isRunStatus(value.status) || !isRunTrigger(value.trigger)) return undefined;
 	const queuedAt = finiteNumber(value.queuedAt, Date.now(), 0);
 	const updatedAt = finiteNumber(value.updatedAt, queuedAt, 0);
@@ -432,14 +416,13 @@ function normalizePersistedRun(value: unknown): AutomationRun | undefined {
 		stepCount: finiteInteger(value.stepCount, 0, 0),
 		...(finiteOptional(value.changedFiles) === undefined ? {} : { changedFiles: finiteInteger(value.changedFiles, 0, 0) }),
 		...(typeof value.error === "string" ? { error: value.error } : {}),
-		...(value.skippedReason === "task-already-running" || value.skippedReason === "task-disabled"
-			? { skippedReason: value.skippedReason }
-			: {}),
-		...(value.budgetReason === "tokens" || value.budgetReason === "cost" || value.budgetReason === "steps"
-			? { budgetReason: value.budgetReason }
-			: {}),
+		...(value.skippedReason === "task-already-running" || value.skippedReason === "task-disabled" ? { skippedReason: value.skippedReason } : {}),
+		...(value.budgetReason === "tokens" || value.budgetReason === "cost" || value.budgetReason === "steps" ? { budgetReason: value.budgetReason } : {}),
 		events: Array.isArray(value.events)
-			? value.events.map(normalizeRunEvent).filter((event): event is AutomationRunEvent => event !== undefined).slice(-MAX_RUN_EVENTS)
+			? value.events
+					.map(normalizeRunEvent)
+					.filter((event): event is AutomationRunEvent => event !== undefined)
+					.slice(-MAX_RUN_EVENTS)
 			: [],
 	};
 }
@@ -459,7 +442,7 @@ function normalizeTaskInput(input: CreateAutomationTaskInput | Record<string, un
 	const projectId = requireTrimmedString(input.projectId, "Project", 200);
 	const prompt = requireTrimmedString(input.prompt, "Prompt", 100_000);
 	const schedule = normalizeSchedule(input.schedule);
-	const backend = input.backend === "dsh" ? "dsh" as const : input.backend === "pi" ? "pi" as const : undefined;
+	const backend = input.backend === "dsh" ? ("dsh" as const) : input.backend === "pi" ? ("pi" as const) : undefined;
 	const model = normalizeModel(input.model);
 	const thinkingLevel = optionalTrimmedString(input.thinkingLevel, 100);
 	const permissionPreset = optionalTrimmedString(input.permissionPreset, 100);
@@ -519,10 +502,7 @@ function normalizePersistedBudget(value: unknown): NormalizedAutomationBudget {
 	return normalizeBudgetRecord(record, undefined);
 }
 
-function normalizeBudgetRecord(
-	record: Record<string, unknown>,
-	defaults: NormalizedAutomationBudget | undefined,
-): NormalizedAutomationBudget {
+function normalizeBudgetRecord(record: Record<string, unknown>, defaults: NormalizedAutomationBudget | undefined): NormalizedAutomationBudget {
 	const timeoutMs = optionalBoundedNumber(record.timeoutMs, 10_000, 7 * 24 * 60 * 60_000, defaults?.timeoutMs);
 	const maxTokens = optionalBoundedNumber(record.maxTokens, 1, 100_000_000, defaults?.maxTokens);
 	const maxCostUsd = optionalBoundedNumber(record.maxCostUsd, 0.000001, 1_000_000, defaults?.maxCostUsd);
@@ -560,12 +540,7 @@ function summarizeTask(task: AutomationTask, now: number): AutomationTaskSummary
 	}
 }
 
-function appendRunEvent(
-	events: readonly AutomationRunEvent[],
-	type: AutomationRunEventType,
-	at: number,
-	message?: string,
-): AutomationRunEvent[] {
+function appendRunEvent(events: readonly AutomationRunEvent[], type: AutomationRunEventType, at: number, message?: string): AutomationRunEvent[] {
 	return [...events, createRunEvent(type, at, message)].slice(-MAX_RUN_EVENTS);
 }
 
@@ -586,10 +561,7 @@ function statusToEventType(status: AutomationRunStatus): AutomationRunEventType 
 }
 
 function isRunStatus(value: unknown): value is AutomationRunStatus {
-	return value === "queued" || value === "starting" || value === "running"
-		|| value === "succeeded" || value === "failed" || value === "aborted"
-		|| value === "timed-out" || value === "budget-exhausted" || value === "skipped"
-		|| value === "interrupted";
+	return value === "queued" || value === "starting" || value === "running" || value === "succeeded" || value === "failed" || value === "aborted" || value === "timed-out" || value === "budget-exhausted" || value === "skipped" || value === "interrupted";
 }
 
 function isRunTrigger(value: unknown): value is AutomationRun["trigger"] {
@@ -597,10 +569,7 @@ function isRunTrigger(value: unknown): value is AutomationRun["trigger"] {
 }
 
 function isEventType(value: unknown): value is AutomationRunEventType {
-	return value === "queued" || value === "starting" || value === "session-created"
-		|| value === "prompt-accepted" || value === "metrics" || value === "completed"
-		|| value === "failed" || value === "aborted" || value === "skipped"
-		|| value === "interrupted" || value === "budget-exhausted" || value === "timed-out";
+	return value === "queued" || value === "starting" || value === "session-created" || value === "prompt-accepted" || value === "metrics" || value === "completed" || value === "failed" || value === "aborted" || value === "skipped" || value === "interrupted" || value === "budget-exhausted" || value === "timed-out";
 }
 
 function requireTrimmedString(value: unknown, label: string, maxLength: number): string {
@@ -617,22 +586,13 @@ function optionalTrimmedString(value: unknown, maxLength: number): string | unde
 }
 
 function boundedNumber(value: unknown, fallback: number, min: number, max: number): number {
-	return typeof value === "number" && Number.isFinite(value)
-		? Math.min(max, Math.max(min, value))
-		: fallback;
+	return typeof value === "number" && Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback;
 }
 
-function optionalBoundedNumber(
-	value: unknown,
-	min: number,
-	max: number,
-	fallback: number | undefined,
-): number | undefined {
+function optionalBoundedNumber(value: unknown, min: number, max: number, fallback: number | undefined): number | undefined {
 	if (value === null) return undefined;
 	if (value === undefined) return fallback;
-	return typeof value === "number" && Number.isFinite(value)
-		? Math.min(max, Math.max(min, value))
-		: fallback;
+	return typeof value === "number" && Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback;
 }
 
 function finiteNumber(value: unknown, fallback: number, min: number): number {

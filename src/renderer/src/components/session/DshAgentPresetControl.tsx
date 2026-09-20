@@ -15,14 +15,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Check } from "lucide-react";
 import { getDefaultStore, useAtomValue, useSetAtom } from "jotai";
-import {
-	dshAgentPresetsAtom,
-	dshDefaultPresetId,
-	type DshAgentPresetIdentity,
-	sessionRecordByIdAtomFamily,
-	sessionRuntimeBySessionIdAtomFamily,
-	upsertSessionAtom,
-} from "../../atoms";
+import { dshAgentPresetsAtom, dshDefaultPresetId, type DshAgentPresetIdentity, sessionRecordByIdAtomFamily, sessionRuntimeBySessionIdAtomFamily, upsertSessionAtom } from "../../atoms";
 import { Badge } from "../ui-shadcn/badge";
 import { Button } from "../ui-shadcn/button";
 import { Dialog, DialogContent } from "../ui-shadcn/dialog";
@@ -46,7 +39,8 @@ function loadDshAgentPresets(): Promise<DshAgentPresetIdentity[] | null> {
 	const cached = store.get(dshAgentPresetsAtom);
 	if (cached) return Promise.resolve(cached);
 	if (presetsLoadPromise) return presetsLoadPromise;
-	presetsLoadPromise = desktopApi.sessions.listDshAgentPresets()
+	presetsLoadPromise = desktopApi.sessions
+		.listDshAgentPresets()
 		.then((list) => {
 			store.set(dshAgentPresetsAtom, list);
 			return list;
@@ -77,31 +71,18 @@ export function DshAgentPresetControl(props: { sessionId: string; disabled?: boo
 	// 生效预设：会话记录回写/预选 > 部署默认（isDefault）；目录未就绪时不猜。
 	const presetId = record?.agentPreset ?? (presets ? dshDefaultPresetId(presets) : undefined);
 	const identity = presetId ? (presets ?? []).find((preset) => preset.id === presetId) : undefined;
-	const label = identity
-		? presetDisplayName(identity, t)
-		: presetId
-			? presetId
-			: t("dshPreset.unset");
+	const label = identity ? presetDisplayName(identity, t) : presetId ? presetId : t("dshPreset.unset");
 	const description = identity ? presetDisplayDescription(identity, t) : undefined;
 	const tooltip = description ? `${label} — ${description}` : label;
 
 	// 可选择项：剔除 broken（无法组合的预设选了也是白选，dsh-web picker 同规则）。
-	const selectable = useMemo(
-		() => (presets ?? []).filter((preset) => !preset.broken),
-		[presets],
-	);
+	const selectable = useMemo(() => (presets ?? []).filter((preset) => !preset.broken), [presets]);
 
 	// 已激活：模式创建即固定，只读展示（不提供假开关）；record 无值时（极端情况）不渲染。
 	if (hasRuntime) {
 		if (!presetId) return null;
 		return (
-			<Badge
-				variant="outline"
-				aria-label={`${t("dshPreset.menuTitle")}: ${label}`}
-				title={tooltip}
-				data-agent-preset={presetId}
-				className="h-5 shrink-0 gap-1 rounded-full px-2 text-[10px] font-semibold leading-none text-muted-foreground"
-			>
+			<Badge variant="outline" aria-label={`${t("dshPreset.menuTitle")}: ${label}`} title={tooltip} data-agent-preset={presetId} className="h-5 shrink-0 gap-1 rounded-full px-2 text-[10px] font-semibold leading-none text-muted-foreground">
 				<AgentPresetLogo className="size-3 shrink-0" />
 				<span className="max-w-28 truncate">{label}</span>
 			</Badge>
@@ -154,32 +135,20 @@ export function DshAgentPresetControl(props: { sessionId: string; disabled?: boo
 				<AgentPresetLogo className="size-3 shrink-0" />
 				<span className="max-w-28 truncate">{label}</span>
 			</Button>
-			<Dialog open={open} onOpenChange={(next) => { if (!next) setOpen(false); }}>
-				<DialogContent
-					showCloseButton={false}
-					className="dsh-preset-picker flex max-h-[min(680px,calc(100vh-48px))] flex-col overflow-hidden p-0 sm:max-w-[min(560px,calc(100vw-48px))]"
-				>
-					<CommandPickerPanel
-						title={t("dshPreset.menuTitle")}
-						hint={t("dshPreset.menuHint")}
-						searchPlaceholder={t("app.commandPickerSearch")}
-						emptyLabel={t("app.commandPickerEmpty")}
-						value={presetId ?? ""}
-						onClose={() => setOpen(false)}
-					>
+			<Dialog
+				open={open}
+				onOpenChange={(next) => {
+					if (!next) setOpen(false);
+				}}
+			>
+				<DialogContent showCloseButton={false} className="dsh-preset-picker flex max-h-[min(680px,calc(100vh-48px))] flex-col overflow-hidden p-0 sm:max-w-[min(560px,calc(100vw-48px))]">
+					<CommandPickerPanel title={t("dshPreset.menuTitle")} hint={t("dshPreset.menuHint")} searchPlaceholder={t("app.commandPickerSearch")} emptyLabel={t("app.commandPickerEmpty")} value={presetId ?? ""} onClose={() => setOpen(false)}>
 						{selectable.map((preset) => {
 							const itemSelected = presetId === preset.id;
 							const presetName = presetDisplayName(preset, t);
 							const presetDesc = presetDisplayDescription(preset, t);
 							return (
-								<CommandItem
-									key={preset.id}
-									value={preset.id}
-									data-picker-value={preset.id}
-									onSelect={() => void pick(preset.id)}
-									disabled={saving}
-									className="min-h-9 items-center gap-2 rounded-md px-2.5 py-1"
-								>
+								<CommandItem key={preset.id} value={preset.id} data-picker-value={preset.id} onSelect={() => void pick(preset.id)} disabled={saving} className="min-h-9 items-center gap-2 rounded-md px-2.5 py-1">
 									<span className={`grid size-6 shrink-0 place-items-center rounded-md ${itemSelected ? "bg-primary/12 text-primary" : "bg-muted text-muted-foreground"}`}>
 										<AgentPresetLogo className="size-3.5" />
 									</span>
@@ -190,10 +159,7 @@ export function DshAgentPresetControl(props: { sessionId: string; disabled?: boo
 											{presetName}
 										</span>
 										{presetDesc ? (
-											<span
-												className="min-w-0 flex-1 truncate text-micro text-muted-foreground/75"
-												title={presetDesc}
-											>
+											<span className="min-w-0 flex-1 truncate text-micro text-muted-foreground/75" title={presetDesc}>
 												{presetDesc}
 											</span>
 										) : (

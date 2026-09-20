@@ -5,13 +5,13 @@ import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 // vm 沙箱默认没有 fetch 系全局（主进程有，测试需补齐）：
 // DshApiClient 用 Headers/Response/ReadableStream/DOMException 组装标准 Response。
 const { DshApiClient } = loadTsCommonJs("src/main/dsh/DshApiClient.ts", {
-  globals: {
-    Headers,
-    Response,
-    ReadableStream,
-    DOMException,
-    TextEncoder,
-  },
+	globals: {
+		Headers,
+		Response,
+		ReadableStream,
+		DOMException,
+		TextEncoder,
+	},
 });
 
 /**
@@ -344,9 +344,6 @@ test("openStream：stream-open 帧载荷同样包装为 { args }", async () => {
 test("call：传入已 args 包装的载荷直接抛错（防二次包装静默损坏协议）", async () => {
 	const { transport } = makeMemoryTransport();
 	const client = new DshApiClient({ transport });
-	await assert.rejects(
-		client.call("settings/describe", { args: {} }),
-		/already args-wrapped/,
-	);
+	await assert.rejects(client.call("settings/describe", { args: {} }), /already args-wrapped/);
 	client.dispose();
 });

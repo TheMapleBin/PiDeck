@@ -52,11 +52,7 @@ export function marshalStreamOpen(id: string, endpoint: string, payload?: unknow
 /** 构造 fetch-request 消息（URL 拆成 path + query，headers 只保留字符串值）。
  *  E12：桥只承载 host 内部 ApiProxy 端点（http://dsh.internal）；外部 origin 是
  *  调用方误用，显式拒绝而不是静默重写成内部路径（host 侧重基会吞掉外部 URL）。 */
-export function marshalFetchRequest(
-	id: string,
-	url: URL,
-	init?: { method?: string; headers?: Record<string, string>; body?: string },
-): DshFetchMessage {
+export function marshalFetchRequest(id: string, url: URL, init?: { method?: string; headers?: Record<string, string>; body?: string }): DshFetchMessage {
 	if (url.origin !== "http://dsh.internal") {
 		throw new Error(`DSH bridge: unexpected origin "${url.origin}" (only http://dsh.internal is bridged)`);
 	}
@@ -65,9 +61,7 @@ export function marshalFetchRequest(
 		id,
 		method: init?.method ?? "GET",
 		path: `${url.pathname}${url.search}`,
-		...(init?.headers && Object.keys(init.headers).length > 0
-			? { headers: init.headers }
-			: {}),
+		...(init?.headers && Object.keys(init.headers).length > 0 ? { headers: init.headers } : {}),
 		...(init?.body !== undefined ? { body: init.body } : {}),
 	};
 }
@@ -111,39 +105,31 @@ export function parseDshFetchMessage(value: unknown): DshFetchMessage | undefine
 			};
 		}
 		case "fetch-chunk":
-			return typeof message.data === "string"
-				? { type: "fetch-chunk", id: message.id, data: message.data }
-				: undefined;
+			return typeof message.data === "string" ? { type: "fetch-chunk", id: message.id, data: message.data } : undefined;
 		case "fetch-end":
 			return { type: "fetch-end", id: message.id };
-	case "fetch-error":
-		return typeof message.message === "string"
-			? { type: "fetch-error", id: message.id, message: message.message }
-			: undefined;
-	case "stream-open":
-		return typeof message.endpoint === "string"
-			? { type: "stream-open", id: message.id, endpoint: message.endpoint, ...(message.payload !== undefined ? { payload: message.payload } : {}) }
-			: undefined;
-	case "stream-cancel":
-		return { type: "stream-cancel", id: message.id };
-	case "stream-item":
-		return "value" in message
-			? { type: "stream-item", id: message.id, value: message.value }
-			: undefined;
-	case "stream-end":
-		return { type: "stream-end", id: message.id };
-	case "stream-error":
-		return typeof message.code === "string" && typeof message.message === "string"
-			? {
-					type: "stream-error",
-					id: message.id,
-					code: message.code,
-					message: message.message,
-					...(message.details !== undefined ? { details: message.details } : {}),
-				}
-			: undefined;
-	default:
-		return undefined;
+		case "fetch-error":
+			return typeof message.message === "string" ? { type: "fetch-error", id: message.id, message: message.message } : undefined;
+		case "stream-open":
+			return typeof message.endpoint === "string" ? { type: "stream-open", id: message.id, endpoint: message.endpoint, ...(message.payload !== undefined ? { payload: message.payload } : {}) } : undefined;
+		case "stream-cancel":
+			return { type: "stream-cancel", id: message.id };
+		case "stream-item":
+			return "value" in message ? { type: "stream-item", id: message.id, value: message.value } : undefined;
+		case "stream-end":
+			return { type: "stream-end", id: message.id };
+		case "stream-error":
+			return typeof message.code === "string" && typeof message.message === "string"
+				? {
+						type: "stream-error",
+						id: message.id,
+						code: message.code,
+						message: message.message,
+						...(message.details !== undefined ? { details: message.details } : {}),
+					}
+				: undefined;
+		default:
+			return undefined;
 	}
 }
 

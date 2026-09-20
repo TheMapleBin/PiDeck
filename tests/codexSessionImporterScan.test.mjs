@@ -52,9 +52,7 @@ function sessionJsonl(id, cwd) {
 				payload: { type: "message", role: "assistant", content: [{ type: "output_text", text: `回复 ${i}` }] },
 			}),
 		);
-		lines.push(
-			JSON.stringify({ type: "event_msg", payload: { type: "user_message", message: `问题 ${i}` } }),
-		);
+		lines.push(JSON.stringify({ type: "event_msg", payload: { type: "user_message", message: `问题 ${i}` } }));
 	}
 	return `${lines.join("\n")}\n`;
 }
@@ -91,10 +89,7 @@ test("codex scan: oversized file is read head-only, broken lines tolerated", asy
 		// 超过 1MB 的会话：session_meta 在前部，中后部填充 + 坏 JSON 行
 		// （旧实现会全量 parse 到坏行抛错，或直接 OOM）
 		const path = join(sessions, "big.jsonl");
-		writeFileSync(
-			path,
-			sessionJsonl("big", project) + "x".repeat(1024 * 1024) + "\n" + '{"type":"response_item","payload":{"type":"message","role":"assistant","content":[{broken',
-		);
+		writeFileSync(path, sessionJsonl("big", project) + "x".repeat(1024 * 1024) + "\n" + '{"type":"response_item","payload":{"type":"message","role":"assistant","content":[{broken');
 
 		const { CodexSessionImporter } = loadImporter(home);
 		const summaries = await new CodexSessionImporter().scan(project);
@@ -138,18 +133,11 @@ test("codex scan: only parses sessions of the selected project", async () => {
 		// projB 会话正文含坏行：若预过滤失效（旧行为全量解析）该文件会拖慢/报错，
 		// 预过滤后 projB 只读头部 64KB 即被丢弃，扫描不受影响
 		writeFileSync(join(sessions, "a", "session.jsonl"), sessionJsonl("a", projA));
-		writeFileSync(
-			join(sessions, "b", "session.jsonl"),
-			sessionJsonl("b", projB) + "\n" + '{"type":"response_item","payload":{"type":"message","role":"assistant","content":[{broken',
-		);
+		writeFileSync(join(sessions, "b", "session.jsonl"), sessionJsonl("b", projB) + "\n" + '{"type":"response_item","payload":{"type":"message","role":"assistant","content":[{broken');
 
 		const { CodexSessionImporter } = loadImporter(home);
 		const summaries = await new CodexSessionImporter().scan(projA);
-		assert.deepEqual(
-			[...summaries.map((s) => s.id)],
-			["a"],
-			"只应返回当前项目（projA）的会话，projB 的坏正文文件被预过滤跳过",
-		);
+		assert.deepEqual([...summaries.map((s) => s.id)], ["a"], "只应返回当前项目（projA）的会话，projB 的坏正文文件被预过滤跳过");
 	} finally {
 		rmSync(home, { recursive: true, force: true });
 	}
@@ -162,22 +150,13 @@ test("codex scan: meta head filter tolerates broken leading lines", async () => 
 		const sessions = join(home, ".codex", "sessions");
 		mkdirSync(sessions, { recursive: true });
 		// meta 前有坏行（手改/损坏的会话）：预过滤应跳过坏行找到 meta
-		writeFileSync(
-			join(sessions, "dirty.jsonl"),
-			'{"type":"event_msg","payload":{"type":"user_message","message":"前导消息"}}\n' +
-				"not-json\n" +
-				sessionJsonl("dirty", project),
-		);
+		writeFileSync(join(sessions, "dirty.jsonl"), '{"type":"event_msg","payload":{"type":"user_message","message":"前导消息"}}\n' + "not-json\n" + sessionJsonl("dirty", project));
 		// 完全没有 meta 的文件（如手放的数据文件）：应被跳过而不是报错
-		writeFileSync(join(sessions, "nometa.jsonl"), "{\"type\":\"response_item\",\"payload\":{}}\n".repeat(4));
+		writeFileSync(join(sessions, "nometa.jsonl"), '{"type":"response_item","payload":{}}\n'.repeat(4));
 
 		const { CodexSessionImporter } = loadImporter(home);
 		const summaries = await new CodexSessionImporter().scan(project);
-		assert.deepEqual(
-			[...summaries.map((s) => s.id)],
-			["dirty"],
-			"坏行应被跳过，无 meta 文件应被静默排除",
-		);
+		assert.deepEqual([...summaries.map((s) => s.id)], ["dirty"], "坏行应被跳过，无 meta 文件应被静默排除");
 	} finally {
 		rmSync(home, { recursive: true, force: true });
 	}

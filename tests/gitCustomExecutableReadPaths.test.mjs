@@ -54,7 +54,7 @@ test("读路径全部 spawn currentGitExecutable：getRefs/getOriginalContent/ge
 	}
 });
 
-test("源码契约：GitService 内不再有 execFileAsync(\"git\") 字面量（兜住 :188/:207 等条件路径）", () => {
+test('源码契约：GitService 内不再有 execFileAsync("git") 字面量（兜住 :188/:207 等条件路径）', () => {
 	const src = readFileSync("src/main/git/GitService.ts", "utf8");
 	assert.doesNotMatch(src, /execFileAsync\(\s*"git"/, "所有 execFileAsync 调用点必须用 currentGitExecutable()");
 });

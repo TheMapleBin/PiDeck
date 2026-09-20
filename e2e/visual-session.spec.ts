@@ -88,11 +88,11 @@ test("visual tour: live session states", async ({ window }) => {
 	await modal.locator("[data-slot='select-trigger']").first().click();
 	await window.locator("[data-slot='select-content']").getByText("暗色").click();
 	await modal.getByRole("button", { name: "保存" }).click();
-	await expect
-		.poll(() => window.evaluate(() => document.documentElement.dataset.theme), { timeout: 5000 })
-		.toBe("dark");
+	await expect.poll(() => window.evaluate(() => document.documentElement.dataset.theme), { timeout: 5000 }).toBe("dark");
 	await window.keyboard.press("Escape");
-	await expect(modal).toBeHidden({ timeout: 5000 }).catch(() => undefined);
+	await expect(modal)
+		.toBeHidden({ timeout: 5000 })
+		.catch(() => undefined);
 	await shot(window, "35-session-dark");
 	await shot(window, "37-markdown-elements-dark");
 });

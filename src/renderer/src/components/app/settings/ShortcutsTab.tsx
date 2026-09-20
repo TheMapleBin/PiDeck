@@ -1,15 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AppSettings } from "../../../../../shared/types";
-import {
-	getShortcutDef,
-	SHORTCUT_DEFS,
-	buildAcceleratorFromKeyEvent,
-	formatAccelerator,
-	isValidAccelerator,
-	resolveShortcutBindings,
-	type ShortcutGroupId,
-	type ShortcutId,
-} from "../../../../../shared/shortcuts";
+import { getShortcutDef, SHORTCUT_DEFS, buildAcceleratorFromKeyEvent, formatAccelerator, isValidAccelerator, resolveShortcutBindings, type ShortcutGroupId, type ShortcutId } from "../../../../../shared/shortcuts";
 import { t, type TranslationKey } from "../../../i18n";
 import { Button } from "../../ui-shadcn/button";
 import { DirtyMarker, SettingRow } from "./SettingRows";
@@ -58,10 +49,7 @@ export function ShortcutsTab(props: ShortcutsTabProps) {
 
 	// 生效绑定 = 覆盖 ∪ 平台默认，与主进程 resolveShortcutBindings 同一实现，
 	// 保证设置页展示的键就是实际生效的键。
-	const resolved = useMemo(
-		() => resolveShortcutBindings(draft.shortcuts ?? {}, platform),
-		[draft.shortcuts, platform],
-	);
+	const resolved = useMemo(() => resolveShortcutBindings(draft.shortcuts ?? {}, platform), [draft.shortcuts, platform]);
 
 	// 冲突检测：两个快捷键解析到同一个 accelerator（含默认键互相撞车的情况）
 	const conflicts = useMemo(() => {
@@ -74,7 +62,11 @@ export function ShortcutsTab(props: ShortcutsTabProps) {
 		const map = new Map<ShortcutId, ShortcutId[]>();
 		for (const ids of byAcc.values()) {
 			if (ids.length > 1) {
-				for (const id of ids) map.set(id, ids.filter((other) => other !== id));
+				for (const id of ids)
+					map.set(
+						id,
+						ids.filter((other) => other !== id),
+					);
 			}
 		}
 		return map;
@@ -138,15 +130,9 @@ export function ShortcutsTab(props: ShortcutsTabProps) {
 		<div className="settings-panel min-w-0">
 			{/* 顶部说明 + 一键全部恢复默认 */}
 			<div className="flex items-center justify-between gap-4 pb-1">
-				<p className="text-caption leading-relaxed text-muted-foreground">
-					{t("settings.shortcuts.intro")}
-				</p>
+				<p className="text-caption leading-relaxed text-muted-foreground">{t("settings.shortcuts.intro")}</p>
 				{hasOverrides ? (
-					<Button
-						variant="outline"
-						size="sm"
-						onClick={() => updateDraft({ shortcuts: {} })}
-					>
+					<Button variant="outline" size="sm" onClick={() => updateDraft({ shortcuts: {} })}>
 						{t("settings.shortcuts.resetAll")}
 					</Button>
 				) : null}
@@ -167,10 +153,7 @@ export function ShortcutsTab(props: ShortcutsTabProps) {
 									title={
 										<span className="inline-flex items-center gap-1.5">
 											{t(shortcutLabelKey(def.labelKey))}
-											<DirtyMarker
-												dirty={props.isDirty("shortcuts")}
-												label={t(shortcutLabelKey(def.labelKey))}
-											/>
+											<DirtyMarker dirty={props.isDirty("shortcuts")} label={t(shortcutLabelKey(def.labelKey))} />
 										</span>
 									}
 									description={
@@ -179,35 +162,19 @@ export function ShortcutsTab(props: ShortcutsTabProps) {
 											{conflictedWith.length > 0 && (
 												<span className="mt-0.5 block font-medium text-destructive">
 													{t("settings.shortcuts.conflictWith", {
-														label: conflictedWith
-															.map((id) => t(shortcutLabelKey(getShortcutDef(id)?.labelKey ?? id)))
-															.join(", "),
+														label: conflictedWith.map((id) => t(shortcutLabelKey(getShortcutDef(id)?.labelKey ?? id))).join(", "),
 													})}
 												</span>
 											)}
-											{hint && hint.id === def.id && hint.kind === "needModifier" && (
-												<span className="mt-0.5 block text-destructive">
-													{t("settings.shortcuts.needModifier")}
-												</span>
-											)}
+											{hint && hint.id === def.id && hint.kind === "needModifier" && <span className="mt-0.5 block text-destructive">{t("settings.shortcuts.needModifier")}</span>}
 										</>
 									}
 								>
 									<div className="flex items-center justify-end gap-2">
 										{recording ? (
-											<span className="text-caption text-muted-foreground">
-												{t("settings.shortcuts.recordingHint")}
-											</span>
+											<span className="text-caption text-muted-foreground">{t("settings.shortcuts.recordingHint")}</span>
 										) : (
-											<kbd
-												className={`inline-flex min-w-14 items-center justify-center rounded border px-2 py-1 font-mono text-xs text-foreground ${
-													conflictedWith.length > 0
-														? "border-destructive/60 bg-destructive/10"
-														: "border-border-subtle bg-bg-muted"
-												}`}
-											>
-												{formatAccelerator(resolved[def.id], platform)}
-											</kbd>
+											<kbd className={`inline-flex min-w-14 items-center justify-center rounded border px-2 py-1 font-mono text-xs text-foreground ${conflictedWith.length > 0 ? "border-destructive/60 bg-destructive/10" : "border-border-subtle bg-bg-muted"}`}>{formatAccelerator(resolved[def.id], platform)}</kbd>
 										)}
 										<Button
 											variant={recording ? "default" : "outline"}
@@ -218,18 +185,10 @@ export function ShortcutsTab(props: ShortcutsTabProps) {
 												setRecordingId(recording ? null : def.id);
 											}}
 										>
-											{t(
-												recording
-													? "settings.shortcuts.recording"
-													: "settings.shortcuts.change",
-											)}
+											{t(recording ? "settings.shortcuts.recording" : "settings.shortcuts.change")}
 										</Button>
 										{overridden && !recording ? (
-											<Button
-												variant="ghost"
-												size="sm"
-												onClick={() => resetToDefault(def.id)}
-											>
+											<Button variant="ghost" size="sm" onClick={() => resetToDefault(def.id)}>
 												{t("settings.shortcuts.reset")}
 											</Button>
 										) : null}

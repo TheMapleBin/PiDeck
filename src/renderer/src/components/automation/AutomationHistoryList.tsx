@@ -1,18 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAtomValue } from "jotai";
-import {
-	History,
-	ExternalLink,
-	StopCircle,
-	CheckCircle2,
-	XCircle,
-	AlertCircle,
-	Clock,
-	Coins,
-	Wrench,
-	FileCode,
-	Trash2,
-} from "lucide-react";
+import { History, ExternalLink, StopCircle, CheckCircle2, XCircle, AlertCircle, Clock, Coins, Wrench, FileCode, Trash2 } from "lucide-react";
 import { automationRunsAtom } from "../../atoms/automation-atoms";
 import { projectInventoryAtom } from "../../atoms/project-atoms";
 import { desktopApi } from "../../desktopApi";
@@ -54,15 +42,9 @@ function formatTime(timestamp?: number) {
  * 历史执行记录与实时运行看板。
  * 删除/清空只作用于已结束记录：queued/starting/running 必须留在看板上，否则无法中止。
  */
-export function AutomationHistoryList({
-	projectId,
-	onViewSession,
-}: AutomationHistoryListProps) {
+export function AutomationHistoryList({ projectId, onViewSession }: AutomationHistoryListProps) {
 	const allRuns = useAtomValue(automationRunsAtom);
-	const runs = useMemo(
-		() => projectId ? allRuns.filter((run) => run.projectId === projectId) : allRuns,
-		[allRuns, projectId],
-	);
+	const runs = useMemo(() => (projectId ? allRuns.filter((run) => run.projectId === projectId) : allRuns), [allRuns, projectId]);
 	const projects = useAtomValue(projectInventoryAtom);
 
 	const [abortingRunIds, setAbortingRunIds] = useState<Set<string>>(new Set());
@@ -75,14 +57,8 @@ export function AutomationHistoryList({
 		projectMap.set(p.id, p.name);
 	}
 
-	const terminalRuns = useMemo(
-		() => runs.filter((run) => isAutomationRunTerminal(run.status)),
-		[runs],
-	);
-	const terminalIdSet = useMemo(
-		() => new Set(terminalRuns.map((run) => run.id)),
-		[terminalRuns],
-	);
+	const terminalRuns = useMemo(() => runs.filter((run) => isAutomationRunTerminal(run.status)), [runs]);
+	const terminalIdSet = useMemo(() => new Set(terminalRuns.map((run) => run.id)), [terminalRuns]);
 
 	useEffect(() => {
 		setSelectedIds((prev) => {
@@ -101,10 +77,7 @@ export function AutomationHistoryList({
 			await desktopApi.automation.abortRun(run.id);
 			showNotice(t("automation.runAborted"), 2500);
 		} catch (error) {
-			showNotice(
-				error instanceof Error ? error.message : String(error),
-				3500,
-			);
+			showNotice(error instanceof Error ? error.message : String(error), 3500);
 		} finally {
 			setAbortingRunIds((prev) => {
 				const next = new Set(prev);
@@ -166,15 +139,7 @@ export function AutomationHistoryList({
 			case "queued":
 			case "starting":
 			case "running":
-				return (
-					<Badge className="h-5 animate-pulse border-sky-500/30 bg-sky-500/15 px-1.5 text-[11px] font-normal text-sky-500">
-						{status === "queued"
-							? t("automation.status.queued")
-							: status === "starting"
-								? t("automation.status.starting")
-								: t("automation.status.running")}
-					</Badge>
-				);
+				return <Badge className="h-5 animate-pulse border-sky-500/30 bg-sky-500/15 px-1.5 text-[11px] font-normal text-sky-500">{status === "queued" ? t("automation.status.queued") : status === "starting" ? t("automation.status.starting") : t("automation.status.running")}</Badge>;
 			case "succeeded":
 				return (
 					<Badge className="h-5 border-emerald-500/30 bg-emerald-500/15 px-1.5 text-[11px] font-normal text-emerald-500">
@@ -189,11 +154,7 @@ export function AutomationHistoryList({
 				return (
 					<Badge className="h-5 border-destructive/30 bg-destructive/15 px-1.5 text-[11px] font-normal text-destructive">
 						<XCircle className="mr-1 size-3" />
-						{status === "timed-out"
-							? t("automation.status.timedOut")
-							: status === "interrupted"
-								? t("automation.status.interrupted")
-								: t("automation.status.failed")}
+						{status === "timed-out" ? t("automation.status.timedOut") : status === "interrupted" ? t("automation.status.interrupted") : t("automation.status.failed")}
 					</Badge>
 				);
 			case "aborted":
@@ -205,10 +166,7 @@ export function AutomationHistoryList({
 				);
 			case "skipped":
 				return (
-					<Badge
-						variant="outline"
-						className="h-5 px-1.5 text-[11px] font-normal text-muted-foreground"
-					>
+					<Badge variant="outline" className="h-5 px-1.5 text-[11px] font-normal text-muted-foreground">
 						{t("automation.status.skipped")}
 					</Badge>
 				);
@@ -230,36 +188,19 @@ export function AutomationHistoryList({
 		<div className="flex flex-col gap-2.5">
 			<div className="flex flex-wrap items-center justify-between gap-2 pb-0.5">
 				<div className="flex items-center gap-2 text-xs text-muted-foreground">
-					<Checkbox
-						checked={allSelected ? true : someSelected ? "indeterminate" : false}
-						disabled={terminalRuns.length === 0 || busy}
-						onCheckedChange={toggleSelectAll}
-						aria-label={t("common.selectAll")}
-					/>
+					<Checkbox checked={allSelected ? true : someSelected ? "indeterminate" : false} disabled={terminalRuns.length === 0 || busy} onCheckedChange={toggleSelectAll} aria-label={t("common.selectAll")} />
 					<span>
 						{t("automation.historyTab")} ({runs.length})
 					</span>
 				</div>
 				<div className="flex items-center gap-1.5">
-					<Button
-						variant="outline"
-						size="sm"
-						className="h-6 px-2 text-[11px]"
-						disabled={selectedIds.size === 0 || busy}
-						onClick={() => setConfirm("delete")}
-					>
+					<Button variant="outline" size="sm" className="h-6 px-2 text-[11px]" disabled={selectedIds.size === 0 || busy} onClick={() => setConfirm("delete")}>
 						<Trash2 className="mr-1 size-3" />
 						{t("common.deleteSelected")}
 						{selectedIds.size > 0 ? ` (${selectedIds.size})` : ""}
 					</Button>
 					{!projectId && (
-						<Button
-							variant="ghost"
-							size="sm"
-							className="h-6 px-2 text-[11px]"
-							disabled={terminalRuns.length === 0 || busy}
-							onClick={() => setConfirm("clear")}
-						>
+						<Button variant="ghost" size="sm" className="h-6 px-2 text-[11px]" disabled={terminalRuns.length === 0 || busy} onClick={() => setConfirm("clear")}>
 							{t("automation.clearHistory")}
 						</Button>
 					)}
@@ -274,57 +215,29 @@ export function AutomationHistoryList({
 					const totalTokens = (run.inputTokens || 0) + (run.outputTokens || 0);
 
 					return (
-						<div
-							key={run.id}
-							className="flex flex-col gap-2 rounded-lg border border-border/50 bg-bg-panel/30 p-2.5 transition-colors hover:border-border"
-						>
+						<div key={run.id} className="flex flex-col gap-2 rounded-lg border border-border/50 bg-bg-panel/30 p-2.5 transition-colors hover:border-border">
 							<div className="flex items-center justify-between gap-2">
 								<div className="flex min-w-0 items-center gap-2">
-									{!isRunning && (
-										<Checkbox
-											checked={selectedIds.has(run.id)}
-											disabled={busy}
-											onCheckedChange={(checked) => toggleRow(run.id, checked === true)}
-											aria-label={run.taskName}
-										/>
-									)}
-									<span className="truncate text-xs font-medium text-foreground">
-										{run.taskName}
-									</span>
+									{!isRunning && <Checkbox checked={selectedIds.has(run.id)} disabled={busy} onCheckedChange={(checked) => toggleRow(run.id, checked === true)} aria-label={run.taskName} />}
+									<span className="truncate text-xs font-medium text-foreground">{run.taskName}</span>
 									{!projectId && (
-										<Badge
-											variant="outline"
-											className="h-4 px-1 text-[10px] font-normal text-muted-foreground"
-										>
+										<Badge variant="outline" className="h-4 px-1 text-[10px] font-normal text-muted-foreground">
 											{projectName}
 										</Badge>
 									)}
 									{renderStatusBadge(run.status)}
-									<span className="font-mono text-[11px] text-muted-foreground">
-										{run.trigger}
-									</span>
+									<span className="font-mono text-[11px] text-muted-foreground">{run.trigger}</span>
 								</div>
 
 								<div className="flex shrink-0 items-center gap-1.5">
 									{isRunning && (
-										<Button
-											variant="destructive"
-											size="sm"
-											className="h-6 gap-1 px-2 text-[11px]"
-											disabled={isAborting}
-											onClick={() => handleAbort(run)}
-										>
+										<Button variant="destructive" size="sm" className="h-6 gap-1 px-2 text-[11px]" disabled={isAborting} onClick={() => handleAbort(run)}>
 											<StopCircle className="size-3" />
 											{t("automation.abortRun")}
 										</Button>
 									)}
 									{run.sessionId && onViewSession && (
-										<Button
-											variant="outline"
-											size="sm"
-											className="h-6 gap-1 px-2 text-[11px]"
-											onClick={() => onViewSession(run.projectId, run.sessionId!)}
-										>
+										<Button variant="outline" size="sm" className="h-6 gap-1 px-2 text-[11px]" onClick={() => onViewSession(run.projectId, run.sessionId!)}>
 											<ExternalLink className="size-3" />
 											{t("automation.viewSession")}
 										</Button>
@@ -332,11 +245,7 @@ export function AutomationHistoryList({
 								</div>
 							</div>
 
-							{run.error && (
-								<div className="break-all rounded bg-destructive/10 px-2 py-1 font-mono text-[11px] text-destructive">
-									{run.error}
-								</div>
-							)}
+							{run.error && <div className="break-all rounded bg-destructive/10 px-2 py-1 font-mono text-[11px] text-destructive">{run.error}</div>}
 
 							<div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/20 pt-1.5 text-[11px] text-muted-foreground">
 								<span className="flex items-center gap-1">
@@ -387,26 +296,8 @@ export function AutomationHistoryList({
 				})}
 			</div>
 
-			{confirm === "delete" && (
-				<ConfirmDialog
-					title={t("common.deleteSelected")}
-					message={t("common.deleteBatchConfirm", { count: selectedIds.size })}
-					confirmLabel={t("common.delete")}
-					danger
-					onConfirm={() => void handleDeleteSelected()}
-					onCancel={() => setConfirm(null)}
-				/>
-			)}
-			{confirm === "clear" && (
-				<ConfirmDialog
-					title={t("automation.clearHistory")}
-					message={t("automation.clearHistoryConfirm")}
-					confirmLabel={t("common.clear")}
-					danger
-					onConfirm={() => void handleClear()}
-					onCancel={() => setConfirm(null)}
-				/>
-			)}
+			{confirm === "delete" && <ConfirmDialog title={t("common.deleteSelected")} message={t("common.deleteBatchConfirm", { count: selectedIds.size })} confirmLabel={t("common.delete")} danger onConfirm={() => void handleDeleteSelected()} onCancel={() => setConfirm(null)} />}
+			{confirm === "clear" && <ConfirmDialog title={t("automation.clearHistory")} message={t("automation.clearHistoryConfirm")} confirmLabel={t("common.clear")} danger onConfirm={() => void handleClear()} onCancel={() => setConfirm(null)} />}
 		</div>
 	);
 }

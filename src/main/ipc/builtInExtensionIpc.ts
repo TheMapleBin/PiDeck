@@ -1,10 +1,6 @@
 import { ipcMain, shell } from "electron";
 import { ipcChannels } from "../../shared/ipc";
-import {
-	BUILT_IN_EXTENSIONS_UPDATE_ALLOWED_BRANCHES,
-	BUILT_IN_EXTENSIONS_UPDATE_DEFAULT_BRANCH,
-	type BuiltInExtensionsUpdater,
-} from "../extensions/builtInExtensionsUpdater";
+import { BUILT_IN_EXTENSIONS_UPDATE_ALLOWED_BRANCHES, BUILT_IN_EXTENSIONS_UPDATE_DEFAULT_BRANCH, type BuiltInExtensionsUpdater } from "../extensions/builtInExtensionsUpdater";
 
 /**
  * 内置扩展热更新 IPC（扩展设置页的「内置扩展」更新入口）。
@@ -35,8 +31,5 @@ export function registerBuiltInExtensionIpc(updater: BuiltInExtensionsUpdater): 
 
 /** 白名单分支校验：只允许 main/dev，非法值回退 main（防 URL 注入）。 */
 function sanitizeBranch(branch: unknown): string {
-	return typeof branch === "string"
-		&& (BUILT_IN_EXTENSIONS_UPDATE_ALLOWED_BRANCHES as readonly string[]).includes(branch)
-		? branch
-		: BUILT_IN_EXTENSIONS_UPDATE_DEFAULT_BRANCH;
+	return typeof branch === "string" && (BUILT_IN_EXTENSIONS_UPDATE_ALLOWED_BRANCHES as readonly string[]).includes(branch) ? branch : BUILT_IN_EXTENSIONS_UPDATE_DEFAULT_BRANCH;
 }

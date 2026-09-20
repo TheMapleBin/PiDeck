@@ -6,12 +6,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import {
-	gitPathCandidates,
-	resolveGitExecutable,
-	parseGitVersion,
-	detectGitExecutable,
-} from "../src/main/git/gitExecutable.ts";
+import { gitPathCandidates, resolveGitExecutable, parseGitVersion, detectGitExecutable } from "../src/main/git/gitExecutable.ts";
 
 test("Windows 候选路径优先官方外部调用入口 cmd\\git.exe", () => {
 	const candidates = gitPathCandidates("win32", undefined);
@@ -59,10 +54,7 @@ test("脏数据（非字符串）也回落到 PATH，不把错误类型传给 sp
 });
 
 test("配置值去空白后原样使用", () => {
-	assert.equal(
-		resolveGitExecutable("  C:\\Program Files\\Git\\cmd\\git.exe  "),
-		"C:\\Program Files\\Git\\cmd\\git.exe",
-	);
+	assert.equal(resolveGitExecutable("  C:\\Program Files\\Git\\cmd\\git.exe  "), "C:\\Program Files\\Git\\cmd\\git.exe");
 });
 
 test("纯空白配置等同未配置", () => {

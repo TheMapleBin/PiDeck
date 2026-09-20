@@ -18,12 +18,9 @@ const require = createRequire(import.meta.url);
 const petSandbox = createTsSandbox();
 
 function resolveUnstubbedRequire(specifier) {
-  if (!specifier.startsWith(".")) return require(specifier);
-  const target = resolve(
-    "src/main/pet",
-    /\.(ts|tsx|js)$/.test(specifier) ? specifier : `${specifier}.ts`,
-  );
-  return petSandbox(target);
+	if (!specifier.startsWith(".")) return require(specifier);
+	const target = resolve("src/main/pet", /\.(ts|tsx|js)$/.test(specifier) ? specifier : `${specifier}.ts`);
+	return petSandbox(target);
 }
 
 function loadModule(mockProcess = {}) {
@@ -50,17 +47,36 @@ function loadModule(mockProcess = {}) {
 			MockBrowserWindow.last = this;
 		}
 
-		isDestroyed() { return false; }
+		isDestroyed() {
+			return false;
+		}
 		setAlwaysOnTop() {}
-		on(name, listener) { this.listeners.set(name, listener); }
-		loadFile() { return Promise.resolve(); }
-		loadURL() { return Promise.resolve(); }
+		on(name, listener) {
+			this.listeners.set(name, listener);
+		}
+		loadFile() {
+			return Promise.resolve();
+		}
+		loadURL() {
+			return Promise.resolve();
+		}
 		showInactive() {}
-		getBounds() { return this.bounds; }
-		getPosition() { return [this.bounds.x, this.bounds.y]; }
-		getSize() { return [this.bounds.width, this.bounds.height]; }
-		setSize(width, height) { this.bounds = { ...this.bounds, width, height }; }
-		setBounds(bounds) { this.setBoundsCalls += 1; this.bounds = { ...this.bounds, ...bounds }; }
+		getBounds() {
+			return this.bounds;
+		}
+		getPosition() {
+			return [this.bounds.x, this.bounds.y];
+		}
+		getSize() {
+			return [this.bounds.width, this.bounds.height];
+		}
+		setSize(width, height) {
+			this.bounds = { ...this.bounds, width, height };
+		}
+		setBounds(bounds) {
+			this.setBoundsCalls += 1;
+			this.bounds = { ...this.bounds, ...bounds };
+		}
 		destroy() {}
 	}
 	let intervalCalls = 0;
@@ -70,7 +86,10 @@ function loadModule(mockProcess = {}) {
 		__dirname: "/tmp/pi-desktop-test/out/main/pet",
 		setTimeout,
 		clearTimeout,
-		setInterval: () => { intervalCalls += 1; return 1; },
+		setInterval: () => {
+			intervalCalls += 1;
+			return 1;
+		},
 		clearInterval: () => undefined,
 		process: {
 			platform: "linux",
@@ -119,8 +138,12 @@ function loadModule(mockProcess = {}) {
 			if (id === "node:fs/promises") {
 				return {
 					mkdir: async () => {},
-					readFile: async () => { throw new Error("no position file"); },
-					writeFile: async (_path, content) => { fsWrites.push(String(content)); },
+					readFile: async () => {
+						throw new Error("no position file");
+					},
+					writeFile: async (_path, content) => {
+						fsWrites.push(String(content));
+					},
 				};
 			}
 			// PetWindow 的诊断日志（2026-08 新增）走 appLogger，测试环境静默
@@ -235,10 +258,7 @@ test("restricted Linux windows avoid transparent backgrounds and absolute positi
 
 test("patrol is disabled when free positioning is unavailable", () => {
 	const source = readFileSync("src/main/pet/index.ts", "utf8");
-	assert.match(
-		source,
-		/petPatrolEnabled[\s\S]{0,160}detectPetWindowCaps\(\)\.freePosition/,
-	);
+	assert.match(source, /petPatrolEnabled[\s\S]{0,160}detectPetWindowCaps\(\)\.freePosition/);
 });
 
 test("scale changes push appearance settings to the pet window", () => {

@@ -2,32 +2,13 @@ import { existsSync } from "node:fs";
 import { mkdir, readdir, readFile, rename, writeFile, rm, cp, lstat, stat } from "node:fs/promises";
 import { dirname, join, relative, sep, basename, extname } from "node:path";
 import { randomUUID } from "node:crypto";
-import {
-	createProjectFileReadBoundary,
-	resolveProjectFileReadPath,
-	resolveProjectFileWritePath,
-	type ProjectFileReadBoundary,
-} from "../files/projectFileAccess";
+import { createProjectFileReadBoundary, resolveProjectFileReadPath, resolveProjectFileWritePath, type ProjectFileReadBoundary } from "../files/projectFileAccess";
 import { trashPath } from "../fs/trash";
-import type {
-	PiExtensionSummary,
-	PiPromptTemplateSummary,
-	PiSkillLocation,
-	PiSkillSummary,
-	Project,
-	ProjectInheritedResourceToggleInput,
-	ProjectResourceDirectoryKind,
-	ProjectResourceListResult,
-	ProjectResourceOverrides,
-} from "../../shared/types";
+import type { PiExtensionSummary, PiPromptTemplateSummary, PiSkillLocation, PiSkillSummary, Project, ProjectInheritedResourceToggleInput, ProjectResourceDirectoryKind, ProjectResourceListResult, ProjectResourceOverrides } from "../../shared/types";
 import type { McpConfigFile } from "../../shared/types/mcp";
 import { parseMcpConfigFile, validateMcpConfigFile } from "../config/mcpConfig";
 import type { MainProcessTranslationKey } from "../../shared/i18n/mainProcessCopy";
-import {
-	emptyProjectResourceOverrides,
-	projectResourceOverridesFromRecord,
-	setProjectInheritedResourceEnabled,
-} from "./projectResourceOverrides";
+import { emptyProjectResourceOverrides, projectResourceOverridesFromRecord, setProjectInheritedResourceEnabled } from "./projectResourceOverrides";
 import { discoverExtensionEntries } from "../extensions/extensionDiscovery";
 
 const SKILL_FILE = "SKILL.md";
@@ -46,10 +27,7 @@ function hasErrorCode(value: unknown, code: string): boolean {
 }
 
 /** Validate project settings before any resource mutation so malformed JSON is never overwritten. */
-async function readProjectSettingsForWrite(
-	settingsFile: string,
-	invalidJsonMessage: string,
-): Promise<Record<string, unknown>> {
+async function readProjectSettingsForWrite(settingsFile: string, invalidJsonMessage: string): Promise<Record<string, unknown>> {
 	if (!existsSync(settingsFile)) return {};
 	let parsed: unknown;
 	try {
@@ -63,10 +41,7 @@ async function readProjectSettingsForWrite(
 
 type ProjectProvider = (projectId: string) => Project | undefined;
 type ProjectPathResolver = (project: Project) => string;
-type ProjectResourceCopy = (
-	key: MainProcessTranslationKey,
-	params?: Record<string, string | number>,
-) => string;
+type ProjectResourceCopy = (key: MainProcessTranslationKey, params?: Record<string, string | number>) => string;
 
 /**
  * 管理单个项目目录内的 pi 资源。
@@ -112,10 +87,7 @@ export class ProjectResourceManager {
 			};
 		}
 		const settings = await this.readProjectSettings(project);
-		const [skills, extensions] = await Promise.all([
-			this.listSkills(project, settings),
-			this.listExtensions(project, settings),
-		]);
+		const [skills, extensions] = await Promise.all([this.listSkills(project, settings), this.listExtensions(project, settings)]);
 		return {
 			skills,
 			extensions,
@@ -126,10 +98,7 @@ export class ProjectResourceManager {
 
 	/** Ensure a user-selected project resource directory exists inside the registered root. */
 	/** Import a store skill into the pi 0.85 project-local .pi/skills directory. */
-	async importSkillFromStore(
-		projectId: string,
-		input: { name: string; description: string; content: string },
-	): Promise<PiSkillSummary> {
+	async importSkillFromStore(projectId: string, input: { name: string; description: string; content: string }): Promise<PiSkillSummary> {
 		const project = this.requireProject(projectId);
 		const normalizedName = this.normalizeSkillName(input.name);
 		if (!normalizedName) throw new Error(this.translate("mainSkill.nameRequired"));
@@ -152,14 +121,9 @@ export class ProjectResourceManager {
 		return this.readSkill(safePath, location, "directory");
 	}
 
-	async ensureResourceDirectory(
-		projectId: string,
-		kind: ProjectResourceDirectoryKind,
-	): Promise<string> {
+	async ensureResourceDirectory(projectId: string, kind: ProjectResourceDirectoryKind): Promise<string> {
 		const project = this.requireProject(projectId);
-		const location = kind === "prompts"
-			? join(this.projectRoot(project), ".pi", "prompts")
-			: this.skillLocations(project).find((candidate) => candidate.id === kind)?.path;
+		const location = kind === "prompts" ? join(this.projectRoot(project), ".pi", "prompts") : this.skillLocations(project).find((candidate) => candidate.id === kind)?.path;
 		if (!location) throw new Error(this.translate("mainProjectResource.pathOutsideProject"));
 		const safeDirectory = await this.resolveProjectWritePath(project, location);
 		await mkdir(safeDirectory, { recursive: true });
@@ -173,10 +137,7 @@ export class ProjectResourceManager {
 	 * The returned path is resolved through the same canonical boundary as every project
 	 * mutation, so a missing directory still inherits the real, registered project root.
 	 */
-	async resolveResourceDirectory(
-		projectId: string,
-		kind: Exclude<ProjectResourceDirectoryKind, "prompts">,
-	): Promise<string> {
+	async resolveResourceDirectory(projectId: string, kind: Exclude<ProjectResourceDirectoryKind, "prompts">): Promise<string> {
 		const project = this.requireProject(projectId);
 		const location = this.skillLocations(project).find((candidate) => candidate.id === kind)?.path;
 		if (!location) throw new Error(this.translate("mainProjectResource.pathOutsideProject"));
@@ -250,12 +211,7 @@ export class ProjectResourceManager {
 	 * This API is intentionally not exposed through IPC; the import manager supplies the
 	 * source path from its short-lived, validated scan session.
 	 */
-	async importSkillDirectory(
-		projectId: string,
-		locationId: Exclude<ProjectResourceDirectoryKind, "prompts">,
-		sourceDirectory: string,
-		targetName: string,
-	): Promise<void> {
+	async importSkillDirectory(projectId: string, locationId: Exclude<ProjectResourceDirectoryKind, "prompts">, sourceDirectory: string, targetName: string): Promise<void> {
 		const project = this.requireProject(projectId);
 		if (!targetName || targetName !== targetName.trim() || targetName.toLowerCase() !== targetName || targetName.length > 64 || !/^[\p{L}\p{N}](?:[\p{L}\p{N}-]{0,63})$/u.test(targetName)) {
 			throw new Error(this.translate("mainProjectResource.pathOutsideProject"));
@@ -267,8 +223,7 @@ export class ProjectResourceManager {
 		if (!lexicalRoot) throw new Error(this.translate("mainProjectResource.pathOutsideProject"));
 		const safeRoot = await resolveProjectFileWritePath(boundary, lexicalRoot);
 		const initialTarget = join(safeRoot, targetName);
-		const occupied = existsSync(safeRoot) && (await readdir(safeRoot, { withFileTypes: true }).catch(() => []))
-			.some((entry) => entry.name.toLowerCase() === targetName.toLowerCase() || this.normalizeSkillName(entry.name) === targetName);
+		const occupied = existsSync(safeRoot) && (await readdir(safeRoot, { withFileTypes: true }).catch(() => [])).some((entry) => entry.name.toLowerCase() === targetName.toLowerCase() || this.normalizeSkillName(entry.name) === targetName);
 		if (occupied || existsSync(initialTarget)) {
 			throw new Error(this.translate("mainProjectResource.skillAlreadyExists", { name: targetName }));
 		}
@@ -278,8 +233,7 @@ export class ProjectResourceManager {
 		// applied to the temporary file and final destination immediately before copying.
 		const stableRoot = await resolveProjectFileWritePath(boundary, lexicalRoot);
 		const stableTarget = await resolveProjectFileWritePath(boundary, join(lexicalRoot, targetName));
-		const stableOccupied = (await readdir(stableRoot, { withFileTypes: true }).catch(() => []))
-			.some((entry) => entry.name.toLowerCase() === targetName.toLowerCase() || this.normalizeSkillName(entry.name) === targetName);
+		const stableOccupied = (await readdir(stableRoot, { withFileTypes: true }).catch(() => [])).some((entry) => entry.name.toLowerCase() === targetName.toLowerCase() || this.normalizeSkillName(entry.name) === targetName);
 		if (stableOccupied || existsSync(stableTarget)) {
 			throw new Error(this.translate("mainProjectResource.skillAlreadyExists", { name: targetName }));
 		}
@@ -304,13 +258,13 @@ export class ProjectResourceManager {
 			// The source copy can take long enough for a project-local directory to be
 			// replaced by a junction. Re-resolve both paths immediately before rename so
 			// the final mutation still targets the registered project's canonical tree.
-			if (await resolveProjectFileReadPath(boundary, temporaryPath) !== temporaryPath) {
+			if ((await resolveProjectFileReadPath(boundary, temporaryPath)) !== temporaryPath) {
 				throw new Error(this.translate("mainProjectResource.pathOutsideProject"));
 			}
-			if (await resolveProjectFileWritePath(boundary, lexicalRoot) !== stableRoot) {
+			if ((await resolveProjectFileWritePath(boundary, lexicalRoot)) !== stableRoot) {
 				throw new Error(this.translate("mainProjectResource.pathOutsideProject"));
 			}
-			if (await resolveProjectFileWritePath(boundary, join(lexicalRoot, targetName)) !== stableTarget) {
+			if ((await resolveProjectFileWritePath(boundary, join(lexicalRoot, targetName))) !== stableTarget) {
 				throw new Error(this.translate("mainProjectResource.pathOutsideProject"));
 			}
 			await assertTargetAbsent();
@@ -320,11 +274,7 @@ export class ProjectResourceManager {
 		}
 	}
 
-	private async assertImportSkillTree(
-		root: string,
-		depth = 0,
-		state: ImportTreeState = { totalBytes: 0 },
-	): Promise<void> {
+	private async assertImportSkillTree(root: string, depth = 0, state: ImportTreeState = { totalBytes: 0 }): Promise<void> {
 		if (depth > IMPORT_MAX_DEPTH) throw new Error("Skill directory is too deep.");
 		const rootEntry = await lstat(root);
 		if (!rootEntry.isDirectory() || rootEntry.isSymbolicLink()) {
@@ -348,10 +298,7 @@ export class ProjectResourceManager {
 	async deleteSkill(projectId: string, skillPath: string): Promise<void> {
 		const project = this.requireProject(projectId);
 		const skill = await this.findSkill(project, skillPath);
-		const target = await this.resolveExistingProjectPath(
-			project,
-			skill.type === "directory" ? skill.dir : skill.path,
-		);
+		const target = await this.resolveExistingProjectPath(project, skill.type === "directory" ? skill.dir : skill.path);
 		// 目录型 skill 代表一个完整能力包；删除走系统回收站（可恢复），拒绝硬删。
 		await trashPath(target, { source: "projects:delete-skill" });
 	}
@@ -360,17 +307,9 @@ export class ProjectResourceManager {
 		const project = this.requireProject(projectId);
 		const skill = await this.findSkill(project, skillPath);
 		const safeSkillPath = await this.resolveExistingProjectPath(project, skill.path);
-		const settingsFile = await this.resolveProjectWritePath(
-			project,
-			join(this.projectRoot(project), ".pi", "settings.json"),
-		);
-		const settings = await readProjectSettingsForWrite(
-			settingsFile,
-			this.translate("mainConfig.invalidJson"),
-		);
-		const disabled = Array.isArray(settings.disabledSkills)
-			? settings.disabledSkills.filter((name): name is string => typeof name === "string")
-			: [];
+		const settingsFile = await this.resolveProjectWritePath(project, join(this.projectRoot(project), ".pi", "settings.json"));
+		const settings = await readProjectSettingsForWrite(settingsFile, this.translate("mainConfig.invalidJson"));
+		const disabled = Array.isArray(settings.disabledSkills) ? settings.disabledSkills.filter((name): name is string => typeof name === "string") : [];
 		const nameKey = skill.name.toLowerCase();
 		const nextDisabled = disabled.filter((name) => name.toLowerCase() !== nameKey);
 		if (!enabled) nextDisabled.push(skill.name);
@@ -382,12 +321,7 @@ export class ProjectResourceManager {
 		await mkdir(dirname(settingsFile), { recursive: true });
 		await writeFile(settingsFile, `${JSON.stringify(settings, null, 2)}\n`, "utf8");
 		// 重新读取文件，获取最新 frontmatter + 禁用列表状态
-		return this.readSkill(
-			safeSkillPath,
-			this.skillLocations(project).find((l) => l.id === skill.sourceId) ?? this.skillLocations(project)[0],
-			skill.type,
-			new Set(nextDisabled.map((name) => name.toLowerCase())),
-		);
+		return this.readSkill(safeSkillPath, this.skillLocations(project).find((l) => l.id === skill.sourceId) ?? this.skillLocations(project)[0], skill.type, new Set(nextDisabled.map((name) => name.toLowerCase())));
 	}
 
 	async toggleExtension(projectId: string, extensionPath: string, enabled: boolean): Promise<void> {
@@ -396,17 +330,9 @@ export class ProjectResourceManager {
 		const extension = (await this.listExtensions(project)).find((item) => item.path === safeRequestedPath);
 		if (!extension?.path) throw new Error(this.translate("mainProjectResource.extensionNotFound"));
 		await this.resolveExistingProjectPath(project, extension.path);
-		const settingsFile = await this.resolveProjectWritePath(
-			project,
-			join(this.projectRoot(project), ".pi", "settings.json"),
-		);
-		const settings = await readProjectSettingsForWrite(
-			settingsFile,
-			this.translate("mainConfig.invalidJson"),
-		);
-		const disabled = Array.isArray(settings.disabledExtensions)
-			? settings.disabledExtensions.filter((source): source is string => typeof source === "string")
-			: [];
+		const settingsFile = await this.resolveProjectWritePath(project, join(this.projectRoot(project), ".pi", "settings.json"));
+		const settings = await readProjectSettingsForWrite(settingsFile, this.translate("mainConfig.invalidJson"));
+		const disabled = Array.isArray(settings.disabledExtensions) ? settings.disabledExtensions.filter((source): source is string => typeof source === "string") : [];
 		if (enabled) {
 			settings.disabledExtensions = disabled.filter((source) => source !== extension.source);
 		} else if (!disabled.includes(extension.source)) {
@@ -417,9 +343,7 @@ export class ProjectResourceManager {
 	}
 
 	/** Writes an override for an inherited global resource without touching the global setting. */
-	async toggleInheritedResource(
-		input: ProjectInheritedResourceToggleInput,
-	): Promise<ProjectResourceOverrides> {
+	async toggleInheritedResource(input: ProjectInheritedResourceToggleInput): Promise<ProjectResourceOverrides> {
 		const project = this.requireProject(input.projectId);
 		const rawKey = input.key.trim();
 		const validSkillKey = /^(?:pi-global|agents-global):[^\u0000\r\n]+$/.test(rawKey);
@@ -427,17 +351,8 @@ export class ProjectResourceManager {
 		const valid = rawKey.length <= 1024 && (input.kind === "skill" ? validSkillKey : validPlainKey);
 		if (!valid) throw new Error(this.translate("mainProjectResource.invalidInheritedKey"));
 		const key = input.kind === "extension" ? rawKey : rawKey.toLowerCase();
-		const settingsFile = await this.resolveProjectWritePath(
-			project,
-			join(this.projectRoot(project), ".pi", "settings.json"),
-		);
-		return setProjectInheritedResourceEnabled(
-			settingsFile,
-			input.kind,
-			key,
-			input.enabled,
-			this.translate("mainConfig.invalidJson"),
-		);
+		const settingsFile = await this.resolveProjectWritePath(project, join(this.projectRoot(project), ".pi", "settings.json"));
+		return setProjectInheritedResourceEnabled(settingsFile, input.kind, key, input.enabled, this.translate("mainConfig.invalidJson"));
 	}
 
 	async deleteExtension(projectId: string, extensionPath: string): Promise<void> {
@@ -450,11 +365,8 @@ export class ProjectResourceManager {
 		await trashPath(safePath, { source: "projects:delete-extension" });
 	}
 
-	private async listSkills(
-		project: Project,
-		settings?: Record<string, unknown>,
-	): Promise<PiSkillSummary[]> {
-		const effectiveSettings = settings ?? await this.readProjectSettings(project);
+	private async listSkills(project: Project, settings?: Record<string, unknown>): Promise<PiSkillSummary[]> {
+		const effectiveSettings = settings ?? (await this.readProjectSettings(project));
 		const disabledKeys = this.projectDisabledSkillKeys(effectiveSettings);
 		const groups = await Promise.all(
 			this.skillLocations(project).map(async (location) => {
@@ -473,18 +385,10 @@ export class ProjectResourceManager {
 
 	private projectDisabledSkillKeys(settings: Record<string, unknown>): Set<string> {
 		if (!Array.isArray(settings.disabledSkills)) return new Set();
-		return new Set(
-			settings.disabledSkills
-				.filter((name): name is string => typeof name === "string")
-				.map((name) => name.toLowerCase()),
-		);
+		return new Set(settings.disabledSkills.filter((name): name is string => typeof name === "string").map((name) => name.toLowerCase()));
 	}
 
-	private async scanSkillLocation(
-		location: PiSkillLocation,
-		disabledKeys: Set<string>,
-		boundary: ProjectFileReadBoundary,
-	): Promise<PiSkillSummary[]> {
+	private async scanSkillLocation(location: PiSkillLocation, disabledKeys: Set<string>, boundary: ProjectFileReadBoundary): Promise<PiSkillSummary[]> {
 		const entries = await readdir(location.path, { withFileTypes: true }).catch(() => []);
 		const skills: PiSkillSummary[] = [];
 		for (const entry of entries) {
@@ -503,13 +407,7 @@ export class ProjectResourceManager {
 		return skills;
 	}
 
-	private async collectDirectorySkills(
-		dir: string,
-		location: PiSkillLocation,
-		out: PiSkillSummary[],
-		disabledKeys: Set<string>,
-		boundary: ProjectFileReadBoundary,
-	) {
+	private async collectDirectorySkills(dir: string, location: PiSkillLocation, out: PiSkillSummary[], disabledKeys: Set<string>, boundary: ProjectFileReadBoundary) {
 		const skillPath = join(dir, SKILL_FILE);
 		if (existsSync(skillPath)) {
 			try {
@@ -528,12 +426,7 @@ export class ProjectResourceManager {
 		}
 	}
 
-	private async readSkill(
-		skillPath: string,
-		location: PiSkillLocation,
-		type: PiSkillSummary["type"],
-		disabledKeys: Set<string> = new Set(),
-	): Promise<PiSkillSummary> {
+	private async readSkill(skillPath: string, location: PiSkillLocation, type: PiSkillSummary["type"], disabledKeys: Set<string> = new Set()): Promise<PiSkillSummary> {
 		const raw = await readFile(skillPath, "utf8").catch(() => "");
 		const frontmatter = this.parseFrontmatter(raw);
 		const name = String(frontmatter.name ?? "").trim();
@@ -550,19 +443,14 @@ export class ProjectResourceManager {
 			type,
 			// 禁用 = 项目禁用列表 ∪ frontmatter 标记（老版语义，仅阻止自动调用，升级后由
 			// 白名单解析器一并排除，显示与加载保持一致）
-			enabled:
-				frontmatter["disable-model-invocation"] !== "true" &&
-				!disabledKeys.has(name.toLowerCase()),
+			enabled: frontmatter["disable-model-invocation"] !== "true" && !disabledKeys.has(name.toLowerCase()),
 			valid: warnings.length === 0,
 			warnings,
 		};
 	}
 
-	private async listExtensions(
-		project: Project,
-		settings?: Record<string, unknown>,
-	): Promise<PiExtensionSummary[]> {
-		const effectiveSettings = settings ?? await this.readProjectSettings(project);
+	private async listExtensions(project: Project, settings?: Record<string, unknown>): Promise<PiExtensionSummary[]> {
+		const effectiveSettings = settings ?? (await this.readProjectSettings(project));
 		const boundary = await this.projectBoundary(project);
 		const lexicalExtensionsDir = join(this.projectRoot(project), ".pi", "extensions");
 		let extensionsDir = lexicalExtensionsDir;
@@ -573,13 +461,7 @@ export class ProjectResourceManager {
 				return [];
 			}
 		}
-		const disabledExts = new Set(
-			Array.isArray(effectiveSettings.disabledExtensions)
-				? effectiveSettings.disabledExtensions.filter(
-					(source): source is string => typeof source === "string",
-				)
-				: [],
-		);
+		const disabledExts = new Set(Array.isArray(effectiveSettings.disabledExtensions) ? effectiveSettings.disabledExtensions.filter((source): source is string => typeof source === "string") : []);
 		const roots = new Map<string, string>();
 		for (const entryPath of discoverExtensionEntries(extensionsDir)) {
 			const relativePath = relative(extensionsDir, entryPath);
@@ -642,11 +524,7 @@ export class ProjectResourceManager {
 		}
 		const entries = await readdir(promptsDir, { withFileTypes: true }).catch(() => []);
 		const settings = await this.readProjectSettings(project);
-		const disabledNames = new Set(
-			Array.isArray(settings.disabledPrompts)
-				? settings.disabledPrompts.filter((name): name is string => typeof name === "string")
-				: [],
-		);
+		const disabledNames = new Set(Array.isArray(settings.disabledPrompts) ? settings.disabledPrompts.filter((name): name is string => typeof name === "string") : []);
 		const templates: PiPromptTemplateSummary[] = [];
 		for (const entry of entries) {
 			if (!entry.isFile() || !entry.name.endsWith(".md") || entry.name.endsWith(".d.md")) continue;
@@ -731,9 +609,7 @@ export class ProjectResourceManager {
 	/** frontmatter 缺 name 时的回退名：markdown 取文件名（去扩展名），目录取目录名。
 	 *  不能直接用 dirname().pop()——markdown 技能会显示成父目录名「skills」。 */
 	private fallbackSkillName(skillPath: string, type: PiSkillSummary["type"]): string {
-		return type === "markdown"
-			? basename(skillPath, extname(skillPath))
-			: basename(dirname(skillPath));
+		return type === "markdown" ? basename(skillPath, extname(skillPath)) : basename(dirname(skillPath));
 	}
 
 	/** 重命名项目级 Skill：按类型分流——目录技能重命名技能目录，markdown 技能只重命名单个文件。
@@ -750,12 +626,7 @@ export class ProjectResourceManager {
 		const isDirectory = skill.type === "directory";
 		const oldTarget = await this.resolveExistingProjectPath(project, isDirectory ? skill.dir : skill.path);
 		const parentDir = dirname(oldTarget);
-		const newTarget = await this.resolveProjectWritePath(
-			project,
-			isDirectory
-				? join(parentDir, normalizedNew)
-				: join(parentDir, `${normalizedNew}${extname(oldTarget)}`),
-		);
+		const newTarget = await this.resolveProjectWritePath(project, isDirectory ? join(parentDir, normalizedNew) : join(parentDir, `${normalizedNew}${extname(oldTarget)}`));
 
 		if (oldTarget === newTarget) throw new Error(this.translate("mainSkill.sameName"));
 		if (existsSync(newTarget)) throw new Error(this.translate("mainProjectResource.skillAlreadyExists", { name: normalizedNew }));
@@ -772,11 +643,7 @@ export class ProjectResourceManager {
 		await this.migrateDisabledSkillName(project, skill.name, displayName);
 
 		// 重命名后重新读取
-		return this.readSkill(
-			newSkillPath,
-			this.skillLocations(project).find((l) => newSkillPath.startsWith(l.path)) ?? this.skillLocations(project)[0],
-			skill.type,
-		);
+		return this.readSkill(newSkillPath, this.skillLocations(project).find((l) => newSkillPath.startsWith(l.path)) ?? this.skillLocations(project)[0], skill.type);
 	}
 
 	/** 重命名后同步项目 .pi/settings.json 的 disabledSkills：旧名条目替换为新名（大小写不敏感）。
@@ -785,21 +652,11 @@ export class ProjectResourceManager {
 		const oldKey = oldName.toLowerCase();
 		const newKey = newDisplayName.toLowerCase();
 		if (oldKey === newKey) return;
-		const settingsFile = await this.resolveProjectWritePath(
-			project,
-			join(this.projectRoot(project), ".pi", "settings.json"),
-		);
-		const settings = await readProjectSettingsForWrite(
-			settingsFile,
-			this.translate("mainConfig.invalidJson"),
-		);
-		const disabled = Array.isArray(settings.disabledSkills)
-			? settings.disabledSkills.filter((name): name is string => typeof name === "string")
-			: [];
+		const settingsFile = await this.resolveProjectWritePath(project, join(this.projectRoot(project), ".pi", "settings.json"));
+		const settings = await readProjectSettingsForWrite(settingsFile, this.translate("mainConfig.invalidJson"));
+		const disabled = Array.isArray(settings.disabledSkills) ? settings.disabledSkills.filter((name): name is string => typeof name === "string") : [];
 		if (!disabled.some((name) => name.toLowerCase() === oldKey)) return;
-		const nextDisabled = disabled.filter(
-			(name) => name.toLowerCase() !== oldKey && name.toLowerCase() !== newKey,
-		);
+		const nextDisabled = disabled.filter((name) => name.toLowerCase() !== oldKey && name.toLowerCase() !== newKey);
 		nextDisabled.push(newDisplayName);
 		settings.disabledSkills = nextDisabled;
 		await mkdir(dirname(settingsFile), { recursive: true });
@@ -834,10 +691,7 @@ export class ProjectResourceManager {
 		const settingsFile = join(this.projectRoot(project), ".pi", "settings.json");
 		if (!existsSync(settingsFile)) return {};
 		try {
-			const safeSettingsFile = await resolveProjectFileReadPath(
-				await this.projectBoundary(project),
-				settingsFile,
-			);
+			const safeSettingsFile = await resolveProjectFileReadPath(await this.projectBoundary(project), settingsFile);
 			const parsed: unknown = JSON.parse(await readFile(safeSettingsFile, "utf8"));
 			return isRecord(parsed) ? parsed : {};
 		} catch {

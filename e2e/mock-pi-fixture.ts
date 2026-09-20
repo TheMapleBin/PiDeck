@@ -64,10 +64,7 @@ export const test = base.extend<MockPiFixture & { seedProjects: SeedProject[] | 
 			const shimName = process.platform === "win32" ? "mock-pi.cmd" : "mock-pi.sh";
 			const shimPath = join(userDataRoot, shimName);
 			const scriptPath = join(repoRoot, "e2e", "mock-pi.cjs");
-			const shimBody =
-				process.platform === "win32"
-					? `@echo off\r\n"${process.execPath}" "${scriptPath}" %*\r\n`
-					: `#!/bin/sh\nexec "${process.execPath}" "${scriptPath}" "$@"\n`;
+			const shimBody = process.platform === "win32" ? `@echo off\r\n"${process.execPath}" "${scriptPath}" %*\r\n` : `#!/bin/sh\nexec "${process.execPath}" "${scriptPath}" "$@"\n`;
 			writeFileSync(shimPath, shimBody);
 			if (process.platform !== "win32") chmodSync(shimPath, 0o755);
 			// 预置设置：customPiPath 指向 shim；piEnvironmentChecked=true 跳过启动
@@ -91,10 +88,7 @@ export const test = base.extend<MockPiFixture & { seedProjects: SeedProject[] | 
 				}),
 			);
 			if (seedImageGenConfig) {
-				writeFileSync(
-					join(userDataRoot, "profile", "imagegen.json"),
-					JSON.stringify(seedImageGenConfig),
-				);
+				writeFileSync(join(userDataRoot, "profile", "imagegen.json"), JSON.stringify(seedImageGenConfig));
 			}
 
 			// 可选：预置项目列表。ProjectStore.load 会保留种子项目并追加内置聊天项目。
@@ -137,14 +131,8 @@ export const test = base.extend<MockPiFixture & { seedProjects: SeedProject[] | 
 				for (const seedFile of seedSessionFiles) {
 					const sessionsDir = join(seedFile.projectPath, ".pi", "sessions");
 					mkdirSync(sessionsDir, { recursive: true });
-					writeFileSync(
-						join(sessionsDir, encodeSessionDir(seedFile.projectPath) + ".jsonl"),
-						seedFile.entries.map((entry) => JSON.stringify(entry)).join("\n") + "\n",
-					);
-					writeFileSync(
-						join(seedFile.projectPath, ".pi", "settings.json"),
-						JSON.stringify({ sessionDir: ".pi/sessions" }, null, 2),
-					);
+					writeFileSync(join(sessionsDir, encodeSessionDir(seedFile.projectPath) + ".jsonl"), seedFile.entries.map((entry) => JSON.stringify(entry)).join("\n") + "\n");
+					writeFileSync(join(seedFile.projectPath, ".pi", "settings.json"), JSON.stringify({ sessionDir: ".pi/sessions" }, null, 2));
 				}
 			}
 
@@ -162,11 +150,7 @@ export const test = base.extend<MockPiFixture & { seedProjects: SeedProject[] | 
 				CI: "1",
 				// PIDECK_E2E：主进程 isE2E 开关，窗口 showInactive 不抢焦点、不最大化（见 main/index.ts）
 				PIDECK_E2E: "1",
-				...(process.platform === "win32"
-					? { APPDATA: userDataRoot, USERPROFILE: userDataRoot }
-					: process.platform === "darwin"
-						? { HOME: userDataRoot }
-						: { XDG_CONFIG_HOME: userDataRoot, HOME: userDataRoot }),
+				...(process.platform === "win32" ? { APPDATA: userDataRoot, USERPROFILE: userDataRoot } : process.platform === "darwin" ? { HOME: userDataRoot } : { XDG_CONFIG_HOME: userDataRoot, HOME: userDataRoot }),
 			};
 			delete env.ELECTRON_RENDERER_URL;
 			const app = await electron.launch({
@@ -178,7 +162,11 @@ export const test = base.extend<MockPiFixture & { seedProjects: SeedProject[] | 
 		} finally {
 			// 调试可用 PIDECK_E2E_KEEP=1 保留 userData（含主进程日志），排查 spawn/状态问题
 			if (!process.env.PIDECK_E2E_KEEP) {
-				try { rmSync(userDataRoot, { recursive: true, force: true }); } catch { /* Windows 文件锁，忽略 */ }
+				try {
+					rmSync(userDataRoot, { recursive: true, force: true });
+				} catch {
+					/* Windows 文件锁，忽略 */
+				}
 			} else {
 				console.log("[mock-pi-fixture] kept userDataRoot:", userDataRoot);
 			}

@@ -14,12 +14,7 @@ import { resolveConfiguredPackageResources } from "./packageResourceResolver";
  * 文件删除流——受包管理器管理的资源不允许被当作本地文件直接修改。
  */
 
-export type ResourceDiscoverySourceId =
-	| "package-user"
-	| "package-project"
-	| "settings-user"
-	| "settings-project"
-	| "ancestor-agents";
+export type ResourceDiscoverySourceId = "package-user" | "package-project" | "settings-user" | "settings-project" | "ancestor-agents";
 
 export type DiscoveredSkillResource = {
 	/** 稳定身份：sourceId:name（与 ProjectResourceOverrides.disabledGlobalSkills 同构）。 */
@@ -84,9 +79,7 @@ export function discoverSkills(options: ResourceDiscoveryOptions): DiscoveredSki
 	const includeProjectResources = options.includeProjectResources !== false;
 
 	const userSettings = readSettingsObject(join(agentDir, "settings.json"));
-	const projectSettings = includeProjectResources
-		? readSettingsObject(join(projectBaseDir, "settings.json"))
-		: {};
+	const projectSettings = includeProjectResources ? readSettingsObject(join(projectBaseDir, "settings.json")) : {};
 	const disabledKeys = new Set((options.disabledSkillNames ?? []).map((name) => name.toLowerCase()));
 
 	const result: DiscoveredSkillResource[] = [];
@@ -98,12 +91,8 @@ export function discoverSkills(options: ResourceDiscoveryOptions): DiscoveredSki
 	};
 
 	// settings.skills 显式路径（user + project），按 settings 过滤后作为 managed 条目。
-	const { plain: userPlain, patterns: userPatterns } = splitResourceEntries(
-		Array.isArray(userSettings.skills) ? userSettings.skills : [],
-	);
-	const { plain: projectPlain, patterns: projectPatterns } = splitResourceEntries(
-		Array.isArray(projectSettings.skills) ? projectSettings.skills : [],
-	);
+	const { plain: userPlain, patterns: userPatterns } = splitResourceEntries(Array.isArray(userSettings.skills) ? userSettings.skills : []);
+	const { plain: projectPlain, patterns: projectPatterns } = splitResourceEntries(Array.isArray(projectSettings.skills) ? projectSettings.skills : []);
 	for (const item of collectSettingsSkillFiles(agentDir, userPlain, userPatterns)) {
 		const name = readSkillName(item);
 		add({
@@ -187,9 +176,7 @@ export function discoverPrompts(options: ResourceDiscoveryOptions): DiscoveredPr
 	const includeProjectResources = options.includeProjectResources !== false;
 
 	const userSettings = readSettingsObject(join(agentDir, "settings.json"));
-	const projectSettings = includeProjectResources
-		? readSettingsObject(join(projectBaseDir, "settings.json"))
-		: {};
+	const projectSettings = includeProjectResources ? readSettingsObject(join(projectBaseDir, "settings.json")) : {};
 	const disabledKeys = new Set((options.disabledPromptNames ?? []).map((name) => name.toLowerCase()));
 
 	const result: DiscoveredPromptResource[] = [];
@@ -201,12 +188,8 @@ export function discoverPrompts(options: ResourceDiscoveryOptions): DiscoveredPr
 		result.push(resource);
 	};
 
-	const { plain: userPlain, patterns: userPatterns } = splitResourceEntries(
-		Array.isArray(userSettings.prompts) ? userSettings.prompts : [],
-	);
-	const { plain: projectPlain, patterns: projectPatterns } = splitResourceEntries(
-		Array.isArray(projectSettings.prompts) ? projectSettings.prompts : [],
-	);
+	const { plain: userPlain, patterns: userPatterns } = splitResourceEntries(Array.isArray(userSettings.prompts) ? userSettings.prompts : []);
+	const { plain: projectPlain, patterns: projectPatterns } = splitResourceEntries(Array.isArray(projectSettings.prompts) ? projectSettings.prompts : []);
 	for (const item of collectSettingsPromptFiles(agentDir, userPlain, userPatterns)) {
 		const name = promptName(item);
 		add({
@@ -265,12 +248,8 @@ export function discoverExtensions(options: ResourceDiscoveryOptions): Discovere
 	const includeProjectResources = options.includeProjectResources !== false;
 
 	const userSettings = readSettingsObject(join(agentDir, "settings.json"));
-	const projectSettings = includeProjectResources
-		? readSettingsObject(join(projectBaseDir, "settings.json"))
-		: {};
-	const disabledKeys = new Set(
-		(options.disabledExtensions ?? []).map((entry) => `${entry.scope}:${entry.source.trim()}`),
-	);
+	const projectSettings = includeProjectResources ? readSettingsObject(join(projectBaseDir, "settings.json")) : {};
+	const disabledKeys = new Set((options.disabledExtensions ?? []).map((entry) => `${entry.scope}:${entry.source.trim()}`));
 
 	const result: DiscoveredExtensionResource[] = [];
 	const seen = new Set<string>();
@@ -281,12 +260,8 @@ export function discoverExtensions(options: ResourceDiscoveryOptions): Discovere
 		result.push(resource);
 	};
 
-	const { plain: userPlain, patterns: userPatterns } = splitResourceEntries(
-		Array.isArray(userSettings.extensions) ? userSettings.extensions : [],
-	);
-	const { plain: projectPlain, patterns: projectPatterns } = splitResourceEntries(
-		Array.isArray(projectSettings.extensions) ? projectSettings.extensions : [],
-	);
+	const { plain: userPlain, patterns: userPatterns } = splitResourceEntries(Array.isArray(userSettings.extensions) ? userSettings.extensions : []);
+	const { plain: projectPlain, patterns: projectPatterns } = splitResourceEntries(Array.isArray(projectSettings.extensions) ? projectSettings.extensions : []);
 	for (const item of collectSettingsExtensionFiles(agentDir, userPlain, userPatterns)) {
 		const source = extensionSource(item);
 		add({
@@ -346,7 +321,12 @@ function readSkillName(path: string): string {
 				const index = line.indexOf(":");
 				if (index === -1) continue;
 				if (line.slice(0, index).trim() === "name") {
-					return line.slice(index + 1).trim().replace(/^['"]|['"]$/g, "") || basename(dirname(path));
+					return (
+						line
+							.slice(index + 1)
+							.trim()
+							.replace(/^['"]|['"]$/g, "") || basename(dirname(path))
+					);
 				}
 			}
 		}
@@ -365,7 +345,10 @@ function readSkillDescription(path: string): string {
 				const index = line.indexOf(":");
 				if (index === -1) continue;
 				if (line.slice(0, index).trim() === "description") {
-					return line.slice(index + 1).trim().replace(/^['"]|['"]$/g, "");
+					return line
+						.slice(index + 1)
+						.trim()
+						.replace(/^['"]|['"]$/g, "");
 				}
 			}
 		}
@@ -388,7 +371,10 @@ function readPromptDescription(path: string): string {
 				const index = line.indexOf(":");
 				if (index === -1) continue;
 				if (line.slice(0, index).trim() === "description") {
-					return line.slice(index + 1).trim().replace(/^['"]|['"]$/g, "");
+					return line
+						.slice(index + 1)
+						.trim()
+						.replace(/^['"]|['"]$/g, "");
 				}
 			}
 		}
@@ -470,12 +456,7 @@ function collectSkillDirFiles(dir: string, mode: "pi" | "agents"): string[] {
 	return files;
 }
 
-function collectSkillDir(
-	dir: string,
-	mode: "pi" | "agents",
-	addPath: (path: string) => void,
-	root = dir,
-): void {
+function collectSkillDir(dir: string, mode: "pi" | "agents", addPath: (path: string) => void, root = dir): void {
 	let entries;
 	try {
 		entries = readdirSync(dir, { withFileTypes: true });

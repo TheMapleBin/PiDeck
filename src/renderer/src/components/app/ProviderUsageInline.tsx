@@ -22,18 +22,8 @@
 import { Fragment } from "react";
 import { Clock, RefreshCw } from "lucide-react";
 import type { UsageProbeBackend } from "../../../../shared/types/providerUsage";
-import {
-	useProviderUsageEntry,
-	useProviderUsageRefresh,
-	useProviderUsageState,
-} from "../../hooks/useProviderUsage";
-import {
-	usageBadgePrimarySegment,
-	usageBadgeSegments,
-	USAGE_TONE_TEXT_CLASS,
-	relativeTimeParts,
-	type UsageBadgeSegment,
-} from "../../utils/providerUsageDisplay";
+import { useProviderUsageEntry, useProviderUsageRefresh, useProviderUsageState } from "../../hooks/useProviderUsage";
+import { usageBadgePrimarySegment, usageBadgeSegments, USAGE_TONE_TEXT_CLASS, relativeTimeParts, type UsageBadgeSegment } from "../../utils/providerUsageDisplay";
 import { t } from "../../i18n";
 
 /** 一段用量的渲染：灰标签 + 彩色粗体数值（段间由调用方加分隔点）。 */
@@ -41,12 +31,8 @@ function UsageSegment(props: { segment: UsageBadgeSegment }) {
 	const { segment } = props;
 	return (
 		<span className="inline-flex items-baseline gap-0.5 whitespace-nowrap">
-			<span className="text-text-tertiary">
-				{segment.labelKey != null ? t(segment.labelKey) : segment.labelText}
-			</span>
-			<span className={`font-mono font-semibold tabular-nums ${USAGE_TONE_TEXT_CLASS[segment.tone]}`}>
-				{segment.text}
-			</span>
+			<span className="text-text-tertiary">{segment.labelKey != null ? t(segment.labelKey) : segment.labelText}</span>
+			<span className={`font-mono font-semibold tabular-nums ${USAGE_TONE_TEXT_CLASS[segment.tone]}`}>{segment.text}</span>
 		</span>
 	);
 }
@@ -115,12 +101,7 @@ export function ProviderUsageInline(props: {
 	const time = entry.fetchedAt != null ? relativeTimeParts(entry.fetchedAt) : null;
 
 	return (
-		<span
-			className={`flex flex-none items-center gap-1.5 whitespace-nowrap ${props.className ?? ""}`}
-			data-testid="provider-usage-inline"
-			data-provider={props.provider}
-			data-enabled="true"
-		>
+		<span className={`flex flex-none items-center gap-1.5 whitespace-nowrap ${props.className ?? ""}`} data-testid="provider-usage-inline" data-provider={props.provider} data-enabled="true">
 			{time && segments && segments.length > 0 && (
 				<span className="inline-flex items-center gap-0.5 text-[10px] text-text-tertiary">
 					<Clock size={10} aria-hidden="true" />

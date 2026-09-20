@@ -42,100 +42,92 @@ const PROBE_FILE_LAST_RESORT = "PiDeck-setup.exe";
  * 非法路径/查询串一律丢弃，避免探测请求被 yml 内容带出镜像目录。
  */
 export function resolveProbeFileName(ymlText: string): string {
-  const versionMatch = ymlText.match(/^version:\s*(\S+)/m);
-  const rawVersion = versionMatch?.[1]?.replace(/^v/i, "") ?? "";
-  const fallback = rawVersion
-    ? `${PROBE_FILE_FALLBACK_PREFIX}${rawVersion}${PROBE_FILE_FALLBACK_SUFFIX}`
-    : PROBE_FILE_LAST_RESORT;
+	const versionMatch = ymlText.match(/^version:\s*(\S+)/m);
+	const rawVersion = versionMatch?.[1]?.replace(/^v/i, "") ?? "";
+	const fallback = rawVersion ? `${PROBE_FILE_FALLBACK_PREFIX}${rawVersion}${PROBE_FILE_FALLBACK_SUFFIX}` : PROBE_FILE_LAST_RESORT;
 
-  const urls: string[] = [];
-  const urlRe = /^\s+url:\s*(\S+)/gm;
-  let urlMatch: RegExpExecArray | null;
-  while ((urlMatch = urlRe.exec(ymlText)) !== null) {
-    urls.push(urlMatch[1] ?? "");
-  }
-  const preferred =
-    urls.find((url) => /-setup\.exe(?:\?|$)/i.test(url)) ?? urls[0] ?? "";
-  if (!preferred) return fallback;
+	const urls: string[] = [];
+	const urlRe = /^\s+url:\s*(\S+)/gm;
+	let urlMatch: RegExpExecArray | null;
+	while ((urlMatch = urlRe.exec(ymlText)) !== null) {
+		urls.push(urlMatch[1] ?? "");
+	}
+	const preferred = urls.find((url) => /-setup\.exe(?:\?|$)/i.test(url)) ?? urls[0] ?? "";
+	if (!preferred) return fallback;
 
-  const withoutQuery = preferred.split("?")[0] ?? preferred;
-  const slash = Math.max(withoutQuery.lastIndexOf("/"), withoutQuery.lastIndexOf("\\"));
-  const basename = (slash >= 0 ? withoutQuery.slice(slash + 1) : withoutQuery).trim();
-  return PROBE_FILE_NAME_RE.test(basename) ? basename : fallback;
+	const withoutQuery = preferred.split("?")[0] ?? preferred;
+	const slash = Math.max(withoutQuery.lastIndexOf("/"), withoutQuery.lastIndexOf("\\"));
+	const basename = (slash >= 0 ? withoutQuery.slice(slash + 1) : withoutQuery).trim();
+	return PROBE_FILE_NAME_RE.test(basename) ? basename : fallback;
 }
 
 /** 单个镜像探测；fetchImpl 注入便于测试。超时/非预期响应一律收成 broken，不向外抛。 */
-export async function probeMirrorHealth(
-  fetchImpl: typeof fetch,
-  mirror: { id: UpdateSourceId; host: string },
-  now: () => number = Date.now,
-): Promise<MirrorHealthResult> {
-  const base = buildCustomSourceFeedUrl(mirror.host);
-  const checkedAt = now();
-  const timeout = AbortSignal.timeout(PROBE_TIMEOUT_MS);
-  try {
-    // ── 1. 检测：latest.yml ──
-    const start = now();
-    const ymlRes = await fetchImpl(`${base}/latest.yml`, { signal: timeout });
-    const latencyMs = now() - start;
-    const ymlText = await ymlRes.text();
-    if (!ymlRes.ok || !/^version:\s*\S+/m.test(ymlText)) {
-      return {
-        id: mirror.id,
-        status: "broken",
-        latencyMs,
-        speedKBps: 0,
-        error: `latest.yml ${ymlRes.ok ? "格式异常" : `HTTP ${ymlRes.status}`}`,
-        checkedAt,
-      };
-    }
+export async function probeMirrorHealth(fetchImpl: typeof fetch, mirror: { id: UpdateSourceId; host: string }, now: () => number = Date.now): Promise<MirrorHealthResult> {
+	const base = buildCustomSourceFeedUrl(mirror.host);
+	const checkedAt = now();
+	const timeout = AbortSignal.timeout(PROBE_TIMEOUT_MS);
+	try {
+		// ── 1. 检测：latest.yml ──
+		const start = now();
+		const ymlRes = await fetchImpl(`${base}/latest.yml`, { signal: timeout });
+		const latencyMs = now() - start;
+		const ymlText = await ymlRes.text();
+		if (!ymlRes.ok || !/^version:\s*\S+/m.test(ymlText)) {
+			return {
+				id: mirror.id,
+				status: "broken",
+				latencyMs,
+				speedKBps: 0,
+				error: `latest.yml ${ymlRes.ok ? "格式异常" : `HTTP ${ymlRes.status}`}`,
+				checkedAt,
+			};
+		}
 
-    // ── 2. 下载预检：Range 分片（206 + 测速）；文件名跟 latest.yml，避免写死旧版 setup。──
-    const probeFile = resolveProbeFileName(ymlText);
-    const dlStart = now();
-    const dlRes = await fetchImpl(`${base}/${probeFile}`, {
-      signal: timeout,
-      headers: { Range: `bytes=0-${PROBE_RANGE_BYTES - 1}` },
-    });
-    // 注意：fetch 会自动跟随 302（GitHub releases/latest 先跳到具体版本）；分片是否保留取决于镜像
-    const bytes = await dlRes.arrayBuffer();
-    const dlMs = now() - dlStart;
-    const speedKBps = dlMs > 0 ? Math.round(bytes.byteLength / dlMs) : 0;
-    if (dlRes.status !== 206 || bytes.byteLength < 1024) {
-      return {
-        id: mirror.id,
-        status: "broken",
-        latencyMs,
-        speedKBps,
-        error: `安装包下载预检失败（HTTP ${dlRes.status}）`,
-        checkedAt,
-      };
-    }
+		// ── 2. 下载预检：Range 分片（206 + 测速）；文件名跟 latest.yml，避免写死旧版 setup。──
+		const probeFile = resolveProbeFileName(ymlText);
+		const dlStart = now();
+		const dlRes = await fetchImpl(`${base}/${probeFile}`, {
+			signal: timeout,
+			headers: { Range: `bytes=0-${PROBE_RANGE_BYTES - 1}` },
+		});
+		// 注意：fetch 会自动跟随 302（GitHub releases/latest 先跳到具体版本）；分片是否保留取决于镜像
+		const bytes = await dlRes.arrayBuffer();
+		const dlMs = now() - dlStart;
+		const speedKBps = dlMs > 0 ? Math.round(bytes.byteLength / dlMs) : 0;
+		if (dlRes.status !== 206 || bytes.byteLength < 1024) {
+			return {
+				id: mirror.id,
+				status: "broken",
+				latencyMs,
+				speedKBps,
+				error: `安装包下载预检失败（HTTP ${dlRes.status}）`,
+				checkedAt,
+			};
+		}
 
-    return {
-      id: mirror.id,
-      status: speedKBps >= SLOW_THRESHOLD_KBPS ? "ok" : "slow",
-      latencyMs,
-      speedKBps,
-      checkedAt,
-    };
-  } catch (error) {
-    // 超时/中止判定不看 instanceof（vm 测试沙箱与生产 realm 不同会误判），
-    // 用错误对象 name：AbortSignal.timeout → TimeoutError、手动 abort → AbortError。
-    const errName =
-      error && typeof error === "object" && "name" in error ? String(error.name) : "";
-    return {
-      id: mirror.id,
-      status: "broken",
-      latencyMs: 0,
-      speedKBps: 0,
-      error: /timeout|abort/i.test(errName) ? "连接超时" : "连接失败",
-      checkedAt,
-    };
-  }
+		return {
+			id: mirror.id,
+			status: speedKBps >= SLOW_THRESHOLD_KBPS ? "ok" : "slow",
+			latencyMs,
+			speedKBps,
+			checkedAt,
+		};
+	} catch (error) {
+		// 超时/中止判定不看 instanceof（vm 测试沙箱与生产 realm 不同会误判），
+		// 用错误对象 name：AbortSignal.timeout → TimeoutError、手动 abort → AbortError。
+		const errName = error && typeof error === "object" && "name" in error ? String(error.name) : "";
+		return {
+			id: mirror.id,
+			status: "broken",
+			latencyMs: 0,
+			speedKBps: 0,
+			error: /timeout|abort/i.test(errName) ? "连接超时" : "连接失败",
+			checkedAt,
+		};
+	}
 }
 
 /** 探测所有内置镜像（并行，任一失败不影响其它）。 */
 export async function probeAllMirrors(fetchImpl: typeof fetch = fetch): Promise<MirrorHealthResult[]> {
-  return Promise.all(UPDATE_SOURCE_MIRRORS.map((mirror) => probeMirrorHealth(fetchImpl, mirror)));
+	return Promise.all(UPDATE_SOURCE_MIRRORS.map((mirror) => probeMirrorHealth(fetchImpl, mirror)));
 }

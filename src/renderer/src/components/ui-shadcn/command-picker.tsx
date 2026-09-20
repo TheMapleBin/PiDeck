@@ -2,20 +2,9 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 import { ChevronsDownUp, ChevronsUpDown, ChevronDown, ChevronRight, X } from "lucide-react";
 import { t } from "../../i18n";
 import { Button } from "./button";
-import {
-	Command,
-	CommandEmpty,
-	CommandGroup,
-	CommandInput,
-	CommandList,
-} from "./command";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandList } from "./command";
 import { cn } from "../../lib/utils";
-import {
-	INITIAL_PICKER_GROUP_SELECTION,
-	applyPickerGroupAction,
-	resolveGroupExpanded,
-	type PickerGroupSelection,
-} from "./commandPickerExpansion";
+import { INITIAL_PICKER_GROUP_SELECTION, applyPickerGroupAction, resolveGroupExpanded, type PickerGroupSelection } from "./commandPickerExpansion";
 
 type CommandPickerContextValue = {
 	searchActive: boolean;
@@ -25,11 +14,7 @@ type CommandPickerContextValue = {
 };
 
 /** cmdk 过滤函数签名（value/keywords 参与匹配，返回分数，>0 显示）。 */
-export type CommandPickerFilter = (
-	value: string,
-	search: string,
-	keywords: string[] | undefined,
-) => number;
+export type CommandPickerFilter = (value: string, search: string, keywords: string[] | undefined) => number;
 
 const CommandPickerContext = createContext<CommandPickerContextValue>({
 	searchActive: false,
@@ -75,11 +60,7 @@ export function CommandPickerGroup(props: {
 			>
 				{expanded ? <ChevronDown className="size-3.5 flex-none" aria-hidden="true" /> : <ChevronRight className="size-3.5 flex-none" aria-hidden="true" />}
 				<span className="max-w-[45%] flex-none truncate">{props.label}</span>
-				{props.count != null && (
-					<span className="flex-none font-mono text-caption text-muted-foreground/70">
-						{props.countText ?? props.count}
-					</span>
-				)}
+				{props.count != null && <span className="flex-none font-mono text-caption text-muted-foreground/70">{props.countText ?? props.count}</span>}
 				{/* 弹性空隙：把 trailing（用量等）推到行最右，与名称/数量分开，避免挤在一起 */}
 				<span className="min-w-4 flex-1" />
 				{props.trailing}
@@ -140,9 +121,7 @@ export function CommandPickerPanel(props: {
 		if (!value) return;
 		const frame = window.requestAnimationFrame(() => {
 			const items = listHostRef.current?.querySelectorAll<HTMLElement>("[data-picker-value]");
-			const selected = Array.from(items ?? []).find(
-				(item) => item.getAttribute("data-picker-value")?.toLowerCase() === value,
-			);
+			const selected = Array.from(items ?? []).find((item) => item.getAttribute("data-picker-value")?.toLowerCase() === value);
 			selected?.scrollIntoView({ block: "center" });
 		});
 		return () => window.cancelAnimationFrame(frame);
@@ -197,31 +176,18 @@ export function CommandPickerPanel(props: {
 					)}
 					{props.headerAction}
 					{props.onClose && (
-						<Button
-							variant="ghost"
-							size="icon-sm"
-							className="text-muted-foreground hover:text-foreground"
-							aria-label={t("common.close")}
-							title={t("common.close")}
-							onClick={props.onClose}
-						>
+						<Button variant="ghost" size="icon-sm" className="text-muted-foreground hover:text-foreground" aria-label={t("common.close")} title={t("common.close")} onClick={props.onClose}>
 							<X size={16} strokeWidth={2} aria-hidden="true" />
 						</Button>
 					)}
 				</div>
 			</header>
 			<Command defaultValue={props.value} onValueChange={props.onValueChange} filter={props.filter} className="min-h-0 rounded-none">
-				<CommandInput
-					onValueChange={setSearch}
-					placeholder={props.searchPlaceholder}
-					autoFocus
-				/>
+				<CommandInput onValueChange={setSearch} placeholder={props.searchPlaceholder} autoFocus />
 				<div ref={listHostRef} className="min-h-0">
 					<CommandList className="max-h-[min(440px,55vh)] min-h-0">
 						{search.trim() ? <CommandEmpty>{props.emptyLabel}</CommandEmpty> : null}
-						<CommandPickerContext.Provider value={{ searchActive: search.trim().length > 0, selection, defaultExpandedIds, toggleGroup }}>
-							{props.children}
-						</CommandPickerContext.Provider>
+						<CommandPickerContext.Provider value={{ searchActive: search.trim().length > 0, selection, defaultExpandedIds, toggleGroup }}>{props.children}</CommandPickerContext.Provider>
 					</CommandList>
 				</div>
 			</Command>

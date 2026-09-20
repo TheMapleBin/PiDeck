@@ -72,18 +72,13 @@ export function ExtensionTableRow(props: {
 						{/* 过滤式安装徽标：source 已在主进程剥离 "(filtered)" 后缀，
 						    版本查询/更新/卸载均用干净 source；此处仅展示标记 */}
 						{extension.filtered && <span className="text-micro text-muted-foreground">{t("config.extensionFiltered")}</span>}
-						{disabled && (
-							<span className="text-micro text-muted-foreground">{t("config.extensionDisabledBadge")}</span>
-						)}
+						{disabled && <span className="text-micro text-muted-foreground">{t("config.extensionDisabledBadge")}</span>}
 					</div>
 					<span className="truncate font-mono text-caption text-muted-foreground">{extension.source}</span>
 					{/* 内置扩展简介：只有名称和路径时用户不知道扩展干什么（用户反馈）。
 					    限 2 行 + title 兜底：完整文案悬停可见，同时不让长简介把列撑宽。 */}
 					{extension.builtIn && BUILT_IN_EXTENSION_DESC[extension.source] && (
-						<span
-							className="line-clamp-2 text-caption leading-4 text-muted-foreground"
-							title={t(BUILT_IN_EXTENSION_DESC[extension.source])}
-						>
+						<span className="line-clamp-2 text-caption leading-4 text-muted-foreground" title={t(BUILT_IN_EXTENSION_DESC[extension.source])}>
 							{t(BUILT_IN_EXTENSION_DESC[extension.source])}
 						</span>
 					)}
@@ -91,24 +86,18 @@ export function ExtensionTableRow(props: {
 			</TableCell>
 			<TableCell className="whitespace-nowrap text-caption text-muted-foreground">
 				{extension.builtIn
-					// 内置扩展是**包级**版本号（extensions-manifest.json，不跟 PiDeck 应用版本走）：
-					// 只显示当前生效版本（覆盖层优先），「最新」与更新入口由上方内置扩展面板统一负责。
-					? t("config.builtInExt.rowVersion", { version: extension.currentVersion ?? "-" })
+					? // 内置扩展是**包级**版本号（extensions-manifest.json，不跟 PiDeck 应用版本走）：
+						// 只显示当前生效版本（覆盖层优先），「最新」与更新入口由上方内置扩展面板统一负责。
+						t("config.builtInExt.rowVersion", { version: extension.currentVersion ?? "-" })
 					: t("config.extensionVersions", {
-						current: extension.currentVersion ?? "-",
-						latest: extension.latestVersion ?? "-",
-					})}
+							current: extension.currentVersion ?? "-",
+							latest: extension.latestVersion ?? "-",
+						})}
 				{extension.hasUpdate && <span className="ml-1 text-text-primary">{t("config.extensionUpdateAvailable")}</span>}
 				{/* 有更新时提供单扩展更新与复制更新指令（npm 包专属；内置扩展走包级热更新面板） */}
 				{extension.hasUpdate && !extension.builtIn && (
 					<div className="mt-1.5 flex items-center gap-1.5">
-						<Button
-							size="xs"
-							variant="outline"
-							onClick={() => props.onUpdateOne(extension)}
-							disabled={props.updatingOne}
-							aria-busy={props.updatingOne}
-						>
+						<Button size="xs" variant="outline" onClick={() => props.onUpdateOne(extension)} disabled={props.updatingOne} aria-busy={props.updatingOne}>
 							{props.updatingOne ? t("config.extensionUpdatingOne") : t("config.extensionUpdateOne")}
 						</Button>
 						<Button size="xs" variant="ghost" onClick={() => props.onCopyUpdateCommand(extension)}>
@@ -122,14 +111,7 @@ export function ExtensionTableRow(props: {
 			<TableCell className="text-right">
 				<div className="flex justify-end gap-1">
 					{/* 文件位置：真实安装路径（主进程按项目边界授权打开） */}
-					<Button
-						variant="ghost"
-						size="icon-sm"
-						className="size-7"
-						disabled={!extension.path}
-						onClick={() => props.onShowInFolder(extension)}
-						title={t("config.openExtensionLocation")}
-					>
+					<Button variant="ghost" size="icon-sm" className="size-7" disabled={!extension.path} onClick={() => props.onShowInFolder(extension)} title={t("config.openExtensionLocation")}>
 						<FolderOpen size={14} strokeWidth={1.8} />
 					</Button>
 					{/* 启停开关：内置扩展也复用 extensions:toggle；项目作用域下继承的全局行只写项目覆盖，
@@ -140,18 +122,10 @@ export function ExtensionTableRow(props: {
 						className={`size-7${effectiveEnabled ? " text-primary" : ""}`}
 						disabled={props.toggling || props.uninstalling || (inherited && extension.enabled === false)}
 						onClick={() => props.onToggle(extension, !effectiveEnabled)}
-						title={
-							props.toggling
-								? t("config.extensionToggling")
-								: effectiveEnabled
-									? t("config.extensionDisable")
-									: t("config.extensionEnable")
-						}
+						title={props.toggling ? t("config.extensionToggling") : effectiveEnabled ? t("config.extensionDisable") : t("config.extensionEnable")}
 						aria-busy={props.toggling}
 					>
-						{effectiveEnabled
-							? <ToggleRight size={18} strokeWidth={1.8} />
-							: <ToggleLeft size={18} strokeWidth={1.8} />}
+						{effectiveEnabled ? <ToggleRight size={18} strokeWidth={1.8} /> : <ToggleLeft size={18} strokeWidth={1.8} />}
 					</Button>
 					{extension.builtIn && extension.enabled !== false && !inherited && (
 						<Button variant="ghost" size="icon-sm" className="size-7" disabled={props.removingBuiltIn} onClick={() => props.onRemoveBuiltIn(extension)} title={props.removingBuiltIn ? t("config.uninstalling") : t("config.uninstall")}>
@@ -172,9 +146,7 @@ export function ExtensionTableRow(props: {
 /** 运行时发现（package/settings 声明的扩展）只读行：由包/设置管理，不提供行内操作。 */
 export function DiscoveredExtensionRow(props: { item: DiscoveredExtensionItem }) {
 	const { item } = props;
-	const name = item.source
-		.replace(/^(?:npm|file|github|git):/i, "")
-		.replace(/\.ts$/i, "");
+	const name = item.source.replace(/^(?:npm|file|github|git):/i, "").replace(/\.ts$/i, "");
 	return (
 		<TableRow>
 			{/* 同 ExtensionTableRow：基类 nowrap 会把这一列顶宽，需显式恢复换行 */}

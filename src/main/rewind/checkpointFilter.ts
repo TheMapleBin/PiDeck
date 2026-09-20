@@ -9,11 +9,7 @@
 import { statSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
-import {
-	IGNORED_DIR_NAMES,
-	MAX_UNTRACKED_DIR_FILES,
-	MAX_UNTRACKED_FILE_SIZE,
-} from "./checkpointConstants.ts";
+import { IGNORED_DIR_NAMES, MAX_UNTRACKED_DIR_FILES, MAX_UNTRACKED_FILE_SIZE } from "./checkpointConstants.ts";
 
 /** 路径任意段命中忽略目录名即忽略（跨平台匹配 / 与 \）。 */
 export function shouldIgnoreForSnapshot(path: string): boolean {
@@ -87,11 +83,7 @@ export function isPathWithinAny(path: string, dirs: ReadonlySet<string>): boolea
  * 文件按「最具体（最深）的所在目录」分桶计数；不在任何未跟踪目录下的文件
  * 记到其父目录桶（根目录 "." 不计为大目录——根下文件多不代表该忽略）。
  */
-export function detectLargeDirs(
-	files: string[],
-	dirs: string[],
-	threshold: number,
-): string[] {
+export function detectLargeDirs(files: string[], dirs: string[], threshold: number): string[] {
 	if (threshold <= 0 || files.length === 0) return [];
 	const counts = new Map<string, number>();
 
@@ -132,10 +124,7 @@ export function sanitizeForRef(s: string): string {
 }
 
 /** 找时间戳最接近 targetTs 的 checkpoint（同毫秒时稳定保持先到者）。 */
-export function findClosestCheckpoint<T extends { timestamp: number }>(
-	checkpoints: T[],
-	targetTs: number,
-): T | undefined {
+export function findClosestCheckpoint<T extends { timestamp: number }>(checkpoints: T[], targetTs: number): T | undefined {
 	if (checkpoints.length === 0) return undefined;
 	return checkpoints.reduce((best, cp) => {
 		const bd = Math.abs(best.timestamp - targetTs);

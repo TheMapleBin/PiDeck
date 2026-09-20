@@ -50,25 +50,13 @@ test("Feishu hook keeps raw IPC exceptions in logs and returns localized product
 
 test("Feishu Session Bot cache changes only after explicit main-process success", () => {
 	const current = { "session-a": "bot-a" };
-	assert.equal(
-		hookModule.applySessionBotAssignment(current, "session-a", "bot-b", { success: false }),
-		current,
-	);
-	assert.equal(
-		JSON.stringify(hookModule.applySessionBotAssignment(current, "session-a", "bot-b", { success: true })),
-		JSON.stringify({ "session-a": "bot-b" }),
-	);
-	assert.equal(
-		JSON.stringify(hookModule.applySessionBotAssignment(current, "session-a", null, { success: true })),
-		JSON.stringify({}),
-	);
+	assert.equal(hookModule.applySessionBotAssignment(current, "session-a", "bot-b", { success: false }), current);
+	assert.equal(JSON.stringify(hookModule.applySessionBotAssignment(current, "session-a", "bot-b", { success: true })), JSON.stringify({ "session-a": "bot-b" }));
+	assert.equal(JSON.stringify(hookModule.applySessionBotAssignment(current, "session-a", null, { success: true })), JSON.stringify({}));
 });
 
 test("Feishu binding pushes retain stable Session keys across runtime replacement", () => {
-	const retained = hookModule.retainBoundSessionBots(
-		{ "session-a": "bot-a", "session-b": "bot-b" },
-		[{ sessionId: "session-a" }],
-	);
+	const retained = hookModule.retainBoundSessionBots({ "session-a": "bot-a", "session-b": "bot-b" }, [{ sessionId: "session-a" }]);
 	assert.equal(JSON.stringify(retained), JSON.stringify({ "session-a": "bot-a" }));
 });
 

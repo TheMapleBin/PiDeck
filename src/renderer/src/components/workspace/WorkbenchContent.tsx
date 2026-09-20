@@ -35,17 +35,9 @@ export type WorkbenchContentProps = {
 	editorMode: WorkspaceContentOpenMode;
 	onToggleEditorMode?: () => void;
 	onCloseEditor: () => void;
-	readContent: (
-		path: string,
-		maxBytes?: number,
-		scope?: ProjectFileAccessScope,
-	) => Promise<string>;
+	readContent: (path: string, maxBytes?: number, scope?: ProjectFileAccessScope) => Promise<string>;
 	readOriginalContent: (path: string) => Promise<string>;
-	saveContent: (
-		path: string,
-		content: string,
-		scope?: ProjectFileAccessScope,
-	) => Promise<void>;
+	saveContent: (path: string, content: string, scope?: ProjectFileAccessScope) => Promise<void>;
 };
 
 /**
@@ -85,22 +77,14 @@ export function WorkbenchContent(props: WorkbenchContentProps) {
 			activeTabId={props.activeTab.id}
 			fileAccessScope={props.activeTab.fileAccessScope}
 			mode={props.activeTab.mode}
-			onToggleMode={
-				props.activeTab.preserveDrawer ? undefined : props.onToggleEditorMode
-			}
-			originalContent={
-				props.activeTab.mode === "diff"
-					? props.activeTab.originalContent
-					: undefined
-			}
+			onToggleMode={props.activeTab.preserveDrawer ? undefined : props.onToggleEditorMode}
+			originalContent={props.activeTab.mode === "diff" ? props.activeTab.originalContent : undefined}
 			initialLine={props.activeTab.initialLine}
 			modifiedContent={props.activeTab.modifiedContent}
 			onClose={props.onCloseEditor}
 			readContent={props.readContent}
 			readOriginalContent={props.readOriginalContent}
-			saveContent={
-				props.activeTab.allowSave ? props.saveContent : undefined
-			}
+			saveContent={props.activeTab.allowSave ? props.saveContent : undefined}
 			theme={props.theme}
 			maxFileSizeMB={props.maxFileSizeMB}
 			chromeTabsExternal

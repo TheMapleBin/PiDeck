@@ -6,13 +6,8 @@ import test from "node:test";
 import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
 const { DshRuntimeInstaller } = loadTsCommonJs("src/main/dsh/runtime/DshRuntimeInstaller.ts");
-const {
-	dshRuntimeArchiveName,
-	dshRuntimeAssetDownloadUrl,
-} = loadTsCommonJs("src/shared/types/dshRuntimeManifest.ts");
-const { resolveDshRuntimeReleaseTag } = loadTsCommonJs(
-	"src/main/dsh/runtime/dshRuntimeReleaseTarget.ts",
-);
+const { dshRuntimeArchiveName, dshRuntimeAssetDownloadUrl } = loadTsCommonJs("src/shared/types/dshRuntimeManifest.ts");
+const { resolveDshRuntimeReleaseTag } = loadTsCommonJs("src/main/dsh/runtime/dshRuntimeReleaseTarget.ts");
 
 const APP_VERSION = "0.7.5";
 
@@ -28,13 +23,7 @@ const release = (over = {}) => ({
 });
 
 /** 组装一个 installer，manager 用替身（不碰磁盘与网络）。 */
-function makeInstaller({
-	index = { schemaVersion: 1, releases: [release()] },
-	url = "https://idx.test/i.json",
-	manager = {},
-	updateSource = "atomgit",
-	releaseTag,
-} = {}) {
+function makeInstaller({ index = { schemaVersion: 1, releases: [release()] }, url = "https://idx.test/i.json", manager = {}, updateSource = "atomgit", releaseTag } = {}) {
 	const progress = [];
 	const calls = { installFromUrl: [], installFromArchive: [], installFromDirectory: [], uninstall: [] };
 	const fakeManager = {
@@ -48,15 +37,11 @@ function makeInstaller({
 		},
 		installFromArchive: async (filePath) => {
 			calls.installFromArchive.push(filePath);
-			return manager.installFromArchive
-				? manager.installFromArchive()
-				: { ok: true, dirName: "0.1.1-rc.2", manifest: { runtimeVersion: "0.1.1-rc.2" } };
+			return manager.installFromArchive ? manager.installFromArchive() : { ok: true, dirName: "0.1.1-rc.2", manifest: { runtimeVersion: "0.1.1-rc.2" } };
 		},
 		installFromDirectory: async (dirPath) => {
 			calls.installFromDirectory.push(dirPath);
-			return manager.installFromDirectory
-				? manager.installFromDirectory()
-				: { ok: true, dirName: "0.1.1-rc.2", manifest: { runtimeVersion: "0.1.1-rc.2" } };
+			return manager.installFromDirectory ? manager.installFromDirectory() : { ok: true, dirName: "0.1.1-rc.2", manifest: { runtimeVersion: "0.1.1-rc.2" } };
 		},
 		uninstall: (dirName) => {
 			calls.uninstall.push(dirName);
@@ -78,14 +63,8 @@ function makeInstaller({
 }
 
 test("dev 未发布同版本 tag 时跟随 latest，避免请求不存在的 beta Release", () => {
-	assert.equal(
-		resolveDshRuntimeReleaseTag({ isPackaged: false, appVersion: "0.7.6-beta" }),
-		undefined,
-	);
-	assert.equal(
-		resolveDshRuntimeReleaseTag({ isPackaged: true, appVersion: "0.7.5" }),
-		"v0.7.5",
-	);
+	assert.equal(resolveDshRuntimeReleaseTag({ isPackaged: false, appVersion: "0.7.6-beta" }), undefined);
+	assert.equal(resolveDshRuntimeReleaseTag({ isPackaged: true, appVersion: "0.7.5" }), "v0.7.5");
 	assert.equal(
 		resolveDshRuntimeReleaseTag({
 			explicitTag: " v0.7.5 ",
@@ -101,11 +80,7 @@ test("installFromIndex：按兼容区间挑版本并触发下载", async () => {
 	const result = await installer.installFromIndex();
 	assert.equal(result.ok, true);
 	assert.equal(calls.installFromUrl.length, 1);
-	assert.equal(
-		calls.installFromUrl[0].archiveUrl,
-		dshRuntimeAssetDownloadUrl("atomgit", dshRuntimeArchiveName(process.platform, process.arch)),
-		"归档文件名占位必须改写成当前 latest 应用 Release",
-	);
+	assert.equal(calls.installFromUrl[0].archiveUrl, dshRuntimeAssetDownloadUrl("atomgit", dshRuntimeArchiveName(process.platform, process.arch)), "归档文件名占位必须改写成当前 latest 应用 Release");
 	assert.equal(calls.installFromUrl[0].sha256, "abc");
 	// 结束时必须是 done=100，UI 据此收起进度条
 	assert.equal(progress.at(-1).phase, "done");
@@ -116,10 +91,7 @@ test("installFromIndex：指定 Release tag 时 runtime 归档跟随同一应用
 	const { installer, calls } = makeInstaller({ releaseTag: "v0.7.6-beta" });
 	const result = await installer.installFromIndex();
 	assert.equal(result.ok, true);
-	assert.equal(
-		calls.installFromUrl[0].archiveUrl,
-		`https://atomgit.com/ayuayue/PiDeck/releases/download/v0.7.6-beta/dsh-runtime-${process.platform}-${process.arch}.tgz`,
-	);
+	assert.equal(calls.installFromUrl[0].archiveUrl, `https://atomgit.com/ayuayue/PiDeck/releases/download/v0.7.6-beta/dsh-runtime-${process.platform}-${process.arch}.tgz`);
 });
 
 test("installFromIndex：file:// 归档不改写，离线验证直连本地文件", async () => {
@@ -137,7 +109,10 @@ test("installFromIndex：下载字节进度映射到 0-70%，阶段进度随后�
 	await installer.installFromIndex();
 	const downloading = progress.filter((p) => p.phase === "downloading");
 	// 一半字节 → 约 35%，且不超过 70（给校验/解压留进度空间）
-	assert.ok(downloading.some((p) => p.percent === 35), JSON.stringify(downloading));
+	assert.ok(
+		downloading.some((p) => p.percent === 35),
+		JSON.stringify(downloading),
+	);
 	assert.ok(downloading.every((p) => p.percent <= 70));
 	assert.ok(progress.some((p) => p.phase === "extracting" && p.percent === 85));
 });
@@ -171,7 +146,8 @@ test("installFromIndex：isVersionInstalled 为 false（半残/损坏）时正�
 	assert.equal(calls.installFromUrl.length, 1);
 });
 
-test("installFromIndex：索引里没有兼容版本时不下载，避免下完才发现装不上", async () => {	const { installer, calls, progress } = makeInstaller({
+test("installFromIndex：索引里没有兼容版本时不下载，避免下完才发现装不上", async () => {
+	const { installer, calls, progress } = makeInstaller({
 		index: { schemaVersion: 1, releases: [release({ minAppVersion: "9.0.0" })] },
 	});
 	const result = await installer.installFromIndex();

@@ -24,12 +24,7 @@ import { createPortal } from "react-dom";
 import type { ReactNode } from "react";
 import { useAtomValue, useSetAtom } from "jotai";
 import { ChevronDown, ChevronRight, Megaphone, RefreshCw, X } from "lucide-react";
-import {
-	unreadAnnouncementsAtom,
-	announcementStateAtom,
-	announcementCenterOpenAtom,
-	announcementNotificationEnabledAtom,
-} from "../../atoms/announcement-atoms";
+import { unreadAnnouncementsAtom, announcementStateAtom, announcementCenterOpenAtom, announcementNotificationEnabledAtom } from "../../atoms/announcement-atoms";
 import { desktopApi } from "../../desktopApi";
 import { t } from "../../i18n";
 import { cn } from "../../lib/utils";
@@ -37,15 +32,7 @@ import { announcementExcerpt } from "../../utils/announcementExcerpt";
 import { showNotice } from "../../utils/notice";
 import { MarkdownStream } from "../session/MarkdownStream";
 import { Button } from "../ui-shadcn/button";
-import {
-	Dialog,
-	DialogContent,
-	DialogDescription,
-	DialogFooter,
-	DialogHeader,
-	DialogTitle,
-	DialogTrigger,
-} from "../ui-shadcn/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "../ui-shadcn/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui-shadcn/tooltip";
 import { Drawer } from "../motion/drawer";
 import type { AnnouncementItem } from "../../../../shared/types/announcement";
@@ -64,15 +51,9 @@ const DETAIL_DRAWER_ATTR = "data-announcement-detail-drawer";
  * 判定外部交互是否来自公告详情抽屉（含背板）。命中后调用方应 preventDefault，
  * 让这次 dismiss 只作用于抽屉，列表弹窗保持打开。
  */
-function isOutsideInteractionFromDetailDrawer(event: {
-	target: EventTarget | null;
-	detail?: { originalEvent?: Event };
-}): boolean {
+function isOutsideInteractionFromDetailDrawer(event: { target: EventTarget | null; detail?: { originalEvent?: Event } }): boolean {
 	const target = event.detail?.originalEvent?.target ?? event.target;
-	return (
-		target instanceof Element &&
-		Boolean(target.closest(`[${DETAIL_DRAWER_ATTR}]`))
-	);
+	return target instanceof Element && Boolean(target.closest(`[${DETAIL_DRAWER_ATTR}]`));
 }
 
 /** 未读通知 + 使用指南的默认展示上限；超出走「展示更多公告」，不全量展开。 */
@@ -96,52 +77,26 @@ function SectionLabel(props: { children: ReactNode; count?: number }) {
 	return (
 		<div className="flex items-baseline gap-1.5 px-0.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70 first:mt-0 mt-1">
 			<span>{children}</span>
-			{count !== undefined && count > 0 && (
-				<span className="text-muted-foreground/50">({count})</span>
-			)}
+			{count !== undefined && count > 0 && <span className="text-muted-foreground/50">({count})</span>}
 		</div>
 	);
 }
 
 /** 单条公告卡片：标题 + 级别锚点 + 清洗后的短摘要 + 「查看详情」入口。 */
-function AnnouncementCard(props: {
-	item: AnnouncementItem;
-	unread: boolean;
-	onViewDetail: (item: AnnouncementItem) => void;
-}) {
+function AnnouncementCard(props: { item: AnnouncementItem; unread: boolean; onViewDetail: (item: AnnouncementItem) => void }) {
 	const { item, unread, onViewDetail } = props;
 	return (
-		<article
-			className={cn(
-				"rounded-lg border border-border/50 bg-muted/30 p-3",
-				unread && "border-[var(--color-accent)]/50",
-			)}
-		>
+		<article className={cn("rounded-lg border border-border/50 bg-muted/30 p-3", unread && "border-[var(--color-accent)]/50")}>
 			<header className="flex items-center gap-2">
-				{unread && (
-					<span
-						className="size-2 shrink-0 rounded-full bg-[var(--color-accent)]"
-						aria-hidden="true"
-					/>
-				)}
-				<h4 className={cn("text-sm font-medium leading-snug", levelToneClass(item.level))}>
-					{item.title}
-				</h4>
+				{unread && <span className="size-2 shrink-0 rounded-full bg-[var(--color-accent)]" aria-hidden="true" />}
+				<h4 className={cn("text-sm font-medium leading-snug", levelToneClass(item.level))}>{item.title}</h4>
 			</header>
 			{/* 列表卡片不渲染 md（公告是外部数据）：摘要清洗标记 + 折叠空白 + 截断，
 			   完整正文放详情弹窗经 MarkdownStream 的 sanitize 管线渲染 */}
-			<p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
-				{announcementExcerpt(item.body)}
-			</p>
+			<p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-muted-foreground">{announcementExcerpt(item.body)}</p>
 			<footer className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground/80">
 				<time dateTime={item.publishedAt}>{item.publishedAt.slice(0, 10)}</time>
-				<Button
-					type="button"
-					variant="ghost"
-					size="sm"
-					className="h-auto p-0 text-[11px] text-muted-foreground/80 hover:text-foreground"
-					onClick={() => onViewDetail(item)}
-				>
+				<Button type="button" variant="ghost" size="sm" className="h-auto p-0 text-[11px] text-muted-foreground/80 hover:text-foreground" onClick={() => onViewDetail(item)}>
 					{t("announcements.viewDetail")}
 				</Button>
 			</footer>
@@ -172,10 +127,7 @@ function AnnouncementCard(props: {
  * 文档链接点击后应直达外部站点；不跟随用户「内置浏览器」设置，避免在详情阅读
  * 场景里弹出浏览器面板打断浏览（内置面板是给会话浏览用的）。
  */
-function AnnouncementDetailDrawer(props: {
-	item: AnnouncementItem | null;
-	onClose: () => void;
-}) {
+function AnnouncementDetailDrawer(props: { item: AnnouncementItem | null; onClose: () => void }) {
 	const { item, onClose } = props;
 	// 正文滚动容器 ref：react-remove-scroll 的滚轮锁会把弹窗内容之外的 wheel 一律
 	// preventDefault（抽屉 portal 在锁外，症状=只能拖滚动条），需要手动滚轮桥
@@ -202,28 +154,14 @@ function AnnouncementDetailDrawer(props: {
 				<>
 					<header className="flex items-start justify-between gap-3 border-b border-border/60 px-5 py-4">
 						<div className="min-w-0">
-							<h2
-								className={cn(
-									"text-base font-semibold leading-snug",
-									levelToneClass(item.level),
-								)}
-							>
-								{item.title}
-							</h2>
+							<h2 className={cn("text-base font-semibold leading-snug", levelToneClass(item.level))}>{item.title}</h2>
 							<p className="mt-1 text-xs text-muted-foreground">
 								{t("announcements.publishedAt", {
 									time: item.publishedAt.slice(0, 10),
 								})}
 							</p>
 						</div>
-						<Button
-							type="button"
-							variant="ghost"
-							size="icon"
-							className="-mr-1.5 shrink-0 text-muted-foreground hover:text-foreground"
-							onClick={onClose}
-							aria-label={t("announcements.closeDetail")}
-						>
+						<Button type="button" variant="ghost" size="icon" className="-mr-1.5 shrink-0 text-muted-foreground hover:text-foreground" onClick={onClose} aria-label={t("announcements.closeDetail")}>
 							<X className="size-4" />
 						</Button>
 					</header>
@@ -344,32 +282,16 @@ export function AnnouncementCenter() {
 				<TooltipTrigger asChild>
 					<DialogTrigger asChild>
 						<div className="relative size-full">
-							<Button
-								type="button"
-								variant="ghost"
-								className="size-full rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
-								aria-label={
-									unreadCount > 0
-										? t("announcements.unreadAria", { count: String(unreadCount) })
-										: t("announcements.title")
-								}
-							>
+							<Button type="button" variant="ghost" className="size-full rounded-full text-muted-foreground hover:bg-muted hover:text-foreground" aria-label={unreadCount > 0 ? t("announcements.unreadAria", { count: String(unreadCount) }) : t("announcements.title")}>
 								<Megaphone className="size-4" />
 							</Button>
 							{/* 未读圆点：与设置按钮更新角标同款式；仅 notice 计入（guide 常驻不打扰） */}
-							{unreadCount > 0 && (
-								<span
-									className="pointer-events-none absolute right-1 top-1 size-2 rounded-full bg-[var(--color-accent)]"
-									aria-hidden="true"
-								/>
-							)}
+							{unreadCount > 0 && <span className="pointer-events-none absolute right-1 top-1 size-2 rounded-full bg-[var(--color-accent)]" aria-hidden="true" />}
 						</div>
 					</DialogTrigger>
 				</TooltipTrigger>
 				<TooltipContent side="right" sideOffset={6}>
-					{unreadCount > 0
-						? t("announcements.unreadBadge", { count: String(unreadCount) })
-						: t("announcements.title")}
+					{unreadCount > 0 ? t("announcements.unreadBadge", { count: String(unreadCount) }) : t("announcements.title")}
 				</TooltipContent>
 			</Tooltip>
 			<DialogContent
@@ -401,120 +323,64 @@ export function AnnouncementCenter() {
 				</DialogHeader>
 				<div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto pr-1">
 					{items.length === 0 ? (
-						<p className="py-8 text-center text-sm text-muted-foreground">
-							{t("announcements.empty")}
-						</p>
+						<p className="py-8 text-center text-sm text-muted-foreground">{t("announcements.empty")}</p>
 					) : (
 						<>
 							{/* 临时通知：已读即焚（不归档），时点信息看完就该消失 */}
 							{unreadFlashes.length > 0 && (
 								<section className="flex flex-col gap-2.5">
-									<SectionLabel count={unreadFlashes.length}>
-										{t("announcements.section.flash")}
-									</SectionLabel>
+									<SectionLabel count={unreadFlashes.length}>{t("announcements.section.flash")}</SectionLabel>
 									{activeVisible
 										.filter((item) => item.category === "flash")
 										.map((item) => (
-											<AnnouncementCard
-												key={item.id}
-												item={item}
-												unread
-												onViewDetail={viewDetail}
-											/>
+											<AnnouncementCard key={item.id} item={item} unread onViewDetail={viewDetail} />
 										))}
 								</section>
 							)}
 							{/* 公告：未读时展示，读后进归档区 */}
 							{unreadNotices.length > 0 && (
 								<section className="flex flex-col gap-2.5">
-									<SectionLabel count={unreadNotices.length}>
-										{t("announcements.section.notice")}
-									</SectionLabel>
+									<SectionLabel count={unreadNotices.length}>{t("announcements.section.notice")}</SectionLabel>
 									{activeVisible
 										.filter((item) => item.category === "notice")
 										.map((item) => (
-											<AnnouncementCard
-												key={item.id}
-												item={item}
-												unread
-												onViewDetail={viewDetail}
-											/>
+											<AnnouncementCard key={item.id} item={item} unread onViewDetail={viewDetail} />
 										))}
 								</section>
 							)}
 							{/* 使用指南：常驻参考，不参与未读，始终展示 */}
 							{guides.length > 0 && (
 								<section className="flex flex-col gap-2.5">
-									<SectionLabel count={guides.length}>
-										{t("announcements.section.guides")}
-									</SectionLabel>
+									<SectionLabel count={guides.length}>{t("announcements.section.guides")}</SectionLabel>
 									{activeVisible
 										.filter((item) => item.category === "guide")
 										.map((item) => (
-											<AnnouncementCard
-												key={item.id}
-												item={item}
-												unread={false}
-												onViewDetail={viewDetail}
-											/>
+											<AnnouncementCard key={item.id} item={item} unread={false} onViewDetail={viewDetail} />
 										))}
 								</section>
 							)}
 							{/* 展示更多 / 收起：未读+指南合计超过上限时出现，避免大全量展开 */}
 							{hiddenCount > 0 && (
-								<Button
-									type="button"
-									variant="ghost"
-									size="sm"
-									className="self-center text-xs text-muted-foreground hover:text-foreground"
-									onClick={() => setShowAllActive((v) => !v)}
-								>
-									{showAllActive
-										? t("announcements.collapse")
-										: t("announcements.showMore", { count: String(hiddenCount) })}
+								<Button type="button" variant="ghost" size="sm" className="self-center text-xs text-muted-foreground hover:text-foreground" onClick={() => setShowAllActive((v) => !v)}>
+									{showAllActive ? t("announcements.collapse") : t("announcements.showMore", { count: String(hiddenCount) })}
 								</Button>
 							)}
 							{/* 已读归档：公告读过折叠成一行（看过后不该占主列表）；flash 已读不归档直接消失 */}
 							{readNotices.length > 0 && (
 								<section className="flex flex-col gap-2.5">
-									<Button
-										type="button"
-										variant="ghost"
-										size="sm"
-										className="h-auto justify-start gap-1 self-start px-0.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70 hover:bg-transparent hover:text-foreground"
-										onClick={() => setShowRead((v) => !v)}
-										aria-expanded={showRead}
-									>
-										{showRead ? (
-											<ChevronDown className="size-3.5" />
-										) : (
-											<ChevronRight className="size-3.5" />
-										)}
+									<Button type="button" variant="ghost" size="sm" className="h-auto justify-start gap-1 self-start px-0.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70 hover:bg-transparent hover:text-foreground" onClick={() => setShowRead((v) => !v)} aria-expanded={showRead}>
+										{showRead ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
 										{t("announcements.section.read")}
 										<span className="text-muted-foreground/50">({readNotices.length})</span>
 									</Button>
-									{showRead &&
-										readNotices.map((item) => (
-											<AnnouncementCard
-												key={item.id}
-												item={item}
-												unread={false}
-												onViewDetail={viewDetail}
-											/>
-										))}
+									{showRead && readNotices.map((item) => <AnnouncementCard key={item.id} item={item} unread={false} onViewDetail={viewDetail} />)}
 								</section>
 							)}
 						</>
 					)}
 				</div>
 				<DialogFooter className="items-center gap-2">
-					<Button
-						type="button"
-						variant="ghost"
-						size="sm"
-						onClick={refresh}
-						disabled={refreshing}
-					>
+					<Button type="button" variant="ghost" size="sm" onClick={refresh} disabled={refreshing}>
 						<RefreshCw className={cn("size-3.5", refreshing && "animate-pideck-spin")} />
 						{t("announcements.refresh")}
 					</Button>

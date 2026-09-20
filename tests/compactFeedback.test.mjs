@@ -8,19 +8,8 @@ import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
  * 圆环按钮 / /compact / 主进程重复压缩共用同一套规则。
  */
 
-const {
-	COMPACT_CANCELLED_BY_OWNER,
-	COMPACT_CANCELLED_BY_USER_ABORT,
-	COMPACT_HOOK_REJECT_MAX_MS,
-	COMPACT_OBSERVATION_MAX_AGE_MS,
-	COMPACT_ROUTED_TO_OWNER,
-	COMPACT_USER_ABORT_WINDOW_MS,
-	compactOwnerReason,
-	compactRoutedCommand,
-	compactUiState,
-	resolveCompactUsagePercent,
-	classifyCompactError,
-} = loadTsCommonJs("src/shared/compactFeedback.ts");
+const { COMPACT_CANCELLED_BY_OWNER, COMPACT_CANCELLED_BY_USER_ABORT, COMPACT_HOOK_REJECT_MAX_MS, COMPACT_OBSERVATION_MAX_AGE_MS, COMPACT_ROUTED_TO_OWNER, COMPACT_USER_ABORT_WINDOW_MS, compactOwnerReason, compactRoutedCommand, compactUiState, resolveCompactUsagePercent, classifyCompactError } =
+	loadTsCommonJs("src/shared/compactFeedback.ts");
 
 test("compactUiState is ready whenever usage data exists, regardless of occupancy", () => {
 	// loadTsCommonJs 在 vm 里跑，对象原型跨 realm，不能 deepEqual 整个对象
@@ -51,10 +40,7 @@ test("resolveCompactUsagePercent matches ring occupancy, including zero-percent 
 	assert.equal(resolveCompactUsagePercent({ contextPercent: 45.3 }), 45.3);
 	// 不封顶：pi 按 tokens/window 直接计算，缓存超窗等场景可 >100%（CLI footer 同口径）
 	assert.equal(resolveCompactUsagePercent({ contextPercent: 112 }), 112);
-	assert.equal(
-		resolveCompactUsagePercent({ contextPercent: 0, contextTokens: 0, contextWindow: 1000 }),
-		0,
-	);
+	assert.equal(resolveCompactUsagePercent({ contextPercent: 0, contextTokens: 0, contextWindow: 1000 }), 0);
 	const recomputed = resolveCompactUsagePercent({
 		contextPercent: 0,
 		contextTokens: 408,
@@ -93,34 +79,12 @@ test("cancelled compaction is never silent and carries its source", () => {
 	assert.equal(classifyCompactError("Compaction cancelled"), "cancelled");
 	assert.equal(classifyCompactError("cancelled"), "cancelled");
 	// 主进程判明来源后抛稳定标记，渲染层据此给出可操作文案
-	assert.equal(
-		classifyCompactError(COMPACT_CANCELLED_BY_OWNER),
-		"cancelledByOwner",
-	);
-	assert.equal(
-		classifyCompactError(`Error invoking remote method 'x': Error: ${COMPACT_CANCELLED_BY_OWNER}`),
-		"cancelledByOwner",
-	);
-	assert.equal(
-		classifyCompactError(COMPACT_CANCELLED_BY_USER_ABORT),
-		"interrupted",
-	);
+	assert.equal(classifyCompactError(COMPACT_CANCELLED_BY_OWNER), "cancelledByOwner");
+	assert.equal(classifyCompactError(`Error invoking remote method 'x': Error: ${COMPACT_CANCELLED_BY_OWNER}`), "cancelledByOwner");
+	assert.equal(classifyCompactError(COMPACT_CANCELLED_BY_USER_ABORT), "interrupted");
 	// 任何分类都必须有文案：静默会让「压缩被扩展接管」变成「点了没反应」
-	const kinds = [
-		"done",
-		"nothingToDo",
-		"tooSmall",
-		"inProgress",
-		"failed",
-		"cancelled",
-		"cancelledByOwner",
-		"interrupted",
-	];
-	for (const raw of [
-		"Compaction cancelled",
-		COMPACT_CANCELLED_BY_OWNER,
-		COMPACT_CANCELLED_BY_USER_ABORT,
-	]) {
+	const kinds = ["done", "nothingToDo", "tooSmall", "inProgress", "failed", "cancelled", "cancelledByOwner", "interrupted"];
+	for (const raw of ["Compaction cancelled", COMPACT_CANCELLED_BY_OWNER, COMPACT_CANCELLED_BY_USER_ABORT]) {
 		assert.ok(kinds.includes(classifyCompactError(raw)));
 	}
 });
@@ -134,18 +98,12 @@ test("hook-reject threshold is short enough to separate hook cancel from real co
 
 test("owner takeover is classified as routed / owned-with-reason, never silent", () => {
 	// 接管者有自己的入口：主进程已改写动作，渲染层要按「已改用 X」提示
-	assert.equal(
-		classifyCompactError(`${COMPACT_ROUTED_TO_OWNER}: /ctx-wrapup`),
-		"routedToOwner",
-	);
+	assert.equal(classifyCompactError(`${COMPACT_ROUTED_TO_OWNER}: /ctx-wrapup`), "routedToOwner");
 	assert.equal(compactRoutedCommand(`${COMPACT_ROUTED_TO_OWNER}: /ctx-wrapup`), "/ctx-wrapup");
 	// 接管者没有可用入口：标记后带原因，提示要说清为什么压不了
 	const blocked = `${COMPACT_CANCELLED_BY_OWNER}: Magic Context 接管了上下文窗口，但没有配置 historian 模型`;
 	assert.equal(classifyCompactError(blocked), "cancelledByOwner");
-	assert.equal(
-		compactOwnerReason(blocked),
-		"Magic Context 接管了上下文窗口，但没有配置 historian 模型",
-	);
+	assert.equal(compactOwnerReason(blocked), "Magic Context 接管了上下文窗口，但没有配置 historian 模型");
 	// 改写类不能被 cancel 规则抢走（文案里同样含 extension / cancelled 等词）
 	assert.equal(classifyCompactError("compaction routed to extension command: /ctx-wrapup"), "routedToOwner");
 });
@@ -185,10 +143,7 @@ test("meter compact button uses shared ui state and e2e testid", () => {
 });
 
 test("composer compact path toasts done and maps inProgress", () => {
-	const composer = readFileSync(
-		"src/renderer/src/hooks/useSessionComposerController.ts",
-		"utf8",
-	);
+	const composer = readFileSync("src/renderer/src/hooks/useSessionComposerController.ts", "utf8");
 	assert.match(composer, /function compactNotice/);
 	assert.match(composer, /classifyCompactError/);
 	// 客户端不再按占用拦截：低占用也发 RPC，由 pi 自行判定
@@ -202,11 +157,7 @@ test("composer compact path toasts done and maps inProgress", () => {
 	assert.doesNotMatch(composer, /case "silent"/);
 	assert.match(composer, /const runManualCompact = useCallback/);
 	assert.match(composer, /await runManualCompact\(target, prompt\)/);
-	assert.equal(
-		(composer.match(/friendlyCompactError\(error\)/g) || []).length,
-		1,
-		"error mapping lives in the shared runManualCompact helper",
-	);
+	assert.equal((composer.match(/friendlyCompactError\(error\)/g) || []).length, 1, "error mapping lives in the shared runManualCompact helper");
 });
 
 test("pi compact failure resolves the cancel source instead of swallowing it", () => {
@@ -229,10 +180,7 @@ test("pi compact failure resolves the cancel source instead of swallowing it", (
 test("pi and dsh compact throw already compacting instead of returning success", () => {
 	const pi = readFileSync("src/main/pi/AgentManager.ts", "utf8");
 	assert.match(pi, /throw new Error\("already compacting"\)/);
-	assert.doesNotMatch(
-		pi,
-		/Compact skipped: already compacting[\s\S]{0,120}return this\.getRuntimeState\(agentId\)/,
-	);
+	assert.doesNotMatch(pi, /Compact skipped: already compacting[\s\S]{0,120}return this\.getRuntimeState\(agentId\)/);
 	const dsh = readFileSync("src/main/dsh/DshAgentManager.ts", "utf8");
 	assert.match(dsh, /if \(runtime\.isCompacting\) \{\s*\n\s*throw new Error\("already compacting"\)/);
 });

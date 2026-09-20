@@ -11,10 +11,7 @@ function put(path, content) {
 }
 
 function packageFixture(root, packageRoot, name = "tool") {
-	put(
-		join(packageRoot, "package.json"),
-		JSON.stringify({ name, pi: { extensions: ["index.ts"] } }),
-	);
+	put(join(packageRoot, "package.json"), JSON.stringify({ name, pi: { extensions: ["index.ts"] } }));
 	put(join(packageRoot, "index.ts"), "export default () => {};\n");
 }
 
@@ -74,19 +71,16 @@ test("user npm legacy fallback uses configured command and caches the global roo
 		packageFixture(root, join(globalRoot, "tool-two"), "tool-two");
 		put(settingsFile, JSON.stringify({ npmCommand: ["custom-npm"], packages: ["npm:tool"] }));
 		const calls = [];
-		const { resolveConfiguredPackageResources } = loadTsCommonJs(
-			"src/main/packageResourceResolver.ts",
-			{
-				stubs: {
-					"node:child_process": {
-						execFileSync(command, args) {
-							calls.push({ command, args: [...args] });
-							return `${globalRoot}\n`;
-						},
+		const { resolveConfiguredPackageResources } = loadTsCommonJs("src/main/packageResourceResolver.ts", {
+			stubs: {
+				"node:child_process": {
+					execFileSync(command, args) {
+						calls.push({ command, args: [...args] });
+						return `${globalRoot}\n`;
 					},
 				},
 			},
-		);
+		});
 		const first = resolveExtensions(resolveConfiguredPackageResources, {
 			userSettingsFile: settingsFile,
 			userBaseDir: agentDir,
@@ -119,19 +113,16 @@ test("project npm packages never fall back to a user-global installation", () =>
 		put(userSettingsFile, "{}");
 		put(projectSettingsFile, JSON.stringify({ packages: ["npm:project-only"] }));
 		let commandCalls = 0;
-		const { resolveConfiguredPackageResources } = loadTsCommonJs(
-			"src/main/packageResourceResolver.ts",
-			{
-				stubs: {
-					"node:child_process": {
-						execFileSync() {
-							commandCalls += 1;
-							return join(root, "global", "node_modules");
-						},
+		const { resolveConfiguredPackageResources } = loadTsCommonJs("src/main/packageResourceResolver.ts", {
+			stubs: {
+				"node:child_process": {
+					execFileSync() {
+						commandCalls += 1;
+						return join(root, "global", "node_modules");
 					},
 				},
 			},
-		);
+		});
 		const resources = resolveExtensions(resolveConfiguredPackageResources, {
 			userSettingsFile,
 			userBaseDir: agentDir,
@@ -152,24 +143,24 @@ test("pnpm legacy fallback reads the configured global dependency path", () => {
 		const settingsFile = join(agentDir, "settings.json");
 		const packageRoot = join(root, "pnpm-global", "tool");
 		packageFixture(root, packageRoot, "tool");
-		put(settingsFile, JSON.stringify({
-			npmCommand: ["corepack", "--", "pnpm"],
-			packages: ["npm:tool"],
-		}));
+		put(
+			settingsFile,
+			JSON.stringify({
+				npmCommand: ["corepack", "--", "pnpm"],
+				packages: ["npm:tool"],
+			}),
+		);
 		const calls = [];
-		const { resolveConfiguredPackageResources } = loadTsCommonJs(
-			"src/main/packageResourceResolver.ts",
-			{
-				stubs: {
-					"node:child_process": {
-						execFileSync(command, args) {
-							calls.push({ command, args: [...args] });
-							return JSON.stringify([{ dependencies: { tool: { path: packageRoot } } }]);
-						},
+		const { resolveConfiguredPackageResources } = loadTsCommonJs("src/main/packageResourceResolver.ts", {
+			stubs: {
+				"node:child_process": {
+					execFileSync(command, args) {
+						calls.push({ command, args: [...args] });
+						return JSON.stringify([{ dependencies: { tool: { path: packageRoot } } }]);
 					},
 				},
 			},
-		);
+		});
 		const resources = resolveExtensions(resolveConfiguredPackageResources, {
 			userSettingsFile: settingsFile,
 			userBaseDir: agentDir,
@@ -192,19 +183,16 @@ test("bun legacy fallback derives its global node_modules directory from pm bin"
 		packageFixture(root, packageRoot, "tool");
 		put(settingsFile, JSON.stringify({ npmCommand: ["bun"], packages: ["npm:tool"] }));
 		const calls = [];
-		const { resolveConfiguredPackageResources } = loadTsCommonJs(
-			"src/main/packageResourceResolver.ts",
-			{
-				stubs: {
-					"node:child_process": {
-						execFileSync(command, args) {
-							calls.push({ command, args: [...args] });
-							return `${binDir}\n`;
-						},
+		const { resolveConfiguredPackageResources } = loadTsCommonJs("src/main/packageResourceResolver.ts", {
+			stubs: {
+				"node:child_process": {
+					execFileSync(command, args) {
+						calls.push({ command, args: [...args] });
+						return `${binDir}\n`;
 					},
 				},
 			},
-		);
+		});
 		const resources = resolveExtensions(resolveConfiguredPackageResources, {
 			userSettingsFile: settingsFile,
 			userBaseDir: agentDir,

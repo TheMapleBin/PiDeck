@@ -3,15 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { is } from "@electron-toolkit/utils";
 import type { AppFontSizeMode, PetWindowCaps } from "../../shared/types";
-import {
-	PET_BASE_H,
-	PET_BASE_W,
-	clampToWorkArea,
-	keepFeetCenter,
-	petLayout,
-	toNormalLayoutPosition,
-	type Size2D,
-} from "../../shared/petNotificationLayout";
+import { PET_BASE_H, PET_BASE_W, clampToWorkArea, keepFeetCenter, petLayout, toNormalLayoutPosition, type Size2D } from "../../shared/petNotificationLayout";
 import { preparePreloadPath } from "../preloadPath";
 import { rendererHeapAdditionalArguments } from "../v8HeapLimits";
 import { readElectronChromiumSandboxPreference } from "../settings/SettingsStore";
@@ -35,7 +27,9 @@ export function detectPetWindowCaps(): PetWindowCaps {
 	return { transparent: x11, clickThrough: true, freePosition: x11 };
 }
 
-function posPath() { return join(app.getPath("userData"), "pet-position.json"); }
+function posPath() {
+	return join(app.getPath("userData"), "pet-position.json");
+}
 
 function getOzonePlatform() {
 	const fromArgv = process.argv.find((arg) => arg.startsWith("--ozone-platform="));
@@ -53,14 +47,18 @@ async function loadPos(): Promise<{ x: number; y: number } | null> {
 		const raw = await readFile(posPath(), "utf8");
 		const p = JSON.parse(raw);
 		return typeof p.x === "number" && typeof p.y === "number" ? p : null;
-	} catch { return null; }
+	} catch {
+		return null;
+	}
 }
 
 async function savePos(bounds: { x: number; y: number }) {
 	try {
 		await mkdir(app.getPath("userData"), { recursive: true });
 		await writeFile(posPath(), JSON.stringify(bounds, null, 2), "utf8");
-	} catch { /* 保存失败不影响宠物运行 */ }
+	} catch {
+		/* 保存失败不影响宠物运行 */
+	}
 }
 
 /**
@@ -90,8 +88,12 @@ export class PetWindow {
 	private fontMode: AppFontSizeMode = "medium";
 	private notificationVisible = false;
 
-	get window(): BrowserWindow | null { return this.win; }
-	get exists(): boolean { return !!this.win && !this.win.isDestroyed(); }
+	get window(): BrowserWindow | null {
+		return this.win;
+	}
+	get exists(): boolean {
+		return !!this.win && !this.win.isDestroyed();
+	}
 
 	/** 当前布局（含通知槽位状态） */
 	private get layout() {
@@ -105,7 +107,8 @@ export class PetWindow {
 		this.fontMode = fontMode;
 		this.notificationVisible = false;
 		const layout = this.layout;
-		const w = layout.windowW, h = layout.windowH;
+		const w = layout.windowW,
+			h = layout.windowH;
 		this.targetSize = { width: Math.max(w, 1), height: Math.max(h, 1) };
 		const caps = detectPetWindowCaps();
 		const isMac = process.platform === "darwin";
@@ -125,12 +128,18 @@ export class PetWindow {
 		const preloadPath = await preparePreloadPath(sourcePreloadPath, "pet-preload.js");
 
 		this.win = new BrowserWindow({
-			width: w, height: h,
+			width: w,
+			height: h,
 			...(caps.freePosition ? { x, y } : {}),
 			...(isMac ? { type: "panel" as const } : {}),
-			frame: false, transparent: caps.transparent, resizable: false,
-			maximizable: false, fullscreenable: false, hasShadow: false,
-			skipTaskbar: true, alwaysOnTop: true,
+			frame: false,
+			transparent: caps.transparent,
+			resizable: false,
+			maximizable: false,
+			fullscreenable: false,
+			hasShadow: false,
+			skipTaskbar: true,
+			alwaysOnTop: true,
 			backgroundColor: caps.transparent ? "#00000000" : "#eef0f3",
 			webPreferences: {
 				preload: preloadPath,
@@ -188,7 +197,11 @@ export class PetWindow {
 				if (this.saveTimer) return;
 				this.saveTimer = setTimeout(() => {
 					this.saveTimer = null;
-					if (this.pendingPos) { const p = this.pendingPos; this.pendingPos = null; void savePos(p); }
+					if (this.pendingPos) {
+						const p = this.pendingPos;
+						this.pendingPos = null;
+						void savePos(p);
+					}
 				}, 400);
 			});
 		}
@@ -197,17 +210,13 @@ export class PetWindow {
 			// 幂等注册：webRequest 监听不可移除，重复 create 会累积（见模块级 petCspHeaderInstalled 注释）
 			if (!petCspHeaderInstalled) {
 				petCspHeaderInstalled = true;
-				this.win.webContents.session.webRequest.onHeadersReceived(
-					(details, cb) => {
-						cb({ responseHeaders: { ...details.responseHeaders, "Content-Security-Policy": ["default-src 'self'; img-src 'self' file: data: pideck-pet:; script-src 'self'; style-src 'self' 'unsafe-inline'"] } });
-					},
-				);
+				this.win.webContents.session.webRequest.onHeadersReceived((details, cb) => {
+					cb({ responseHeaders: { ...details.responseHeaders, "Content-Security-Policy": ["default-src 'self'; img-src 'self' file: data: pideck-pet:; script-src 'self'; style-src 'self' 'unsafe-inline'"] } });
+				});
 			}
 		}
 
-		const devRendererUrl = shouldUseDevRendererUrl()
-			? process.env.ELECTRON_RENDERER_URL
-			: undefined;
+		const devRendererUrl = shouldUseDevRendererUrl() ? process.env.ELECTRON_RENDERER_URL : undefined;
 		const url = devRendererUrl ? `${devRendererUrl}/pet.html` : join(__dirname, "../renderer/pet.html");
 		await (devRendererUrl ? this.win.loadURL(url) : this.win.loadFile(url));
 
@@ -220,7 +229,10 @@ export class PetWindow {
 
 	destroy() {
 		this.stopSizeGuard();
-		if (this.saveTimer) { clearTimeout(this.saveTimer); this.saveTimer = null; }
+		if (this.saveTimer) {
+			clearTimeout(this.saveTimer);
+			this.saveTimer = null;
+		}
 		// 销毁前先保存挂起的位置，否则设置页开关后重开可能回到默认位置
 		if (this.pendingPos) {
 			void savePos(this.pendingPos);
@@ -233,11 +245,7 @@ export class PetWindow {
 	/** 把任意布局的窗口 bounds 换算成普通布局左上角（持久化格式） */
 	private toNormalPos(b: { x: number; y: number; width: number; height: number }): { x: number; y: number } {
 		const normal = petLayout({ scale: this.scale, fontMode: this.fontMode, notificationVisible: false });
-		return toNormalLayoutPosition(
-			{ x: b.x, y: b.y },
-			{ width: b.width, height: b.height },
-			{ width: normal.windowW, height: normal.windowH },
-		);
+		return toNormalLayoutPosition({ x: b.x, y: b.y }, { width: b.width, height: b.height }, { width: normal.windowW, height: normal.windowH });
 	}
 
 	/**
@@ -316,7 +324,10 @@ export class PetWindow {
 		this.stopSizeGuard();
 		if (!detectPetWindowCaps().freePosition) return;
 		this.sizeGuardTimer = setInterval(() => {
-			if (!this.exists) { this.stopSizeGuard(); return; }
+			if (!this.exists) {
+				this.stopSizeGuard();
+				return;
+			}
 			const [w, h] = this.win!.getSize();
 			if (w !== this.targetSize.width || h !== this.targetSize.height) {
 				this.ensureTargetSize();
@@ -331,8 +342,14 @@ export class PetWindow {
 		}
 	}
 
-	setAlwaysOnTop(v: boolean) { if (this.exists) this.win!.setAlwaysOnTop(v, "floating"); }
+	setAlwaysOnTop(v: boolean) {
+		if (this.exists) this.win!.setAlwaysOnTop(v, "floating");
+	}
 
-	show() { if (this.exists) process.platform === "darwin" ? this.win!.showInactive() : this.win!.show(); }
-	hide() { if (this.exists) this.win!.hide(); }
+	show() {
+		if (this.exists) process.platform === "darwin" ? this.win!.showInactive() : this.win!.show();
+	}
+	hide() {
+		if (this.exists) this.win!.hide();
+	}
 }

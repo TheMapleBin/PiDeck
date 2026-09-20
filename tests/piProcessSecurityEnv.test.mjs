@@ -27,10 +27,7 @@ function loadWslPaths() {
  * 沙箱加载 PiProcess：mock spawn 以捕获传入子进程的环境变量，mock locator 让 resolveCommand
  * 返回 "wsl://" 触发 WSL 分支，其余依赖（fs/extensions/logging）给最小桩，避免触碰真实文件系统。
  */
-function loadPiProcess(
-	versionResult = { output: "0.82.1\n" },
-	options = { parkedExtensions: [] },
-) {
+function loadPiProcess(versionResult = { output: "0.82.1\n" }, options = { parkedExtensions: [] }) {
 	const wslPaths = loadWslPaths();
 	/** piExtensionFilter 收到的目录，用于验证 denied trust 不触碰项目资源。 */
 	const parkedDirectories = [];
@@ -51,9 +48,13 @@ function loadPiProcess(
 		};
 	};
 	class MockRpcClient {
-		on() { return this; }
+		on() {
+			return this;
+		}
 		close() {}
-		request() { return Promise.resolve({ success: true, data: {} }); }
+		request() {
+			return Promise.resolve({ success: true, data: {} });
+		}
 	}
 	// locator 决定 command 是否进入 WSL 分支；createProcessEnv 给空 env 让注入逻辑可观测
 	const mockLocator = {
@@ -139,11 +140,7 @@ function loadPiProcess(
 
 test("Windows 下启动 pi 进程时隐藏 cmd.exe 控制台窗口", async () => {
 	const { PiProcess, mockLocator, getCaptured } = loadPiProcess();
-	const proc = new PiProcess(
-		"C:\\proj",
-		{ wslEnabled: true, wslDistro: "Ubuntu-24.04", wslUser: "root" },
-		mockLocator,
-	);
+	const proc = new PiProcess("C:\\proj", { wslEnabled: true, wslDistro: "Ubuntu-24.04", wslUser: "root" }, mockLocator);
 
 	await proc.start(undefined, undefined, true);
 
@@ -160,12 +157,7 @@ test("WSL 模式下 PIDECK_SESSION_ID（UUID 身份 key）原样注入，不经 
 	const uuid = "550e8400-e29b-41d4-a716-446655440000";
 	const snapshotPath = "C:\\Users\\tester\\AppData\\Roaming\\PiDeck-dev\\security-policy.json";
 
-	const proc = new PiProcess(
-		"C:\\proj",
-		{ wslEnabled: true, wslDistro: "Ubuntu-24.04", wslUser: "root", piRpcNoExtensions: true, piRpcOffline: true },
-		mockLocator,
-		{ securitySnapshotPath: snapshotPath, securitySessionId: uuid },
-	);
+	const proc = new PiProcess("C:\\proj", { wslEnabled: true, wslDistro: "Ubuntu-24.04", wslUser: "root", piRpcNoExtensions: true, piRpcOffline: true }, mockLocator, { securitySnapshotPath: snapshotPath, securitySessionId: uuid });
 
 	// noSession=true：临时会话不传 sessionPath，securitySessionId 仅剩 UUID（最易触发 bug 的路径）
 	await proc.start(undefined, undefined, true);
@@ -175,23 +167,15 @@ test("WSL 模式下 PIDECK_SESSION_ID（UUID 身份 key）原样注入，不经 
 	// 身份 key 原样透传：扩展按它命中 sessionLevels 覆盖
 	assert.equal(captured.env.PIDECK_SESSION_ID, uuid);
 	// snapshotPath 是真实 Windows 路径（扩展需 fs 打开），WSL 下仍要转成 /mnt/c/...
-	assert.equal(
-		captured.env.PIDECK_SECURITY_CONFIG,
-		"/mnt/c/Users/tester/AppData/Roaming/PiDeck-dev/security-policy.json",
-	);
+	assert.equal(captured.env.PIDECK_SECURITY_CONFIG, "/mnt/c/Users/tester/AppData/Roaming/PiDeck-dev/security-policy.json");
 });
 
 test("默认（未开启总开关）且存在禁用项时注入 --no-extensions + -e 白名单", async () => {
 	const { PiProcess, mockLocator, getCaptured } = loadPiProcess();
-	const proc = new PiProcess(
-		"C:\\proj",
-		{ wslEnabled: true, wslDistro: "Ubuntu-24.04", wslUser: "root" },
-		mockLocator,
-		{
-			resolveEnabledExtensionPaths: () => ["C:\\ext\\a.ts", "C:\\ext\\b.ts"],
-			securitySnapshotPath: "C:\\Users\\tester\\AppData\\Roaming\\PiDeck-dev\\security-policy.json",
-		},
-	);
+	const proc = new PiProcess("C:\\proj", { wslEnabled: true, wslDistro: "Ubuntu-24.04", wslUser: "root" }, mockLocator, {
+		resolveEnabledExtensionPaths: () => ["C:\\ext\\a.ts", "C:\\ext\\b.ts"],
+		securitySnapshotPath: "C:\\Users\\tester\\AppData\\Roaming\\PiDeck-dev\\security-policy.json",
+	});
 	await proc.start(undefined, undefined, true);
 	const captured = getCaptured();
 	assert.ok(captured?.args, "spawn 应被调用");
@@ -206,20 +190,12 @@ test("默认（未开启总开关）且存在禁用项时注入 --no-extensions 
 
 test("自动标题设置以显式环境标志注入 pi 进程", async () => {
 	const disabled = loadPiProcess();
-	const disabledProc = new disabled.PiProcess(
-		"C:\\proj",
-		{ autoSessionTitle: false, wslEnabled: true, wslDistro: "Ubuntu", wslUser: "root" },
-		disabled.mockLocator,
-	);
+	const disabledProc = new disabled.PiProcess("C:\\proj", { autoSessionTitle: false, wslEnabled: true, wslDistro: "Ubuntu", wslUser: "root" }, disabled.mockLocator);
 	await disabledProc.start(undefined, undefined, true);
 	assert.equal(disabled.getCaptured()?.env?.PIDECK_AUTO_SESSION_TITLE, "0");
 
 	const enabled = loadPiProcess();
-	const enabledProc = new enabled.PiProcess(
-		"C:\\proj",
-		{ wslEnabled: true, wslDistro: "Ubuntu", wslUser: "root" },
-		enabled.mockLocator,
-	);
+	const enabledProc = new enabled.PiProcess("C:\\proj", { wslEnabled: true, wslDistro: "Ubuntu", wslUser: "root" }, enabled.mockLocator);
 	await enabledProc.start(undefined, undefined, true);
 	assert.equal(enabled.getCaptured()?.env?.PIDECK_AUTO_SESSION_TITLE, "1");
 });
@@ -227,15 +203,10 @@ test("自动标题设置以显式环境标志注入 pi 进程", async () => {
 test("白名单总开关 disableExtensionWhitelist=true 时不再注入 --no-extensions/-e", async () => {
 	const { PiProcess, mockLocator, getCaptured } = loadPiProcess();
 	// resolver 返回白名单路径（模拟存在禁用项），但总开关开启时应整体忽略白名单
-	const proc = new PiProcess(
-		"C:\\proj",
-		{ wslEnabled: true, wslDistro: "Ubuntu-24.04", wslUser: "root", disableExtensionWhitelist: true },
-		mockLocator,
-		{
-			resolveEnabledExtensionPaths: () => ["C:\\ext\\a.ts"],
-			securitySnapshotPath: "C:\\Users\\tester\\AppData\\Roaming\\PiDeck-dev\\security-policy.json",
-		},
-	);
+	const proc = new PiProcess("C:\\proj", { wslEnabled: true, wslDistro: "Ubuntu-24.04", wslUser: "root", disableExtensionWhitelist: true }, mockLocator, {
+		resolveEnabledExtensionPaths: () => ["C:\\ext\\a.ts"],
+		securitySnapshotPath: "C:\\Users\\tester\\AppData\\Roaming\\PiDeck-dev\\security-policy.json",
+	});
 	await proc.start(undefined, undefined, true);
 	const captured = getCaptured();
 	assert.ok(captured?.args, "spawn 应被调用");
@@ -245,16 +216,11 @@ test("白名单总开关 disableExtensionWhitelist=true 时不再注入 --no-ext
 
 test("存在禁用技能时注入 --no-skills + 逐条 --skill 白名单", async () => {
 	const { PiProcess, mockLocator, getCaptured } = loadPiProcess();
-	const proc = new PiProcess(
-		"C:\\proj",
-		{ wslEnabled: true, wslDistro: "Ubuntu-24.04", wslUser: "root" },
-		mockLocator,
-		{
-			// 模拟技能白名单解析器：存在禁用项 → 返回启用技能路径
-			resolveEnabledSkillPaths: () => ["C:\\Users\\tester\\skills\\a\\SKILL.md", "C:\\Users\\tester\\skills\\b\\SKILL.md"],
-			securitySnapshotPath: "C:\\Users\\tester\\AppData\\Roaming\\PiDeck-dev\\security-policy.json",
-		},
-	);
+	const proc = new PiProcess("C:\\proj", { wslEnabled: true, wslDistro: "Ubuntu-24.04", wslUser: "root" }, mockLocator, {
+		// 模拟技能白名单解析器：存在禁用项 → 返回启用技能路径
+		resolveEnabledSkillPaths: () => ["C:\\Users\\tester\\skills\\a\\SKILL.md", "C:\\Users\\tester\\skills\\b\\SKILL.md"],
+		securitySnapshotPath: "C:\\Users\\tester\\AppData\\Roaming\\PiDeck-dev\\security-policy.json",
+	});
 	await proc.start(undefined, undefined, true);
 	const captured = getCaptured();
 	assert.ok(captured?.args, "spawn 应被调用");
@@ -274,19 +240,13 @@ test("技能数量超出启动通道的命令行预算时整体跳过白名单�
 	// （CreateProcess 32767），千级技能仍会撑爆；超预算必须整体放弃注入（pi 走默认发现，
 	// 禁用不生效但能启动）。500 个 Windows 绝对路径 ≈ 29.5k 字符 > 26000 预算。
 	const { PiProcess, mockLocator, getCaptured } = loadPiProcess();
-	const manySkills = Array.from({ length: 500 }, (_, i) =>
-		`C:\\Users\\tester\\.pi\\agent\\skills\\skill-${String(i).padStart(3, "0")}\\SKILL.md`);
+	const manySkills = Array.from({ length: 500 }, (_, i) => `C:\\Users\\tester\\.pi\\agent\\skills\\skill-${String(i).padStart(3, "0")}\\SKILL.md`);
 	assert.ok(manySkills[0].length > 40, "构造的技能路径应接近真实 Windows 长度");
 
-	const proc = new PiProcess(
-		"C:\\proj",
-		{ wslEnabled: true, wslDistro: "Ubuntu-24.04", wslUser: "root" },
-		mockLocator,
-		{
-			resolveEnabledSkillPaths: () => manySkills,
-			securitySnapshotPath: "C:\\Users\\tester\\AppData\\Roaming\\PiDeck-dev\\security-policy.json",
-		},
-	);
+	const proc = new PiProcess("C:\\proj", { wslEnabled: true, wslDistro: "Ubuntu-24.04", wslUser: "root" }, mockLocator, {
+		resolveEnabledSkillPaths: () => manySkills,
+		securitySnapshotPath: "C:\\Users\\tester\\AppData\\Roaming\\PiDeck-dev\\security-policy.json",
+	});
 	await proc.start(undefined, undefined, true);
 	const captured = getCaptured();
 	assert.ok(captured?.args, "spawn 应被调用");
@@ -305,51 +265,31 @@ test("数百个技能在 node 直启通道下不再被误拦（旧的一刀切 5
 	// （cmd.exe 8191 → 预算 5000）一刀切，≈17.7k 字符直接越过 5000 被误判为「超预算」。
 	// 按实际通道（node 直启 26000）判定后应照常注入，禁用功能继续生效。
 	const { PiProcess, mockLocator, getCaptured } = loadPiProcess();
-	const manySkills = Array.from({ length: 300 }, (_, i) =>
-		`C:\\Users\\tester\\.pi\\agent\\skills\\skill-${String(i).padStart(3, "0")}\\SKILL.md`);
+	const manySkills = Array.from({ length: 300 }, (_, i) => `C:\\Users\\tester\\.pi\\agent\\skills\\skill-${String(i).padStart(3, "0")}\\SKILL.md`);
 
-	const proc = new PiProcess(
-		"C:\\proj",
-		{ wslEnabled: true, wslDistro: "Ubuntu-24.04", wslUser: "root" },
-		mockLocator,
-		{
-			resolveEnabledSkillPaths: () => manySkills,
-			securitySnapshotPath: "C:\\Users\\tester\\AppData\\Roaming\\PiDeck-dev\\security-policy.json",
-		},
-	);
+	const proc = new PiProcess("C:\\proj", { wslEnabled: true, wslDistro: "Ubuntu-24.04", wslUser: "root" }, mockLocator, {
+		resolveEnabledSkillPaths: () => manySkills,
+		securitySnapshotPath: "C:\\Users\\tester\\AppData\\Roaming\\PiDeck-dev\\security-policy.json",
+	});
 	await proc.start(undefined, undefined, true);
 	const captured = getCaptured();
 	assert.ok(captured?.args, "spawn 应被调用");
 	assert.ok(captured.args.includes("--no-skills"), "预算内应照常注入 --no-skills");
-	assert.equal(
-		captured.args.filter((a) => a === "--skill").length,
-		300,
-		"300 个技能应逐条注入（禁用功能保持生效）",
-	);
-	assert.equal(
-		proc.getDiagnostics()?.whitelistSkipped,
-		undefined,
-		"预算内不得记录跳过信息（否则会误报给用户）",
-	);
+	assert.equal(captured.args.filter((a) => a === "--skill").length, 300, "300 个技能应逐条注入（禁用功能保持生效）");
+	assert.equal(proc.getDiagnostics()?.whitelistSkipped, undefined, "预算内不得记录跳过信息（否则会误报给用户）");
 });
 
 test("扩展数量超出命令行预算时同样整体跳过白名单注入", async () => {
 	// 回归：预算守卫最初只覆盖技能，扩展/提示词漏在外面——逐条 --extension 的注入量与
 	// 技能同阶（命令行长度 O(条数)），漏守卫就会撑爆 Windows 命令行导致启动失败。
 	const { PiProcess, mockLocator, getCaptured } = loadPiProcess();
-	const manyExtensions = Array.from({ length: 600 }, (_, i) =>
-		`C:\\Users\\tester\\.pi\\agent\\extensions\\extension-${String(i).padStart(3, "0")}.ts`);
+	const manyExtensions = Array.from({ length: 600 }, (_, i) => `C:\\Users\\tester\\.pi\\agent\\extensions\\extension-${String(i).padStart(3, "0")}.ts`);
 
-	const proc = new PiProcess(
-		"C:\\proj",
-		{ wslEnabled: true, wslDistro: "Ubuntu-24.04", wslUser: "root" },
-		mockLocator,
-		{
-			resolveEnabledExtensionPaths: () => manyExtensions,
-			resolveBuiltInExtensionPaths: () => ["C:\\app\\resources\\extensions\\pi-deck-todo.ts"],
-			securitySnapshotPath: "C:\\Users\\tester\\AppData\\Roaming\\PiDeck-dev\\security-policy.json",
-		},
-	);
+	const proc = new PiProcess("C:\\proj", { wslEnabled: true, wslDistro: "Ubuntu-24.04", wslUser: "root" }, mockLocator, {
+		resolveEnabledExtensionPaths: () => manyExtensions,
+		resolveBuiltInExtensionPaths: () => ["C:\\app\\resources\\extensions\\pi-deck-todo.ts"],
+		securitySnapshotPath: "C:\\Users\\tester\\AppData\\Roaming\\PiDeck-dev\\security-policy.json",
+	});
 	await proc.start(undefined, undefined, true);
 	const captured = getCaptured();
 	assert.ok(captured?.args, "spawn 应被调用");
@@ -367,21 +307,14 @@ test("提示词模板数量超出命令行预算时同样整体跳过白名单�
 	// 三类白名单共用同一条命令行预算，可同时被跳过；诊断必须逐类记录，
 	// 否则用户只能看到「技能被跳过」而不知提示词也没生效。
 	const { PiProcess, mockLocator, getCaptured } = loadPiProcess();
-	const manyPrompts = Array.from({ length: 400 }, (_, i) =>
-		`C:\\Users\\tester\\.pi\\agent\\prompts\\prompt-${String(i).padStart(3, "0")}.md`);
-	const manySkills = Array.from({ length: 900 }, (_, i) =>
-		`C:\\Users\\tester\\.pi\\agent\\skills\\skill-${String(i).padStart(3, "0")}\\SKILL.md`);
+	const manyPrompts = Array.from({ length: 400 }, (_, i) => `C:\\Users\\tester\\.pi\\agent\\prompts\\prompt-${String(i).padStart(3, "0")}.md`);
+	const manySkills = Array.from({ length: 900 }, (_, i) => `C:\\Users\\tester\\.pi\\agent\\skills\\skill-${String(i).padStart(3, "0")}\\SKILL.md`);
 
-	const proc = new PiProcess(
-		"C:\\proj",
-		{ wslEnabled: true, wslDistro: "Ubuntu-24.04", wslUser: "root" },
-		mockLocator,
-		{
-			resolveEnabledSkillPaths: () => manySkills,
-			resolveEnabledPromptPaths: () => manyPrompts,
-			securitySnapshotPath: "C:\\Users\\tester\\AppData\\Roaming\\PiDeck-dev\\security-policy.json",
-		},
-	);
+	const proc = new PiProcess("C:\\proj", { wslEnabled: true, wslDistro: "Ubuntu-24.04", wslUser: "root" }, mockLocator, {
+		resolveEnabledSkillPaths: () => manySkills,
+		resolveEnabledPromptPaths: () => manyPrompts,
+		securitySnapshotPath: "C:\\Users\\tester\\AppData\\Roaming\\PiDeck-dev\\security-policy.json",
+	});
 	await proc.start(undefined, undefined, true);
 	const captured = getCaptured();
 	assert.ok(captured?.args, "spawn 应被调用");
@@ -390,28 +323,17 @@ test("提示词模板数量超出命令行预算时同样整体跳过白名单�
 
 	// 用本 realm 的 Array.from 重建：whitelistSkipped 是 vm 沙箱数组，跨 realm 直接
 	// deepEqual 会因原型不同而失败（内容一样也报错）。
-	const kinds = Array.from(
-		proc.getDiagnostics()?.whitelistSkipped ?? [],
-		(entry) => entry.kind,
-	).sort();
+	const kinds = Array.from(proc.getDiagnostics()?.whitelistSkipped ?? [], (entry) => entry.kind).sort();
 	assert.deepEqual(kinds, ["prompts", "skills"], "两类超预算应各记一条，不互相遮蔽");
 });
 
 test("WSL 家目录的 --skill 白名单路径（UNC）转换为 distro 内 Linux 路径", async () => {
 	const { PiProcess, mockLocator, getCaptured } = loadPiProcess();
-	const proc = new PiProcess(
-		"C:\\proj",
-		{ wslEnabled: true, wslDistro: "Ubuntu-24.04", wslUser: "root" },
-		mockLocator,
-		{
-			// 模拟 WSL 场景：解析器经 \\wsl.localhost 扫到 Linux 家目录技能（issue #203）
-			resolveEnabledSkillPaths: () => [
-				"\\\\wsl.localhost\\Ubuntu-24.04\\root\\.agents\\skills\\wsl-skill\\SKILL.md",
-				"\\\\wsl.localhost\\Ubuntu-24.04\\root\\.pi\\agent\\skills\\wsl-pi-skill\\SKILL.md",
-			],
-			securitySnapshotPath: "C:\\Users\\tester\\AppData\\Roaming\\PiDeck-dev\\security-policy.json",
-		},
-	);
+	const proc = new PiProcess("C:\\proj", { wslEnabled: true, wslDistro: "Ubuntu-24.04", wslUser: "root" }, mockLocator, {
+		// 模拟 WSL 场景：解析器经 \\wsl.localhost 扫到 Linux 家目录技能（issue #203）
+		resolveEnabledSkillPaths: () => ["\\\\wsl.localhost\\Ubuntu-24.04\\root\\.agents\\skills\\wsl-skill\\SKILL.md", "\\\\wsl.localhost\\Ubuntu-24.04\\root\\.pi\\agent\\skills\\wsl-pi-skill\\SKILL.md"],
+		securitySnapshotPath: "C:\\Users\\tester\\AppData\\Roaming\\PiDeck-dev\\security-policy.json",
+	});
 	await proc.start(undefined, undefined, true);
 	const captured = getCaptured();
 	assert.ok(captured?.args, "spawn 应被调用");
@@ -427,15 +349,10 @@ test("WSL 家目录的 --skill 白名单路径（UNC）转换为 distro 内 Linu
 
 test("无禁用技能（resolver 返回 null）时不注入 --no-skills/--skill", async () => {
 	const { PiProcess, mockLocator, getCaptured } = loadPiProcess();
-	const proc = new PiProcess(
-		"C:\\proj",
-		{ wslEnabled: true, wslDistro: "Ubuntu-24.04", wslUser: "root" },
-		mockLocator,
-		{
-			resolveEnabledSkillPaths: () => null,
-			securitySnapshotPath: "C:\\Users\\tester\\AppData\\Roaming\\PiDeck-dev\\security-policy.json",
-		},
-	);
+	const proc = new PiProcess("C:\\proj", { wslEnabled: true, wslDistro: "Ubuntu-24.04", wslUser: "root" }, mockLocator, {
+		resolveEnabledSkillPaths: () => null,
+		securitySnapshotPath: "C:\\Users\\tester\\AppData\\Roaming\\PiDeck-dev\\security-policy.json",
+	});
 	await proc.start(undefined, undefined, true);
 	const captured = getCaptured();
 	assert.ok(captured?.args, "spawn 应被调用");
@@ -445,16 +362,11 @@ test("无禁用技能（resolver 返回 null）时不注入 --no-skills/--skill"
 
 test("存在禁用模板时注入 --no-prompt-templates + 逐条 --prompt-template 白名单", async () => {
 	const { PiProcess, mockLocator, getCaptured } = loadPiProcess();
-	const proc = new PiProcess(
-		"C:\\proj",
-		{ wslEnabled: true, wslDistro: "Ubuntu-24.04", wslUser: "root" },
-		mockLocator,
-		{
-			// 模拟模板白名单解析器：存在禁用项 → 返回启用模板路径
-			resolveEnabledPromptPaths: () => ["C:\\Users\\tester\\prompts\\a.md", "C:\\Users\\tester\\prompts\\b.md"],
-			securitySnapshotPath: "C:\\Users\\tester\\AppData\\Roaming\\PiDeck-dev\\security-policy.json",
-		},
-	);
+	const proc = new PiProcess("C:\\proj", { wslEnabled: true, wslDistro: "Ubuntu-24.04", wslUser: "root" }, mockLocator, {
+		// 模拟模板白名单解析器：存在禁用项 → 返回启用模板路径
+		resolveEnabledPromptPaths: () => ["C:\\Users\\tester\\prompts\\a.md", "C:\\Users\\tester\\prompts\\b.md"],
+		securitySnapshotPath: "C:\\Users\\tester\\AppData\\Roaming\\PiDeck-dev\\security-policy.json",
+	});
 	await proc.start(undefined, undefined, true);
 	const captured = getCaptured();
 	assert.ok(captured?.args, "spawn 应被调用");
@@ -469,15 +381,10 @@ test("存在禁用模板时注入 --no-prompt-templates + 逐条 --prompt-templa
 
 test("无禁用模板（resolver 返回 null）时不注入 --no-prompt-templates/--prompt-template", async () => {
 	const { PiProcess, mockLocator, getCaptured } = loadPiProcess();
-	const proc = new PiProcess(
-		"C:\\proj",
-		{ wslEnabled: true, wslDistro: "Ubuntu-24.04", wslUser: "root" },
-		mockLocator,
-		{
-			resolveEnabledPromptPaths: () => null,
-			securitySnapshotPath: "C:\\Users\\tester\\AppData\\Roaming\\PiDeck-dev\\security-policy.json",
-		},
-	);
+	const proc = new PiProcess("C:\\proj", { wslEnabled: true, wslDistro: "Ubuntu-24.04", wslUser: "root" }, mockLocator, {
+		resolveEnabledPromptPaths: () => null,
+		securitySnapshotPath: "C:\\Users\\tester\\AppData\\Roaming\\PiDeck-dev\\security-policy.json",
+	});
 	await proc.start(undefined, undefined, true);
 	const captured = getCaptured();
 	assert.ok(captured?.args, "spawn 应被调用");
@@ -487,15 +394,10 @@ test("无禁用模板（resolver 返回 null）时不注入 --no-prompt-template
 
 test("piRpcNoSkills 总开关开启时不注入技能白名单", async () => {
 	const { PiProcess, mockLocator, getCaptured } = loadPiProcess();
-	const proc = new PiProcess(
-		"C:\\proj",
-		{ wslEnabled: true, wslDistro: "Ubuntu-24.04", wslUser: "root", piRpcNoSkills: true },
-		mockLocator,
-		{
-			resolveEnabledSkillPaths: () => ["C:\\Users\\tester\\skills\\a\\SKILL.md"],
-			securitySnapshotPath: "C:\\Users\\tester\\AppData\\Roaming\\PiDeck-dev\\security-policy.json",
-		},
-	);
+	const proc = new PiProcess("C:\\proj", { wslEnabled: true, wslDistro: "Ubuntu-24.04", wslUser: "root", piRpcNoSkills: true }, mockLocator, {
+		resolveEnabledSkillPaths: () => ["C:\\Users\\tester\\skills\\a\\SKILL.md"],
+		securitySnapshotPath: "C:\\Users\\tester\\AppData\\Roaming\\PiDeck-dev\\security-policy.json",
+	});
 	await proc.start(undefined, undefined, true);
 	const captured = getCaptured();
 	assert.ok(captured?.args, "spawn 应被调用");
@@ -505,22 +407,20 @@ test("piRpcNoSkills 总开关开启时不注入技能白名单", async () => {
 });
 
 test("resolver failure before spawn restores temporarily parked extensions", async () => {
-	const parked = [{
-		dir: "C:\\Users\\tester\\.pi\\agent\\extensions",
-		name: "codeisland.ts",
-		originalPath: "C:\\Users\\tester\\.pi\\agent\\extensions\\codeisland.ts",
-		parkedPath: "C:\\Users\\tester\\.pi\\agent\\extensions\\codeisland.ts.pideck-disabled",
-	}];
-	const { PiProcess, mockLocator, getCaptured, getUnparkCalls } = loadPiProcess(
-		{ output: "0.82.1\n" },
-		{ parkedExtensions: parked },
-	);
-	const proc = new PiProcess(
-		"C:\\proj",
-		{ wslEnabled: true, wslDistro: "Ubuntu-24.04", wslUser: "root" },
-		mockLocator,
-		{ resolveEnabledExtensionPaths: () => { throw new Error("resolver failed"); } },
-	);
+	const parked = [
+		{
+			dir: "C:\\Users\\tester\\.pi\\agent\\extensions",
+			name: "codeisland.ts",
+			originalPath: "C:\\Users\\tester\\.pi\\agent\\extensions\\codeisland.ts",
+			parkedPath: "C:\\Users\\tester\\.pi\\agent\\extensions\\codeisland.ts.pideck-disabled",
+		},
+	];
+	const { PiProcess, mockLocator, getCaptured, getUnparkCalls } = loadPiProcess({ output: "0.82.1\n" }, { parkedExtensions: parked });
+	const proc = new PiProcess("C:\\proj", { wslEnabled: true, wslDistro: "Ubuntu-24.04", wslUser: "root" }, mockLocator, {
+		resolveEnabledExtensionPaths: () => {
+			throw new Error("resolver failed");
+		},
+	});
 	await assert.rejects(proc.start(undefined, undefined, true), /resolver failed/);
 	assert.equal(getCaptured(), null);
 	assert.equal(getUnparkCalls(), 1);
@@ -529,29 +429,24 @@ test("resolver failure before spawn restores temporarily parked extensions", asy
 test("--no-approve 会通知所有资源 resolver 排除项目层并传给受支持的 pi", async () => {
 	const { PiProcess, mockLocator, getCaptured, getParkedDirectories } = loadPiProcess();
 	const observed = [];
-	const proc = new PiProcess(
-		"C:\\proj",
-		{ wslEnabled: true, wslDistro: "Ubuntu-24.04", wslUser: "root", disableExtensionWhitelist: true },
-		mockLocator,
-		{
-			resolveBuiltInExtensionPaths: (_settings, includeProjectResources) => {
-				observed.push(["built-in", includeProjectResources]);
-				return [];
-			},
-			resolveEnabledExtensionPaths: (_settings, _cwd, includeProjectResources) => {
-				observed.push(["extension", includeProjectResources]);
-				return [];
-			},
-			resolveEnabledSkillPaths: (_settings, _cwd, includeProjectResources) => {
-				observed.push(["skill", includeProjectResources]);
-				return [];
-			},
-			resolveEnabledPromptPaths: (_settings, _cwd, includeProjectResources) => {
-				observed.push(["prompt", includeProjectResources]);
-				return [];
-			},
+	const proc = new PiProcess("C:\\proj", { wslEnabled: true, wslDistro: "Ubuntu-24.04", wslUser: "root", disableExtensionWhitelist: true }, mockLocator, {
+		resolveBuiltInExtensionPaths: (_settings, includeProjectResources) => {
+			observed.push(["built-in", includeProjectResources]);
+			return [];
 		},
-	);
+		resolveEnabledExtensionPaths: (_settings, _cwd, includeProjectResources) => {
+			observed.push(["extension", includeProjectResources]);
+			return [];
+		},
+		resolveEnabledSkillPaths: (_settings, _cwd, includeProjectResources) => {
+			observed.push(["skill", includeProjectResources]);
+			return [];
+		},
+		resolveEnabledPromptPaths: (_settings, _cwd, includeProjectResources) => {
+			observed.push(["prompt", includeProjectResources]);
+			return [];
+		},
+	});
 	await proc.start(undefined, "no-approve", true);
 	assert.ok(getCaptured()?.args?.includes("--no-approve"));
 	assert.ok(getCaptured()?.args?.includes("--no-extensions"), "denied trust overrides the whitelist diagnostic switch");
@@ -566,28 +461,14 @@ test("--no-approve 会通知所有资源 resolver 排除项目层并传给受支
 
 test("拒绝 trust 时版本探测失败会阻止 spawn", async () => {
 	const { PiProcess, mockLocator, getCaptured } = loadPiProcess({ error: new Error("missing pi") });
-	const proc = new PiProcess(
-		"C:\\proj",
-		{ wslEnabled: true, wslDistro: "Ubuntu-24.04", wslUser: "root" },
-		mockLocator,
-	);
-	await assert.rejects(
-		proc.start(undefined, "no-approve", true),
-		/Cannot start an untrusted project safely/,
-	);
+	const proc = new PiProcess("C:\\proj", { wslEnabled: true, wslDistro: "Ubuntu-24.04", wslUser: "root" }, mockLocator);
+	await assert.rejects(proc.start(undefined, "no-approve", true), /Cannot start an untrusted project safely/);
 	assert.equal(getCaptured(), null, "版本不可验证时绝不能启动可能加载项目代码的进程");
 });
 
 test("拒绝 trust 时旧版 pi 会阻止 spawn", async () => {
 	const { PiProcess, mockLocator, getCaptured } = loadPiProcess({ output: "0.78.0\n" });
-	const proc = new PiProcess(
-		"C:\\proj",
-		{ wslEnabled: true, wslDistro: "Ubuntu-24.04", wslUser: "root" },
-		mockLocator,
-	);
-	await assert.rejects(
-		proc.start(undefined, "no-approve", true),
-		/Cannot start an untrusted project safely/,
-	);
+	const proc = new PiProcess("C:\\proj", { wslEnabled: true, wslDistro: "Ubuntu-24.04", wslUser: "root" }, mockLocator);
+	await assert.rejects(proc.start(undefined, "no-approve", true), /Cannot start an untrusted project safely/);
 	assert.equal(getCaptured(), null);
 });

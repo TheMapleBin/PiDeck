@@ -2,14 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
-const {
-	IMPORTED_IMAGE_MAX_BASE64_CHARS,
-	capImportedImage,
-	importedContentHasToolCall,
-	importedUnknownBlockAsText,
-	normalizeImportedStopReason,
-	tryImportedImageBlock,
-} = loadTsCommonJs("src/main/sessions/importNormalize.ts");
+const { IMPORTED_IMAGE_MAX_BASE64_CHARS, capImportedImage, importedContentHasToolCall, importedUnknownBlockAsText, normalizeImportedStopReason, tryImportedImageBlock } = loadTsCommonJs("src/main/sessions/importNormalize.ts");
 
 const asPlain = (value) => JSON.parse(JSON.stringify(value));
 
@@ -37,10 +30,7 @@ test("importedUnknownBlockAsText: 未知块落成 JSON 文本", () => {
 });
 
 test("tryImportedImageBlock: 小图写成 pi image，无字节/过大写占位", () => {
-	assert.deepEqual(
-		asPlain(tryImportedImageBlock({ type: "image", data: "abc", mimeType: "image/png" })),
-		{ type: "image", data: "abc", mimeType: "image/png" },
-	);
+	assert.deepEqual(asPlain(tryImportedImageBlock({ type: "image", data: "abc", mimeType: "image/png" })), { type: "image", data: "abc", mimeType: "image/png" });
 	assert.deepEqual(
 		asPlain(
 			tryImportedImageBlock({

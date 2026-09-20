@@ -4,20 +4,11 @@ import type { ChangelogPayload } from "../../../../../shared/types";
 import { desktopApi } from "../../../desktopApi";
 import { formatI18nDateTime, t } from "../../../i18n";
 import { Button } from "../../ui-shadcn/button";
-import {
-	Dialog,
-	DialogContent,
-	DialogDescription,
-	DialogHeader,
-	DialogTitle,
-} from "../../ui-shadcn/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../ui-shadcn/dialog";
 import { ScrollArea } from "../../ui-shadcn/scroll-area";
 import { MarkdownStream } from "../../session/MarkdownStream";
 
-type LoadState =
-	| { status: "loading" }
-	| { status: "ready"; payload: ChangelogPayload & { markdown: string } }
-	| { status: "unavailable"; pageUrl: string };
+type LoadState = { status: "loading" } | { status: "ready"; payload: ChangelogPayload & { markdown: string } } | { status: "unavailable"; pageUrl: string };
 
 /**
  * 更新日志弹窗。
@@ -100,29 +91,15 @@ export function ChangelogDialog(props: {
 			>
 				<DialogHeader>
 					<DialogTitle>{t("changelog.title")}</DialogTitle>
-					<DialogDescription>
-						{state.status === "ready"
-							? t("changelog.subtitleVersions", { count: state.payload.versionCount })
-							: t("changelog.subtitle")}
-					</DialogDescription>
+					<DialogDescription>{state.status === "ready" ? t("changelog.subtitleVersions", { count: state.payload.versionCount }) : t("changelog.subtitle")}</DialogDescription>
 				</DialogHeader>
 
-				{state.status === "loading" && (
-					<p className="py-8 text-center text-caption text-muted-foreground">
-						{t("changelog.loading")}
-					</p>
-				)}
+				{state.status === "loading" && <p className="py-8 text-center text-caption text-muted-foreground">{t("changelog.loading")}</p>}
 
 				{state.status === "unavailable" && (
 					<div className="flex flex-col items-center gap-3 py-8">
-						<p className="text-caption text-muted-foreground">
-							{t("changelog.unavailable")}
-						</p>
-						<Button
-							variant="secondary"
-							size="sm"
-							onClick={() => openInBrowser(state.pageUrl)}
-						>
+						<p className="text-caption text-muted-foreground">{t("changelog.unavailable")}</p>
+						<Button variant="secondary" size="sm" onClick={() => openInBrowser(state.pageUrl)}>
 							<ExternalLink size={12} aria-hidden="true" />
 							{t("changelog.openInBrowser")}
 						</Button>
@@ -142,12 +119,7 @@ export function ChangelogDialog(props: {
 						    单行文本，横向撑破弹窗——既不出换行也不出滚动条。 */}
 						<ScrollArea className="h-[52vh] rounded-md border border-border-subtle">
 							<div className="markdown-body px-4 py-3 text-chat text-text-primary">
-								<MarkdownStream
-									text={state.payload.markdown}
-									isStreaming={false}
-									light
-									onOpenExternal={(url) => openInBrowser(url)}
-								/>
+								<MarkdownStream text={state.payload.markdown} isStreaming={false} light onOpenExternal={(url) => openInBrowser(url)} />
 							</div>
 						</ScrollArea>
 						<div className="flex items-center justify-between gap-2">
@@ -155,12 +127,7 @@ export function ChangelogDialog(props: {
 							    stale（网络失败退回旧缓存）时额外提示可刷新取最新。 */}
 							<span className="text-caption text-muted-foreground/70">
 								{t("changelog.sourceLabel", {
-									source:
-										state.payload.source === "github"
-											? "GitHub"
-											: state.payload.source === "atomgit"
-												? "AtomGit"
-												: "—",
+									source: state.payload.source === "github" ? "GitHub" : state.payload.source === "atomgit" ? "AtomGit" : "—",
 								})}
 								{state.payload.fetchedAt
 									? ` · ${t("changelog.updatedAt", {
@@ -169,24 +136,12 @@ export function ChangelogDialog(props: {
 									: ""}
 							</span>
 							<div className="flex gap-2">
-								{state.payload.stale && (
-									<span className="self-center text-caption text-muted-foreground">
-										{t("changelog.staleNotice")}
-									</span>
-								)}
-								<Button
-									variant="ghost"
-									size="sm"
-									onClick={() => void load(true)}
-								>
+								{state.payload.stale && <span className="self-center text-caption text-muted-foreground">{t("changelog.staleNotice")}</span>}
+								<Button variant="ghost" size="sm" onClick={() => void load(true)}>
 									<RefreshCw size={12} aria-hidden="true" />
 									{t("changelog.reload")}
 								</Button>
-								<Button
-									variant="ghost"
-									size="sm"
-									onClick={() => openInBrowser(state.payload.pageUrl)}
-								>
+								<Button variant="ghost" size="sm" onClick={() => openInBrowser(state.payload.pageUrl)}>
 									<ExternalLink size={12} aria-hidden="true" />
 									{t("changelog.openInBrowser")}
 								</Button>
@@ -204,5 +159,4 @@ export function ChangelogDialog(props: {
  * 与主进程 ChangelogService.changelogPageUrl 同源（同样指向 AtomGit blob 页）；
  * 主进程返回的 pageUrl 始终可用，此常量只用于 IPC 本身抛错的极端场景。
  */
-const DEFAULT_PAGE_URL =
-	"https://atomgit.com/ayuayue/PiDeck/blob/main/CHANGELOG.zh-CN.md";
+const DEFAULT_PAGE_URL = "https://atomgit.com/ayuayue/PiDeck/blob/main/CHANGELOG.zh-CN.md";

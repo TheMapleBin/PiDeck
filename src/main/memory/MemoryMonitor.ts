@@ -194,8 +194,7 @@ async function collectSnapshot(streamingProbe?: () => boolean): Promise<ProfileR
 			try {
 				const pid = wc.getOSProcessId();
 				const mem = memByPid.get(pid);
-				const { jsHeapKB, totalJSHeapKB, domNodes, imgCount, imgPixels, canvasPixels } =
-					await rendererDomMetrics(wc);
+				const { jsHeapKB, totalJSHeapKB, domNodes, imgCount, imgPixels, canvasPixels } = await rendererDomMetrics(wc);
 				const { count: workerCount, jsHeapKB: workerJSHeapKB, urls } = await workerMetrics(wc);
 				const streaming = streamingProbe?.() ? 1 : 0;
 				if (urls.length) {
@@ -291,9 +290,7 @@ export async function startMemoryProfile(streamingProbe?: () => boolean): Promis
 	}, interval);
 	timer.unref(); // 不阻塞应用退出
 
-	console.log(
-		`[memory-profile] sampling every ${interval}ms → ${filePath} (PIDECK_MEMORY_PROFILE=1)`,
-	);
+	console.log(`[memory-profile] sampling every ${interval}ms → ${filePath} (PIDECK_MEMORY_PROFILE=1)`);
 	return {
 		stop: () => clearInterval(timer),
 		filePath,

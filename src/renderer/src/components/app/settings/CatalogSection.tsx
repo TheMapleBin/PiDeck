@@ -5,12 +5,7 @@ import { desktopApi } from "../../../desktopApi";
 import { updateStatusAtom } from "../../../atoms/update-atoms";
 import { Button } from "../../ui-shadcn/button";
 import { SettingsSection } from "./SettingsStorageTab";
-import type {
-	CatalogCheckResult,
-	CatalogUpdateFailCode,
-	CatalogUpdateResult,
-	CatalogUpdateStatus,
-} from "../../../../../shared/types/catalog";
+import type { CatalogCheckResult, CatalogUpdateFailCode, CatalogUpdateResult, CatalogUpdateStatus } from "../../../../../shared/types/catalog";
 import type { UpdateSourceId } from "../../../../../shared/types/settings";
 import { normalizeCustomMirrorHost, UPDATE_SOURCE_MIRRORS } from "../../../../../shared/updateSources";
 
@@ -36,9 +31,7 @@ function failText(code: CatalogUpdateFailCode | "unexpected"): string {
 }
 
 /** 目录来源摘要行：「v0.84.4 · 1290 条」或「不可用」。 */
-function sourceText(
-	info: CatalogUpdateStatus["builtin"],
-): string {
+function sourceText(info: CatalogUpdateStatus["builtin"]): string {
 	if (!info || info.packageVersion === null || info.entryCount === null) {
 		return t("settings.catalogUnavailable");
 	}
@@ -50,10 +43,7 @@ function sourceText(
  * pi-ai 模型目录覆盖到 userData，支持一键还原与恢复上一个覆盖版。
  * 状态与操作结果不落本地配置——目录文件由主进程统一管理，本组件只读展示。
  */
-export function CatalogSection(props: {
-	updateSource?: UpdateSourceId;
-	customUpdateSourceUrl?: string;
-}) {
+export function CatalogSection(props: { updateSource?: UpdateSourceId; customUpdateSourceUrl?: string }) {
 	const [status, setStatus] = useState<CatalogUpdateStatus | null>(null);
 	const [busy, setBusy] = useState<BusyKind>(null);
 	const [notice, setNotice] = useState<Notice>(null);
@@ -91,11 +81,7 @@ export function CatalogSection(props: {
 	}, [refresh]);
 
 	/** 统一执行动作：busy 锁防重入 → 执行 → 按结果显示 notice → 刷新状态。 */
-	const run = (
-		kind: Exclude<BusyKind, null>,
-		action: () => Promise<CatalogUpdateResult | CatalogCheckResult>,
-		message: (result: CatalogUpdateResult | CatalogCheckResult) => string,
-	) => {
+	const run = (kind: Exclude<BusyKind, null>, action: () => Promise<CatalogUpdateResult | CatalogCheckResult>, message: (result: CatalogUpdateResult | CatalogCheckResult) => string) => {
 		setBusy(kind);
 		setNotice(null);
 		void action()
@@ -114,10 +100,7 @@ export function CatalogSection(props: {
 	const hasInvalidOverlayFiles = (status?.hasOverlayFiles ?? false) && !overlayActive;
 
 	return (
-		<SettingsSection
-			title={t("settings.catalogSectionTitle")}
-			description={t("settings.catalogSectionDesc")}
-		>
+		<SettingsSection title={t("settings.catalogSectionTitle")} description={t("settings.catalogSectionDesc")}>
 			<div className="flex flex-col gap-2">
 				{/* 目录更新源：与应用更新同源，方便用户确认走的是哪个 GitHub 镜像 */}
 				<div className="flex items-center gap-1.5 text-caption text-muted-foreground">
@@ -137,35 +120,15 @@ export function CatalogSection(props: {
 				</div>
 				<div className="flex items-center gap-2 text-caption text-muted-foreground">
 					<span>{t("settings.catalogOverlay")}</span>
-					{overlayActive ? (
-						<span className="font-medium text-foreground">{sourceText(status.overlay)}</span>
-					) : (
-						<span className={hasInvalidOverlayFiles ? "font-medium text-destructive" : undefined}>
-							{hasInvalidOverlayFiles
-								? t("settings.catalogInvalidOverlay")
-								: t("settings.catalogNone")}
-						</span>
-					)}
+					{overlayActive ? <span className="font-medium text-foreground">{sourceText(status.overlay)}</span> : <span className={hasInvalidOverlayFiles ? "font-medium text-destructive" : undefined}>{hasInvalidOverlayFiles ? t("settings.catalogInvalidOverlay") : t("settings.catalogNone")}</span>}
 				</div>
 				<div className="flex items-center gap-2 text-caption text-muted-foreground">
 					<span>{t("settings.catalogBackup")}</span>
-					<span className="font-medium text-foreground">
-						{status?.hasBackup ? t("settings.catalogHasBackup") : t("settings.catalogNone")}
-					</span>
+					<span className="font-medium text-foreground">{status?.hasBackup ? t("settings.catalogHasBackup") : t("settings.catalogNone")}</span>
 				</div>
 			</div>
 
-			{notice && (
-				<div
-					className={`mt-2 rounded-md border px-3 py-2 text-caption ${
-						notice.kind === "ok"
-							? "border-[var(--color-accent)]/40 bg-[var(--color-accent)]/10 text-text-primary"
-							: "border-destructive/40 bg-destructive/10 text-destructive"
-					}`}
-				>
-					{notice.text}
-				</div>
-			)}
+			{notice && <div className={`mt-2 rounded-md border px-3 py-2 text-caption ${notice.kind === "ok" ? "border-[var(--color-accent)]/40 bg-[var(--color-accent)]/10 text-text-primary" : "border-destructive/40 bg-destructive/10 text-destructive"}`}>{notice.text}</div>}
 
 			<div className="mt-2 flex flex-wrap items-center gap-2">
 				<Button
@@ -173,17 +136,21 @@ export function CatalogSection(props: {
 					loading={busy === "check"}
 					disabled={busy !== null && busy !== "check"}
 					onClick={() =>
-						run("check", () => desktopApi.catalog.check("main"), (result) => {
-							const checked = result as CatalogCheckResult;
-							return checked.ok
-								? checked.hasUpdate
-									? t("settings.catalogCheckAvailable", {
-											local: checked.localVersion ?? "—",
-											remote: checked.remoteVersion,
-										})
-									: t("settings.catalogCheckLatest", { remote: checked.remoteVersion })
-								: failText("unexpected");
-						})
+						run(
+							"check",
+							() => desktopApi.catalog.check("main"),
+							(result) => {
+								const checked = result as CatalogCheckResult;
+								return checked.ok
+									? checked.hasUpdate
+										? t("settings.catalogCheckAvailable", {
+												local: checked.localVersion ?? "—",
+												remote: checked.remoteVersion,
+											})
+										: t("settings.catalogCheckLatest", { remote: checked.remoteVersion })
+									: failText("unexpected");
+							},
+						)
 					}
 				>
 					{t("settings.catalogCheck")}
@@ -197,9 +164,7 @@ export function CatalogSection(props: {
 							() => desktopApi.catalog.updateFromGithub("main"),
 							(result) => {
 								const r = result as CatalogUpdateResult;
-								return r.ok && r.updated
-									? t("settings.catalogUpdated")
-									: t("settings.catalogAlreadyLatest");
+								return r.ok && r.updated ? t("settings.catalogUpdated") : t("settings.catalogAlreadyLatest");
 							},
 						)
 					}
@@ -211,7 +176,11 @@ export function CatalogSection(props: {
 					loading={busy === "restore"}
 					disabled={(busy !== null && busy !== "restore") || !status?.hasOverlayFiles}
 					onClick={() =>
-						run("restore", () => desktopApi.catalog.restore(), () => t("settings.catalogRestored"))
+						run(
+							"restore",
+							() => desktopApi.catalog.restore(),
+							() => t("settings.catalogRestored"),
+						)
 					}
 				>
 					{t("settings.catalogRestore")}
@@ -235,9 +204,7 @@ export function CatalogSection(props: {
 					disabled={busy !== null}
 					onClick={() => {
 						// 打开文件走主进程解析路径（覆盖层/内置），渲染层只发意图；失败给出提示
-						desktopApi.catalog
-							.openFile()
-							.catch(() => setNotice({ kind: "error", text: failText("unexpected") }));
+						desktopApi.catalog.openFile().catch(() => setNotice({ kind: "error", text: failText("unexpected") }));
 					}}
 				>
 					{t("settings.catalogOpenFile")}

@@ -1,10 +1,6 @@
 import { ipcMain, shell } from "electron";
 import { ipcChannels } from "../../shared/ipc";
-import {
-	CATALOG_UPDATE_ALLOWED_BRANCHES,
-	CATALOG_UPDATE_DEFAULT_BRANCH,
-	type PiAiCatalogUpdater,
-} from "../pi/PiAiCatalogUpdater";
+import { CATALOG_UPDATE_ALLOWED_BRANCHES, CATALOG_UPDATE_DEFAULT_BRANCH, type PiAiCatalogUpdater } from "../pi/PiAiCatalogUpdater";
 
 /**
  * 模型目录更新 IPC：输入校验在边界——分支只接受白名单字面量（main/dev），
@@ -32,8 +28,5 @@ export function registerCatalogIpc(updater: PiAiCatalogUpdater): void {
 
 /** 白名单分支校验：只允许 main/dev，非法值回退 main（防 URL/路径注入）。 */
 function sanitizeBranch(branch: unknown): string {
-	return typeof branch === "string"
-		&& (CATALOG_UPDATE_ALLOWED_BRANCHES as readonly string[]).includes(branch)
-		? branch
-		: CATALOG_UPDATE_DEFAULT_BRANCH;
+	return typeof branch === "string" && (CATALOG_UPDATE_ALLOWED_BRANCHES as readonly string[]).includes(branch) ? branch : CATALOG_UPDATE_DEFAULT_BRANCH;
 }

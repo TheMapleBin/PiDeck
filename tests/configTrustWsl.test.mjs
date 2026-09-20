@@ -60,7 +60,11 @@ function loadConfigManager() {
 			}
 			// 用量探针传输层抽取（6d9e2294）后新增的依赖；trust 测试不调用用量探测，空实现即可
 			if (id === "./usageProbeTransport") {
-				return { usageProbeRequest: async () => { throw new Error("stub"); } };
+				return {
+					usageProbeRequest: async () => {
+						throw new Error("stub");
+					},
+				};
 			}
 			if (id === "./userUsageProbes") {
 				return {
@@ -113,12 +117,16 @@ function loadConfigManager() {
 					compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 				}).outputText;
 				const m = { exports: {} };
-				vm.runInNewContext(out, {
-					...sandbox,
-					module: m,
-					exports: m.exports,
-					require: sandbox.require,
-				}, { filename: "dshUsageEndpoint.ts" });
+				vm.runInNewContext(
+					out,
+					{
+						...sandbox,
+						module: m,
+						exports: m.exports,
+						require: sandbox.require,
+					},
+					{ filename: "dshUsageEndpoint.ts" },
+				);
 				return m.exports;
 			}
 			return require(id);
@@ -142,7 +150,10 @@ test("preserves POSIX WSL trust keys under Windows path semantics", async () => 
 		"/root/ba_cli/private": false,
 	});
 	assert.equal(await manager.getProjectTrustDecision("/root/ba_cli/private/nested"), false);
-	assert.equal(writes.every((write) => write.filePath === "C:\\PiDeck\\config\\trust.json"), true);
+	assert.equal(
+		writes.every((write) => write.filePath === "C:\\PiDeck\\config\\trust.json"),
+		true,
+	);
 });
 
 test("retains case-insensitive matching for native Windows trust keys", async () => {

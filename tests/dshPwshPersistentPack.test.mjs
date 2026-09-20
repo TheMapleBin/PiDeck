@@ -15,14 +15,8 @@ const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 test("package.json keeps dsh-tool-pwsh-persistent in devDependencies and the runtime archive seeds it", () => {
 	const pkg = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8"));
-	assert.ok(
-		pkg.devDependencies["dsh-tool-pwsh-persistent"],
-		"dsh-tool-pwsh-persistent must be a devDependency (deps partitioned into the dsh-runtime archive)",
-	);
-	assert.match(
-		String(pkg.devDependencies["dsh-tool-pwsh-persistent"]),
-		/file:packages\/dsh-tool-pwsh-persistent/,
-	);
+	assert.ok(pkg.devDependencies["dsh-tool-pwsh-persistent"], "dsh-tool-pwsh-persistent must be a devDependency (deps partitioned into the dsh-runtime archive)");
+	assert.match(String(pkg.devDependencies["dsh-tool-pwsh-persistent"]), /file:packages\/dsh-tool-pwsh-persistent/);
 	// 依赖分区（2026-09）：该包不进 app.asar，由 dsh-runtime 归档/SED 提供并守护。
 	const checkScript = readFileSync(join(repoRoot, "scripts/check-dsh-asar.mjs"), "utf8");
 	const packScript = readFileSync(join(repoRoot, "scripts/pack-dsh-runtime.mjs"), "utf8");
@@ -33,10 +27,7 @@ test("package.json keeps dsh-tool-pwsh-persistent in devDependencies and the run
 test("asarUnpack includes nested node-pty of the pwsh plugin", () => {
 	const pkg = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8"));
 	const unpack = pkg.build?.asarUnpack ?? [];
-	assert.ok(
-		unpack.includes("node_modules/dsh-tool-pwsh-persistent/node_modules/node-pty/**"),
-		"nested node-pty of dsh-tool-pwsh-persistent must be asarUnpacked",
-	);
+	assert.ok(unpack.includes("node_modules/dsh-tool-pwsh-persistent/node_modules/node-pty/**"), "nested node-pty of dsh-tool-pwsh-persistent must be asarUnpacked");
 });
 
 test("hostEntry composition inserts the standalone pwsh plugin by package name", () => {
@@ -55,9 +46,7 @@ test("electron-vite externalizes the standalone pwsh package", () => {
 });
 
 test("standalone package peers pin the host rc line, not wildcard", () => {
-	const pkg = JSON.parse(
-		readFileSync(join(repoRoot, "packages/dsh-tool-pwsh-persistent/package.json"), "utf8"),
-	);
+	const pkg = JSON.parse(readFileSync(join(repoRoot, "packages/dsh-tool-pwsh-persistent/package.json"), "utf8"));
 	// 0.1.5 迁移：host rc 线从 0.1.0-rc.8 升到 0.1.5-rc.1（docs/dsh-0.1.5-typert-migration.md）。
 	assert.equal(pkg.peerDependencies["@deepseek-ai/dsh-tools"], "^0.1.5-rc.1");
 	assert.equal(pkg.peerDependencies["@deepseek-ai/dsh-timeout"], "^0.1.5-rc.1");

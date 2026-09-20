@@ -72,10 +72,7 @@ test("fuzzyMatch：词首命中比词中命中得分高", () => {
 	const wordStarts = s.fuzzyMatch("ac", "Agent Config");
 	const midWord = s.fuzzyMatch("ac", "back");
 	assert.ok(wordStarts && midWord);
-	assert.ok(
-		wordStarts.score > midWord.score,
-		`词首命中应更高分: ${wordStarts.score} vs ${midWord.score}`,
-	);
+	assert.ok(wordStarts.score > midWord.score, `词首命中应更高分: ${wordStarts.score} vs ${midWord.score}`);
 });
 
 test("fuzzyMatch：连续命中比分散命中得分高", () => {
@@ -84,10 +81,7 @@ test("fuzzyMatch：连续命中比分散命中得分高", () => {
 	const contiguous = s.fuzzyMatch("set", "set xyz");
 	const scattered = s.fuzzyMatch("set", "sxxexxt");
 	assert.ok(contiguous && scattered);
-	assert.ok(
-		contiguous.score > scattered.score,
-		`连续命中应更高分: ${contiguous.score} vs ${scattered.score}`,
-	);
+	assert.ok(contiguous.score > scattered.score, `连续命中应更高分: ${contiguous.score} vs ${scattered.score}`);
 });
 
 // rankFuzzy 的测试随实现一起下线：排序与可见性已交给 cmdk（依据 filter 返回的分数）。

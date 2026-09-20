@@ -8,30 +8,14 @@ const webHeader = readFileSync("src/renderer/src/web/WebHeader.tsx", "utf8");
 const webChatApp = readFileSync("src/renderer/src/web/WebChatApp.tsx", "utf8");
 
 test("Web shell keeps sidebar and chat pane in a horizontal split", () => {
-	assert.match(
-		webCss,
-		/\.app\.wechat-shell\s*\{[\s\S]*?flex-direction:\s*row;/,
-		"the desktop shell defaults to a vertical layout, so Web must explicitly restore the horizontal split",
-	);
-	assert.match(
-		webCss,
-		/\.app\.wechat-shell\s*>\s*\.chat-list-pane\s*\{[\s\S]*?flex:\s*0\s+0\s+280px;[\s\S]*?width:\s*280px;/,
-		"the Web sidebar needs a stable width or it consumes the chat pane",
-	);
-	assert.match(
-		webCss,
-		/\.app\.wechat-shell\s*>\s*\.chat-pane\s*\{[\s\S]*?flex:\s*1\s+1\s+0;/,
-		"the chat pane must own the remaining horizontal space",
-	);
+	assert.match(webCss, /\.app\.wechat-shell\s*\{[\s\S]*?flex-direction:\s*row;/, "the desktop shell defaults to a vertical layout, so Web must explicitly restore the horizontal split");
+	assert.match(webCss, /\.app\.wechat-shell\s*>\s*\.chat-list-pane\s*\{[\s\S]*?flex:\s*0\s+0\s+280px;[\s\S]*?width:\s*280px;/, "the Web sidebar needs a stable width or it consumes the chat pane");
+	assert.match(webCss, /\.app\.wechat-shell\s*>\s*\.chat-pane\s*\{[\s\S]*?flex:\s*1\s+1\s+0;/, "the chat pane must own the remaining horizontal space");
 });
 
 test("Web project rows can collapse after the active session is revealed", () => {
 	assert.match(webSidebar, /useEffect\(\(\) => \{/);
-	assert.doesNotMatch(
-		webSidebar,
-		/expandedProjects\.has\(project\.id\) \|\| project\.id === activeSessionProjectId/,
-		"the active project must not be forced open on every render",
-	);
+	assert.doesNotMatch(webSidebar, /expandedProjects\.has\(project\.id\) \|\| project\.id === activeSessionProjectId/, "the active project must not be forced open on every render");
 	assert.match(webSidebar, /const expanded = searching \|\| expandedProjects\.has\(project\.id\)/);
 });
 
@@ -65,11 +49,7 @@ test("Project actions are sibling buttons instead of nested controls", () => {
 test("Web sidebar groups orphan sessions under an ungrouped fallback", () => {
 	assert.match(webSidebar, /t\("web\.ungrouped"\)/);
 	assert.match(webSidebar, /projectIds\.has\(session\.projectId\)/);
-	assert.match(
-		webSidebar,
-		/const ungroupedSessions = useMemo\(/,
-		"ungrouped sessions must be derived from sessions whose projectId matches no registered project",
-	);
+	assert.match(webSidebar, /const ungroupedSessions = useMemo\(/, "ungrouped sessions must be derived from sessions whose projectId matches no registered project");
 	// 未分组分组用与项目内会话相同的 SessionRows 渲染（运行态圆点 + 可点击打开）。
 	assert.match(webSidebar, /sessions=\{ungroupedSessions\}/);
 	assert.match(webSidebar, /onSelect=\{props\.onSelectSession\}/);

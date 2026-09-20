@@ -12,10 +12,7 @@ import { getByPath, toNumber } from "./providerUsagePath";
 import { parseBooster } from "./providerUsageBooster";
 
 /** 专用解析器表：kind:"custom" 的 resolver 名称 → 解析函数。 */
-const CUSTOM_RESOLVERS: Record<
-	"xai-billing" | "codex-usage" | "commandcode-credits" | "kimi-credits",
-	(body: unknown, raw: string) => UsageProbeResponse
-> = {
+const CUSTOM_RESOLVERS: Record<"xai-billing" | "codex-usage" | "commandcode-credits" | "kimi-credits", (body: unknown, raw: string) => UsageProbeResponse> = {
 	"xai-billing": parseXaiBilling,
 	"codex-usage": parseCodexUsage,
 	"commandcode-credits": parseCommandcodeCredits,
@@ -23,11 +20,7 @@ const CUSTOM_RESOLVERS: Record<
 };
 
 /** 按 resolver 名解析（未注册的 resolver 返回 undefined，由调用方回退 raw）。 */
-export function resolveCustomUsage(
-	resolver: string | undefined,
-	body: unknown,
-	raw: string,
-): UsageProbeResponse | undefined {
+export function resolveCustomUsage(resolver: string | undefined, body: unknown, raw: string): UsageProbeResponse | undefined {
 	if (!resolver) return undefined;
 	const fn = CUSTOM_RESOLVERS[resolver as keyof typeof CUSTOM_RESOLVERS];
 	return fn ? fn(body, raw) : undefined;
@@ -94,15 +87,8 @@ function parseCodexUsage(body: unknown, raw: string): UsageProbeResponse {
 		windows.push({ key: position, used: Math.min(100, Math.max(0, used)), total: 100 });
 	}
 	const credits = getByPath(body, "credits");
-	const creditsBalance =
-		credits && typeof credits === "object" && !Array.isArray(credits)
-			? toNumber((credits as Record<string, unknown>).balance)
-			: undefined;
-	const creditsUnlimited =
-		credits && typeof credits === "object" && !Array.isArray(credits)
-			? (credits as Record<string, unknown>).has_credits === true &&
-			  (credits as Record<string, unknown>).unlimited === true
-			: false;
+	const creditsBalance = credits && typeof credits === "object" && !Array.isArray(credits) ? toNumber((credits as Record<string, unknown>).balance) : undefined;
+	const creditsUnlimited = credits && typeof credits === "object" && !Array.isArray(credits) ? (credits as Record<string, unknown>).has_credits === true && (credits as Record<string, unknown>).unlimited === true : false;
 	if (windows.length === 0 && creditsBalance === undefined) return { matched: false, raw };
 	return {
 		matched: true,
@@ -147,15 +133,9 @@ const COMMANDCODE_PLANS: ReadonlyArray<{
  * 由 wire 上报的 5h/周 cap 反查套餐（cap 组合全表唯一）校验剩余额度不超月度上限后，
  * 返回可信的月度分母；查不到套餐或校验失败返回 undefined（调用方降级只显剩余）。
  */
-function trustedCommandcodeAllowance(
-	fiveHourCap: number | undefined,
-	weeklyCap: number | undefined,
-	monthlyRemaining: number,
-): number | undefined {
+function trustedCommandcodeAllowance(fiveHourCap: number | undefined, weeklyCap: number | undefined, monthlyRemaining: number): number | undefined {
 	if (fiveHourCap === undefined || weeklyCap === undefined) return undefined;
-	const plan = COMMANDCODE_PLANS.find(
-		(p) => p.fiveHourCapUsd === fiveHourCap && p.weeklyCapUsd === weeklyCap,
-	);
+	const plan = COMMANDCODE_PLANS.find((p) => p.fiveHourCapUsd === fiveHourCap && p.weeklyCapUsd === weeklyCap);
 	if (!plan) return undefined;
 	if (monthlyRemaining > plan.monthlyCreditsUsd) return undefined;
 	return plan.monthlyCreditsUsd;
@@ -172,20 +152,11 @@ function parseCommandcodeCredits(body: unknown, raw: string): UsageProbeResponse
 	if (!body || typeof body !== "object" || Array.isArray(body)) return { matched: false, raw };
 	const root = body as Record<string, unknown>;
 	const creditsBox = root.credits;
-	const credits =
-		creditsBox && typeof creditsBox === "object" && !Array.isArray(creditsBox)
-			? (creditsBox as Record<string, unknown>)
-			: {};
-	const monthlyRemaining = toNumber(
-		credits.monthlyCredits ?? credits.monthly_credits ?? root.monthlyCredits ?? root.monthly_credits,
-	);
+	const credits = creditsBox && typeof creditsBox === "object" && !Array.isArray(creditsBox) ? (creditsBox as Record<string, unknown>) : {};
+	const monthlyRemaining = toNumber(credits.monthlyCredits ?? credits.monthly_credits ?? root.monthlyCredits ?? root.monthly_credits);
 	if (monthlyRemaining === undefined) return { matched: false, raw };
-	const windowBoxRaw =
-		credits.windowLimits ?? credits.window_limits ?? root.windowLimits ?? root.window_limits;
-	const windowBox =
-		windowBoxRaw && typeof windowBoxRaw === "object" && !Array.isArray(windowBoxRaw)
-			? (windowBoxRaw as Record<string, unknown>)
-			: {};
+	const windowBoxRaw = credits.windowLimits ?? credits.window_limits ?? root.windowLimits ?? root.window_limits;
+	const windowBox = windowBoxRaw && typeof windowBoxRaw === "object" && !Array.isArray(windowBoxRaw) ? (windowBoxRaw as Record<string, unknown>) : {};
 	const rawWindow = (key: "fiveHour" | "weekly"): Record<string, unknown> | undefined => {
 		const w = windowBox[key] ?? windowBox[key === "fiveHour" ? "five_hour" : "weekly"];
 		return w && typeof w === "object" && !Array.isArray(w) ? (w as Record<string, unknown>) : undefined;
@@ -275,7 +246,9 @@ function parseKimiCredits(body: unknown, raw: string): UsageProbeResponse {
 			if (!detail) continue;
 
 			const duration = toNumber(windowMeta?.duration) ?? 0;
-			const unitRaw = String(windowMeta?.timeUnit ?? "").toUpperCase().replace(/^TIME_UNIT_/, "");
+			const unitRaw = String(windowMeta?.timeUnit ?? "")
+				.toUpperCase()
+				.replace(/^TIME_UNIT_/, "");
 
 			// 计算窗口标识 key
 			let windowKey: string;
@@ -391,4 +364,3 @@ function parseKimiCredits(body: unknown, raw: string): UsageProbeResponse {
 		...(booster ? { booster } : {}),
 	};
 }
-

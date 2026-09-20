@@ -115,10 +115,7 @@ const RECOMMENDED_PACKAGES: RecommendedPackage[] = [
  * 推荐扩展包面板（当前隐藏：{false && ...}，扩展商店已取代该入口）。
  * 保留为独立组件便于日后恢复；安装复用扩展管理链路。
  */
-export function RecommendedPackagesPanel(props: {
-	data: PiExtensionListResult;
-	onRefresh: () => void;
-}) {
+export function RecommendedPackagesPanel(props: { data: PiExtensionListResult; onRefresh: () => void }) {
 	const [installingSources, setInstallingSources] = useState<Set<string>>(() => new Set());
 
 	const handleInstall = async (pkg: Pick<PiPackageInfo, "name" | "installCmd">) => {
@@ -133,11 +130,7 @@ export function RecommendedPackagesPanel(props: {
 			}
 			props.onRefresh();
 		} catch (e) {
-			showNotice(
-				t("config.extensionOperationFailed", { error: e instanceof Error ? e.message : String(e) }),
-				4500,
-				"error",
-			);
+			showNotice(t("config.extensionOperationFailed", { error: e instanceof Error ? e.message : String(e) }), 4500, "error");
 		} finally {
 			setInstallingSources((current) => {
 				const next = new Set(current);
@@ -151,24 +144,16 @@ export function RecommendedPackagesPanel(props: {
 		<div className="config-section mb-5">
 			<div className="mb-3 flex items-center justify-between">
 				{/* 与设置弹窗分区标题同级：text-sm，避免 title 字号偏大 */}
-				<h3 className="extensions-installed-title text-sm font-semibold tracking-tight text-foreground">
-					{t("config.recommendedPackages")}
-				</h3>
+				<h3 className="extensions-installed-title text-sm font-semibold tracking-tight text-foreground">{t("config.recommendedPackages")}</h3>
 			</div>
-			<p className="config-im-form-hint mb-3 text-caption text-muted-foreground">
-				{t("config.recommendedPackagesHint")}
-			</p>
+			<p className="config-im-form-hint mb-3 text-caption text-muted-foreground">{t("config.recommendedPackagesHint")}</p>
 			<div className="extensions-recommended-list">
 				{RECOMMENDED_PACKAGES.map((pkg) => {
 					// 内置扩展按 source 文件名匹配，npm 扩展按 installCmd 匹配
 					const builtInSource = pkg.name.startsWith("pi-deck-") ? PIDEK_BUILTIN_SOURCE[pkg.name] : undefined;
-					const builtInExt = builtInSource
-						? props.data.extensions.find((ext: PiExtensionSummary) => ext.builtIn && ext.source === builtInSource)
-						: undefined;
+					const builtInExt = builtInSource ? props.data.extensions.find((ext: PiExtensionSummary) => ext.builtIn && ext.source === builtInSource) : undefined;
 					// 已部署（非移除状态）视为已安装；已移除的内置扩展允许恢复安装
-					const alreadyInstalled = builtInExt
-						? builtInExt.enabled !== false
-						: props.data.extensions.some((ext) => ext.source === pkg.installCmd);
+					const alreadyInstalled = builtInExt ? builtInExt.enabled !== false : props.data.extensions.some((ext) => ext.source === pkg.installCmd);
 					const installing = installingSources.has(pkg.installCmd);
 					return (
 						<div
@@ -179,37 +164,30 @@ export function RecommendedPackagesPanel(props: {
 								const packageName = pkg.piPackageName ?? pkg.name;
 								// 弹框内链接强制系统浏览器：window.open 会走 setWindowOpenHandler → 跟随 linkOpenMode，
 								// internal 时内置浏览器在 Dialog 下层不可见同样被遮挡（与 openDocsInSystemBrowser 同规则）
-								window.piDesktop.app.openExternal(
-									`https://pi.dev/packages/${pkg.name}?name=${packageName}`,
-									true
-								);
+								window.piDesktop.app.openExternal(`https://pi.dev/packages/${pkg.name}?name=${packageName}`, true);
 							}}
 							title={`${t("config.openPackageDetail")}: ${pkg.name}`}
 						>
 							<div className="extensions-recommended-info">
 								<div className="extensions-recommended-name">
 									<strong>{pkg.name}</strong>
-									{alreadyInstalled && <span className="config-im-connected-badge" style={{ marginLeft: 8 }}>{t("config.installed")}</span>}
+									{alreadyInstalled && (
+										<span className="config-im-connected-badge" style={{ marginLeft: 8 }}>
+											{t("config.installed")}
+										</span>
+									)}
 								</div>
-								<div className="extensions-recommended-desc">
-									{t(pkg.descriptionKey)}
-								</div>
+								<div className="extensions-recommended-desc">{t(pkg.descriptionKey)}</div>
 							</div>
 							<div className="extensions-recommended-action" onClick={(e) => e.stopPropagation()}>
 								{/* 安装中保持与图标按钮同尺寸，避免 config-btn 文本把操作区撑开错位 */}
-								<Button variant="ghost" size="icon-sm" className="size-7"
-									title={installing ? t("config.installing") : alreadyInstalled ? t("config.installed") : t("config.install")}
-									onClick={() => handleInstall(pkg)}
-									disabled={alreadyInstalled || installing}
-									aria-busy={installing}
-								>
-									{installing ? (
-										<span className="skillhub-installing-dot animate-pideck-spin" aria-hidden="true" />
-									) : (
-										<Download size={15} strokeWidth={1.8} aria-hidden="true" />
-									)}
+								<Button variant="ghost" size="icon-sm" className="size-7" title={installing ? t("config.installing") : alreadyInstalled ? t("config.installed") : t("config.install")} onClick={() => handleInstall(pkg)} disabled={alreadyInstalled || installing} aria-busy={installing}>
+									{installing ? <span className="skillhub-installing-dot animate-pideck-spin" aria-hidden="true" /> : <Download size={15} strokeWidth={1.8} aria-hidden="true" />}
 								</Button>
-								<Button variant="ghost" size="icon-sm" className="size-7"
+								<Button
+									variant="ghost"
+									size="icon-sm"
+									className="size-7"
 									title={t("common.copy")}
 									onClick={(e) => {
 										e.stopPropagation();

@@ -35,94 +35,92 @@ const noCompactionOwner = {
 const piSandbox = createTsSandbox();
 
 function resolveUnstubbedRequire(specifier) {
-  if (!specifier.startsWith(".")) return nodeRequire(specifier);
-  const target = resolve(
-    "src/main/pi",
-    /\.(ts|tsx|js)$/.test(specifier) ? specifier : `${specifier}.ts`,
-  );
-  return piSandbox(target);
+	if (!specifier.startsWith(".")) return nodeRequire(specifier);
+	const target = resolve("src/main/pi", /\.(ts|tsx|js)$/.test(specifier) ? specifier : `${specifier}.ts`);
+	return piSandbox(target);
 }
 
 function extractMessageText(content) {
-  return Array.isArray(content)
-    ? content
-      .filter((item) => item?.type === "text")
-      .map((item) => item.text ?? "")
-      .join("\n")
-    : "";
+	return Array.isArray(content)
+		? content
+				.filter((item) => item?.type === "text")
+				.map((item) => item.text ?? "")
+				.join("\n")
+		: "";
 }
 
 function loadAgentMessageProjectorModule() {
-  const output = ts.transpileModule(
-    readFileSync("src/main/pi/AgentMessageProjector.ts", "utf8"),
-    {
-      compilerOptions: {
-        module: ts.ModuleKind.CommonJS,
-        target: ts.ScriptTarget.ES2022,
-        esModuleInterop: true,
-      },
-      fileName: "AgentMessageProjector.ts",
-    },
-  ).outputText;
-  const module = { exports: {} };
-  vm.runInNewContext(output, {
-    module,
-    exports: module.exports,
-    require: (specifier) => {
-      if (specifier === "../../shared/formatToolDetail") {
-        return {
-          extractToolResultText: (result) => typeof result === "string" ? result : "",
-          formatToolDetail: () => "",
-          safeJson: (value) => JSON.stringify(value),
-          truncateDetailWithMeta: (text) => ({ text, truncated: false, fullLength: text.length }),
-          truncateForDetail: (text) => typeof text === "string" ? text : String(text ?? ""),
-        };
-      }
-      if (specifier === "./messageContent") return { extractMessageText };
-      if (specifier === "./sessionEntryIds") {
-        return {
-          takeActiveEntryId: (ids, index) => ({ entryId: ids?.[index], nextIndex: index + 1 }),
-        };
-      }
-      // 25fd516 起 AgentManager 引入内置扩展参数拼接；本测试不涉及扩展加载，透传即可
-      if (specifier === "../extensions/builtInExtensions") {
-        return { appendBuiltInExtensionArgs: (args) => [...args] };
-      }
-      // 扩展白名单解析器（禁用功能）；本测试不涉及，返回 null（关闭白名单）
-      if (specifier === "../extensions/enabledExtensionResolver") {
-        return { resolveEnabledExtensionPaths: () => null };
-      }
-      // 并行提交给 AgentManager 新增的扩展启动回落纯函数：无依赖，就地编译注入
-      if (specifier === "./extensionStartupFallback") {
-        // 无依赖纯函数：就地编译注入（测试文件无独立 transpile，用 ts.transpileModule）
-        const fallbackModule = { exports: {} };
-        vm.runInNewContext(
-          ts.transpileModule(readFileSync("src/main/pi/extensionStartupFallback.ts", "utf8"), {
-            compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-            fileName: "extensionStartupFallback.ts",
-          }).outputText,
-          { module: fallbackModule, exports: fallbackModule.exports },
-          { filename: "extensionStartupFallback.ts" },
-        );
-        return fallbackModule.exports;
-      }
-      if (specifier === "./extensionError") {
-        // AgentManager 依赖的扩展错误原因格式化；本测试不涉及错误文案，透传字符串即可
-        return { formatExtensionErrorReason: (reason) => String(reason ?? "") };
-      }
-      // 工具推导纯函数：本测试不覆盖（另有 sessionAcpDelegateDerive.test.mjs），空实现满足依赖契约
-      if (specifier === "./derivedSubagents") {
-        return { mergeSubagentSources: (records) => records };
-      }
-      // rewind checkpoint 纯 git 模块：本测试不涉及，空桩满足依赖契约
-      if (specifier === "../rewind/index.ts") return {};
-      return resolveUnstubbedRequire(specifier);
-    },
-    Date,
-    Map,
-    JSON,
-  }, { filename: "AgentMessageProjector.ts" });
-  return module.exports;
+	const output = ts.transpileModule(readFileSync("src/main/pi/AgentMessageProjector.ts", "utf8"), {
+		compilerOptions: {
+			module: ts.ModuleKind.CommonJS,
+			target: ts.ScriptTarget.ES2022,
+			esModuleInterop: true,
+		},
+		fileName: "AgentMessageProjector.ts",
+	}).outputText;
+	const module = { exports: {} };
+	vm.runInNewContext(
+		output,
+		{
+			module,
+			exports: module.exports,
+			require: (specifier) => {
+				if (specifier === "../../shared/formatToolDetail") {
+					return {
+						extractToolResultText: (result) => (typeof result === "string" ? result : ""),
+						formatToolDetail: () => "",
+						safeJson: (value) => JSON.stringify(value),
+						truncateDetailWithMeta: (text) => ({ text, truncated: false, fullLength: text.length }),
+						truncateForDetail: (text) => (typeof text === "string" ? text : String(text ?? "")),
+					};
+				}
+				if (specifier === "./messageContent") return { extractMessageText };
+				if (specifier === "./sessionEntryIds") {
+					return {
+						takeActiveEntryId: (ids, index) => ({ entryId: ids?.[index], nextIndex: index + 1 }),
+					};
+				}
+				// 25fd516 起 AgentManager 引入内置扩展参数拼接；本测试不涉及扩展加载，透传即可
+				if (specifier === "../extensions/builtInExtensions") {
+					return { appendBuiltInExtensionArgs: (args) => [...args] };
+				}
+				// 扩展白名单解析器（禁用功能）；本测试不涉及，返回 null（关闭白名单）
+				if (specifier === "../extensions/enabledExtensionResolver") {
+					return { resolveEnabledExtensionPaths: () => null };
+				}
+				// 并行提交给 AgentManager 新增的扩展启动回落纯函数：无依赖，就地编译注入
+				if (specifier === "./extensionStartupFallback") {
+					// 无依赖纯函数：就地编译注入（测试文件无独立 transpile，用 ts.transpileModule）
+					const fallbackModule = { exports: {} };
+					vm.runInNewContext(
+						ts.transpileModule(readFileSync("src/main/pi/extensionStartupFallback.ts", "utf8"), {
+							compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+							fileName: "extensionStartupFallback.ts",
+						}).outputText,
+						{ module: fallbackModule, exports: fallbackModule.exports },
+						{ filename: "extensionStartupFallback.ts" },
+					);
+					return fallbackModule.exports;
+				}
+				if (specifier === "./extensionError") {
+					// AgentManager 依赖的扩展错误原因格式化；本测试不涉及错误文案，透传字符串即可
+					return { formatExtensionErrorReason: (reason) => String(reason ?? "") };
+				}
+				// 工具推导纯函数：本测试不覆盖（另有 sessionAcpDelegateDerive.test.mjs），空实现满足依赖契约
+				if (specifier === "./derivedSubagents") {
+					return { mergeSubagentSources: (records) => records };
+				}
+				// rewind checkpoint 纯 git 模块：本测试不涉及，空桩满足依赖契约
+				if (specifier === "../rewind/index.ts") return {};
+				return resolveUnstubbedRequire(specifier);
+			},
+			Date,
+			Map,
+			JSON,
+		},
+		{ filename: "AgentMessageProjector.ts" },
+	);
+	return module.exports;
 }
 
 function loadAgentManagerModule() {
@@ -141,247 +139,253 @@ function loadAgentManagerModule() {
 	const cacheHitStatsModule = loadTsCommonJs("src/main/pi/cacheHitStats.ts");
 	const messageProjectorModule = loadAgentMessageProjectorModule();
 	const historyReaderModule = { exports: {} };
-	const historyReaderOutput = ts.transpileModule(
-		readFileSync("src/main/pi/SessionHistoryReader.ts", "utf8"),
+	const historyReaderOutput = ts.transpileModule(readFileSync("src/main/pi/SessionHistoryReader.ts", "utf8"), {
+		compilerOptions: {
+			module: ts.ModuleKind.CommonJS,
+			target: ts.ScriptTarget.ES2022,
+			esModuleInterop: true,
+		},
+		fileName: "SessionHistoryReader.ts",
+	}).outputText;
+	vm.runInNewContext(
+		historyReaderOutput,
 		{
-			compilerOptions: {
-				module: ts.ModuleKind.CommonJS,
-				target: ts.ScriptTarget.ES2022,
-				esModuleInterop: true,
+			module: historyReaderModule,
+			exports: historyReaderModule.exports,
+			require: (specifier) => {
+				// 停止身份缓存（72fe93da 起 SessionHistoryReader 依赖）：真实加载保持身份核对行为
+				if (specifier === "./stoppedMessageIdentity") return loadTsCommonJs("src/main/pi/stoppedMessageIdentity.ts");
+				// todo 快照解析纯函数：本测试不覆盖，空实现满足依赖契约
+				if (specifier === "../../shared/sessionTodo") return { parseTodoSnapshotData: () => undefined };
+				// acp_delegate 推导纯函数：本测试不覆盖（另有 sessionAcpDelegateDerive.test.mjs），空实现满足依赖契约
+				if (specifier === "./derivedSubagents") return { deriveToolSubagentEntries: () => [] };
+				// 会话 JSONL 流式行扫描器：真实加载（索引重建已改为流式，不再整文件 readFile）
+				if (specifier === "../sessions/jsonlLineStream") return loadTsCommonJs("src/main/sessions/jsonlLineStream.ts");
+				// 会话文件汇总纯函数：本测试不覆盖，空实现满足 AgentManager 依赖契约
+				if (specifier === "../../shared/fileChanges") return { collectLatestTurnFileChanges: () => [] };
+				return nodeRequire(specifier);
 			},
-			fileName: "SessionHistoryReader.ts",
+			Buffer,
+			Date,
+			Map,
+			Set,
+			Promise,
+			JSON,
+			console,
 		},
-	).outputText;
-	vm.runInNewContext(historyReaderOutput, {
-		module: historyReaderModule,
-		exports: historyReaderModule.exports,
-		require: (specifier) => {
-			// 停止身份缓存（72fe93da 起 SessionHistoryReader 依赖）：真实加载保持身份核对行为
-			if (specifier === "./stoppedMessageIdentity") return loadTsCommonJs("src/main/pi/stoppedMessageIdentity.ts");
-			// todo 快照解析纯函数：本测试不覆盖，空实现满足依赖契约
-			if (specifier === "../../shared/sessionTodo") return { parseTodoSnapshotData: () => undefined };
-			// acp_delegate 推导纯函数：本测试不覆盖（另有 sessionAcpDelegateDerive.test.mjs），空实现满足依赖契约
-			if (specifier === "./derivedSubagents") return { deriveToolSubagentEntries: () => [] };
-			// 会话 JSONL 流式行扫描器：真实加载（索引重建已改为流式，不再整文件 readFile）
-			if (specifier === "../sessions/jsonlLineStream") return loadTsCommonJs("src/main/sessions/jsonlLineStream.ts");
-			// 会话文件汇总纯函数：本测试不覆盖，空实现满足 AgentManager 依赖契约
-			if (specifier === "../../shared/fileChanges") return { collectLatestTurnFileChanges: () => [] };
-			return nodeRequire(specifier);
+		{ filename: "SessionHistoryReader.ts" },
+	);
+	const output = ts.transpileModule(readFileSync("src/main/pi/AgentManager.ts", "utf8"), {
+		compilerOptions: {
+			module: ts.ModuleKind.CommonJS,
+			target: ts.ScriptTarget.ES2022,
+			esModuleInterop: true,
 		},
-		Buffer,
-		Date,
-		Map,
-		Set,
-		Promise,
-		JSON,
-		console,
-	}, { filename: "SessionHistoryReader.ts" });
-	const output = ts.transpileModule(
-    readFileSync("src/main/pi/AgentManager.ts", "utf8"),
-    {
-      compilerOptions: {
-        module: ts.ModuleKind.CommonJS,
-        target: ts.ScriptTarget.ES2022,
-        esModuleInterop: true,
-      },
-      fileName: "AgentManager.ts",
-    },
-  ).outputText;
-  const module = { exports: {} };
-  class LatestByKeyEmitter {
-    constructor() {}
-    cancel() {}
-  }
-  vm.runInNewContext(output, {
-    module,
-    exports: module.exports,
-    require: (specifier) => {
-      // 停止身份缓存（72fe93da 起 AgentManager 依赖）：真实加载保持身份核对行为
-      if (specifier === "./stoppedMessageIdentity") return loadTsCommonJs("src/main/pi/stoppedMessageIdentity.ts");
-      if (specifier === "electron") {
-        return { app: { getName: () => "PiDeck" }, Notification: { isSupported: () => false } };
-      }
-      // 共享扩展 resolver（issue #181）：本测试不涉及扩展加载，透传空实现即可
-      if (specifier === "../extensions/piProcessExtensionResolvers") {
-        return {
-          createPiProcessExtensionResolvers: () => ({
-            resolveBuiltInExtensionPaths: () => [],
-            resolveEnabledExtensionPaths: () => null,
-          }),
-        };
-      }
-      // 技能白名单 resolver：本测试不涉及技能加载，透传空实现即可
-      if (specifier === "../skills/piProcessSkillResolvers") {
-        return {
-          createPiProcessSkillResolvers: () => ({
-            resolveEnabledSkillPaths: () => null,
-          }),
-        };
-      }
-      // 提示词模板白名单 resolver：本测试不涉及模板加载，透传空实现即可
-      if (specifier === "../prompts/piProcessPromptResolvers") {
-        return {
-          createPiProcessPromptResolvers: () => ({
-            resolveEnabledPromptPaths: () => null,
-          }),
-        };
-      }
-      if (specifier === "../../shared/ipc") return { ipcChannels: {} };
-      if (specifier === "./PiProcess") return { PiProcess: class {} };
-      if (specifier === "./bashResult") return { formatBashToolMessage: () => "" };
-      if (specifier === "./AgentMessageProjector") return messageProjectorModule;
-      if (specifier === "./historyMessages") return { mergeHistoryWithPreservedMessages: (messages) => messages };
-      if (specifier === "./agentSessionIdentity") {
-        return { buildAgentSessionKey: () => undefined };
-      }
-		if (specifier === "./SessionFileEditor") {
-			return { SessionFileEditor: class {} };
-		}
-		// 会话文件汇总纯函数：本测试不覆盖，空实现满足 AgentManager 依赖契约
-		if (specifier === "../../shared/fileChanges") return { collectLatestTurnFileChanges: () => [] };
-		if (specifier === "./SessionHistoryReader") return historyReaderModule.exports;
-      if (specifier === "./sessionEntryIds") {
-        return {
-          assertResendRootEntry: () => undefined,
-          findLastUserMessageLine: () => undefined,
-          takeActiveEntryId: (ids, index) => ({ entryId: ids?.[index], nextIndex: index + 1 }),
-        };
-      }
-      if (specifier === "./agentUtils") {
-        return {
-          stripAnsi: (text) => text,
-          pickNumber: (...values) => { for (const v of values) if (typeof v === "number") return v; },
-          clampPercent: (v) => v,
-          trimHistoryMessages: (msgs) => msgs,
-          stripToolResultForDelivery: (messages) => messages,
-          leadingSummaryCards: () => [],
-          cleanTitle: (t) => t,
-          inferTitleFromMessages: () => undefined,
-          isDefaultAgentTitle: () => false,
-        };
-      }
-      if (specifier === "./LatestByKeyEmitter") return { LatestByKeyEmitter };
-      if (specifier === "./thinkingLevels") {
-        return { parseAvailableThinkingLevelsResponse: (response) => response?.data?.levels };
-      }
-      if (specifier === "./compactRpc") {
-        return {
-          createCompactRpcRequest: (prompt) => prompt
-            ? { type: "compact", prompt, customInstructions: prompt }
-            : { type: "compact" },
-        };
-      }
-      // 上下文接管探测：本测试不涉及压缩归属，按「没有接管者」透传（退回原生 compact RPC）
-      if (specifier === "./compactionOwner") return noCompactionOwner;
-      if (specifier === "./streamGate") return streamGateModule.exports;
-      if (specifier === "./cacheHitStats") return cacheHitStatsModule;
-      if (specifier === "../../shared/toolRuntimeState") return { updateActiveToolCalls: () => undefined };
-      if (specifier === "../wsl/WslPaths") {
-        return { toWindowsHostPath: (path) => path, toWslLinuxPath: (path) => path };
-      }
-      // 25fd516 起 AgentManager 引入内置扩展参数拼接；本测试不涉及扩展加载，透传即可
-      if (specifier === "../extensions/builtInExtensions") {
-        return { appendBuiltInExtensionArgs: (args) => [...args] };
-      }
-      // 扩展白名单解析器（禁用功能）；本测试不涉及，返回 null（关闭白名单）
-      if (specifier === "../extensions/enabledExtensionResolver") {
-        return { resolveEnabledExtensionPaths: () => null };
-      }
-      // 并行提交给 AgentManager 新增的扩展启动回落纯函数：无依赖，就地编译注入
-      if (specifier === "./extensionStartupFallback") {
-        // 无依赖纯函数：就地编译注入（测试文件无独立 transpile，用 ts.transpileModule）
-        const fallbackModule = { exports: {} };
-        vm.runInNewContext(
-          ts.transpileModule(readFileSync("src/main/pi/extensionStartupFallback.ts", "utf8"), {
-            compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-            fileName: "extensionStartupFallback.ts",
-          }).outputText,
-          { module: fallbackModule, exports: fallbackModule.exports },
-          { filename: "extensionStartupFallback.ts" },
-        );
-        return fallbackModule.exports;
-      }
-      if (specifier === "./extensionError") {
-        // AgentManager 依赖的扩展错误原因格式化；本测试不涉及错误文案，透传字符串即可
-        return { formatExtensionErrorReason: (reason) => String(reason ?? "") };
-      }
-      // 工具推导纯函数：本测试不覆盖（另有 sessionAcpDelegateDerive.test.mjs），空实现满足依赖契约
-      if (specifier === "./derivedSubagents") {
-        return { mergeSubagentSources: (records) => records };
-      }
-      // rewind checkpoint 纯 git 模块：本测试不涉及，空桩满足依赖契约
-      if (specifier === "../rewind/index.ts") return {};
-      return resolveUnstubbedRequire(specifier);
-    },
-    Date,
-    Map,
-    Set,
-    Promise,
-	JSON,
-	Buffer,
-    Error,
-    setTimeout,
-    clearTimeout,
-    console,
-  }, { filename: "AgentManager.ts" });
-  return module.exports;
+		fileName: "AgentManager.ts",
+	}).outputText;
+	const module = { exports: {} };
+	class LatestByKeyEmitter {
+		constructor() {}
+		cancel() {}
+	}
+	vm.runInNewContext(
+		output,
+		{
+			module,
+			exports: module.exports,
+			require: (specifier) => {
+				// 停止身份缓存（72fe93da 起 AgentManager 依赖）：真实加载保持身份核对行为
+				if (specifier === "./stoppedMessageIdentity") return loadTsCommonJs("src/main/pi/stoppedMessageIdentity.ts");
+				if (specifier === "electron") {
+					return { app: { getName: () => "PiDeck" }, Notification: { isSupported: () => false } };
+				}
+				// 共享扩展 resolver（issue #181）：本测试不涉及扩展加载，透传空实现即可
+				if (specifier === "../extensions/piProcessExtensionResolvers") {
+					return {
+						createPiProcessExtensionResolvers: () => ({
+							resolveBuiltInExtensionPaths: () => [],
+							resolveEnabledExtensionPaths: () => null,
+						}),
+					};
+				}
+				// 技能白名单 resolver：本测试不涉及技能加载，透传空实现即可
+				if (specifier === "../skills/piProcessSkillResolvers") {
+					return {
+						createPiProcessSkillResolvers: () => ({
+							resolveEnabledSkillPaths: () => null,
+						}),
+					};
+				}
+				// 提示词模板白名单 resolver：本测试不涉及模板加载，透传空实现即可
+				if (specifier === "../prompts/piProcessPromptResolvers") {
+					return {
+						createPiProcessPromptResolvers: () => ({
+							resolveEnabledPromptPaths: () => null,
+						}),
+					};
+				}
+				if (specifier === "../../shared/ipc") return { ipcChannels: {} };
+				if (specifier === "./PiProcess") return { PiProcess: class {} };
+				if (specifier === "./bashResult") return { formatBashToolMessage: () => "" };
+				if (specifier === "./AgentMessageProjector") return messageProjectorModule;
+				if (specifier === "./historyMessages") return { mergeHistoryWithPreservedMessages: (messages) => messages };
+				if (specifier === "./agentSessionIdentity") {
+					return { buildAgentSessionKey: () => undefined };
+				}
+				if (specifier === "./SessionFileEditor") {
+					return { SessionFileEditor: class {} };
+				}
+				// 会话文件汇总纯函数：本测试不覆盖，空实现满足 AgentManager 依赖契约
+				if (specifier === "../../shared/fileChanges") return { collectLatestTurnFileChanges: () => [] };
+				if (specifier === "./SessionHistoryReader") return historyReaderModule.exports;
+				if (specifier === "./sessionEntryIds") {
+					return {
+						assertResendRootEntry: () => undefined,
+						findLastUserMessageLine: () => undefined,
+						takeActiveEntryId: (ids, index) => ({ entryId: ids?.[index], nextIndex: index + 1 }),
+					};
+				}
+				if (specifier === "./agentUtils") {
+					return {
+						stripAnsi: (text) => text,
+						pickNumber: (...values) => {
+							for (const v of values) if (typeof v === "number") return v;
+						},
+						clampPercent: (v) => v,
+						trimHistoryMessages: (msgs) => msgs,
+						stripToolResultForDelivery: (messages) => messages,
+						leadingSummaryCards: () => [],
+						cleanTitle: (t) => t,
+						inferTitleFromMessages: () => undefined,
+						isDefaultAgentTitle: () => false,
+					};
+				}
+				if (specifier === "./LatestByKeyEmitter") return { LatestByKeyEmitter };
+				if (specifier === "./thinkingLevels") {
+					return { parseAvailableThinkingLevelsResponse: (response) => response?.data?.levels };
+				}
+				if (specifier === "./compactRpc") {
+					return {
+						createCompactRpcRequest: (prompt) => (prompt ? { type: "compact", prompt, customInstructions: prompt } : { type: "compact" }),
+					};
+				}
+				// 上下文接管探测：本测试不涉及压缩归属，按「没有接管者」透传（退回原生 compact RPC）
+				if (specifier === "./compactionOwner") return noCompactionOwner;
+				if (specifier === "./streamGate") return streamGateModule.exports;
+				if (specifier === "./cacheHitStats") return cacheHitStatsModule;
+				if (specifier === "../../shared/toolRuntimeState") return { updateActiveToolCalls: () => undefined };
+				if (specifier === "../wsl/WslPaths") {
+					return { toWindowsHostPath: (path) => path, toWslLinuxPath: (path) => path };
+				}
+				// 25fd516 起 AgentManager 引入内置扩展参数拼接；本测试不涉及扩展加载，透传即可
+				if (specifier === "../extensions/builtInExtensions") {
+					return { appendBuiltInExtensionArgs: (args) => [...args] };
+				}
+				// 扩展白名单解析器（禁用功能）；本测试不涉及，返回 null（关闭白名单）
+				if (specifier === "../extensions/enabledExtensionResolver") {
+					return { resolveEnabledExtensionPaths: () => null };
+				}
+				// 并行提交给 AgentManager 新增的扩展启动回落纯函数：无依赖，就地编译注入
+				if (specifier === "./extensionStartupFallback") {
+					// 无依赖纯函数：就地编译注入（测试文件无独立 transpile，用 ts.transpileModule）
+					const fallbackModule = { exports: {} };
+					vm.runInNewContext(
+						ts.transpileModule(readFileSync("src/main/pi/extensionStartupFallback.ts", "utf8"), {
+							compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+							fileName: "extensionStartupFallback.ts",
+						}).outputText,
+						{ module: fallbackModule, exports: fallbackModule.exports },
+						{ filename: "extensionStartupFallback.ts" },
+					);
+					return fallbackModule.exports;
+				}
+				if (specifier === "./extensionError") {
+					// AgentManager 依赖的扩展错误原因格式化；本测试不涉及错误文案，透传字符串即可
+					return { formatExtensionErrorReason: (reason) => String(reason ?? "") };
+				}
+				// 工具推导纯函数：本测试不覆盖（另有 sessionAcpDelegateDerive.test.mjs），空实现满足依赖契约
+				if (specifier === "./derivedSubagents") {
+					return { mergeSubagentSources: (records) => records };
+				}
+				// rewind checkpoint 纯 git 模块：本测试不涉及，空桩满足依赖契约
+				if (specifier === "../rewind/index.ts") return {};
+				return resolveUnstubbedRequire(specifier);
+			},
+			Date,
+			Map,
+			Set,
+			Promise,
+			JSON,
+			Buffer,
+			Error,
+			setTimeout,
+			clearTimeout,
+			console,
+		},
+		{ filename: "AgentManager.ts" },
+	);
+	return module.exports;
 }
 
 test("history conversion preserves an assistant turn that contains only thinking", () => {
-  const { AgentManager } = loadAgentManagerModule();
-  const manager = new AgentManager(
-    () => undefined,
-    () => null,
-    { get: () => ({}) },
-    {},
-  );
+	const { AgentManager } = loadAgentManagerModule();
+	const manager = new AgentManager(
+		() => undefined,
+		() => null,
+		{ get: () => ({}) },
+		{},
+	);
 
-  const messages = manager.convertAgentMessages("agent-1", [{
-    role: "assistant",
-    content: [{ type: "thinking", thinking: "reason through the tool result" }],
-    timestamp: 1,
-  }], ["entry-1"]);
+	const messages = manager.convertAgentMessages(
+		"agent-1",
+		[
+			{
+				role: "assistant",
+				content: [{ type: "thinking", thinking: "reason through the tool result" }],
+				timestamp: 1,
+			},
+		],
+		["entry-1"],
+	);
 
-  assert.equal(messages.length, 1);
-  assert.equal(messages[0].role, "assistant");
-  assert.equal(messages[0].text, "");
-  assert.equal(messages[0].thinking, "reason through the tool result");
-  assert.equal(messages[0].meta.entryId, "entry-1");
+	assert.equal(messages.length, 1);
+	assert.equal(messages[0].role, "assistant");
+	assert.equal(messages[0].text, "");
+	assert.equal(messages[0].thinking, "reason through the tool result");
+	assert.equal(messages[0].meta.entryId, "entry-1");
 });
 
 test("offline Session Viewer preserves the full active branch for renderer pagination", async () => {
-  const { AgentManager } = loadAgentManagerModule();
-  const manager = new AgentManager(
-    () => undefined,
-    () => null,
-    { get: () => ({}) },
-    {},
-  );
-  const lines = [JSON.stringify({ id: "session", type: "session" })];
-  let parentId = "session";
-  for (let index = 0; index < 100; index += 1) {
-    const id = `message-${index}`;
-    lines.push(JSON.stringify({
-      id,
-      parentId,
-      type: "message",
-      timestamp: "2026-01-01T00:00:00.000Z",
-      message: {
-        role: index % 2 === 0 ? "user" : "assistant",
-        content: [{ type: "text", text: `fixture message ${index}` }],
-      },
-    }));
-    parentId = id;
-  }
+	const { AgentManager } = loadAgentManagerModule();
+	const manager = new AgentManager(
+		() => undefined,
+		() => null,
+		{ get: () => ({}) },
+		{},
+	);
+	const lines = [JSON.stringify({ id: "session", type: "session" })];
+	let parentId = "session";
+	for (let index = 0; index < 100; index += 1) {
+		const id = `message-${index}`;
+		lines.push(
+			JSON.stringify({
+				id,
+				parentId,
+				type: "message",
+				timestamp: "2026-01-01T00:00:00.000Z",
+				message: {
+					role: index % 2 === 0 ? "user" : "assistant",
+					content: [{ type: "text", text: `fixture message ${index}` }],
+				},
+			}),
+		);
+		parentId = id;
+	}
 
-  const messages = await manager.readSessionDisplayMessages(
-    "C:/fixtures/messages-100.jsonl",
-    "viewer",
-    `${lines.join("\n")}\n`,
-  );
+	const messages = await manager.readSessionDisplayMessages("C:/fixtures/messages-100.jsonl", "viewer", `${lines.join("\n")}\n`);
 
-  assert.equal(messages.length, 100);
-  assert.equal(messages[0].text, "fixture message 0");
+	assert.equal(messages.length, 100);
+	assert.equal(messages[0].text, "fixture message 0");
 	assert.equal(messages.at(-1).text, "fixture message 99");
 });
 
@@ -399,16 +403,18 @@ test("offline Session Viewer reads complete historical turns only", async () => 
 	let parentId = "session";
 	for (let index = 0; index < 150; index += 1) {
 		const id = `message-${index}`;
-		lines.push(JSON.stringify({
-			id,
-			parentId,
-			type: "message",
-			timestamp: "2026-01-01T00:00:00.000Z",
-			message: {
-				role: index % 2 === 0 ? "user" : "assistant",
-				content: [{ type: "text", text: `fixture message ${index}` }],
-			},
-		}));
+		lines.push(
+			JSON.stringify({
+				id,
+				parentId,
+				type: "message",
+				timestamp: "2026-01-01T00:00:00.000Z",
+				message: {
+					role: index % 2 === 0 ? "user" : "assistant",
+					content: [{ type: "text", text: `fixture message ${index}` }],
+				},
+			}),
+		);
 		parentId = id;
 	}
 	try {
@@ -431,27 +437,36 @@ test("offline Session Viewer reads complete historical turns only", async () => 
 
 test("offline Session Viewer keeps whole turns under the unified turn protocol", async () => {
 	const { AgentManager } = loadAgentManagerModule();
-	const manager = new AgentManager(() => undefined, () => null, { get: () => ({}) }, {});
+	const manager = new AgentManager(
+		() => undefined,
+		() => null,
+		{ get: () => ({}) },
+		{},
+	);
 	const directory = await mkdtemp(join(tmpdir(), "pideck-history-page-turns-"));
 	const sessionPath = join(directory, "large-text.jsonl");
 	const lines = [JSON.stringify({ id: "session", type: "session" })];
 	let parentId = "session";
 	for (let index = 0; index < 10; index += 1) {
 		const userId = `user-${index}`;
-		lines.push(JSON.stringify({
-			id: userId,
-			parentId,
-			type: "message",
-			message: { role: "user", content: [{ type: "text", text: "x" }] },
-		}));
+		lines.push(
+			JSON.stringify({
+				id: userId,
+				parentId,
+				type: "message",
+				message: { role: "user", content: [{ type: "text", text: "x" }] },
+			}),
+		);
 		parentId = userId;
 		const assistantId = `assistant-${index}`;
-		lines.push(JSON.stringify({
-			id: assistantId,
-			parentId,
-			type: "message",
-			message: { role: "assistant", content: [{ type: "text", text: "x".repeat(100_000) }] },
-		}));
+		lines.push(
+			JSON.stringify({
+				id: assistantId,
+				parentId,
+				type: "message",
+				message: { role: "assistant", content: [{ type: "text", text: "x".repeat(100_000) }] },
+			}),
+		);
 		parentId = assistantId;
 	}
 	try {

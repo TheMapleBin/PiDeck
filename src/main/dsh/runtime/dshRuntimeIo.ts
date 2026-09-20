@@ -51,10 +51,7 @@ const execFileAsync = promisify(execFile);
  * 任一条目越界就整体回退 npm tar 逐条过滤，保持与旧实现相同的安全语义），系统 tar
  * 不可用或执行失败也回退 npm tar。
  */
-export function createTarExtractor(
-	log?: (scope: string, message: string, detail?: unknown) => void,
-	reject?: (path: string) => boolean,
-): DshRuntimeExtractor {
+export function createTarExtractor(log?: (scope: string, message: string, detail?: unknown) => void, reject?: (path: string) => boolean): DshRuntimeExtractor {
 	return async (archivePath, destDir) => {
 		mkdirSync(destDir, { recursive: true });
 		const systemTar = resolveSystemTar();
@@ -88,13 +85,7 @@ export function createTarExtractor(
 /** 系统 tar 两遍式解压：先全量列条目做安全校验（任一越界即抛错回退），再解压。
  *  `-tf` / `-xf archive -C dir` 在 bsdtar（Windows、macOS）与 GNU tar（Linux）上语义一致。
  */
-async function extractWithSystemTar(
-	tarBin: string,
-	archivePath: string,
-	destDir: string,
-	log: ((scope: string, message: string, detail?: unknown) => void) | undefined,
-	reject: ((path: string) => boolean) | undefined,
-): Promise<void> {
+async function extractWithSystemTar(tarBin: string, archivePath: string, destDir: string, log: ((scope: string, message: string, detail?: unknown) => void) | undefined, reject: ((path: string) => boolean) | undefined): Promise<void> {
 	// -tf 只是流式读归档头部目录（4.4 万条目实测 ~1s），不解落磁盘。
 	const { stdout } = await execFileAsync(tarBin, ["-tf", archivePath], {
 		windowsHide: true,
@@ -117,9 +108,7 @@ async function extractWithSystemTar(
  * 与 app update 不同源的地方：runtime 归档较大（数十 MB），这里按 chunk 落盘
  * 而不是整份进内存，避免峰值内存翻倍。
  */
-export function createNetDownloader(
-	log?: (scope: string, message: string, detail?: unknown) => void,
-): DshRuntimeDownloader {
+export function createNetDownloader(log?: (scope: string, message: string, detail?: unknown) => void): DshRuntimeDownloader {
 	return async (url, destPath, onProgress, signal) => {
 		// file:// / 本地路径：直接复制，不走 net（Electron net 不发 file 请求）。
 		const localPath = localPathFromUrl(url);
@@ -167,12 +156,7 @@ function localPathFromUrl(url: string): string | undefined {
  * 失败一律返回 null 而不是抛错：索引拉不到是「暂时装不上」，不该让 IPC 抛到渲染层
  * 变成未捕获异常。
  */
-function fetchJsonIndex<T>(
-	url: string,
-	scope: string,
-	validate: (parsed: T) => boolean,
-	log?: (scope: string, message: string, detail?: unknown) => void,
-): Promise<T | null> {
+function fetchJsonIndex<T>(url: string, scope: string, validate: (parsed: T) => boolean, log?: (scope: string, message: string, detail?: unknown) => void): Promise<T | null> {
 	const localPath = localPathFromUrl(url);
 	if (localPath) {
 		return Promise.resolve(
@@ -222,28 +206,12 @@ function fetchJsonIndex<T>(
 	});
 }
 
-export function fetchDshRuntimeIndex(
-	url: string,
-	log?: (scope: string, message: string, detail?: unknown) => void,
-): Promise<DshRuntimeReleaseIndex | null> {
-	return fetchJsonIndex<DshRuntimeReleaseIndex>(
-		url,
-		"dsh-runtime",
-		(parsed) => Array.isArray(parsed?.releases),
-		log,
-	);
+export function fetchDshRuntimeIndex(url: string, log?: (scope: string, message: string, detail?: unknown) => void): Promise<DshRuntimeReleaseIndex | null> {
+	return fetchJsonIndex<DshRuntimeReleaseIndex>(url, "dsh-runtime", (parsed) => Array.isArray(parsed?.releases), log);
 }
 
-export function fetchDshRunnerNodeIndex(
-	url: string,
-	log?: (scope: string, message: string, detail?: unknown) => void,
-): Promise<DshRunnerNodeReleaseIndex | null> {
-	return fetchJsonIndex<DshRunnerNodeReleaseIndex>(
-		url,
-		"dsh-runner-node",
-		(parsed) => Array.isArray(parsed?.releases),
-		log,
-	);
+export function fetchDshRunnerNodeIndex(url: string, log?: (scope: string, message: string, detail?: unknown) => void): Promise<DshRunnerNodeReleaseIndex | null> {
+	return fetchJsonIndex<DshRunnerNodeReleaseIndex>(url, "dsh-runner-node", (parsed) => Array.isArray(parsed?.releases), log);
 }
 
 type RequestOutcome = { kind: "done" } | { kind: "redirect"; location: string };
@@ -258,13 +226,7 @@ function discardResponse(response: Electron.IncomingMessage): void {
 	});
 }
 
-function requestOnce(
-	url: string,
-	destPath: string,
-	onProgress: ((received: number, total?: number) => void) | undefined,
-	signal: AbortSignal | undefined,
-	log: ((scope: string, message: string, detail?: unknown) => void) | undefined,
-): Promise<RequestOutcome> {
+function requestOnce(url: string, destPath: string, onProgress: ((received: number, total?: number) => void) | undefined, signal: AbortSignal | undefined, log: ((scope: string, message: string, detail?: unknown) => void) | undefined): Promise<RequestOutcome> {
 	return new Promise<RequestOutcome>((resolvePromise, rejectPromise) => {
 		const request = net.request(url);
 		const settle = (outcome: RequestOutcome) => {
@@ -292,9 +254,7 @@ function requestOnce(
 				return;
 			}
 			const totalHeader = response.headers["content-length"];
-			const total = Array.isArray(totalHeader)
-				? Number.parseInt(totalHeader[0] ?? "", 10)
-				: Number.parseInt(String(totalHeader ?? ""), 10);
+			const total = Array.isArray(totalHeader) ? Number.parseInt(totalHeader[0] ?? "", 10) : Number.parseInt(String(totalHeader ?? ""), 10);
 			const totalBytes = Number.isFinite(total) ? total : undefined;
 
 			let received = 0;

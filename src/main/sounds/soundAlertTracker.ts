@@ -10,13 +10,7 @@
  */
 import type { AgentStatus } from "../../shared/types/agent";
 import type { AgentUiRequest } from "../../shared/types/agent";
-import {
-	DEFAULT_SOUND_BY_KIND,
-	parseSoundAlertRef,
-	type SoundAlertKind,
-	type SoundAlertPlayEvent,
-	type SoundAlertSettings,
-} from "../../shared/types/soundAlert";
+import { DEFAULT_SOUND_BY_KIND, parseSoundAlertRef, type SoundAlertKind, type SoundAlertPlayEvent, type SoundAlertSettings } from "../../shared/types/soundAlert";
 
 /** 触发提醒的交互方法白名单（与 PetStateBridge 的 WAITING_METHODS 一致）。 */
 const WAITING_METHODS = new Set(["select", "confirm", "input", "editor", "batch_ask"]);
@@ -71,11 +65,7 @@ function pruneAgent(state: SoundAlertTrackerState, agentId: string) {
  * 首帧只建基线不提醒（启动时已挂着的错误是历史状态，不是新事件）。
  * 同时清理已消失 Agent 的残留。
  */
-export function trackAgentTabs(
-	state: SoundAlertTrackerState,
-	tabs: ReadonlyArray<{ id: string; status: AgentStatus; title: string }>,
-	now: number,
-): SoundAlertEvent[] {
+export function trackAgentTabs(state: SoundAlertTrackerState, tabs: ReadonlyArray<{ id: string; status: AgentStatus; title: string }>, now: number): SoundAlertEvent[] {
 	const events: SoundAlertEvent[] = [];
 	const live = new Set<string>();
 	for (const tab of tabs) {
@@ -106,12 +96,7 @@ export function trackAgentTabs(
  * 带 8 秒 per-Agent 冷却（settled 与兜底可能双触发）；同一时刻多个 Agent
  * 完成时全局 1.5 秒冷却只放行最近一次（避免叠音）。
  */
-export function trackAgentSettled(
-	state: SoundAlertTrackerState,
-	agentId: string,
-	title: string,
-	now: number,
-): SoundAlertEvent | null {
+export function trackAgentSettled(state: SoundAlertTrackerState, agentId: string, title: string, now: number): SoundAlertEvent | null {
 	const cooldownUntil = state.doneCooldownUntil.get(agentId) ?? 0;
 	if (now < cooldownUntil) return null;
 	// lastPlayedAt=0 表示从未播放：首事件不受全局冷却影响（测试/首次触发用小数时间戳也成立）
@@ -128,11 +113,7 @@ export function trackAgentSettled(
  * 只对阻塞式交互方法（select/confirm/input/editor/batch_ask）计数；
  * 同一 Agent 的一批 pending 只提醒一次，全部清空后重置，下次新批再提醒。
  */
-export function trackUiRequest(
-	state: SoundAlertTrackerState,
-	payload: AgentUiRequest,
-	now: number,
-): SoundAlertEvent | null {
+export function trackUiRequest(state: SoundAlertTrackerState, payload: AgentUiRequest, now: number): SoundAlertEvent | null {
 	const { agentId, requestId } = payload;
 	if (!agentId || !requestId) return null;
 	if (payload.completed === true) {
@@ -167,11 +148,7 @@ export function clampSoundVolume(value: number): number {
  * - 音效引用非法/为空 → 回落到该事件的默认预设（保证「开了就一定能响」）；
  * - 返回音量已钳制的 SoundAlertPlayEvent，渲染层直接播放。
  */
-export function resolveSoundPlayback(
-	kind: SoundAlertKind,
-	title: string,
-	settings: SoundAlertSettings | undefined,
-): SoundAlertPlayEvent | null {
+export function resolveSoundPlayback(kind: SoundAlertKind, title: string, settings: SoundAlertSettings | undefined): SoundAlertPlayEvent | null {
 	if (!settings || !settings.enabled) return null;
 	const eventConfig = settings[kind];
 	if (!eventConfig || !eventConfig.enabled) return null;

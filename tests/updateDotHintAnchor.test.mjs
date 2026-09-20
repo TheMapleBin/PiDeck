@@ -11,14 +11,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-const hint = readFileSync(
-	"src/renderer/src/components/sidebar/UpdateDotHint.tsx",
-	"utf8",
-);
-const sidebar = readFileSync(
-	"src/renderer/src/components/sidebar/SidebarContent.tsx",
-	"utf8",
-);
+const hint = readFileSync("src/renderer/src/components/sidebar/UpdateDotHint.tsx", "utf8");
+const sidebar = readFileSync("src/renderer/src/components/sidebar/SidebarContent.tsx", "utf8");
 
 test("气泡锚定 dock 行左缘并铺满行宽（不溢出窗口左缘）", () => {
 	// 左缘锚定 + 撑满 dock 行宽度；固定 224px 宽度或右对齐设置按钮都曾导致左溢。
@@ -35,10 +29,7 @@ test("箭头指向设置按钮（气泡内左侧定位），不随气泡宽度�
 
 test("气泡挂在带 relative 的 dock 行容器，不再寄生在 32px 的 DockItem 内", () => {
 	// 行容器提供相对定位锚点（气泡 bottom-full 相对整行而非单个按钮）。
-	assert.match(
-		sidebar,
-		/relative flex shrink-0 items-center px-2 pb-2 pt-1/,
-	);
+	assert.match(sidebar, /relative flex shrink-0 items-center px-2 pb-2 pt-1/);
 	// UpdateDotHint 直接挂在行容器、Dock 之前。
 	assert.match(sidebar, /<UpdateDotHint[\s\S]*?\/>\s*<Dock size=\{32\}/);
 	// DockItem 内不再渲染气泡。

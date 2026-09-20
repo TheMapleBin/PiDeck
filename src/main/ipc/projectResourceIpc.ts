@@ -1,9 +1,6 @@
 import { ipcMain, shell } from "electron";
 import { ipcChannels } from "../../shared/ipc";
-import type {
-	ProjectInheritedResourceToggleInput,
-	ProjectResourceDirectoryKind,
-} from "../../shared/types";
+import type { ProjectInheritedResourceToggleInput, ProjectResourceDirectoryKind } from "../../shared/types";
 import type { AppLogger } from "../logging/AppLogger";
 import type { ProjectResourceManager } from "../projects/ProjectResourceManager";
 
@@ -21,37 +18,26 @@ function isInheritedToggleInput(value: unknown): value is ProjectInheritedResour
 	if (!("projectId" in value) || !("kind" in value) || !("key" in value) || !("enabled" in value)) {
 		return false;
 	}
-	return (
-		nonEmptyString(value.projectId, 256) &&
-		(value.kind === "extension" || value.kind === "skill" || value.kind === "prompt") &&
-		nonEmptyString(value.key, 1024) &&
-		typeof value.enabled === "boolean"
-	);
+	return nonEmptyString(value.projectId, 256) && (value.kind === "extension" || value.kind === "skill" || value.kind === "prompt") && nonEmptyString(value.key, 1024) && typeof value.enabled === "boolean";
 }
 
 function isProjectResourceDirectoryKind(value: unknown): value is ProjectResourceDirectoryKind {
 	return value === "project-pi" || value === "project-agents" || value === "prompts";
 }
 
-export function registerProjectResourceIpc({
-	appLogger,
-	projectResourceManager,
-}: ProjectResourceIpcDeps): void {
+export function registerProjectResourceIpc({ appLogger, projectResourceManager }: ProjectResourceIpcDeps): void {
 	ipcMain.handle(ipcChannels.projectResourcesList, async (_event, projectId: unknown) => {
 		if (!nonEmptyString(projectId, 256)) throw new Error("Invalid project id.");
 		return projectResourceManager.list(projectId.trim());
 	});
-	ipcMain.handle(
-		ipcChannels.projectResourcesOpenDirectory,
-		async (_event, projectId: unknown, kind: unknown) => {
-			if (!nonEmptyString(projectId, 256) || !isProjectResourceDirectoryKind(kind)) {
-				throw new Error("Invalid project resource directory input.");
-			}
-			const directory = await projectResourceManager.ensureResourceDirectory(projectId.trim(), kind);
-			const error = await shell.openPath(directory);
-			if (error) throw new Error(error);
-		},
-	);
+	ipcMain.handle(ipcChannels.projectResourcesOpenDirectory, async (_event, projectId: unknown, kind: unknown) => {
+		if (!nonEmptyString(projectId, 256) || !isProjectResourceDirectoryKind(kind)) {
+			throw new Error("Invalid project resource directory input.");
+		}
+		const directory = await projectResourceManager.ensureResourceDirectory(projectId.trim(), kind);
+		const error = await shell.openPath(directory);
+		if (error) throw new Error(error);
+	});
 	ipcMain.handle(ipcChannels.projectResourcesDeleteSkill, async (_event, projectId: unknown, skillPath: unknown) => {
 		if (!nonEmptyString(projectId, 256) || !nonEmptyString(skillPath)) throw new Error("Invalid project skill deletion input.");
 		// The manager resolves and rechecks project ownership before deleting renderer-supplied paths.

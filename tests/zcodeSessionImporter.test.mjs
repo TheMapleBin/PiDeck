@@ -36,21 +36,15 @@ function createZcodeDb(dbPath, { projectPath }) {
 const T0 = 1787928060000; // 固定起始时间戳（ms），保证时间断言可复现
 
 function insertSession(db, { id, directory, title, createdAt = T0, updatedAt = T0 + 1000 }) {
-	db.prepare(
-		"insert into session (id, project_id, directory, title, time_created, time_updated) values (?, ?, ?, ?, ?, ?)",
-	).run(id, "proj", directory, title, createdAt, updatedAt);
+	db.prepare("insert into session (id, project_id, directory, title, time_created, time_updated) values (?, ?, ?, ?, ?, ?)").run(id, "proj", directory, title, createdAt, updatedAt);
 }
 
 function insertMessage(db, { id, sessionId, sequence, created = T0, data }) {
-	db.prepare(
-		"insert into message (id, session_id, sequence, time_created, time_updated, data) values (?, ?, ?, ?, ?, ?)",
-	).run(id, sessionId, sequence, created, created, JSON.stringify(data));
+	db.prepare("insert into message (id, session_id, sequence, time_created, time_updated, data) values (?, ?, ?, ?, ?, ?)").run(id, sessionId, sequence, created, created, JSON.stringify(data));
 }
 
 function insertPart(db, { id, messageId, sessionId, sequence, created = T0, data }) {
-	db.prepare(
-		"insert into part (id, message_id, session_id, sequence, time_created, time_updated, data) values (?, ?, ?, ?, ?, ?, ?)",
-	).run(id, messageId, sessionId, sequence, created, created, JSON.stringify(data));
+	db.prepare("insert into part (id, message_id, session_id, sequence, time_created, time_updated, data) values (?, ?, ?, ?, ?, ?, ?)").run(id, messageId, sessionId, sequence, created, created, JSON.stringify(data));
 }
 
 /** 构造一个含 user/assistant/工具/步骤噪声/系统事件的典型会话。 */
@@ -69,7 +63,10 @@ function seedTypicalSession(db, sessionId, projectPath) {
 		data: { role: "user", time: { created: T0 } },
 	});
 	insertPart(db, {
-		id: "p_user_text", messageId: "m_user", sessionId, sequence: 0,
+		id: "p_user_text",
+		messageId: "m_user",
+		sessionId,
+		sequence: 0,
 		data: { type: "text", text: "帮我优化工具栏按钮", time: { start: T0, end: T0 } },
 	});
 
@@ -89,15 +86,24 @@ function seedTypicalSession(db, sessionId, projectPath) {
 		},
 	});
 	insertPart(db, {
-		id: "p_asst_think", messageId: "m_asst", sessionId, sequence: 0,
+		id: "p_asst_think",
+		messageId: "m_asst",
+		sessionId,
+		sequence: 0,
 		data: { type: "reasoning", text: "先看工具栏代码", metadata: { anthropic: { signature: "sig1" } }, time: { start: T0 + 100, end: T0 + 150 } },
 	});
 	insertPart(db, {
-		id: "p_asst_text", messageId: "m_asst", sessionId, sequence: 1,
+		id: "p_asst_text",
+		messageId: "m_asst",
+		sessionId,
+		sequence: 1,
 		data: { type: "text", text: "我来看看", time: { start: T0 + 150, end: T0 + 160 } },
 	});
 	insertPart(db, {
-		id: "p_asst_tool", messageId: "m_asst", sessionId, sequence: 2,
+		id: "p_asst_tool",
+		messageId: "m_asst",
+		sessionId,
+		sequence: 2,
 		data: {
 			type: "tool",
 			callID: "call_abc123",
@@ -106,11 +112,17 @@ function seedTypicalSession(db, sessionId, projectPath) {
 		},
 	});
 	insertPart(db, {
-		id: "p_asst_step1", messageId: "m_asst", sessionId, sequence: 3,
+		id: "p_asst_step1",
+		messageId: "m_asst",
+		sessionId,
+		sequence: 3,
 		data: { type: "step-start" },
 	});
 	insertPart(db, {
-		id: "p_asst_step2", messageId: "m_asst", sessionId, sequence: 4,
+		id: "p_asst_step2",
+		messageId: "m_asst",
+		sessionId,
+		sequence: 4,
 		data: { type: "step-finish" },
 	});
 
@@ -123,7 +135,10 @@ function seedTypicalSession(db, sessionId, projectPath) {
 		data: { role: "assistant", semantics: { origin: "system", kind: "timeline_event" } },
 	});
 	insertPart(db, {
-		id: "p_system_tl", messageId: "m_system", sessionId, sequence: 0,
+		id: "p_system_tl",
+		messageId: "m_system",
+		sessionId,
+		sequence: 0,
 		data: { type: "timeline", timelineType: "model_change" },
 	});
 
@@ -136,7 +151,10 @@ function seedTypicalSession(db, sessionId, projectPath) {
 		data: { role: "user", semantics: { origin: "agent_runtime", kind: "todo_reminder" } },
 	});
 	insertPart(db, {
-		id: "p_todo_text", messageId: "m_todo", sessionId, sequence: 0,
+		id: "p_todo_text",
+		messageId: "m_todo",
+		sessionId,
+		sequence: 0,
 		data: { type: "text", text: "The TodoWrite tool hasn't been used recently. If you're working on tasks..." },
 	});
 	insertMessage(db, {
@@ -147,7 +165,10 @@ function seedTypicalSession(db, sessionId, projectPath) {
 		data: { role: "user", semantics: { origin: "agent_runtime", kind: "background_notification" } },
 	});
 	insertPart(db, {
-		id: "p_bg_text", messageId: "m_bg", sessionId, sequence: 0,
+		id: "p_bg_text",
+		messageId: "m_bg",
+		sessionId,
+		sequence: 0,
 		data: { type: "text", text: "Background task completed." },
 	});
 
@@ -160,7 +181,10 @@ function seedTypicalSession(db, sessionId, projectPath) {
 		data: { role: "assistant", time: { created: T0 + 400, completed: T0 + 500 }, finish: "stop", tokens: { total: 5, input: 5, output: 0, cache: { read: 0, write: 0 } } },
 	});
 	insertPart(db, {
-		id: "p_asst2_tool", messageId: "m_asst2", sessionId, sequence: 0,
+		id: "p_asst2_tool",
+		messageId: "m_asst2",
+		sessionId,
+		sequence: 0,
 		data: { type: "tool", callID: "call_err", tool: "Read", state: { status: "error", input: { path: "nope.txt" }, output: "file not found" } },
 	});
 }
@@ -257,14 +281,15 @@ test("zcode import: 生成可被 pi 读取的 JSONL（消息/工具/图片/标�
 		seedTypicalSession(db, "sess_1", projectPath);
 		// 图片附件：user 消息补一个 file part + artifact 文件（data URL）
 		insertPart(db, {
-			id: "p_user_img", messageId: "m_user", sessionId: "sess_1", sequence: 1, created: T0 + 1,
+			id: "p_user_img",
+			messageId: "m_user",
+			sessionId: "sess_1",
+			sequence: 1,
+			created: T0 + 1,
 			data: { type: "file", mime: "image/png", url: "zcode-artifact://sess_1/tool-result-aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee" },
 		});
 		db.close();
-		writeFileSync(
-			join(artifactsDir, "prompt-attachment-upload-xxx-tool-result-aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.txt"),
-			"data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==",
-		);
+		writeFileSync(join(artifactsDir, "prompt-attachment-upload-xxx-tool-result-aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.txt"), "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==");
 
 		const { ZCodeSessionImporter } = loadImporter(home);
 		const importer = new ZCodeSessionImporter();
@@ -279,15 +304,12 @@ test("zcode import: 生成可被 pi 读取的 JSONL（消息/工具/图片/标�
 		// 侧栏列表时间取文件 mtime：导入后必须回调为会话真实最后时间（session.time_updated），
 		// 否则所有导入会话显示为「刚刚」并排序置顶（时间失真）。
 		const fileMtime = statSync(targetPath).mtimeMs;
-		assert.ok(
-			Math.abs(fileMtime - (T0 + 1000)) < 2000,
-			`产物 mtime 应回调为会话最后时间 T0+1000，实际 ${fileMtime}`,
-		);
-		assert.ok(
-			Math.abs(fileMtime - Date.now()) > 60_000,
-			"产物 mtime 不应停留在导入时刻（当前时间）",
-		);
-		const lines = readFileSync(targetPath, "utf8").split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line));
+		assert.ok(Math.abs(fileMtime - (T0 + 1000)) < 2000, `产物 mtime 应回调为会话最后时间 T0+1000，实际 ${fileMtime}`);
+		assert.ok(Math.abs(fileMtime - Date.now()) > 60_000, "产物 mtime 不应停留在导入时刻（当前时间）");
+		const lines = readFileSync(targetPath, "utf8")
+			.split(/\r?\n/)
+			.filter(Boolean)
+			.map((line) => JSON.parse(line));
 
 		// 头部契约：session 头 + zcode_import 标记 + model_change + session_info 尾行
 		assert.equal(lines[0].type, "session");
@@ -387,8 +409,7 @@ function loadZCodeScanner(homePath) {
 		stubs: {
 			electron: {
 				app: {
-					getPath: (name) =>
-						name === "userData" ? join(homePath, "user-data") : homePath,
+					getPath: (name) => (name === "userData" ? join(homePath, "user-data") : homePath),
 				},
 				shell: {},
 			},
@@ -400,7 +421,6 @@ function loadZCodeScanner(homePath) {
 	});
 	return load("src/main/sessions/SessionScanner.ts");
 }
-
 
 test("zcode import: 导入产物被 SessionScanner 识别为 zcode 来源（标签链路）", async () => {
 	const home = mkdtempSync(join(tmpdir(), "zcode-scanner-"));

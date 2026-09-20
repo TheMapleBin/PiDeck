@@ -26,11 +26,7 @@ function isSamePath(left: string, right: string): boolean {
 	return resolve(left) === resolve(right);
 }
 
-export function registerPasteFilesIpc({
-	projectStore,
-	settingsStore,
-	appLogger,
-}: PasteFilesIpcDeps): () => Promise<number> {
+export function registerPasteFilesIpc({ projectStore, settingsStore, appLogger }: PasteFilesIpcDeps): () => Promise<number> {
 	// 与 filesIpc 同一套 WSL 路径转换：WSL 会话的 projectPath 是 Linux 路径，
 	// 落盘必须转成当前发行版可挂载的主机 UNC；返回给渲染层/p做 @ 引用的仍是原路径。
 	const toWindowsPath = (path: string): string => {
@@ -50,9 +46,7 @@ export function registerPasteFilesIpc({
 	 */
 	const resolvePasteRoot = (projectPath: string): string => {
 		if (projectPath) {
-			const registered = projectStore.list().some(
-				(project) => isSamePath(project.path, projectPath),
-			);
+			const registered = projectStore.list().some((project) => isSamePath(project.path, projectPath));
 			if (!registered) {
 				throw new Error(`Invalid paste target: project path is not registered: ${projectPath}`);
 			}
@@ -61,10 +55,7 @@ export function registerPasteFilesIpc({
 	};
 
 	/** userData 新目录 + 各已登记项目遗留的 .pideck-paste（清理/删文件白名单）。 */
-	const listManagedPasteRoots = (): string[] => [
-		userPasteRoot(),
-		...projectStore.list().map((project) => join(project.path, PROJECT_PASTE_DIR)),
-	];
+	const listManagedPasteRoots = (): string[] => [userPasteRoot(), ...projectStore.list().map((project) => join(project.path, PROJECT_PASTE_DIR))];
 
 	/** 路径必须落在某个受管粘贴根内（防渲染层越权删除任意文件）。 */
 	const isInsideManagedPasteRoot = (path: string): boolean => {
@@ -97,37 +88,26 @@ export function registerPasteFilesIpc({
 	/** 粘贴文件命名：paste-YYYYMMDD-HHmmss-<rand>.md（时间戳可读、随机后缀防并发覆盖）。 */
 	const generatePasteFileName = (): string => {
 		const now = new Date();
-		const stamp = [
-			now.getFullYear(),
-			String(now.getMonth() + 1).padStart(2, "0"),
-			String(now.getDate()).padStart(2, "0"),
-			"-",
-			String(now.getHours()).padStart(2, "0"),
-			String(now.getMinutes()).padStart(2, "0"),
-			String(now.getSeconds()).padStart(2, "0"),
-		].join("");
+		const stamp = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, "0"), String(now.getDate()).padStart(2, "0"), "-", String(now.getHours()).padStart(2, "0"), String(now.getMinutes()).padStart(2, "0"), String(now.getSeconds()).padStart(2, "0")].join("");
 		return `paste-${stamp}-${randomUUID().slice(0, 4)}.md`;
 	};
 
-	ipcMain.handle(
-		ipcChannels.pasteFilesWrite,
-		async (_event, input: PasteFileWriteInput): Promise<PasteFileWriteResult> => {
-			if (!input || typeof input.content !== "string") {
-				throw new Error("Invalid paste-file input");
-			}
-			const root = resolvePasteRoot(input.projectPath ?? "");
-			await mkdir(toWindowsPath(root), { recursive: true });
-			const fileName = generatePasteFileName();
-			const path = join(root, fileName);
-			await writeFile(toWindowsPath(path), input.content, "utf8");
-			void appLogger.info("paste-file", "Pasted text written to file", {
-				path,
-				bytes: Buffer.byteLength(input.content, "utf8"),
-			});
-			// 新写入一律在 userData，pi 工作区读不到，发送必须内联原文（inProject=false）。
-			return { path, fileName, bytes: Buffer.byteLength(input.content, "utf8"), inProject: false };
-		},
-	);
+	ipcMain.handle(ipcChannels.pasteFilesWrite, async (_event, input: PasteFileWriteInput): Promise<PasteFileWriteResult> => {
+		if (!input || typeof input.content !== "string") {
+			throw new Error("Invalid paste-file input");
+		}
+		const root = resolvePasteRoot(input.projectPath ?? "");
+		await mkdir(toWindowsPath(root), { recursive: true });
+		const fileName = generatePasteFileName();
+		const path = join(root, fileName);
+		await writeFile(toWindowsPath(path), input.content, "utf8");
+		void appLogger.info("paste-file", "Pasted text written to file", {
+			path,
+			bytes: Buffer.byteLength(input.content, "utf8"),
+		});
+		// 新写入一律在 userData，pi 工作区读不到，发送必须内联原文（inProject=false）。
+		return { path, fileName, bytes: Buffer.byteLength(input.content, "utf8"), inProject: false };
+	});
 
 	ipcMain.handle(ipcChannels.pasteFilesDelete, async (_event, path: string): Promise<void> => {
 		if (!path || !isInsideManagedPasteRoot(path)) {

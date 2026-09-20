@@ -7,9 +7,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
-const { chatMessagesToUiMessages } = loadTsCommonJs(
-	"src/renderer/src/web/webApi.ts",
-);
+const { chatMessagesToUiMessages } = loadTsCommonJs("src/renderer/src/web/webApi.ts");
 
 function message(overrides = {}) {
 	return {
@@ -45,9 +43,7 @@ test("falls back non-user roles to assistant", () => {
 });
 
 test("injects reasoning part before text when thinking present", () => {
-	const result = chatMessagesToUiMessages([
-		message({ thinking: "推理内容", text: "正文" }),
-	]);
+	const result = chatMessagesToUiMessages([message({ thinking: "推理内容", text: "正文" })]);
 	assert.equal(result[0].parts.length, 2);
 	assert.equal(result[0].parts[0].type, "reasoning");
 	assert.equal(result[0].parts[0].text, "推理内容");

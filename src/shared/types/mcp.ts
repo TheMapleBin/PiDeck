@@ -40,13 +40,7 @@ export type McpConfigFile = {
 	[key: string]: unknown;
 };
 
-export type McpConfigLayerKind =
-	| "user-config"
-	| "agents"
-	| "agents-dir"
-	| "pi-agent"
-	| "project"
-	| "project-pi";
+export type McpConfigLayerKind = "user-config" | "agents" | "agents-dir" | "pi-agent" | "project" | "project-pi";
 
 export type McpConfigLayer = {
 	kind: McpConfigLayerKind;

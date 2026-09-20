@@ -10,13 +10,7 @@
  * 导出名对齐 shiki 4 的 `bundle/web`：`createBundledHighlighter` 来自 `shiki/core`，
  * 不要用顶层 `@shikijs/core@2` 的旧拼写。
  */
-import {
-	createBundledHighlighter,
-	createSingletonShorthands,
-	guessEmbeddedLanguages,
-	type DynamicImportLanguageRegistration,
-	type HighlighterGeneric,
-} from "shiki/core";
+import { createBundledHighlighter, createSingletonShorthands, guessEmbeddedLanguages, type DynamicImportLanguageRegistration, type HighlighterGeneric } from "shiki/core";
 import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
 import { createOnigurumaEngine } from "shiki/engine/oniguruma";
 import { bundledThemes, bundledThemesInfo } from "shiki/themes";
@@ -128,12 +122,8 @@ const extraLanguagesInfo: LangInfo[] = [
 
 export const bundledLanguagesInfo: LangInfo[] = [...webLanguagesInfo, ...extraLanguagesInfo];
 
-const bundledLanguagesBase = Object.fromEntries(
-	bundledLanguagesInfo.map((item) => [item.id, item.import]),
-);
-const bundledLanguagesAlias = Object.fromEntries(
-	bundledLanguagesInfo.flatMap((item) => (item.aliases ?? []).map((alias) => [alias, item.import])),
-);
+const bundledLanguagesBase = Object.fromEntries(bundledLanguagesInfo.map((item) => [item.id, item.import]));
+const bundledLanguagesAlias = Object.fromEntries(bundledLanguagesInfo.flatMap((item) => (item.aliases ?? []).map((alias) => [alias, item.import])));
 export const bundledLanguages = {
 	...bundledLanguagesBase,
 	...bundledLanguagesAlias,
@@ -148,15 +138,7 @@ export const createHighlighter = createBundledHighlighter({
 });
 
 const shorthands = createSingletonShorthands(createHighlighter, { guessEmbeddedLanguages });
-export const {
-	codeToHtml,
-	codeToHast,
-	codeToTokensBase,
-	codeToTokens,
-	codeToTokensWithThemes,
-	getSingletonHighlighter,
-	getLastGrammarState,
-} = shorthands;
+export const { codeToHtml, codeToHast, codeToTokensBase, codeToTokens, codeToTokensWithThemes, getSingletonHighlighter, getLastGrammarState } = shorthands;
 
 export type BundledLanguage = string;
 export type Highlighter = HighlighterGeneric<string, string>;

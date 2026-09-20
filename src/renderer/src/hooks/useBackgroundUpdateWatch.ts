@@ -49,13 +49,7 @@ export function useBackgroundUpdateWatch(options: BackgroundUpdateWatchOptions):
 				const errorKey = `${appStatus.latestVersion ?? ""}:${download.error}`;
 				if (notifiedRef.current.error !== errorKey) {
 					notifiedRef.current.error = errorKey;
-					showNotice(
-						t("update.installFailedDetail", { error: download.error }),
-						0,
-						"error",
-						t("update.installFailedTitle"),
-						settingsAction,
-					);
+					showNotice(t("update.installFailedDetail", { error: download.error }), 0, "error", t("update.installFailedTitle"), settingsAction);
 				}
 				return;
 			}
@@ -63,20 +57,10 @@ export function useBackgroundUpdateWatch(options: BackgroundUpdateWatchOptions):
 			if (appStatus?.hasUpdate && download?.phase === "ready") {
 				// 下载完成后只跳转设置页：设置页负责未保存草稿确认，再由用户明确安装。
 				const version = download.version ?? appStatus.latestVersion ?? "";
-				if (
-					version &&
-					appStatus.notifiedVersion !== version &&
-					notifiedRef.current.ready !== version
-				) {
+				if (version && appStatus.notifiedVersion !== version && notifiedRef.current.ready !== version) {
 					notifiedRef.current.ready = version;
 					void api.app.notifyUpdateSeen("app", version);
-					showNotice(
-						t("update.readyToInstall", { version }),
-						0,
-						"info",
-						t("update.readyToInstallTitle"),
-						settingsAction,
-					);
+					showNotice(t("update.readyToInstall", { version }), 0, "info", t("update.readyToInstallTitle"), settingsAction);
 				}
 				return;
 			}
@@ -103,34 +87,16 @@ export function useBackgroundUpdateWatch(options: BackgroundUpdateWatchOptions):
 			if (download?.phase === "available" && (isManualDelivery || !autoDownload)) {
 				// macOS 无签名发行物和关闭自动下载时均提示新版本；前者只提供 Release 手动安装。
 				const version = download.version ?? "";
-				if (
-					version &&
-					appStatus?.skippedVersion !== version &&
-					appStatus?.notifiedVersion !== version &&
-					notifiedRef.current.app !== version
-				) {
+				if (version && appStatus?.skippedVersion !== version && appStatus?.notifiedVersion !== version && notifiedRef.current.app !== version) {
 					notifiedRef.current.app = version;
 					void api.app.notifyUpdateSeen("app", version);
-					showNotice(
-						isManualDelivery
-							? t("update.availableManualToast", { version })
-							: t("update.availableToast", { version }),
-						8000,
-						"info",
-						t("update.availableToastTitle"),
-						settingsAction,
-					);
+					showNotice(isManualDelivery ? t("update.availableManualToast", { version }) : t("update.availableToast", { version }), 8000, "info", t("update.availableToastTitle"), settingsAction);
 				}
 				return;
 			}
 
 			const piStatus = snapshot?.piCli;
-			if (
-				piStatus?.hasUpdate &&
-				piStatus.latestVersion &&
-				piStatus.latestVersion !== piStatus.notifiedVersion &&
-				notifiedRef.current.pi !== piStatus.latestVersion
-			) {
+			if (piStatus?.hasUpdate && piStatus.latestVersion && piStatus.latestVersion !== piStatus.notifiedVersion && notifiedRef.current.pi !== piStatus.latestVersion) {
 				notifiedRef.current.pi = piStatus.latestVersion;
 				// 立即标记已提示（主进程持久化），重启后同一版本不再打扰。
 				void api.app.notifyUpdateSeen("pi", piStatus.latestVersion);

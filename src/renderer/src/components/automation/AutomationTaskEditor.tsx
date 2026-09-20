@@ -12,23 +12,12 @@ import { Input } from "../ui-shadcn/input";
 import { Textarea } from "../ui-shadcn/textarea";
 import { Label } from "../ui-shadcn/label";
 import { Switch } from "../ui-shadcn/switch";
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "../ui-shadcn/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui-shadcn/select";
 import { ModelPicker } from "../session/ComposerComponents";
 import { THINKING_LEVELS } from "../session/sessionPickerOptions";
 import { useBackendModelCatalog } from "../../hooks/useBackendModelCatalog";
 import { CronScheduleBuilder } from "./CronScheduleBuilder";
-import type {
-	AutomationTask,
-	AutomationTaskMode,
-	CreateAutomationTaskInput,
-	UpdateAutomationTaskInput,
-} from "../../../../shared/types";
+import type { AutomationTask, AutomationTaskMode, CreateAutomationTaskInput, UpdateAutomationTaskInput } from "../../../../shared/types";
 
 interface AutomationTaskEditorProps {
 	task?: AutomationTask | null;
@@ -69,26 +58,14 @@ type TaskBackend = "pi" | "dsh";
  * 定时任务新建与编辑表单。
  * 模型/思考走会话同款选择器，调度走可视化 Cron，避免用户手输 provider/model-id 和五段表达式。
  */
-export function AutomationTaskEditor({
-	task,
-	defaultProjectId,
-	lockProject = false,
-	onSave,
-	onCancel,
-}: AutomationTaskEditorProps) {
+export function AutomationTaskEditor({ task, defaultProjectId, lockProject = false, onSave, onCancel }: AutomationTaskEditorProps) {
 	const projects = useAtomValue(projectInventoryAtom);
 
 	const [name, setName] = useState(task?.name ?? "");
-	const [projectId, setProjectId] = useState(
-		task?.projectId ?? defaultProjectId ?? (projects[0]?.id || ""),
-	);
-	const [cronExpression, setCronExpression] = useState(
-		task?.schedule.type === "cron" ? task.schedule.expression : "0 9 * * 1-5",
-	);
+	const [projectId, setProjectId] = useState(task?.projectId ?? defaultProjectId ?? (projects[0]?.id || ""));
+	const [cronExpression, setCronExpression] = useState(task?.schedule.type === "cron" ? task.schedule.expression : "0 9 * * 1-5");
 	const [prompt, setPrompt] = useState(task?.prompt ?? "");
-	const [selectedModel, setSelectedModel] = useState<
-		{ provider: string; modelId: string } | undefined
-	>(task?.model);
+	const [selectedModel, setSelectedModel] = useState<{ provider: string; modelId: string } | undefined>(task?.model);
 	// 执行后端：旧任务无 backend 字段时缺省 pi。切换 dsh 后 mode/thinking 会被
 	// 锁定回继承/普通（DSH 无 plan/goal 扩展与独立思考档位，见下方 UI 约束）。
 	const [backend, setBackend] = useState<TaskBackend>(task?.backend ?? "pi");
@@ -102,22 +79,11 @@ export function AutomationTaskEditor({
 	const [recentProviders, setRecentProviders] = useState<string[]>([]);
 	const [hiddenProviders, setHiddenProviders] = useState<string[]>([]);
 
-	const initialTimeoutMinutes =
-		task?.budget?.timeoutMs != null
-			? String(Math.round(task.budget.timeoutMs / 60000))
-			: "";
-	const [timeoutMinutes, setTimeoutMinutes] = useState<string>(
-		initialTimeoutMinutes,
-	);
-	const [maxTokens, setMaxTokens] = useState<string>(
-		task?.budget?.maxTokens ? String(task.budget.maxTokens) : "",
-	);
-	const [maxCostUsd, setMaxCostUsd] = useState<string>(
-		task?.budget?.maxCostUsd ? String(task.budget.maxCostUsd) : "",
-	);
-	const [maxSteps, setMaxSteps] = useState<string>(
-		task?.budget?.maxSteps ? String(task.budget.maxSteps) : "",
-	);
+	const initialTimeoutMinutes = task?.budget?.timeoutMs != null ? String(Math.round(task.budget.timeoutMs / 60000)) : "";
+	const [timeoutMinutes, setTimeoutMinutes] = useState<string>(initialTimeoutMinutes);
+	const [maxTokens, setMaxTokens] = useState<string>(task?.budget?.maxTokens ? String(task.budget.maxTokens) : "");
+	const [maxCostUsd, setMaxCostUsd] = useState<string>(task?.budget?.maxCostUsd ? String(task.budget.maxCostUsd) : "");
+	const [maxSteps, setMaxSteps] = useState<string>(task?.budget?.maxSteps ? String(task.budget.maxSteps) : "");
 
 	const [cronPreviews, setCronPreviews] = useState<number[]>([]);
 	const [cronError, setCronError] = useState<string | null>(null);
@@ -141,10 +107,8 @@ export function AutomationTaskEditor({
 	// DSH 无 plan/goal 模式与独立思考档位（都是 pi 侧内置扩展），
 	// 提交时强制退回缺省；UI 上 Select 置灰 + 锁定显示值，避免用户配了不生效。
 	const isDsh = backend === "dsh";
-	const effectiveMode: AutomationTaskMode | typeof THINKING_INHERIT = isDsh
-		? "normal"
-		: (mode || THINKING_INHERIT);
-	const effectiveThinking = isDsh ? THINKING_INHERIT : (thinkingLevel || THINKING_INHERIT);
+	const effectiveMode: AutomationTaskMode | typeof THINKING_INHERIT = isDsh ? "normal" : mode || THINKING_INHERIT;
+	const effectiveThinking = isDsh ? THINKING_INHERIT : thinkingLevel || THINKING_INHERIT;
 
 	useEffect(() => {
 		void desktopApi.settings
@@ -158,7 +122,13 @@ export function AutomationTaskEditor({
 	}, []);
 
 	// 选择器打开才拉模型目录，避免弹层常驻轮询；sessionId 仅满足 hook 签名（目录按 projectId 加载）。
-	const { models, report, loading: catalogLoading, refreshing, reload } = useBackendModelCatalog({
+	const {
+		models,
+		report,
+		loading: catalogLoading,
+		refreshing,
+		reload,
+	} = useBackendModelCatalog({
 		sessionId: "automation-editor",
 		projectId: projectId || undefined,
 		// DSH 任务选 DSH host 的模型目录（listDshModels），pi 任务用默认目录；
@@ -199,19 +169,12 @@ export function AutomationTaskEditor({
 		};
 	}, [cronExpression]);
 
-	const currentModel = models.find(
-		(model) =>
-			model.provider === selectedModel?.provider && model.id === selectedModel?.modelId,
-	);
-	const modelLabel = selectedModel
-		? (currentModel?.name ?? `${selectedModel.provider}/${selectedModel.modelId}`)
-		: t("automation.modelUnset");
+	const currentModel = models.find((model) => model.provider === selectedModel?.provider && model.id === selectedModel?.modelId);
+	const modelLabel = selectedModel ? (currentModel?.name ?? `${selectedModel.provider}/${selectedModel.modelId}`) : t("automation.modelUnset");
 
 	const toggleFavorite = async (provider: string, modelId: string) => {
 		const key = `${provider}/${modelId}`;
-		const next = favoriteModels.includes(key)
-			? favoriteModels.filter((item) => item !== key)
-			: [...favoriteModels, key];
+		const next = favoriteModels.includes(key) ? favoriteModels.filter((item) => item !== key) : [...favoriteModels, key];
 		setFavoriteModels(next);
 		try {
 			await desktopApi.settings.update({ favoriteModels: next });
@@ -290,9 +253,7 @@ export function AutomationTaskEditor({
 					backend,
 					...(selectedModel ? { model: selectedModel } : {}),
 					// DSH 无独立档位，thinking/mode 一律不写（store 缺省即继承/普通）。
-					...(!isDsh && thinkingLevel.trim()
-						? { thinkingLevel: thinkingLevel.trim() }
-						: {}),
+					...(!isDsh && thinkingLevel.trim() ? { thinkingLevel: thinkingLevel.trim() } : {}),
 					// 普通模式是缺省，不必写进创建入参；store 侧也只持久化非 normal。
 					...(!isDsh && mode && mode !== "normal" ? { mode } : {}),
 				};
@@ -302,10 +263,7 @@ export function AutomationTaskEditor({
 			showNotice(t("automation.taskSaved"), 2000);
 			onSave();
 		} catch (error) {
-			showNotice(
-				error instanceof Error ? error.message : String(error),
-				3500,
-			);
+			showNotice(error instanceof Error ? error.message : String(error), 3500);
 		} finally {
 			setIsSubmitting(false);
 		}
@@ -318,14 +276,7 @@ export function AutomationTaskEditor({
 					<Label htmlFor="task-name" className="text-xs font-medium">
 						{t("automation.name")} <span className="text-destructive">*</span>
 					</Label>
-					<Input
-						id="task-name"
-						value={name}
-						onChange={(e) => setName(e.target.value)}
-						placeholder={t("automation.namePlaceholder")}
-						className="h-8 text-xs"
-						required
-					/>
+					<Input id="task-name" value={name} onChange={(e) => setName(e.target.value)} placeholder={t("automation.namePlaceholder")} className="h-8 text-xs" required />
 				</div>
 
 				<div className="flex flex-col gap-1.5">
@@ -333,12 +284,7 @@ export function AutomationTaskEditor({
 						{t("automation.project")} <span className="text-destructive">*</span>
 					</Label>
 					{lockProject ? (
-						<Input
-							id="task-project"
-							value={lockedProjectName}
-							className="h-8 text-xs"
-							disabled
-						/>
+						<Input id="task-project" value={lockedProjectName} className="h-8 text-xs" disabled />
 					) : (
 						<Select value={projectId} onValueChange={setProjectId}>
 							<SelectTrigger id="task-project" className="h-8 text-xs">
@@ -356,116 +302,81 @@ export function AutomationTaskEditor({
 				</div>
 			</div>
 
-			<CronScheduleBuilder
-				value={cronExpression}
-				onChange={setCronExpression}
-				previews={cronPreviews}
-				error={cronError}
-			/>
+			<CronScheduleBuilder value={cronExpression} onChange={setCronExpression} previews={cronPreviews} error={cronError} />
 
 			<div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-			<div className="flex flex-col gap-1.5">
-				<Label htmlFor="task-backend" className="text-xs font-medium">
-					{t("automation.backend")}
-				</Label>
-				<Select
-					value={backend}
-					onValueChange={(value) => setBackend(value as TaskBackend)}
-				>
-					<SelectTrigger id="task-backend" className="h-8 text-xs">
-						<SelectValue />
-					</SelectTrigger>
-					<SelectContent>
-						<SelectItem value="pi" className="text-xs">
-							{t("automation.backendPi")}
-						</SelectItem>
-						<SelectItem value="dsh" className="text-xs">
-							{t("automation.backendDsh")}
-						</SelectItem>
-					</SelectContent>
-				</Select>
-				{isDsh && dshBlockReason ? (
-					// DSH runtime 缺失/损坏/过旧：触发时 host 无法 fork，发送会被拦截。
-					// 只提示不动手（安装入口在设置），与 App 发送链路的拦截口径一致。
-					<p className="text-[11px] leading-snug text-destructive">
-						{t("automation.backendDshUnavailable")}
-					</p>
-				) : (
-					<p className="text-[11px] leading-snug text-muted-foreground">
-						{t("automation.backendHint")}
-					</p>
-				)}
-			</div>
-
-			<div className="flex flex-col gap-1.5">
-				<Label htmlFor="task-mode" className="text-xs font-medium">
-					{t("automation.mode")}
-				</Label>
-				<Select
-					value={effectiveMode}
-					disabled={isDsh}
-					onValueChange={(value) => {
-						setMode(value === THINKING_INHERIT ? "" : (value as AutomationTaskMode));
-					}}
-				>
-					<SelectTrigger id="task-mode" className="h-8 text-xs">
-						<SelectValue />
-					</SelectTrigger>
-					<SelectContent>
-						<SelectItem value={THINKING_INHERIT} className="text-xs">
-							{t("automation.modeInherit")}
-						</SelectItem>
-						{TASK_MODE_OPTIONS.map((option) => (
-							<SelectItem key={option.value} value={option.value} className="text-xs">
-								{t(option.labelKey)}
+				<div className="flex flex-col gap-1.5">
+					<Label htmlFor="task-backend" className="text-xs font-medium">
+						{t("automation.backend")}
+					</Label>
+					<Select value={backend} onValueChange={(value) => setBackend(value as TaskBackend)}>
+						<SelectTrigger id="task-backend" className="h-8 text-xs">
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="pi" className="text-xs">
+								{t("automation.backendPi")}
 							</SelectItem>
-						))}
-					</SelectContent>
-				</Select>
-				<p className="text-[11px] leading-snug text-muted-foreground">
-					{isDsh ? t("automation.dshModeHint") : t("automation.modeHint")}
-				</p>
-			</div>
-		</div>
+							<SelectItem value="dsh" className="text-xs">
+								{t("automation.backendDsh")}
+							</SelectItem>
+						</SelectContent>
+					</Select>
+					{isDsh && dshBlockReason ? (
+						// DSH runtime 缺失/损坏/过旧：触发时 host 无法 fork，发送会被拦截。
+						// 只提示不动手（安装入口在设置），与 App 发送链路的拦截口径一致。
+						<p className="text-[11px] leading-snug text-destructive">{t("automation.backendDshUnavailable")}</p>
+					) : (
+						<p className="text-[11px] leading-snug text-muted-foreground">{t("automation.backendHint")}</p>
+					)}
+				</div>
 
-		<div className="flex flex-col gap-1.5">
-			<Label htmlFor="task-prompt" className="text-xs font-medium">
-				{t("automation.prompt")} <span className="text-destructive">*</span>
-			</Label>
-			<Textarea
-				id="task-prompt"
-				value={prompt}
-				onChange={(e) => setPrompt(e.target.value)}
-				placeholder={t("automation.promptPlaceholder")}
-				rows={4}
-				className="text-xs font-mono"
-				required
-			/>
-		</div>
+				<div className="flex flex-col gap-1.5">
+					<Label htmlFor="task-mode" className="text-xs font-medium">
+						{t("automation.mode")}
+					</Label>
+					<Select
+						value={effectiveMode}
+						disabled={isDsh}
+						onValueChange={(value) => {
+							setMode(value === THINKING_INHERIT ? "" : (value as AutomationTaskMode));
+						}}
+					>
+						<SelectTrigger id="task-mode" className="h-8 text-xs">
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value={THINKING_INHERIT} className="text-xs">
+								{t("automation.modeInherit")}
+							</SelectItem>
+							{TASK_MODE_OPTIONS.map((option) => (
+								<SelectItem key={option.value} value={option.value} className="text-xs">
+									{t(option.labelKey)}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
+					<p className="text-[11px] leading-snug text-muted-foreground">{isDsh ? t("automation.dshModeHint") : t("automation.modeHint")}</p>
+				</div>
+			</div>
+
+			<div className="flex flex-col gap-1.5">
+				<Label htmlFor="task-prompt" className="text-xs font-medium">
+					{t("automation.prompt")} <span className="text-destructive">*</span>
+				</Label>
+				<Textarea id="task-prompt" value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder={t("automation.promptPlaceholder")} rows={4} className="text-xs font-mono" required />
+			</div>
 
 			<div className="grid grid-cols-1 gap-4 md:grid-cols-2">
 				<div className="flex flex-col gap-1.5">
 					<Label className="text-xs font-medium">{t("automation.model")}</Label>
 					<div className="flex items-center gap-1">
-						<Button
-							type="button"
-							variant="outline"
-							className="h-8 min-w-0 flex-1 justify-between px-2 font-mono text-xs"
-							title={modelLabel}
-							onClick={() => setModelPickerOpen(true)}
-						>
+						<Button type="button" variant="outline" className="h-8 min-w-0 flex-1 justify-between px-2 font-mono text-xs" title={modelLabel} onClick={() => setModelPickerOpen(true)}>
 							<span className="min-w-0 truncate">{modelLabel}</span>
 							<ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
 						</Button>
 						{selectedModel && (
-							<Button
-								type="button"
-								variant="ghost"
-								size="sm"
-								className="h-8 w-8 px-0"
-								title={t("automation.modelUnset")}
-								onClick={() => setSelectedModel(undefined)}
-							>
+							<Button type="button" variant="ghost" size="sm" className="h-8 w-8 px-0" title={t("automation.modelUnset")} onClick={() => setSelectedModel(undefined)}>
 								<X className="size-3.5" />
 							</Button>
 						)}
@@ -508,81 +419,36 @@ export function AutomationTaskEditor({
 				<div className="grid grid-cols-2 gap-3 md:grid-cols-4">
 					<div className="flex flex-col gap-1">
 						<span className="text-[11px] text-muted-foreground">{t("automation.timeoutMinutes")}</span>
-						<Input
-							type="number"
-							min="1"
-							value={timeoutMinutes}
-							onChange={(e) => setTimeoutMinutes(e.target.value)}
-							placeholder="30"
-							className="h-7 font-mono text-xs"
-						/>
+						<Input type="number" min="1" value={timeoutMinutes} onChange={(e) => setTimeoutMinutes(e.target.value)} placeholder="30" className="h-7 font-mono text-xs" />
 					</div>
 					<div className="flex flex-col gap-1">
 						<span className="text-[11px] text-muted-foreground">{t("automation.maxTokens")}</span>
-						<Input
-							type="number"
-							min="1000"
-							value={maxTokens}
-							onChange={(e) => setMaxTokens(e.target.value)}
-							placeholder="e.g. 500000"
-							className="h-7 font-mono text-xs"
-						/>
+						<Input type="number" min="1000" value={maxTokens} onChange={(e) => setMaxTokens(e.target.value)} placeholder="e.g. 500000" className="h-7 font-mono text-xs" />
 					</div>
 					<div className="flex flex-col gap-1">
 						<span className="text-[11px] text-muted-foreground">{t("automation.maxCostUsd")}</span>
-						<Input
-							type="number"
-							step="0.01"
-							min="0.01"
-							value={maxCostUsd}
-							onChange={(e) => setMaxCostUsd(e.target.value)}
-							placeholder="e.g. 1.00"
-							className="h-7 font-mono text-xs"
-						/>
+						<Input type="number" step="0.01" min="0.01" value={maxCostUsd} onChange={(e) => setMaxCostUsd(e.target.value)} placeholder="e.g. 1.00" className="h-7 font-mono text-xs" />
 					</div>
 					<div className="flex flex-col gap-1">
 						<span className="text-[11px] text-muted-foreground">{t("automation.maxSteps")}</span>
-						<Input
-							type="number"
-							min="1"
-							value={maxSteps}
-							onChange={(e) => setMaxSteps(e.target.value)}
-							placeholder="e.g. 50"
-							className="h-7 font-mono text-xs"
-						/>
+						<Input type="number" min="1" value={maxSteps} onChange={(e) => setMaxSteps(e.target.value)} placeholder="e.g. 50" className="h-7 font-mono text-xs" />
 					</div>
 				</div>
 			</div>
 
 			<div className="flex items-center justify-between border-t border-border/40 pt-2">
 				<div className="flex items-center gap-2">
-					<Switch
-						id="task-enabled"
-						checked={enabled}
-						onCheckedChange={setEnabled}
-					/>
+					<Switch id="task-enabled" checked={enabled} onCheckedChange={setEnabled} />
 					<Label htmlFor="task-enabled" className="cursor-pointer text-xs">
 						{enabled ? t("automation.enabled") : t("automation.disabled")}
 					</Label>
 				</div>
 
 				<div className="flex items-center gap-2">
-					<Button
-						type="button"
-						variant="ghost"
-						size="sm"
-						className="h-8 text-xs"
-						onClick={onCancel}
-						disabled={isSubmitting}
-					>
+					<Button type="button" variant="ghost" size="sm" className="h-8 text-xs" onClick={onCancel} disabled={isSubmitting}>
 						{t("automation.cancel")}
 					</Button>
-					<Button
-						type="submit"
-						size="sm"
-						className="h-8 text-xs"
-						disabled={isSubmitting || !!cronError}
-					>
+					<Button type="submit" size="sm" className="h-8 text-xs" disabled={isSubmitting || !!cronError}>
 						{t("automation.saveTask")}
 					</Button>
 				</div>

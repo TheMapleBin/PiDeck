@@ -111,8 +111,5 @@ test("typewriter: burst streaming must not jump (maxDelta <= 3)", async ({ windo
 	// 防蹦验证：maxStep=3（流中）+ maxDrainStep=6（结束排空）；React concurrent 合并
 	// 偶发让 DOM 一帧反映 2 帧步进（≤6），但绝不允许 10+ 大蹦（修复前 16/12）。
 	expect(maxDelta, "burst should be capped (no jump)").toBeLessThanOrEqual(6);
-	expect(
-		samples.filter((s) => s.delta > 3).length,
-		"at most a couple of merged frames allowed",
-	).toBeLessThanOrEqual(3);
+	expect(samples.filter((s) => s.delta > 3).length, "at most a couple of merged frames allowed").toBeLessThanOrEqual(3);
 });

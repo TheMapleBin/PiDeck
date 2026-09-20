@@ -33,10 +33,7 @@ export type DshUsageProviderProfile = {
  * 读取 DSH provider 的用量查询 profile。
  * settings.yaml 缺失/损坏/无该 route 时返回 undefined（调用方回落既有 pi/catalog 解析）。
  */
-export async function loadDshUsageProviderProfile(
-	homeDir: string,
-	provider: string,
-): Promise<DshUsageProviderProfile | undefined> {
+export async function loadDshUsageProviderProfile(homeDir: string, provider: string): Promise<DshUsageProviderProfile | undefined> {
 	// 官方 DeepSeek 在 llm.models / session.models 里的组 id 是 deepseek-official，
 	// 与配置面规范名 deepseek 不一致：先归一化再特判，否则选择器/圆球查不到官方路由。
 	const name = normalizeDshDeepseekProvider(provider?.trim() ?? "");

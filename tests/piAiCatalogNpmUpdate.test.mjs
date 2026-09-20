@@ -183,10 +183,7 @@ function makeBranchFetch(catalogText, manifestText) {
 
 /** 用来源文件生成一份合法的 catalog/manifest 对（版本号可指定）。 */
 function generateArtifact(version, modelId = "model-a") {
-	return generatePiAiCatalogFromFiles(
-		[{ name: "demo.json", content: demoDataFileContent(modelId) }],
-		version,
-	);
+	return generatePiAiCatalogFromFiles([{ name: "demo.json", content: demoDataFileContent(modelId) }], version);
 }
 
 test("catalog:update 走仓库分支预生成件（主源，直连 GitHub raw）", async () => {

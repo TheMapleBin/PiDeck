@@ -23,14 +23,7 @@ export function useModelsVerifyNotifier(): void {
 		const unsubscribe = desktopApi.config?.onModelsVerifyResult?.((payload) => {
 			// 成功静默：即时反馈已覆盖「保存成功」，后台 pi 验证通过无需再打扰。
 			if (payload.ok) return;
-			showNotice(
-				t("config.modelsVerifyFailed", { detail: payload.detail || payload.reason || "" }),
-				8000,
-				"warning",
-				t("config.modelsVerifyFailedTitle"),
-				undefined,
-				MODELS_VERIFY_NOTICE_ID,
-			);
+			showNotice(t("config.modelsVerifyFailed", { detail: payload.detail || payload.reason || "" }), 8000, "warning", t("config.modelsVerifyFailedTitle"), undefined, MODELS_VERIFY_NOTICE_ID);
 		});
 		return () => unsubscribe?.();
 	}, []);

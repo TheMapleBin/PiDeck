@@ -64,15 +64,12 @@ export class PetSystem {
 	}
 
 	private isPatrolEnabled() {
-		return (this.deps.settingsStore.get().petPatrolEnabled ?? true)
-			&& detectPetWindowCaps().freePosition;
+		return (this.deps.settingsStore.get().petPatrolEnabled ?? true) && detectPetWindowCaps().freePosition;
 	}
 
 	private translate(key: PetCopyKey, params: Record<string, string | number> = {}): string {
 		const translated = this.deps.translate?.(key, params) ?? defaultPetCopy[key];
-		return translated.replace(/\{([A-Za-z0-9_]+)\}/g, (match, name) => (
-			Object.prototype.hasOwnProperty.call(params, name) ? String(params[name]) : match
-		));
+		return translated.replace(/\{([A-Za-z0-9_]+)\}/g, (match, name) => (Object.prototype.hasOwnProperty.call(params, name) ? String(params[name]) : match));
 	}
 
 	async start() {
@@ -111,8 +108,10 @@ export class PetSystem {
 	stop() {
 		this.clearNotifTimer();
 		this.notifQueue = EMPTY_NOTIFICATION_QUEUE;
-		this.offOutput?.(); this.offOutput = null;
-		this.offSettled?.(); this.offSettled = null;
+		this.offOutput?.();
+		this.offOutput = null;
+		this.offSettled?.();
+		this.offSettled = null;
 		this.bridge.detach();
 		this.petWindow.destroy();
 	}
@@ -171,7 +170,10 @@ export class PetSystem {
 	}
 
 	private clearNotifTimer() {
-		if (this.notifTimer) { clearTimeout(this.notifTimer); this.notifTimer = null; }
+		if (this.notifTimer) {
+			clearTimeout(this.notifTimer);
+			this.notifTimer = null;
+		}
 	}
 
 	// ── IPC ──
@@ -345,17 +347,11 @@ export class PetSystem {
 		}
 		// 缩放 / 字号 / 字体栈都会改宠物窗外观。窗口尺寸由 PetWindow 改，
 		// 绘制比例必须同步推给 renderer，否则会出现「窗大图小」或精灵被裁切。
-		if (
-			next.petScale !== prev.petScale
-			|| next.fontSize !== prev.fontSize
-			|| next.uiFontSize !== prev.uiFontSize
-			|| next.fontFamilyBase !== prev.fontFamilyBase
-			|| next.fontFamilyBaseCustom !== prev.fontFamilyBaseCustom
-		) {
+		if (next.petScale !== prev.petScale || next.fontSize !== prev.fontSize || next.uiFontSize !== prev.uiFontSize || next.fontFamilyBase !== prev.fontFamilyBase || next.fontFamilyBaseCustom !== prev.fontFamilyBaseCustom) {
 			this.pushAppearance(next);
 		}
 		if (next.petPatrolEnabled !== prev.petPatrolEnabled) {
-			(this.isPatrolEnabled() && this.bridge.currentState?.mode === "idle") ? this.patrol.start() : this.patrol.stop();
+			this.isPatrolEnabled() && this.bridge.currentState?.mode === "idle" ? this.patrol.start() : this.patrol.stop();
 		}
 	}
 

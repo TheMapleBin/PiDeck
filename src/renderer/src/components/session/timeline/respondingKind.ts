@@ -13,13 +13,7 @@
  */
 export type RespondingKind = "starting" | "executing" | "responding" | "compacting" | "waiting";
 
-export function deriveRespondingKind(input: {
-	isCompacting?: boolean;
-	isStarting?: boolean;
-	isExecutingTool?: boolean;
-	liveTextStreaming?: boolean;
-	liveThinkingStreaming?: boolean;
-}): RespondingKind {
+export function deriveRespondingKind(input: { isCompacting?: boolean; isStarting?: boolean; isExecutingTool?: boolean; liveTextStreaming?: boolean; liveThinkingStreaming?: boolean }): RespondingKind {
 	if (input.isCompacting) return "compacting";
 	if (input.isExecutingTool) return "executing";
 	if (input.liveTextStreaming || input.liveThinkingStreaming) return "responding";

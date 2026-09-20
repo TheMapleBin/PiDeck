@@ -10,12 +10,7 @@
  * - 本模块不依赖 React / 编辑器，可被 node:test 直接加载单测。
  */
 
-import {
-	escapeXmlAttribute,
-	parseExpandedRefBlocks,
-	replaceExpandedRefBlocksWithLabels,
-	sanitizeBlockClosingTag,
-} from "./referenceBlocks";
+import { escapeXmlAttribute, parseExpandedRefBlocks, replaceExpandedRefBlocksWithLabels, sanitizeBlockClosingTag } from "./referenceBlocks";
 import type { ExpandedRefBlock } from "./referenceBlocks";
 
 // 自包含块的解析/折叠已下沉到 shared/expandedRefBlocks（主进程 preview、Web 端共用一份实现）；
@@ -120,10 +115,7 @@ export function stripQuoteTokens(text: string): string {
  * - resolve 未命中的孤儿 token 直接丢弃（自愈，不阻断发送）；
  * - 展开后若用户正文为空则只留引用块。
  */
-export function expandQuoteTokens(
-	text: string,
-	resolve: (id: string) => QuoteSnippet | undefined,
-): string | null {
+export function expandQuoteTokens(text: string, resolve: (id: string) => QuoteSnippet | undefined): string | null {
 	const occurrences = extractQuoteTokens(text);
 	if (occurrences.length === 0) return null;
 
@@ -163,10 +155,7 @@ export function expandQuoteTokens(
  * （label/messageId/全文），气泡渲染时直接解析出 chip，不依赖运行时 quoteMap——
  * 切会话、重启、disk 加载后依然能还原 chip（旧方案依赖运行时快照，发送后即失效）。
  */
-export function formatQuoteBlock(
-	text: string,
-	meta: { label: string; messageId: string },
-): string {
+export function formatQuoteBlock(text: string, meta: { label: string; messageId: string }): string {
 	const safeText = sanitizeBlockClosingTag(text.trim(), "quoted_context");
 	const safeLabel = escapeXmlAttribute(meta.label);
 	const safeMessageId = escapeXmlAttribute(meta.messageId);
@@ -174,9 +163,7 @@ export function formatQuoteBlock(
 }
 
 /** 气泡渲染片段：正文或已折叠的 chip（保持原文顺序）。 */
-export type BubbleRefSegment =
-	| { kind: "text"; value: string }
-	| { kind: "chip"; block: ExpandedRefBlock };
+export type BubbleRefSegment = { kind: "text"; value: string } | { kind: "chip"; block: ExpandedRefBlock };
 
 /**
  * 把消息文本切成「正文 / chip」片段，并把紧贴块的空白压缩掉。
@@ -222,10 +209,7 @@ export type RehydratedDraft = {
  * 块两侧的 `\n\n` 是写给模型看的上下文分隔，回输入框时压成单个空格；
  * 正文自身的段落换行保持不动。
  */
-export function rehydrateDraftFromMessage(
-	text: string,
-	createId: () => string = createQuoteId,
-): RehydratedDraft {
+export function rehydrateDraftFromMessage(text: string, createId: () => string = createQuoteId): RehydratedDraft {
 	const blocks = parseExpandedRefBlocks(text);
 	if (blocks.length === 0) return { draft: text, quotes: [] };
 
@@ -286,10 +270,7 @@ export function buildDraftWithAppendedQuote(draft: string, token: string): strin
  * 孤儿清理：剔除仓里草稿已不再引用的快照（用户删了 chip）。
  * 纯函数便于单测；调用方在每次登记新快照时顺带执行，避免无限堆积。
  */
-export function pruneUnreferencedQuotes<T extends { id: string }>(
-	map: Record<string, T>,
-	keepIds: ReadonlySet<string>,
-): Record<string, T> {
+export function pruneUnreferencedQuotes<T extends { id: string }>(map: Record<string, T>, keepIds: ReadonlySet<string>): Record<string, T> {
 	const next: Record<string, T> = {};
 	for (const [id, snippet] of Object.entries(map)) {
 		if (keepIds.has(id)) next[id] = snippet;

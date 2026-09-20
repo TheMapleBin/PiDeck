@@ -8,14 +8,7 @@
 
 export const CRON_MINUTE_INTERVALS = [1, 2, 5, 10, 15, 20, 30] as const;
 
-export type CronVisualKind =
-	| "every-minutes"
-	| "hourly"
-	| "daily"
-	| "weekdays"
-	| "weekly"
-	| "monthly"
-	| "custom";
+export type CronVisualKind = "every-minutes" | "hourly" | "daily" | "weekdays" | "weekly" | "monthly" | "custom";
 
 export type CronVisualState =
 	| { kind: "every-minutes"; interval: number }
@@ -31,15 +24,7 @@ const DEFAULT_MINUTE = 0;
 const DEFAULT_MONTH_DAY = 1;
 const WEEKDAYS = [1, 2, 3, 4, 5];
 
-export const CRON_VISUAL_KINDS: readonly CronVisualKind[] = [
-	"every-minutes",
-	"hourly",
-	"daily",
-	"weekdays",
-	"weekly",
-	"monthly",
-	"custom",
-];
+export const CRON_VISUAL_KINDS: readonly CronVisualKind[] = ["every-minutes", "hourly", "daily", "weekdays", "weekly", "monthly", "custom"];
 
 /** 把可视化状态编成 5 段 cron（分 时 日 月 周）。 */
 export function buildCronExpression(state: CronVisualState): string {

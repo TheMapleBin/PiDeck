@@ -92,9 +92,7 @@ function locateInputBlock(lines, inputName) {
 /** 替换输入块里的 options 列表：保留首项（哨兵值），后面按 versions 顺序重排。 */
 function rewriteOptions(lines, block, versions, keep) {
 	const { start, end } = block;
-	const optionsIdx = lines.findIndex(
-		(line, i) => i > start && i < end && line.trim() === "options:"
-	);
+	const optionsIdx = lines.findIndex((line, i) => i > start && i < end && line.trim() === "options:");
 	if (optionsIdx === -1) return { changed: false, reason: "该输入不是 choice（没有 options 列表）" };
 
 	let optionsEnd = end;
@@ -104,9 +102,7 @@ function rewriteOptions(lines, block, versions, keep) {
 			break;
 		}
 	}
-	const current = lines
-		.slice(optionsIdx + 1, optionsEnd)
-		.map((line) => line.trim().replace(/^- /, ""));
+	const current = lines.slice(optionsIdx + 1, optionsEnd).map((line) => line.trim().replace(/^- /, ""));
 	if (!current.length) return { changed: false, reason: "options 列表为空" };
 
 	// 首项是哨兵值（auto / latest 之类非版本号），原样保留在最前
@@ -115,11 +111,7 @@ function rewriteOptions(lines, block, versions, keep) {
 	if (current.join("\n") === desired.join("\n")) return { changed: false, reason: "已是最新" };
 
 	const indent = "          "; // options 项的缩进（与文件现有风格一致）
-	const next = [
-		...lines.slice(0, optionsIdx + 1),
-		...desired.map((v) => `${indent}- ${v}`),
-		...lines.slice(optionsEnd),
-	];
+	const next = [...lines.slice(0, optionsIdx + 1), ...desired.map((v) => `${indent}- ${v}`), ...lines.slice(optionsEnd)];
 	return { changed: true, lines: next, before: current, after: desired };
 }
 
