@@ -70,7 +70,7 @@ test("project resource file operations retain the registered project scope", () 
 	const extensions = read("src/renderer/src/config/ExtensionsTab.tsx");
 	assert.match(modal, /isProjectSkill\(skill\) && effectiveProjectId \? \{ projectId: effectiveProjectId \} : undefined/);
 	assert.match(modal, /isProjectSkill\(editingGlobalSkill\) && effectiveProjectId \? \{ projectId: effectiveProjectId \} : undefined/);
-	assert.match(modal, /api\.projectResources\.openDirectory\(effectiveProjectId, "project-pi"\)/);
+	assert.match(modal, /api\.projectResources\.openDirectory\(effectiveProjectId, kind\)/);
 	assert.match(modal, /extension\.scope === "project" && effectiveProjectId \? \{ projectId: effectiveProjectId \} : undefined/);
 	assert.match(extensions, /onShowInFolder/);
 });

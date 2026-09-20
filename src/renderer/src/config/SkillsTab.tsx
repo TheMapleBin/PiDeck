@@ -1,15 +1,18 @@
 import { Button } from "../components/ui-shadcn/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui-shadcn/table";
+import { Select, SelectContent, SelectItem, SelectTrigger } from "../components/ui-shadcn/select";
 import { useEffect, useState, type ReactNode } from "react";
 import { ContentTabs } from "./ContentTabs";
 import { Check, FileEdit, Pencil, ShoppingBag, Sparkles, ToggleLeft, ToggleRight, Trash2, X, Store, Globe } from "lucide-react";
-import type { PiSkillListResult, PiSkillSummary, ProjectResourceOverrides } from "../../../shared/types";
+import type { CreatePiSkillInput, PiSkillListResult, PiSkillLocation, PiSkillSummary, ProjectResourceOverrides } from "../../../shared/types";
 import { t } from "../i18n";
 import { SkillStoreTab } from "./SkillStoreTab";
 import { SkillHubStorePanel } from "./SkillHubStorePanel";
 import { ContentStoreUpdatePanel } from "./ContentStoreUpdatePanel";
 import { desktopApi } from "../desktopApi";
 import { Input } from "../components/ui-shadcn/input";
+import { Textarea } from "../components/ui-shadcn/textarea";
+import { Label } from "../components/ui-shadcn/label";
 import type { ResourceScope } from "./ResourceScopeSelector";
 import { globalSkillOverrideKey, isGlobalSkillSourceId } from "../../../shared/resourceIdentity";
 import { ResourceImportDialog } from "./ResourceImportDialog";
@@ -38,8 +41,16 @@ export function SkillsTab(props: {
 	}>;
 	data: PiSkillListResult;
 	loading: boolean;
+	creating: boolean;
+	newName: string;
+	newDescription: string;
+	newLocationId: PiSkillLocation["id"];
 	onRefresh: () => void;
 	onOpenRoot: () => void;
+	onChangeNewName: (value: string) => void;
+	onChangeNewDescription: (value: string) => void;
+	onChangeNewLocation: (value: PiSkillLocation["id"]) => void;
+	onCreate: () => void;
 	onToggle: (skill: PiSkillSummary, enabled: boolean) => void;
 	onDelete: (skill: PiSkillSummary) => void;
 	onEdit: (skill: PiSkillSummary) => void;
@@ -52,6 +63,7 @@ export function SkillsTab(props: {
 	const projectSkills = visibleSkills.filter((skill) => skill.sourceId === "project-pi" || skill.sourceId === "project-agents");
 	const globalSkills = visibleSkills.filter((skill) => skill.sourceId === "pi-global" || skill.sourceId === "agents-global");
 	const disabledGlobalKeys = new Set(props.projectOverrides.disabledGlobalSkills);
+	const availableLocations = data.locations.filter((location) => (props.scope === "project" ? location.id === "project-pi" || location.id === "project-agents" : location.id === "pi-global" || location.id === "agents-global"));
 	// discovery 行去重：与本地列表同名的条目只保留本地行（带操作），列表只显示一次
 	const localSkillNames = new Set(visibleSkills.map((skill) => skill.name.toLowerCase()));
 	const uniqueDiscoverySkills = props.discoverySkills.filter((item) => !localSkillNames.has(item.name.toLowerCase()));
@@ -59,6 +71,9 @@ export function SkillsTab(props: {
 	const [skillTab, setSkillTab] = useState<"local" | "store">("local");
 	// 二级 tab（商店内）：选择供应商
 	const [storeSource, setStoreSource] = useState<"promptchat" | "skillhub">("skillhub");
+	const canCreate = props.newName.trim() && props.newDescription.trim();
+	// 新建技能的位置只影响保存目标，不应把其他目录已有的技能从列表中隐藏。
+	const selectedLocation = availableLocations.find((location) => location.id === props.newLocationId) ?? availableLocations[0];
 	return (
 		<div className="skills-tab">
 			<div className="mb-3 flex items-center justify-between gap-3">
@@ -96,7 +111,7 @@ export function SkillsTab(props: {
 							{ value: "promptchat", label: "Prompt.chat", icon: <Globe size={14} strokeWidth={1.8} /> },
 						]}
 					/>
-					{storeSource === "skillhub" ? <SkillHubStorePanel projectId={props.scope === "project" ? props.projectId : undefined} /> : <SkillStoreTab projectId={props.scope === "project" ? props.projectId : undefined} onImported={props.onRefresh} />}
+					{storeSource === "skillhub" ? <SkillHubStorePanel projectId={props.scope === "project" ? props.projectId : undefined} /> : <SkillStoreTab projectId={props.scope === "project" ? props.projectId : undefined} onImported={props.onRefresh} locationId={props.newLocationId} />}
 				</div>
 			) : (
 				<>
@@ -133,6 +148,48 @@ export function SkillsTab(props: {
 							</Button>
 						</div>
 					</div>
+
+					<section className="config-create-card">
+						<strong>{t("config.createSkill")}</strong>
+						<div className="config-create-grid">
+							<Label className="config-create-label">
+								<span>{t("config.name")}</span>
+								<Input value={props.newName} placeholder={t("config.skillNamePlaceholder")} onChange={(event) => props.onChangeNewName(event.target.value)} />
+							</Label>
+							<Label className="config-create-label">
+								<span>{t("config.location")}</span>
+								<Select
+									value={props.newLocationId}
+									onValueChange={(v) => {
+										// 只接受已知位置 id，避免外部字符串注入；仅改变保存目标，不立即创建文件。
+										if (v === "pi-global" || v === "agents-global" || v === "project-pi" || v === "project-agents") {
+											props.onChangeNewLocation(v);
+										}
+									}}
+								>
+									{/* 只显示相对路径（label 形如 ~/.pi/agent/skills）：绝对路径长且无增益，
+										窄列会溢出框边界；单行 + truncate 超长省略。 */}
+									<SelectTrigger className="w-full">
+										<span className="min-w-0 flex-1 truncate text-left">{selectedLocation?.label ?? t("config.chooseFolder")}</span>
+									</SelectTrigger>
+									<SelectContent>
+										{availableLocations.map((location) => (
+											<SelectItem key={location.id} value={location.id}>
+												<span className="min-w-0 flex-1 truncate text-left">{location.label}</span>
+											</SelectItem>
+										))}
+									</SelectContent>
+								</Select>
+							</Label>
+						</div>
+						<Label className="config-create-label">
+							<span>{t("config.description")}</span>
+							<Textarea value={props.newDescription} placeholder={t("config.skillUseWhenPlaceholder")} onChange={(event) => props.onChangeNewDescription(event.target.value)} className="min-h-[72px] resize-y" />
+						</Label>
+						<Button size="sm" variant="default" className="justify-self-start" onClick={props.onCreate} disabled={!canCreate || props.creating}>
+							{props.creating ? t("config.creatingSkill") : t("config.addSkill")}
+						</Button>
+					</section>
 
 					<div className="overflow-x-auto rounded-lg border border-border-subtle bg-bg-panel">
 						{visibleSkills.length === 0 ? (
