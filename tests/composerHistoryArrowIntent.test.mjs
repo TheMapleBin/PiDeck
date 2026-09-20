@@ -105,7 +105,10 @@ test("caret block edge comes from ProseMirror state instead of the draft string"
 	});
 	const doc = schema.nodeFromJSON({
 		type: "doc",
-		content: [{ type: "paragraph", content: [{ type: "text", text: "a" }] }, { type: "paragraph", content: [{ type: "text", text: "b" }] }],
+		content: [
+			{ type: "paragraph", content: [{ type: "text", text: "a" }] },
+			{ type: "paragraph", content: [{ type: "text", text: "b" }] },
+		],
 	});
 	const stateAt = (pos) => ({ doc, selection: { $from: doc.resolve(pos) } });
 

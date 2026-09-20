@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import test from "node:test";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { buildMergeMessage, parseSyncArgs } from "../scripts/sync-main.mjs";
 
 /**
@@ -83,4 +86,21 @@ test("sync is wired as an npm script and self-documents dry-run", () => {
 	const dryRunIndex = script.indexOf("if (options.dryRun) {");
 	const worktreeIndex = script.indexOf('mkdtempSync(join(tmpdir(), "pideck-sync-main-"))');
 	assert.ok(dryRunIndex > 0 && worktreeIndex > 0 && dryRunIndex < worktreeIndex, "dry-run must return before any worktree is created");
+});
+
+test("importing the script exposes helpers without ever running a sync", () => {
+	// 回归（2026-09-20 CI 红灯）：脚本原先在模块顶层直接 `main();`，于是「import 纯函数做断言」
+	// 会顺带执行一次真实的 fetch + 合并 + 推送——本机那次 import 真的把 main 推到了远端，
+	// CI 里则整个文件失败（输出「当前正处于 main 分支，请先切回 dev 再执行同步」）。
+	// 子进程在临时目录（非 git 仓库）里 import：万一守卫被删，最坏也只是撞上预检，碰不到真实仓库。
+	const scriptPath = fileURLToPath(new URL("../scripts/sync-main.mjs", import.meta.url));
+	const child = spawnSync(process.execPath, ["--input-type=module", "-e", `import { parseSyncArgs, buildMergeMessage } from ${JSON.stringify(pathToFileURL(scriptPath).href)}; process.stdout.write(\`exports:\${typeof parseSyncArgs},\${typeof buildMergeMessage}\`);`], { cwd: tmpdir(), encoding: "utf8" });
+	const output = `${child.stdout}${child.stderr}`;
+	assert.equal(child.status, 0, `import 不应触发任何同步动作，但子进程退出码为 ${child.status}：${output}`);
+	assert.equal(child.stdout, "exports:function,function");
+	assert.doesNotMatch(output, /同步 |已合并|已推送/);
+	// 入口守卫与 CI 护栏本身也要钉住：它们被删时上面两条会立刻变红
+	assert.match(script, /if \(process\.argv\[1\] && pathToFileURL\(process\.argv\[1\]\)\.href === import\.meta\.url\) main\(\);/);
+	assert.doesNotMatch(script, /^main\(\);$/m);
+	assert.match(script, /process\.env\.CI/);
 });
