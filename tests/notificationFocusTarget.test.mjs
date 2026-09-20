@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import test from "node:test";
 import ts from "typescript";
 import vm from "node:vm";
+import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
 const nodeRequire = createRequire(import.meta.url);
 
@@ -33,6 +34,8 @@ test("resolveNotificationSessionId prefers record id over pi session id", () => 
 					// looksLikePiSessionFileStem 顶层引用：resolveNotificationSessionId 用不到，空导出
 					return { looksLikePiSessionFileStem: () => false };
 				}
+				// entryId 槽位判定（isRoleMessageRole）：无依赖纯模块，真实加载保持顶层导入契约
+				if (id === "./sessionEntryIds") return loadTsCommonJs("src/main/pi/sessionEntryIds.ts");
 				return nodeRequire(id);
 			},
 		},

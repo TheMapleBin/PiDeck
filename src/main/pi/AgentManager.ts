@@ -74,6 +74,7 @@ import {
 import { AgentMessageProjector, buildActiveBranchEntryIds as buildActiveBranchEntryIdsForDisplay } from "./AgentMessageProjector";
 import { LatestByKeyEmitter } from "./LatestByKeyEmitter";
 import { resolveNotificationSessionId } from "./agentUtils";
+import { isRoleMessageRole } from "./sessionEntryIds";
 import { createStreamGateState, isStreamGateSealed, noteAbortSettled, openStreamGateForNewRun, sealStreamGate, type StreamGateState } from "./streamGate";
 import { createCacheHitStatsReader, type CacheHitStats, type CacheHitStatsReader } from "./cacheHitStats";
 import {
@@ -1131,9 +1132,11 @@ export class AgentManager {
 		// 解析 entryId 列表（需要先于 convertAgentMessages，用于把消息关联到 pi 的会话分支）。
 		let activeEntryIds: string[] | undefined;
 		if (useFileEntryIds && sessionPath) {
+			// 只数消费 entryId 槽位的角色消息：getRecentActiveEntryIds 按同一规则过滤
+			// （pi 0.86 的 role:"system" 条目不算槽位，见 sessionEntryIds.isRoleMessageRole）。
 			const roleCount = rawMessages.reduce<number>((count, message) => {
 				const role = (message as { role?: unknown } | undefined)?.role;
-				return count + (role === "user" || role === "assistant" || role === "toolResult" ? 1 : 0);
+				return count + (isRoleMessageRole(role) ? 1 : 0);
 			}, 0);
 			activeEntryIds = await this.sessionHistoryReader.getRecentActiveEntryIds(sessionPath, roleCount).catch(() => undefined);
 		} else if (entriesResult) {
@@ -1159,27 +1162,25 @@ export class AgentManager {
 		}
 		// 记录缓存头部在文件消息下标空间中的位置：无 entryId 的窗口（skipEntries 大历史路径）
 		// 需要用它作为首次补历史的数值游标（渲染层 before=windowStartFilePos）。
+		// 窗口条数必须用「message 条目数」而不是角色消息数：readRecordMessagePage 的数值 before
+		// 是 activeMessageEntries 下标空间，而 0.86 起窗口里会夹 role:"system" 的 prompt/tool
+		// 更新条目，少算会让「加载更多」锚点前移。（trimmedStart 之前的条目已滑出窗口）
+		const windowEntryCount = Math.max(0, rawMessages.length - trimmedStart);
 		let headOffset: number;
 		if (useFileEntryIds && sessionPath && activeEntryIds) {
 			// 文件 entryId 已是尾部窗口，不是全量分支：headOffset 必须用
 			// 文件总数 - 窗口条数，否则「加载更多」会以为已经在文件头。
 			const activeFileCount = await this.sessionHistoryReader.getActiveEntryCount(sessionPath).catch(() => activeEntryIds.length);
-			headOffset = Math.max(0, activeFileCount - activeEntryIds.length);
+			headOffset = Math.max(0, activeFileCount - windowEntryCount);
 		} else if (activeEntryIds) {
 			headOffset = droppedRoleCount;
 		} else if (runtime.tab.sessionPath) {
 			// get_entries 失败/未启用（skipEntries）时同样尽力提供数值游标：
 			// 否则渲染层「加载更多对话」因 entryId 锚点与 windowStartFilePos 双缺失而静默放弃，
 			// 表现为点击无反应（2026-02 修复，此前仅 skipEntries 路径走此兑底）。
-			const roleCount = trimmed.reduce<number>((count, message) => {
-				const role = (message as { role?: unknown } | undefined)?.role;
-				return count + (role === "user" || role === "assistant" || role === "toolResult" ? 1 : 0);
-			}, 0);
-			// 最佳努力：文件活动消息数 - 缓存内角色消息数 ≈ 被裁头部长度。
-			// 文件里非角色 message 条目（system 等）会让该值偏大，属极端边角；
-			// entryId 锚点仍是首选路径，此值只作为无 entryId 时的兜底游标。
+			// 最佳努力：文件活动消息数 - 窗口条数 ≈ 被裁头部长度（entryId 锚点仍是首选路径）。
 			const activeFileCount = await this.sessionHistoryReader.getActiveEntryCount(runtime.tab.sessionPath).catch(() => 0);
-			headOffset = Math.max(0, activeFileCount - roleCount);
+			headOffset = Math.max(0, activeFileCount - windowEntryCount);
 		} else {
 			headOffset = -1; // 未知：不提供 windowStartFilePos，渲染层回退 entryId 锚点
 		}

@@ -534,6 +534,45 @@ test("getRecentActiveEntryIds returns the last N active message ids", async () =
 	}
 });
 
+test("getRecentActiveEntryIds skips pi 0.86 system message entries", async () => {
+	const directory = await mkdtemp(join(tmpdir(), "pideck-history-entry-ids-role-"));
+	const sessionPath = join(directory, "session.jsonl");
+	try {
+		// 0.86 起系统提示/工具清单变更也落成 type:"message" + role:"system" 条目：
+		// 首个请求一条完整 sections，会话中段工具变更再补一条。
+		await writeFile(
+			sessionPath,
+			[
+				JSON.stringify({ id: "session", type: "session" }),
+				JSON.stringify({ id: "sys0", parentId: "session", type: "message", message: { role: "system", content: "", sections: { preamble: "You are pi." } } }),
+				JSON.stringify({ id: "u1", parentId: "sys0", type: "message", message: { role: "user", content: [{ type: "text", text: "q1" }] } }),
+				JSON.stringify({ id: "a1", parentId: "u1", type: "message", message: { role: "assistant", content: [{ type: "text", text: "a1" }] } }),
+				JSON.stringify({ id: "u2", parentId: "a1", type: "message", message: { role: "user", content: [{ type: "text", text: "q2" }] } }),
+				JSON.stringify({ id: "a2", parentId: "u2", type: "message", message: { role: "assistant", content: [{ type: "text", text: "a2" }] } }),
+				JSON.stringify({ id: "u3", parentId: "a2", type: "message", message: { role: "user", content: [{ type: "text", text: "q3" }] } }),
+				JSON.stringify({ id: "a3", parentId: "u3", type: "message", message: { role: "assistant", content: [{ type: "text", text: "a3" }] } }),
+				// 会话中段工具清单变更（plan 模式 setActiveTools 等）：落在尾部窗口内。
+				JSON.stringify({ id: "sys3", parentId: "a3", type: "message", message: { role: "system", content: "", toolsRemoved: [{ name: "edit" }] } }),
+				JSON.stringify({ id: "u4", parentId: "sys3", type: "message", message: { role: "user", content: [{ type: "text", text: "q4" }] } }),
+				JSON.stringify({ id: "a4", parentId: "u4", type: "message", message: { role: "assistant", content: [{ type: "text", text: "a4" }] } }),
+			].join("\n"),
+			"utf8",
+		);
+		const reader = createReader((path) => path);
+		// 窗口内夹着 sys3：必须跳过它，否则返回的 id 整体前移一条（u1→a1、a1→u2 …）。
+		const ids = await reader.getRecentActiveEntryIds(sessionPath, 4);
+		assert.equal(JSON.stringify(ids), JSON.stringify(["u3", "a3", "u4", "a4"]));
+		// 窗口不跨越该条目时结果不变。
+		const shorter = await reader.getRecentActiveEntryIds(sessionPath, 2);
+		assert.equal(JSON.stringify(shorter), JSON.stringify(["u4", "a4"]));
+		// getActiveEntryCount 仍是「message 条目总数」：readRecordMessagePage 的数值 before
+		// 游标与 entryId 对齐是两套口径，不要把这里改成角色消息数。
+		assert.equal(await reader.getActiveEntryCount(sessionPath), 10);
+	} finally {
+		await rm(directory, { recursive: true, force: true });
+	}
+});
+
 test("SessionHistoryReader prefetches the next page and serves it from cache", async () => {
 	const directory = await mkdtemp(join(tmpdir(), "pideck-history-prefetch-"));
 	const sessionPath = join(directory, "session.jsonl");

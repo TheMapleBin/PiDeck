@@ -8,6 +8,7 @@ import type { MainProcessTranslationKey } from "../../shared/i18n/mainProcessCop
 import type { RpcResponse } from "./PiRpcClient";
 import type { AppLogger } from "../logging/AppLogger";
 import { stoppedMessageFingerprint, type StoppedMessageIdentity } from "./stoppedMessageIdentity";
+import { isRoleMessageRole } from "./sessionEntryIds";
 
 type SessionModelSelection = {
 	provider: string;
@@ -826,15 +827,30 @@ export class SessionHistoryReader {
 	}
 
 	/**
-	 * 取活动分支末尾 `messageCount` 条消息的 entryId（与 JSONL 尾部窗口一一对应）。
+	 * 取活动分支末尾 `messageCount` 条**消费 entryId 槽位的角色消息**的 entryId
+	 * （与 JSONL 尾部窗口一一对应）。
 	 * loadMessages 用它代替 get_entries：pi 会把整棵 entry 树打成单行 JSON，同步 parse 会冻窗。
+	 *
+	 * 为什么必须按角色过滤：activeMessageEntries 只按 `type === "message"` 收集，而 pi 0.86
+	 * 起系统提示与工具清单变更也会落成 `type:"message"` + `role:"system"` 的条目
+	 * （transcript-backed prompt/tool 更新，首个请求一条完整 sections、之后按 name 打补丁）。
+	 * AgentMessageProjector 只给 user/assistant/toolResult 分配槽位；若这里直接对
+	 * activeMessageEntries 尾部切片，窗口内夹着 system 条目时返回的 id 会整体错位
+	 * （u1→a1、a1→u2 …），而 SessionFileEditor 按 id 定位，编辑/删除/重发将落到相邻条目上
+	 * （重发另有 assertResendRootEntry 文本校验兜底，编辑/删除没有）。2026-09 适配 0.86。
 	 */
 	async getRecentActiveEntryIds(sessionPath: string, messageCount: number): Promise<string[]> {
 		const index = await this.getSessionDisplayIndex(sessionPath);
-		const total = index.activeMessageEntries.length;
-		const count = Number.isFinite(messageCount) && messageCount > 0 ? Math.min(Math.floor(messageCount), total) : 0;
+		const entries = index.activeMessageEntries;
+		const count = Number.isFinite(messageCount) && messageCount > 0 ? Math.min(Math.floor(messageCount), entries.length) : 0;
 		if (count <= 0) return [];
-		return index.activeMessageEntries.slice(total - count).map((entry) => entry.id);
+		// 从尾部倒着收集，凑够 count 条即停：避免对上千条消息的会话做一次全量 filter 分配。
+		const ids: string[] = [];
+		for (let position = entries.length - 1; position >= 0 && ids.length < count; position -= 1) {
+			const entry = entries[position];
+			if (isRoleMessageRole(entry.role)) ids.push(entry.id);
+		}
+		return ids.reverse();
 	}
 
 	/**

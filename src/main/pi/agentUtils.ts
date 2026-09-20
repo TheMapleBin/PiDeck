@@ -5,6 +5,7 @@
 
 import type { ChatMessage, Project } from "../../shared/types";
 import { looksLikePiSessionFileStem } from "../../shared/sessionIdentity";
+import { isRoleMessageRole } from "./sessionEntryIds";
 
 export { looksLikePiSessionFileStem } from "../../shared/sessionIdentity";
 
@@ -77,14 +78,15 @@ export function trimHistoryMessages<T>(rawMessages: T[], maxTurns = 12): T[] {
 /**
  * 统计 [0, endIndex) 内会消费 entryId 槽位的角色消息数（user/assistant/toolResult）。
  * 与 AgentMessageProjector 的槽位消费规则一致：compactionSummary/branchSummary/非角色条目
- * 不消费槽位。用于 trim 后把 activeEntryIds 与保留消息重新对齐。
+ * 不消费槽位（pi 0.86 起窗口里可能夹 `role:"system"` 的 prompt/tool 更新条目，同样不算）。
+ * 用于 trim 后把 activeEntryIds 与保留消息重新对齐。
  */
 export function countRoleMessagesBefore<T>(rawMessages: T[], endIndex: number): number {
 	const bound = Math.min(Math.max(0, endIndex), rawMessages.length);
 	let count = 0;
 	for (let i = 0; i < bound; i++) {
 		const role = (rawMessages[i] as { role?: unknown } | undefined)?.role;
-		if (role === "user" || role === "assistant" || role === "toolResult") count++;
+		if (isRoleMessageRole(role)) count++;
 	}
 	return count;
 }
