@@ -93,6 +93,7 @@ import {
 	Sparkles,
 	MessageSquare,
 	Quote,
+	EyeOff,
 } from "lucide-react";
 import { getFileIconSeti, getFileIconColor, getFileTypeLabel } from "../../fileIcons";
 import { normalizeSessionPathForCompare } from "../../agentListDisplay";
@@ -865,6 +866,19 @@ export const UserBubble = memo(function UserBubble(props: {
 								</div>
 								{block.description && <p className="mt-1.5 text-[13px] leading-[1.6] break-words whitespace-pre-wrap text-text-primary">{block.description}</p>}
 								{visionDetailOpen && <VisionBridgeDetail events={visionEvents} loading={visionLoading} />}
+							</div>
+						) : block.kind === "skipped" ? (
+							// 未发送：中性提示卡（视觉桥没开/没选模型，图片压根没进转换流程，不是故障）。
+							// 用 warning 而非 danger：红色意味着「出错了」，会把用户引去检查 Key/接口地址，
+							// 而真正要做的只是开视觉桥或给模型勾上图片输入（2026-09 反馈）。
+							<div key={bi} className="w-full min-w-0 rounded-lg border border-warning/40 bg-warning/10 p-2.5" title={t("app.visionBridgeNotSentDesc")}>
+								<div className="flex items-center gap-1.5 text-[11px] font-medium text-warning">
+									<EyeOff size={12} className="shrink-0" />
+									<span>{t("app.visionBridgeNotSent")}</span>
+									<span className="text-warning/60">·</span>
+									<span>{t("app.visionBridgeImageLabel", { index: block.index })}</span>
+								</div>
+								{block.reason && <p className="mt-1.5 text-[13px] leading-[1.6] break-words whitespace-pre-wrap text-text-primary">{block.reason}</p>}
 							</div>
 						) : (
 							// 失败：红色卡片，原因直出，用户不用去设置页翻日志
