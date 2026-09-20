@@ -74,6 +74,7 @@ import { useDrawerPorts } from "./hooks/useDrawerPorts";
 import { useTerminalDock } from "./hooks/useTerminalDock";
 import { resolveTerminalOwner, terminalOwnerKey } from "./terminalDockState";
 import { useImportFlow } from "./hooks/useImportFlow";
+import { useDirectoryImport } from "./hooks/useDirectoryImport";
 import { useQueuedPrompt } from "./hooks/useQueuedPrompt";
 import { activeAgentIdAtom } from "./hooks/useSessionRuntimeController";
 import { useSessionHistoryMutations } from "./hooks/useSessionHistoryMutations";
@@ -636,6 +637,18 @@ export function App() {
     scanCursorSessions: api.cursorSessions.scan,
     importCursorSessionsApi: api.cursorSessions.import,
     t,
+  });
+
+  // === 外置目录会话导入（目录移动/改名后找回历史）===
+  const {
+    project: directoryImportProject,
+    setProject: setDirectoryImportProject,
+    controller: directoryImportController,
+    open: openDirectoryImport,
+  } = useDirectoryImport({
+    setProjectMenu: () => undefined,
+    refreshProjectSessions,
+    showToast,
   });
 
   const rename = useRename({
@@ -3318,6 +3331,7 @@ export function App() {
         if (source === "cursor") return openCursorImport(project);
         return openOpenCodeImport(project);
       },
+      importDirectorySessions: (project) => openDirectoryImport(project),
       manageResources: (project) => setProjectResourcesProject(project),
       manageAutomations: (projectId) => openAutomationModal(projectId),
       toggleWorktree: toggleProjectWorktree,
@@ -4585,6 +4599,7 @@ export function App() {
     {zcodeImportProject && <ImportOverlayHost kind="zcode" project={zcodeImportProject} controller={zcodeImportController} onClose={() => setZcodeImportProject(null)} />}
     {workbuddyImportProject && <ImportOverlayHost kind="workbuddy" project={workbuddyImportProject} controller={workbuddyImportController} onClose={() => setWorkbuddyImportProject(null)} />}
     {cursorImportProject && <ImportOverlayHost kind="cursor" project={cursorImportProject} controller={cursorImportController} onClose={() => setCursorImportProject(null)} />}
+    {directoryImportProject && <ImportOverlayHost kind="directory" project={directoryImportProject} controller={directoryImportController} onClose={() => setDirectoryImportProject(null)} />}
 
     {/* Scratch Pad（草稿本）：根级渲染，避免受 chat-pane grid 影响定位 */}
     <ScratchPadOverlay controller={scratchPad} />

@@ -3,6 +3,7 @@ import {
 	ClaudeImportModal,
 	CodexImportModal,
 	CursorImportModal,
+	DirectoryImportModal,
 	OpenCodeImportModal,
 	WorkBuddyImportModal,
 	ZCodeImportModal,
@@ -20,9 +21,12 @@ import type {
   WorkBuddySessionSummary,
   CursorImportReport,
   CursorSessionSummary,
+  DirectoryImportReport,
+  DirectorySessionSummary,
   Project,
 } from "../../../../shared/types";
 import type { ImportController } from "../../hooks/useImportFlow";
+import type { DirectoryImportController } from "../../hooks/useDirectoryImport";
 
 export type ImportOverlayHostProps =
   | { kind: "codex"; project: Project; controller: ImportController<CodexSessionSummary, CodexImportReport>; onClose: () => void }
@@ -30,7 +34,9 @@ export type ImportOverlayHostProps =
   | { kind: "opencode"; project: Project; controller: ImportController<OpenCodeSessionSummary, OpenCodeImportReport>; onClose: () => void }
   | { kind: "zcode"; project: Project; controller: ImportController<ZCodeSessionSummary, ZCodeImportReport>; onClose: () => void }
   | { kind: "workbuddy"; project: Project; controller: ImportController<WorkBuddySessionSummary, WorkBuddyImportReport>; onClose: () => void }
-  | { kind: "cursor"; project: Project; controller: ImportController<CursorSessionSummary, CursorImportReport>; onClose: () => void };
+  | { kind: "cursor"; project: Project; controller: ImportController<CursorSessionSummary, CursorImportReport>; onClose: () => void }
+  /** 目录导入源目录现选，控制器多带「已选目录 / 只看失效目录」两组状态。 */
+  | { kind: "directory"; project: Project; controller: DirectoryImportController; onClose: () => void };
 
 export function renderImportError(error: string | null): ReactNode {
 	if (!error) return null;
@@ -62,6 +68,7 @@ export function renderImportError(error: string | null): ReactNode {
 
 /** A provider switch lives here so Sidebar only chooses a provider/project. */
 export function ImportOverlayHost(props: ImportOverlayHostProps) {
+	if (props.kind === "directory") return <DirectoryImportModal project={props.project} {...props.controller} onClose={props.onClose} onRefresh={props.controller.refresh} onToggle={props.controller.toggle} onToggleAll={props.controller.toggleAll} onImport={() => void props.controller.importSelected()} onChooseDirectory={() => void props.controller.chooseDirectory()} onSetOnlyMissingCwd={props.controller.setOnlyMissingCwd} hiddenByFilter={props.controller.hiddenByFilter} />;
 	if (props.kind === "claude") return <><ClaudeImportModal project={props.project} {...props.controller} onClose={props.onClose} onRefresh={props.controller.refresh} onToggle={props.controller.toggle} onToggleAll={props.controller.toggleAll} onImport={() => void props.controller.importSelected()} />{renderImportError(props.controller.error)}</>;
 	if (props.kind === "opencode") return <><OpenCodeImportModal project={props.project} {...props.controller} onClose={props.onClose} onRefresh={props.controller.refresh} onToggle={props.controller.toggle} onToggleAll={props.controller.toggleAll} onImport={() => void props.controller.importSelected()} />{renderImportError(props.controller.error)}</>;
 	if (props.kind === "zcode") return <><ZCodeImportModal project={props.project} {...props.controller} onClose={props.onClose} onRefresh={props.controller.refresh} onToggle={props.controller.toggle} onToggleAll={props.controller.toggleAll} onImport={() => void props.controller.importSelected()} />{renderImportError(props.controller.error)}</>;
@@ -78,4 +85,5 @@ export type ImportOverlayData = {
 	zcode: { sessions: ZCodeSessionSummary[]; report: ZCodeImportReport | null };
 	workbuddy: { sessions: WorkBuddySessionSummary[]; report: WorkBuddyImportReport | null };
 	cursor: { sessions: CursorSessionSummary[]; report: CursorImportReport | null };
+	directory: { sessions: DirectorySessionSummary[]; report: DirectoryImportReport | null };
 };

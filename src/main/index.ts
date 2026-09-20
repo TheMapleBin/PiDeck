@@ -293,6 +293,8 @@ import { OpenCodeSessionImporter } from "./sessions/OpenCodeSessionImporter";
 import { ZCodeSessionImporter } from "./sessions/ZCodeSessionImporter";
 import { WorkBuddySessionImporter } from "./sessions/WorkBuddySessionImporter";
 import { CursorSessionImporter } from "./sessions/CursorSessionImporter";
+import { DirectorySessionImporter } from "./sessions/DirectorySessionImporter";
+import { normalizeSessionPathKey } from "./sessions/directorySessionImport";
 import { SettingsStore } from "./settings/SettingsStore";
 import { SecurityStore } from "./security/SecurityStore";
 import { applyDesktopProxy } from "./settings/DesktopProxy";
@@ -438,6 +440,8 @@ let openCodeSessionImporter: OpenCodeSessionImporter;
 let zcodeSessionImporter: ZCodeSessionImporter;
 let workbuddySessionImporter: WorkBuddySessionImporter;
 let cursorSessionImporter: CursorSessionImporter;
+/** 外置目录会话导入（项目目录移动/改名后找回历史）；只建 catalog 引用，不复制文件。 */
+let directorySessionImporter: DirectorySessionImporter;
 let settingsStore: SettingsStore;
 let securityStore: SecurityStore;
 let worktreeService: WorktreeService;
@@ -2709,6 +2713,7 @@ function registerIpc() {
 		zcodeSessionImporter,
 		workbuddySessionImporter,
 		cursorSessionImporter,
+		directorySessionImporter,
 		appLogger,
 		terminalManager,
 		mainCopy: mainCopy as (key: string, params?: Record<string, string | number>) => string,
@@ -3303,6 +3308,48 @@ app.whenReady().then(async () => {
 	zcodeSessionImporter = new ZCodeSessionImporter(mainCopy);
 	workbuddySessionImporter = new WorkBuddySessionImporter(mainCopy);
 	cursorSessionImporter = new CursorSessionImporter(mainCopy);
+	// 外置目录会话导入：不复制会话文件，只把选定目录里的会话挂到当前项目（catalog 归属改写）。
+	// 候选来自 SessionScanner 的全量清单（list() 不带项目参数）——项目目录改名后，
+	// 那批会话仍然躺在 sessions 树里，只是项目过滤把它们排除了。
+	directorySessionImporter = new DirectorySessionImporter({
+		listSessions: () => sessionScanner.list(),
+		readSessionName: (filePath) => sessionScanner.inferSessionNameFromFile(filePath),
+		readDirectoryShape: async (dir) => {
+			const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+			return {
+				hasJsonl: entries.some(
+					(entry) => entry.isFile() && entry.name.toLowerCase().endsWith(".jsonl"),
+				),
+				// sessions 根形态：--D--Users-me-old-- 这样的 encoded 分组目录
+				hasEncodedGroups: entries.some(
+					(entry) => entry.isDirectory() && /^--.*--$/.test(entry.name.trim()),
+				),
+			};
+		},
+		listKnownFilePaths: () => new Set(
+			sessionCatalog.listEntries()
+				.filter((entry) => Boolean(entry.filePath))
+				.map((entry) => normalizeSessionPathKey(entry.filePath!)),
+		),
+		// 第四个参数是导入选项：manualAssignment 把归属钉在当前项目（旧目录项目扫描抢不回去）。
+		mergeScanned: (projectId, summaries, options) =>
+			sessionCatalog.mergeScanned(projectId, summaries, undefined, options),
+		// 原目录是否还在磁盘上（判定「目录被移动/改名」）；stat 失败按不存在处理。
+		pathExists: async (path) => {
+			try {
+				await stat(path);
+				return true;
+			} catch {
+				return false;
+			}
+		},
+		onError: (sourcePath, error) => {
+			void appLogger?.warn("session", "Directory session import failed", {
+				sourcePath,
+				error: error instanceof Error ? error.message : String(error),
+			});
+		},
+	});
 	settingsStore = new SettingsStore();
 	// 安全管理：配置 owner + 策略快照写入（供 pi-deck-security-gate 扩展消费）
 	securityStore = new SecurityStore({

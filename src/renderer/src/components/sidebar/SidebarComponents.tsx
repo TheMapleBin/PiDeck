@@ -632,6 +632,8 @@ export function ProjectContextMenu(props: {
 	onImportZCodeSessions: () => void;
 	onImportWorkBuddySessions: () => void;
 	onImportCursorSessions: () => void;
+	/** 导入其他目录的会话（项目目录被移动/改名后找回历史） */
+	onImportDirectorySessions: () => void;
 	onManageProjectResources: () => void;
 	onManageAutomations: () => void;
 	onManageSessions: () => void;
@@ -751,6 +753,12 @@ export function ProjectContextMenu(props: {
 							</DropdownMenuItem>
 							<DropdownMenuItem onSelect={props.onImportCursorSessions}>
 								{t("menu.importCursor")}
+							</DropdownMenuItem>
+							{/* 目录移动/改名后历史找不到时的找回入口：源目录现选，不复制文件。
+							    放在「导入会话」子菜单最后并加分隔线，与「其它工具导入」区分开。 */}
+							<DropdownMenuSeparator />
+							<DropdownMenuItem onSelect={props.onImportDirectorySessions}>
+								{t("menu.importDirectorySessions")}
 							</DropdownMenuItem>
 						</DropdownMenuSubContent>
 					</DropdownMenuSub>

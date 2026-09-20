@@ -64,6 +64,13 @@ export type SessionCatalogEntry = {
 	agentPreset?: string;
 	/** 会话级代理覆盖（缺省 = 跟随全局）。DSH 会话的设置在 host 启动时被聚合应用。 */
 	proxy?: SessionProxyOverride;
+	/**
+	 * 手动导入钉住的项目归属（外置目录导入）：置位后自动扫描不得把该会话改回原目录对应的项目。
+	 * 场景：项目目录被移动/改名后，用户手动把旧路径下的会话导入到新项目；
+	 * 旧项目若仍留在侧栏，它的常规扫描会把属于旧 encoded 目录的会话抢回去，
+	 * 表现为「导入后刷新一下又不见了」。置位后该条目只由用户操作改归属（重新导入/删除）。
+	 */
+	manualProjectAssignment?: boolean;
 	createdAt: number;
 	updatedAt: number;
 };
@@ -849,6 +856,13 @@ export class SessionCatalog {
 		projectId: string,
 		summaries: SessionSummary[],
 		context: SessionCatalogContext = this.identityContext,
+		options: {
+			/**
+			 * 本次并入来自用户手动导入（外置目录导入）：命中条目打上 manualProjectAssignment，
+			 * 之后别的项目扫描不得把归属改回去。
+			 */
+			manualAssignment?: boolean;
+		} = {},
 	): Promise<SessionRecord[]> {
 		this.assertLoaded();
 		// 轻量列表扫描的 summary 不带 name（listPathSummary 只 stat，见 SessionScanner）；
@@ -955,6 +969,7 @@ export class SessionCatalog {
 					entries.push(entry);
 					byOrigin.set(originKey, entry);
 					changed = true;
+					if (options?.manualAssignment) entry.manualProjectAssignment = true;
 				} else {
 					// 旧 catalog 可能已经保存了时间戳文件名；不能在清洗失败时用 entry.title 回退，
 					// 否则每次扫描都会把这个错误标题原样保留下来，重启后仍显示时间戳。
@@ -971,8 +986,15 @@ export class SessionCatalog {
 					const nextParent = summary.parentSessionPath ?? fetchedParent ?? entry.parentSessionPath;
 					// fork 标记同样只增补、不清空：未探测到（轻量扫描/普通会话）保留持久化值。
 					const nextForked = nextParent ? entry.forked : (fetchedForkedFlag || entry.forked);
+					// 手动导入钉住的归属：别的项目扫描不得改回去（见 SessionCatalogEntry 注释）；
+					// 用户再一次手动导入（manualAssignment）表示明确改主意，允许迁移到新项目。
+					const nextProjectId = entry.manualProjectAssignment
+						&& !options?.manualAssignment
+						&& entry.projectId !== projectId
+						? entry.projectId
+						: projectId;
 					if (
-						entry.projectId !== projectId ||
+						entry.projectId !== nextProjectId ||
 						entry.filePath !== summary.filePath ||
 						entry.title !== nextTitle ||
 						entry.source !== (summary.source ?? "pi") ||
@@ -985,7 +1007,7 @@ export class SessionCatalog {
 						entry.forked !== nextForked ||
 						entry.updatedAt !== summary.updatedAt
 					) {
-						entry.projectId = projectId;
+						entry.projectId = nextProjectId;
 						entry.filePath = summary.filePath;
 						entry.title = nextTitle;
 						entry.source = summary.source ?? "pi";
@@ -1003,6 +1025,11 @@ export class SessionCatalog {
 						entry.parentSessionPath = summary.parentSessionPath ?? fetchedParent ?? entry.parentSessionPath;
 						entry.forked = nextForked;
 						entry.updatedAt = summary.updatedAt;
+						changed = true;
+					}
+					// 只有本次是手动导入才置位（自动扫描不得清除既有置位，否则归属又会被抢走）。
+					if (options?.manualAssignment && !entry.manualProjectAssignment) {
+						entry.manualProjectAssignment = true;
 						changed = true;
 					}
 				}

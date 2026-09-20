@@ -60,6 +60,8 @@ import type {
 	WorkBuddySessionSummary,
 	CursorImportReport,
 	CursorSessionSummary,
+	DirectoryImportReport,
+	DirectorySessionSummary,
 	ConfigFileDiagnostic,
 	DraftMeta,
 	CreateSessionDraftInput,
@@ -1011,6 +1013,23 @@ const api = {
 				projectId,
 				sourcePaths,
 			) as Promise<CursorImportReport>,
+	},
+	/**
+	 * 外置目录会话导入：源目录由用户现选（旧项目目录 / pi sessions 根 / encoded 分组目录），
+	 * 导入 = 把会话挂到当前项目（catalog 归属改写），原文件不移动、不复制。
+	 */
+	directorySessions: {
+		scan: (projectId: string, dir: string) =>
+			ipcRenderer.invoke(ipcChannels.directorySessionsScan, projectId, dir) as Promise<
+				DirectorySessionSummary[]
+			>,
+		import: (projectId: string, dir: string, sourcePaths: string[]) =>
+			ipcRenderer.invoke(
+				ipcChannels.directorySessionsImport,
+				projectId,
+				dir,
+				sourcePaths,
+			) as Promise<DirectoryImportReport>,
 	},
 	git: {
 		/** 扫描项目内独立仓库；单仓项目通常只返回根仓库 */
