@@ -2474,6 +2474,10 @@ export const zhCN = {
 	"config.modelSpecAutoFilled": "已按模型能力目录填充 {model} 的规格",
 	"config.modelUserAgent": "User-Agent",
 	"config.modelUserAgentInherit": "留空时继承该供应商的 UA",
+	"config.modelUserAgentClear": "清除覆盖",
+	// 弹框里解释逐模型 UA 的优先级：modelOverrides 覆盖 provider.headers（pi 的 rawModelHeaders 最后展开），
+	// 不写清这一层用户会以为「填了就替换掉供应商 UA 的全部场景」
+	"config.modelUserAgentDialogDesc": "留空 = 继承该供应商的 UA；填写后由 pi 覆盖供应商级 User-Agent（优先级更高），只对当前模型生效。",
 	"config.modelResetAdaptive": "重置为自适应",
 	"config.modelResetAdaptiveDone": "已按 {model} 的自适应模板重置能力字段",
 	"config.modelResetAdaptiveKept": "未匹配到自适应模板，已保留手动填写的容量字段",

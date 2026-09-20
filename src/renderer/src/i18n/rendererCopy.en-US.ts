@@ -2480,6 +2480,8 @@ export const enUS: Record<TranslationKey, string> = {
 	"config.modelSpecAutoFilled": "Auto-filled specs for {model} from the model capability catalog",
 	"config.modelUserAgent": "User-Agent",
 	"config.modelUserAgentInherit": "Leave empty to inherit the provider-level UA",
+	"config.modelUserAgentClear": "Clear override",
+	"config.modelUserAgentDialogDesc": "Leave empty to inherit the provider-level User-Agent. When set, pi overrides it (higher priority) for this model only.",
 	"config.modelResetAdaptive": "Reset to adaptive",
 	"config.modelResetAdaptiveDone": "Reset capability fields to the adaptive template for {model}",
 	"config.modelResetAdaptiveKept": "No adaptive template matched; kept manually set capacity fields",
