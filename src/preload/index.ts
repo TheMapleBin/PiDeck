@@ -187,7 +187,14 @@ const api = {
 		/** 异步写入纯文本：诊断报告/AI 提示词可达数十 KB，直连 clipboard 在 Electron 38 已废弃。 */
 		writeText: (value: string) => ipcRenderer.invoke(ipcChannels.clipboardWriteText, value) as Promise<boolean>,
 	},
+	quickTask: {
+		getState: () => ipcRenderer.invoke(ipcChannels.quickTaskGetState) as Promise<import("../shared/types/quickTask").QuickTaskState>,
+		onChanged: (callback: (state: import("../shared/types/quickTask").QuickTaskState) => void) => subscribe(ipcChannels.quickTaskChanged, callback),
+		exit: () => ipcRenderer.invoke(ipcChannels.quickTaskExit) as Promise<void>,
+	},
 	shellMenu: {
+		getQuickTaskState: () => ipcRenderer.invoke(ipcChannels.shellMenuQuickTaskGetState) as Promise<{ supported: boolean; registered: boolean }>,
+		setQuickTaskEnabled: (enabled: boolean) => ipcRenderer.invoke(ipcChannels.shellMenuQuickTaskSetEnabled, enabled) as Promise<{ supported: boolean; registered: boolean }>,
 		/** 查询资源管理器右键菜单注册状态（非 Windows 返回 supported=false） */
 		getState: () =>
 			ipcRenderer.invoke(ipcChannels.shellMenuGetState) as Promise<{

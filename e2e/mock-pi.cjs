@@ -91,14 +91,16 @@ function encodeSessionDir(cwd) {
 // 2) 项目 cwd/.pi/sessions 镜像，SessionScanner 扫历史（#113 3.2-9）
 let sessionFile = resumeSessionPath;
 let sessionHeaderWritten = false;
-const TMP_SESSION_FILE_PATH = path.join(require("node:os").tmpdir(), sessionId + ".jsonl");
 const PROJECT_SESSIONS_DIR = path.join(process.cwd(), ".pi", "sessions");
 const PROJECT_SESSION_FILE_PATH = path.join(PROJECT_SESSIONS_DIR, sessionId + ".jsonl");
+// Session identity tests need the RPC-reported file and scanner file to be the same,
+// as with real pi; retain the older dual-file fixture for existing recovery tests.
+const TMP_SESSION_FILE_PATH = process.env.PIDECK_MOCK_SESSION_IN_PROJECT === "1" ? PROJECT_SESSION_FILE_PATH : path.join(require("node:os").tmpdir(), sessionId + ".jsonl");
 function ensureSessionFile() {
 	if (sessionFile) return;
 	try {
-		fs.writeFileSync(TMP_SESSION_FILE_PATH, "", { flag: "a" });
 		fs.mkdirSync(PROJECT_SESSIONS_DIR, { recursive: true });
+		fs.writeFileSync(TMP_SESSION_FILE_PATH, "", { flag: "a" });
 		const settingsPath = path.join(process.cwd(), ".pi", "settings.json");
 		if (!fs.existsSync(settingsPath)) {
 			fs.writeFileSync(settingsPath, JSON.stringify({ sessionDir: ".pi/sessions" }, null, 2));

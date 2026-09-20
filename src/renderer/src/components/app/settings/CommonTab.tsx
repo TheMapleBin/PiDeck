@@ -10,6 +10,7 @@ import { Input } from "../../ui-shadcn/input";
 import { SettingsSection } from "./SettingsStorageTab";
 import { DirtyMarker, SettingBox, SettingRow, SettingSwitchRow } from "./SettingRows";
 import { VoiceTranscriptionSettingsSection } from "./VoiceTranscriptionSettingsSection";
+import { QuickTaskMenuSetting } from "./QuickTaskMenuSetting";
 
 type CommonTabProps = {
 	draft: AppSettings;
@@ -354,6 +355,7 @@ export const CommonTab = memo(function CommonTab(props: CommonTabProps) {
           HKCU 写入即时生效；非 Windows 平台开关置灰并提示。 */}
 			<SettingsSection title={t("settings.shellContextMenuSection")} description={t("settings.shellContextMenuSectionDesc")}>
 				<SettingSwitchRow anchor="common-shell-context-menu" title={t("settings.shellContextMenu")} description={t("settings.shellContextMenuDesc")} checked={shellMenuState?.registered ?? false} disabled={!shellMenuState?.supported || shellMenuBusy} onChange={toggleShellMenu} />
+				<QuickTaskMenuSetting />
 				{!shellMenuState?.supported && <p className="px-4 pb-2 text-xs text-destructive">{t("settings.shellContextMenuUnsupported")}</p>}
 				{shellMenuError && <p className="px-4 pb-2 text-xs text-destructive">{shellMenuError}</p>}
 			</SettingsSection>

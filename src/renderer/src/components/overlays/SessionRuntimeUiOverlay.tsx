@@ -294,14 +294,6 @@ function BatchQuestion(props: {
 	finalLabel?: string;
 }) {
 	const { question } = props;
-	const selectOptions = question.type === "select" || question.type === "multi_select" ? (question.options ?? []) : [];
-	const hasOptionDescriptions = selectOptions.some((option) => typeof option !== "string" && Boolean(option.description));
-	const hasLongOptionText = selectOptions.some((option) => {
-		const label = typeof option === "string" ? option : option.label;
-		const description = typeof option === "string" ? "" : (option.description ?? "");
-		return label.length > 28 || description.length > 56;
-	});
-	const expandedOptionLayout = hasOptionDescriptions || hasLongOptionText || selectOptions.length > 6;
 	return (
 		<div
 			className="flex flex-col gap-1.5"
@@ -360,8 +352,9 @@ function BatchQuestion(props: {
 					</div>
 				) : question.type === "select" && question.options?.length ? (
 					<>
-						{/* 长文案/多选项使用宽卡片并自然增高；外层时间线是唯一滚动容器，避免嵌套滚动。 */}
-						<div className={`grid min-w-0 gap-1.5 ${expandedOptionLayout ? "grid-cols-2 max-[720px]:grid-cols-1" : "grid-cols-4 max-[720px]:grid-cols-2 max-[480px]:grid-cols-1"}`}>
+						{/* 选项一律整行横条（2026-12 用户反馈）：栅格 2/4 列在长文案下会被压成窄条，
+						    横条让标签与说明各自有整行宽度，长文案也能完整换行；外层时间线是唯一滚动容器。 */}
+						<div className="flex min-w-0 flex-col gap-1.5">
 							{question.options.map((option, index) => {
 								const rawLabel = typeof option === "string" ? option : option.label;
 								const parsed = typeof option === "string" ? splitAskOption(option) : { label: rawLabel, description: option.description };
@@ -371,7 +364,7 @@ function BatchQuestion(props: {
 								return (
 									<Button
 										key={`${question.id}:${index}`}
-										className={`ask-inline-bar-option h-auto min-h-[30px] w-full min-w-0 max-w-none flex-col items-start justify-center gap-0.5 px-2 py-1 text-left break-words whitespace-normal${expandedOptionLayout ? " min-h-[72px] py-2" : ""}${props.answer === value ? ` ${ASK_OPTION_SELECTED_CLASS}` : ""}`}
+										className={`ask-inline-bar-option h-auto min-h-[30px] w-full min-w-0 max-w-none flex-col items-start justify-center gap-0.5 px-2 py-1.5 text-left break-words whitespace-normal${props.answer === value ? ` ${ASK_OPTION_SELECTED_CLASS}` : ""}`}
 										variant="outline"
 										disabled={props.responding}
 										onClick={() => {
@@ -418,8 +411,9 @@ function BatchQuestion(props: {
 					</>
 				) : question.type === "multi_select" && question.options?.length ? (
 					<>
-						{/* 多选：checkbox 语义（选中打勾，再点取消），选完走底部的下一题/提交全部 */}
-						<div className={`grid min-w-0 gap-1.5 ${expandedOptionLayout ? "grid-cols-2 max-[720px]:grid-cols-1" : "grid-cols-4 max-[720px]:grid-cols-2 max-[480px]:grid-cols-1"}`}>
+						{/* 多选：checkbox 语义（选中打勾，再点取消），选完走底部的下一题/提交全部。
+						    与单选一致用整行横条，保证勾选态与文案在长选项下都可读。 */}
+						<div className="flex min-w-0 flex-col gap-1.5">
 							{question.options.map((option, index) => {
 								const rawLabel = typeof option === "string" ? option : option.label;
 								const parsed = typeof option === "string" ? splitAskOption(option) : { label: rawLabel, description: option.description };
@@ -431,7 +425,7 @@ function BatchQuestion(props: {
 								return (
 									<Button
 										key={`${question.id}:${index}`}
-										className={`ask-inline-bar-option h-auto min-h-[30px] w-full min-w-0 max-w-none flex-col items-start justify-center gap-0.5 px-2 py-1 text-left break-words whitespace-normal${expandedOptionLayout ? " min-h-[72px] py-2" : ""}${selected ? ` ${ASK_OPTION_SELECTED_CLASS}` : ""}`}
+										className={`ask-inline-bar-option h-auto min-h-[30px] w-full min-w-0 max-w-none flex-col items-start justify-center gap-0.5 px-2 py-1.5 text-left break-words whitespace-normal${selected ? ` ${ASK_OPTION_SELECTED_CLASS}` : ""}`}
 										variant="outline"
 										disabled={props.responding}
 										onClick={() => {
@@ -613,7 +607,8 @@ export function SessionRuntimeUiOverlay({ sessionId, runtime, ui, responder, onE
 				}}
 			>
 				{request.method === "select" && request.options?.length ? (
-					<div className="grid min-w-0 grid-cols-2 gap-1.5 max-[480px]:grid-cols-1">
+					// 单卡选项同样整行横条：横条比双列栅格更耐长文案，也与批量卡的选项语言一致。
+					<div className="flex min-w-0 flex-col gap-1.5">
 						{request.options.map((option) => {
 							const parsed = splitAskOption(option);
 							return (
