@@ -5,7 +5,9 @@ import { useFileLinkContext, useFilePathExists } from "./FileLinkBase";
 import { extractFileLinkLocation, relativeFilePathWithinRoot, resolveFileLinkPath } from "../../utils/filePathLinks";
 import { t } from "../../i18n";
 import { showNotice } from "../../utils/notice";
-import { writeClipboardText } from "../ui-shadcn/notice-toast";
+// 剪贴板工具必须取 utils 而非 notice-toast：notice-toast 经 MarkdownStream 依赖本文件，
+// 从它那里取导出会形成循环 import
+import { writeClipboard } from "../../utils/clipboard";
 import { desktopApi } from "../../desktopApi";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../ui-shadcn/dropdown-menu";
 export {
@@ -87,13 +89,13 @@ export function MarkdownLink(
 	};
 	const copyAbsolutePath = () => {
 		if (!resolvedPath) return;
-		void writeClipboardText(resolvedPath).then((ok) => {
+		void writeClipboard(resolvedPath).then((ok) => {
 			if (ok) showNotice(t("app.pathCopied"));
 		});
 	};
 	const copyRelativePath = () => {
 		if (!relativePath) return;
-		void writeClipboardText(relativePath).then((ok) => {
+		void writeClipboard(relativePath).then((ok) => {
 			if (ok) showNotice(t("app.pathCopied"));
 		});
 	};
