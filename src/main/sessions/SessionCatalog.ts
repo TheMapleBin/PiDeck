@@ -493,7 +493,11 @@ export class SessionCatalog {
 					const agentPresetChanged = input.agentPreset !== undefined && existing.agentPreset !== input.agentPreset;
 					const changed =
 						forgotten ||
-						existing.projectId !== input.projectId || existing.title !== nextTitle || existing.backend !== input.backend || agentPresetChanged || existing.status !== "active" ||
+						existing.projectId !== input.projectId ||
+						existing.title !== nextTitle ||
+						existing.backend !== input.backend ||
+						agentPresetChanged ||
+						existing.status !== "active" ||
 						// mtime 变化也落盘：修正历史被顶高的 updatedAt，否则排序永远错
 						existing.updatedAt !== (input.updatedAt ?? now);
 					existing.projectId = input.projectId;
