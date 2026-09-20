@@ -4020,6 +4020,8 @@ export const enUS: Record<TranslationKey, string> = {
 	"timeline.showEarlierSteps": "Show {count} earlier steps",
 	"timeline.loadMoreHistory": "Load more history messages ({count})",
 	"timeline.loadMoreTurns": "Load more conversations",
+	"timeline.loadMoreFailed": "Failed to load earlier history",
+	"timeline.loadMoreFailedHint": "The session file or DSH host may be temporarily unavailable. Click the button to retry.",
 	"drawer.lazyLoading": "Loading...",
 	"diagnostic.errorTitle": "Error diagnostics",
 	"diagnostic.systemTitle": "System status",

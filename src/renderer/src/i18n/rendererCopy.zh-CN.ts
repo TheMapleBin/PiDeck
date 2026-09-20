@@ -4010,6 +4010,8 @@ export const zhCN = {
 	"timeline.showEarlierSteps": "显示更早的 {count} 条步骤",
 	"timeline.loadMoreHistory": "加载更多历史消息 ({count} 条)",
 	"timeline.loadMoreTurns": "加载更多对话",
+	"timeline.loadMoreFailed": "更早的历史加载失败",
+	"timeline.loadMoreFailedHint": "可能是会话文件或 DSH host 暂时不可用；按钮可再点重试。",
 	"drawer.lazyLoading": "加载中...",
 	"diagnostic.errorTitle": "错误诊断",
 	"diagnostic.systemTitle": "系统状态",

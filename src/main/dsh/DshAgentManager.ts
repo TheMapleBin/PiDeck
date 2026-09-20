@@ -7,7 +7,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { ipcChannels } from "../../shared/ipc";
 import { getAppLogger } from "../logging/sharedLogger";
-import type { DshEnvelope, DshHistoryPage } from "./dshRemoteClient";
+import type { DshEnvelope, DshHistoryEntry, DshHistoryPage } from "./dshRemoteClient";
 import type { SessionAgentGateway } from "../sessions/SessionRuntimeCoordinator";
 import type { DshHost } from "./DshHost";
 import { renderDshSessionHtml, sanitizeExportFileName } from "./dshSessionHtmlExport";
@@ -32,6 +32,7 @@ import { toDshAvailableModels } from "./dshModels";
 import { approvalUiRequest, buildDshRejectValue, buildDshRespondValue, parseDshApprovalFrame, parseDshQuestionFrame, questionUiRequest, type DshApprovalFrame, type DshQuestionFrame } from "./dshApprovalBridge";
 // DSH 会话持久化路径编码（与 DshHost 归档共用同一 workspace 目录名规则）
 import { dshSessionFilePath } from "./dshSessionPath";
+import { assembleDshHistoryEntries, countDshUserMessages, DSH_HISTORY_DEFAULT_TURN_PAGE_SIZE, normalizeDshTurnPageSize, planDshHistoryRounds, trimToOldestTurnStart } from "./dshHistoryPagePlan";
 
 const DSH_PROJECTION_KEYS = ["contextPressure", "contextBreakdown", "tokenUsage", "sessionStats", "todos"];
 
@@ -956,35 +957,83 @@ export class DshAgentManager implements SessionAgentGateway {
 	 * （事件流翻页，beforeSeq 为排除边界：返回 seq < beforeSeq 的事件，与本页最旧事件
 	 * seq 相同即可不重复）。投影复用 dshEventProjector（过滤注入上下文）。
 	 * 返回形状对齐渲染层 disk 分页协议（sessionsCatalogReadMessagePage）。
+	 *
+	 * options 二选一（换算口径见 dshHistoryPagePlan）：
+	 *  - turnCount：渲染层契约的「轮数」（首屏 9 / 加载更多 3）。host 的 session/page
+	 *    以消息事件数计数（MESSAGE_TYPES，默认 50），旧实现把它当 maxMessages 直接透传，
+	 *    于是「加载更多」一次只前进 3 条消息（稀疏会话里不到半轮），用户必须连点很多次；
+	 *    这里按 24 条/轮换算预算并支持多轮补取，直到凑够轮数或到会话开头；
+	 *  - maxMessages：显式消息窗口（Web/mobile 首屏、工具结果回读），原样透传一轮。
 	 */
-	async readHistoryPage(dshSessionId: string, beforeSeq: number | undefined, maxMessages: number): Promise<{ messages: ChatMessage[]; total: number; nextBefore: number | null }> {
+	async readHistoryPage(dshSessionId: string, beforeSeq: number | undefined, options: { turnCount?: number; maxMessages?: number } = {}): Promise<{ messages: ChatMessage[]; total: number; nextBefore: number | null }> {
 		// 历史浏览是 DSH host 的第一个入口：点击历史 DSH 会话时 runtime 尚未激活
 		// （懒启动），必须 ensureStarted 拉起 host，否则 requireClient 直接抛
 		// "DSH host is not started"，时间线加载失败显示为空会话。
 		const client = await this.ensureClient();
-		const page = await this.historyPage(String(dshSessionId), { beforeSeq, maxMessages });
-		if (!page.result.ok) {
-			// 历史读取失败不再静默返回空：0.1.5 升级后「会话内容为空」的根因（throughSeq
-			// 送 MAX 被 host 拒）就是被这个分支吞掉的；这里把真实原因记主进程日志并抛给
-			// 渲染层（时间线 error 态），避免「看着像空会话」。
-			const error = page.result.error;
-			getAppLogger()?.warn("dsh-agent", "dsh history page failed", {
-				sessionId: String(dshSessionId),
-				code: error.code,
-				message: error.message,
-			});
-			throw new Error(`DSH session history unavailable (${error.code}): ${error.message}`);
+		// 轮分页（渲染层契约）与显式消息窗口二选一：前者按「一轮 ≈ 24 条消息」换算成 host 的
+		// maxMessages 预算，必要时多轮补取；后者（Web/mobile 首屏、工具结果回读）原样送一轮。
+		const pagingByTurns = options.maxMessages === undefined;
+		const turnCount = pagingByTurns ? normalizeDshTurnPageSize(options.turnCount ?? DSH_HISTORY_DEFAULT_TURN_PAGE_SIZE) : 0;
+		const rounds = pagingByTurns ? planDshHistoryRounds(turnCount) : [Math.max(1, Math.floor(options.maxMessages ?? DSH_HISTORY_DEFAULT_TURN_PAGE_SIZE))];
+		const batches: DshHistoryEntry[][] = [];
+		let cursor = beforeSeq;
+		let hasMore = false;
+		let pageError: { code: string; message: string } | undefined;
+		for (const [round, maxMessages] of rounds.entries()) {
+			const page = await this.historyPage(String(dshSessionId), { beforeSeq: cursor, maxMessages });
+			if (!page.result.ok) {
+				// 历史读取失败不再静默返回空：0.1.5 升级后「会话内容为空」的根因（throughSeq
+				// 送 MAX 被 host 拒）就是被这个分支吞掉的；这里把真实原因记主进程日志（首轮
+				// 还会抛给渲染层转 error 态），避免「看着像空会话」。
+				pageError = page.result.error;
+				getAppLogger()?.warn("dsh-agent", "dsh history page failed", {
+					sessionId: String(dshSessionId),
+					code: pageError.code,
+					message: pageError.message,
+					round,
+					rounds: rounds.length,
+				});
+				break;
+			}
+			const batch = (page.result.value.events ?? []).map((entry) => ({ event: entry.event, view: entry.view })).filter((item): item is DshHistoryEntry => Boolean(item.event));
+			hasMore = page.result.value.hasMore === true;
+			if (batch.length === 0) break;
+			batches.push(batch);
+			// 下一轮从本批最旧事件继续往更早处取（beforeSeq 是排除边界，不会重复取到同一批）
+			const oldest = batch.reduce<number | undefined>((min, item) => {
+				const seq = item.event.seq;
+				return typeof seq === "number" && Number.isFinite(seq) && (min === undefined || seq < min) ? seq : min;
+			}, undefined);
+			if (oldest === undefined || !hasMore) break;
+			cursor = oldest;
+			if (batches.length >= rounds.length) break;
+			// 已凑够渲染层要的轮数就收手：正常会话（每轮 2~9 条消息）一轮即满足，
+			// 只有超长轮（实测单轮最多 157 条消息）才会走满补取轮数。
+			if (countDshUserMessages(assembleDshHistoryEntries(batches, beforeSeq).entries) >= turnCount) break;
 		}
-		const entries = (page.result.value.events ?? [])
-			.map((entry) => ({ event: entry.event, view: entry.view }))
-			.filter((item): item is { event: NonNullable<typeof item.event>; view: typeof item.view } => Boolean(item.event))
-			.sort((left: { event: { seq?: number } }, right: { event: { seq?: number } }) => (left.event.seq ?? 0) - (right.event.seq ?? 0));
+		// 首轮失败保持「明确报错」语义（渲染层转 error 态）；补取轮失败时保留已取到的部分页
+		// （日志已记），下一次点击仍从同一游标续取，比整页报错重来体验更好。
+		if (pageError && batches.length === 0) {
+			throw new Error(`DSH session history unavailable (${pageError.code}): ${pageError.message}`);
+		}
+		const assembled = assembleDshHistoryEntries(batches, beforeSeq);
+		if (assembled.droppedByContract > 0) {
+			// host 违反了排除边界契约（回了 seq ≥ beforeSeq 的事件）：丢弃并留痕，
+			// 否则渲染层拿到的游标会在原地打转（再点一次拿到同一页）。
+			getAppLogger()?.warn("dsh-agent", "dsh history page returned out-of-range events", {
+				sessionId: String(dshSessionId),
+				beforeSeq,
+				dropped: assembled.droppedByContract,
+			});
+		}
+		// 轮分页把页首裁到本页最旧的 turn/start：不完整的那一轮下次点击会重新取到（游标已指向
+		// 裁剪后的起点），观感与 pi 的轮对齐分页一致；显式消息窗口（Web/工具结果）保持原样。
+		const entries = pagingByTurns ? trimToOldestTurnStart(assembled.entries, hasMore) : assembled.entries;
 		const agentId = `dsh:${dshSessionId}`;
 		let projection = projectDshEvent(undefined, undefined, agentId);
 		for (const { event, view } of entries) {
 			projection = projectDshEvent(projection, event, agentId, view);
 		}
-		const hasMore = page.result.value.hasMore === true;
 		const oldestSeq = entries.length > 0 ? entries[0].event.seq : undefined;
 		// 游标语义：下一页传本页最旧事件 seq（DSH history 的 beforeSeq 是排除边界，
 		// 返回 seq < beforeSeq 的事件，与渲染层 prepend 协议「nextBefore 原样回传」对齐）。

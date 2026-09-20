@@ -199,8 +199,12 @@ export type DshBackendIpcDeps = {
 	stopDshHost?: () => Promise<boolean>;
 	/** DSH host 显式启动：清除手动停止标记并 boot；返回 host 是否就绪。 */
 	startDshHost?: () => Promise<boolean>;
-	/** DSH 历史分页（session.history 事件流翻页）；未装配时返回空页。 */
-	readDshHistoryPage?: (dshSessionId: string, beforeSeq: number | undefined, pageSize: number) => Promise<{ messages: import("../../shared/types").ChatMessage[]; total: number; nextBefore: number | null }>;
+	/**
+	 * DSH 历史分页（session.history 事件流翻页）；未装配时返回空页。
+	 * 第三个参数二选一：`turnCount` = 渲染层契约的轮数（首屏 9 / 加载更多 3，由 main 侧
+	 * 按 24 条/轮换算成 host 的消息预算）；`maxMessages` = 显式消息窗口（Web/工具结果回读）。
+	 */
+	readDshHistoryPage?: (dshSessionId: string, beforeSeq: number | undefined, options: { turnCount?: number; maxMessages?: number }) => Promise<{ messages: import("../../shared/types").ChatMessage[]; total: number; nextBefore: number | null }>;
 	/** DSH 轨迹过程事件（运行时会话按 mux/重放收集；历史会话从 host history 推导；未装配时返回空数组）。 */
 	readDshProcessEvents?: (agentId: string | undefined, dshSessionId: string | undefined) => Promise<import("../../shared/types/trajectory").SessionProcessEvent[]>;
 	/** DSH 轨迹系统提示（运行时会话读投影缓存；历史会话从 host history 折叠 request/header；未装配返回 undefined）。 */
@@ -782,7 +786,7 @@ export function registerSessionIpc(deps: SessionIpcDeps): void {
 		// DSH 会话没有 pi 会话文件：全量读走 host 历史事件流（一次拉最大页），
 		// 与分页路径同源；未装配 readDshHistoryPage 时返回空数组。
 		if (entry?.backend === "dsh" && entry.dshSessionId && readDshHistoryPage) {
-			const page = await readDshHistoryPage(entry.dshSessionId, undefined, 1000);
+			const page = await readDshHistoryPage(entry.dshSessionId, undefined, { maxMessages: 1000 });
 			return page.messages;
 		}
 		if (entry?.backend === "imagegen") {
@@ -862,9 +866,10 @@ export function registerSessionIpc(deps: SessionIpcDeps): void {
 	ipcMain.handle(ipcChannels.sessionsCatalogReadMessagePage, async (_event, sessionId: string, before?: number, pageSize?: number, options?: { beforeEntryId?: string }) => {
 		const entry = sessionCatalog.get(sessionId);
 		// DSH 会话没有 pi 会话文件：历史浏览走 host 的 session.history 事件流翻页
-		// （游标 = 事件 seq），与 pi 的磁盘分页同形状（messages/total/nextBefore）。
+		// （游标 = 事件 seq），与 pi 的磁盘分页同形状（messages/total/nextBefore）；
+		// 第三条参数在 pi 路径是「轮数」，所以 DSH 这里按 turnCount 传（main 侧换算消息预算）。
 		if (entry?.backend === "dsh" && entry.dshSessionId && readDshHistoryPage) {
-			return readDshHistoryPage(entry.dshSessionId, before, pageSize ?? 100);
+			return readDshHistoryPage(entry.dshSessionId, before, { turnCount: pageSize });
 		}
 		if (entry?.backend === "imagegen" || !entry?.filePath) {
 			// imagegen 后端会话（可能残留无意义 pi filePath）或纯生图草稿：

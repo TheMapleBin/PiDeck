@@ -781,6 +781,17 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
 				</div>
 			)}
 
+			{/* 加载更多失败：按钮弹回却没有任何提示就是 2026-09 反馈的「点了没反应」。
+			    这里出失败行（原始 IPC 文案放 title），按钮仍在，可直接再点重试。 */}
+			{controller.loadMoreError && (
+				<div className="flex flex-col items-center gap-1 px-6 pb-3 text-center">
+					<p className="text-xs font-medium text-destructive">{t("timeline.loadMoreFailed")}</p>
+					<p className="max-w-[560px] text-[11px] text-muted-foreground" title={controller.loadMoreError}>
+						{t("timeline.loadMoreFailedHint")}
+					</p>
+				</div>
+			)}
+
 			{isConversationLoading && (
 				<div className="history-loading">
 					<div className="history-loading-placeholder">

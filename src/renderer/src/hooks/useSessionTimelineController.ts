@@ -245,6 +245,8 @@ export type SessionTimelineController = {
 	/** 下一次「加载更多」触发 disk 轮次分页（渲染窗口已耗尽且窗口前还有历史） */
 	nextLoadIsHistory: boolean;
 	isLoadingMoreMessages: boolean;
+	/** 上一次「加载更多」失败原因（原始 IPC 文案）；null = 无错误。时间线在按钮下方出失败行并允许直接重试。 */
+	loadMoreError: string | null;
 	/** 补页后保持当前视口（新历史只出现在上方）。所有入口统一，不再有「新页直接出现」的跳动。 */
 	loadMoreMessages: (source?: "scroll" | "button") => void;
 	/** 标记一次程序化滚动（turn 窗口展开补偿等组件内补偿用），抑制历史意图消费。
@@ -549,6 +551,11 @@ export function useSessionTimelineController(options: { sessionId?: string; mess
 	// 内存预算由主进程 12 轮缓存 + 回底临时历史清理承担，渲染层不再有第二道条数窗口。
 	const visibleMessages = combinedMessages;
 	const [isLoadingMessagePage, setIsLoadingMessagePage] = useState(false);
+	/**
+	 * 「加载更多对话」失败态：IPC 抛错（DSH host 不可用 / 会话文件失效）原先没人接，
+	 * finally 只复位 loading，表现为「点了没反应」。这里留原始文案给时间线出错误行。
+	 */
+	const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
 	// This snapshot is intentionally read during render. In the reused solo pane,
 	// waiting for a passive effect would let MessageScroller commit the previous
 	// session's follow mode before the target session's anchor is materialized.
@@ -715,6 +722,8 @@ export function useSessionTimelineController(options: { sessionId?: string; mess
 	// restoreAnchor 的快照在 render 阶段初始化，不能在此处无条件重置为 3 轮。
 	useEffect(() => {
 		setIsLoadingMessagePage(false);
+		// 失败提示是会话级状态：切会话不能把上一会话的加载失败带过来显示
+		setLoadMoreError(null);
 		pendingExpandTurnsRef.current = 0;
 		lastWindowExpandAtRef.current = 0;
 		if (expandBatchFrameRef.current !== undefined) {
@@ -1079,6 +1088,8 @@ export function useSessionTimelineController(options: { sessionId?: string; mess
 				trackLatestLoad(sessionId, sequence);
 				const expectedRevision = cachedEntry?.revision ?? 0;
 				setIsLoadingMessagePage(true);
+				// 重试时先清掉上一次的错误行
+				setLoadMoreError(null);
 				void desktopApi.sessions
 					.readRecordMessagePage(sessionId, before, RUNTIME_HISTORY_TURN_PAGE_SIZE)
 					.then((page: { messages: ChatMessage[]; total: number; nextBefore: number | null }) => {
@@ -1099,6 +1110,11 @@ export function useSessionTimelineController(options: { sessionId?: string; mess
 								if (growth > 0) expandWindowBatched(growth);
 							}
 						}
+					})
+					.catch((error: unknown) => {
+						// 失败必须可见：没有 catch 时 IPC 抛错被吞掉，按钮弹回但页面无提示（2026-09 反馈）。
+						if (latestLoadBySession.get(sessionId) !== sequence) return;
+						setLoadMoreError(error instanceof Error ? error.message : String(error));
 					})
 					.finally(() => {
 						if (latestLoadBySession.get(sessionId) === sequence) setIsLoadingMessagePage(false);
@@ -1126,6 +1142,8 @@ export function useSessionTimelineController(options: { sessionId?: string; mess
 				trackLatestLoad(sessionId, sequence);
 				const expectedRevision = cachedEntry?.revision ?? 0;
 				setIsLoadingMessagePage(true);
+				// 重试时先清掉上一次的错误行
+				setLoadMoreError(null);
 				void desktopApi.sessions
 					.readRecordMessagePage(sessionId, before ?? (anchorFilePos !== undefined ? anchorFilePos : undefined), RUNTIME_HISTORY_TURN_PAGE_SIZE, {
 						beforeEntryId: anchorEntryId ?? runtimeHistory?.nextBeforeEntryId ?? undefined,
@@ -1147,6 +1165,11 @@ export function useSessionTimelineController(options: { sessionId?: string; mess
 								if (growth > 0) expandWindowBatched(growth);
 							}
 						}
+					})
+					.catch((error: unknown) => {
+						// 失败必须可见：没有 catch 时 IPC 抛错被吞掉，按钮弹回但页面无提示（2026-09 反馈）。
+						if (latestLoadBySession.get(sessionId) !== sequence) return;
+						setLoadMoreError(error instanceof Error ? error.message : String(error));
 					})
 					.finally(() => {
 						if (latestLoadBySession.get(sessionId) === sequence) setIsLoadingMessagePage(false);
@@ -1569,6 +1592,8 @@ export function useSessionTimelineController(options: { sessionId?: string; mess
 		// 2026-11 轮次模型：runtime 会话一律按轮补页（无内存扩窗阶段），文案恒为「加载更多对话」
 		nextLoadIsHistory: controllerEnabled && !diskPage && historyHasMore,
 		isLoadingMoreMessages: diskPage || historyHasMore ? isLoadingMessagePage : false,
+		/** 上一次「加载更多」失败原因（原始 IPC 文案，渲染层错误行 title）；null = 无错误。 */
+		loadMoreError,
 		loadMoreMessages,
 		markProgrammaticScroll,
 		pinViewportAfterPrepend,

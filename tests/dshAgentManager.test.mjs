@@ -569,7 +569,7 @@ test("create attach 历史投影过滤注入上下文（source.kind=agent-instru
 	assert.equal(messages[1].role, "assistant");
 });
 
-test("readHistoryPage 对齐渲染层 disk 分页协议（seq 游标、hasMore 边界）", async () => {
+test("readHistoryPage 显式消息窗口（maxMessages）保持 disk 分页协议（seq 游标、hasMore 边界）", async () => {
 	const { host, sessions, historyBySession, calls } = makeFakeHost();
 	sessions.set("session-hist-1", { sessionId: "session-hist-1", cwd: PROJECT.path, running: false, blank: false });
 	// 4 轮对话（turn/start + user + assistant），seq 1..12：
@@ -598,15 +598,16 @@ test("readHistoryPage 对齐渲染层 disk 分页协议（seq 游标、hasMore �
 	}
 	historyBySession.set("session-hist-1", history);
 	const manager = new DshAgentManager(host, () => PROJECT);
-	// 首页：beforeSeq undefined → 尾部 4 条消息（问8 答9 问11 答12，seq 7..12）
-	const page1 = await manager.readHistoryPage("session-hist-1", undefined, 4);
+	// 首页：maxMessages=4 是显式消息窗口（Web/mobile 首屏、工具结果回读走这条）
+	// → 尾部 4 条消息（问8 答9 问11 答12，seq 7..12）
+	const page1 = await manager.readHistoryPage("session-hist-1", undefined, { maxMessages: 4 });
 	assert.equal(page1.messages.length, 4);
 	assert.equal(page1.messages[0].text, "问8");
 	assert.equal(page1.messages[3].text, "答12");
 	assert.equal(typeof page1.nextBefore, "number", "还有更早历史时 nextBefore 是数字游标");
 	assert.equal(page1.total, -1, "DSH 无总条数概念，返回 -1 占位");
 	// 翻页：beforeSeq = 本页最旧事件 seq（排除边界，seq < beforeSeq 的事件）
-	const page2 = await manager.readHistoryPage("session-hist-1", page1.nextBefore, 4);
+	const page2 = await manager.readHistoryPage("session-hist-1", page1.nextBefore, { maxMessages: 4 });
 	assert.equal(page2.messages.length, 4);
 	assert.equal(page2.messages[0].text, "问2");
 	assert.equal(page2.messages[3].text, "答6");
@@ -614,11 +615,46 @@ test("readHistoryPage 对齐渲染层 disk 分页协议（seq 游标、hasMore �
 	assert.equal(calls.history, 2);
 });
 
+test("readHistoryPage 轮分页：一次「加载更多」拿到足够多的消息（不再只前进 3 条）", async () => {
+	// 回归（2026-09 反馈「要点好多次才加载出来」）：渲染层送的是轮数（加载更多 = 3），
+	// 旧实现把它当 maxMessages 直接透传 host，一次只前进 3 条消息。现在按「轮数 × 24」
+	// 换算消息预算（3 轮 → 72 条），正常会话一轮 host 调用就能返回一大段历史。
+	const { host, sessions, historyBySession, calls } = makeFakeHost();
+	sessions.set("session-turns-1", { sessionId: "session-turns-1", cwd: PROJECT.path, running: false, blank: false });
+	// 60 轮 ×（turn/start + user + assistant）= 180 条事件、120 条消息
+	const history = [];
+	let seq = 1;
+	for (let turn = 1; turn <= 60; turn += 1) {
+		history.push(event("turn/start", seq));
+		history.push(event("user/message", seq + 1, { content: [{ type: "text", text: `问${turn}` }], source: { kind: "user", rpcId: `rpc-${turn}` } }));
+		history.push(event("assistant/message", seq + 2, { message: { content: [{ type: "text", text: `答${turn}` }] } }));
+		seq += 3;
+	}
+	historyBySession.set("session-turns-1", history);
+	const manager = new DshAgentManager(host, () => PROJECT);
+	const page = await manager.readHistoryPage("session-turns-1", undefined, { turnCount: 3 });
+	// 每轮 2 条消息 → 72 条预算正好落在第 25 轮起点
+	assert.equal(page.messages.length, 72, "3 轮 → 72 条消息预算（旧实现只会给 3 条）");
+	assert.equal(page.messages[0].text, "问25", "页首对齐到轮起点（不会从半轮的 assistant 开始）");
+	assert.equal(page.messages[0].role, "user");
+	assert.equal(calls.history, 1, "一轮 host 调用即满足轮数需求，不做无谓补取");
+	assert.equal(typeof page.nextBefore, "number", "还有更早历史 → 数字游标");
+	// 再点一次：从游标继续向更早翻，两页不重叠且能走到会话开头
+	const page2 = await manager.readHistoryPage("session-turns-1", page.nextBefore, { turnCount: 3 });
+	assert.equal(page2.messages[0].text, "问1", "游标续取到会话开头");
+	assert.equal(page2.nextBefore, null, "已到最开头 → hasMore=false");
+	const firstPageTexts = new Set(page.messages.map((message) => message.text));
+	assert.ok(
+		page2.messages.every((message) => !firstPageTexts.has(message.text)),
+		"第二页与第一页不重叠",
+	);
+});
+
 test("readHistoryPage 空会话返回空页且 nextBefore=null", async () => {
 	const { host, sessions } = makeFakeHost();
 	sessions.set("session-empty", { sessionId: "session-empty", cwd: PROJECT.path, running: false, blank: true });
 	const manager = new DshAgentManager(host, () => PROJECT);
-	const page = await manager.readHistoryPage("session-empty", undefined, 100);
+	const page = await manager.readHistoryPage("session-empty", undefined, { maxMessages: 100 });
 	assert.equal(page.messages.length, 0);
 	assert.equal(page.nextBefore, null);
 	assert.equal(page.total, -1);
@@ -709,7 +745,7 @@ test("readHistoryPage host 冷启动：先 ensureStarted 等 boot，不抛「DSH
 	]);
 	const manager = new DshAgentManager(host, () => PROJECT);
 	// 冷启动打开会话：渲染层首屏拉历史页 → host 未 boot → 必须等 ensureStarted 而不是抛错
-	const page = await manager.readHistoryPage("session-cold-1", undefined, 100);
+	const page = await manager.readHistoryPage("session-cold-1", undefined, { maxMessages: 100 });
 	assert.equal(page.messages.length, 2, "冷启动历史页必须返回会话消息");
 	assert.equal(page.messages[0].text, "重启前的提问");
 	assert.equal(page.messages[1].text, "重启前的回复");

@@ -2649,7 +2649,7 @@ function registerIpc() {
 					return false;
 				}
 			},
-			readDshHistoryPage: (dshSessionId, beforeSeq, pageSize) => dshAgentManager.readHistoryPage(dshSessionId, beforeSeq, pageSize),
+			readDshHistoryPage: (dshSessionId, beforeSeq, options) => dshAgentManager.readHistoryPage(dshSessionId, beforeSeq, options),
 			readDshProcessEvents: (agentId, dshSessionId) => dshAgentManager.readProcessEvents(agentId, dshSessionId),
 			readDshSystemPrompt: (agentId, dshSessionId) => dshAgentManager.readSystemPrompt(agentId, dshSessionId),
 			readDshMessageFullText: (agentId, messageId) => dshAgentManager.readMessageFullText(agentId, messageId),
@@ -3687,7 +3687,7 @@ app
 				// DSH 会话没有 pi 会话文件：读 host 历史事件流的一页（有界），
 				// 与分页路径同源；未挂载 DSH 后端时返回空窗口。
 				if (entry?.backend === "dsh" && entry.dshSessionId && dshAgentManager) {
-					const page = await dshAgentManager.readHistoryPage(entry.dshSessionId, undefined, 1000);
+					const page = await dshAgentManager.readHistoryPage(entry.dshSessionId, undefined, { maxMessages: 1000 });
 					return { messages: page.messages, total: page.total, windowStart: 0, truncated: false };
 				}
 				if (!entry?.filePath) return { messages: [], total: 0, windowStart: 0, truncated: false };
@@ -3701,7 +3701,7 @@ app
 				// DSH 会话没有 pi 会话文件：历史浏览走 host 的 session.history 事件流翻页
 				// （游标 = 事件 seq），与 pi 的磁盘分页同形状（messages/total/nextBefore）。
 				if (entry?.backend === "dsh" && entry.dshSessionId && dshAgentManager) {
-					return dshAgentManager.readHistoryPage(entry.dshSessionId, before, pageSize ?? 100);
+					return dshAgentManager.readHistoryPage(entry.dshSessionId, before, { turnCount: pageSize });
 				}
 				if (!entry?.filePath) return { messages: [], total: 0, nextBefore: null };
 				return agentManager.readSessionDisplayTurnPage(entry.filePath, sessionId, before, pageSize);
