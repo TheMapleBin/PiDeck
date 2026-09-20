@@ -124,6 +124,17 @@ export function useProjectSync(input: UseProjectSyncInput) {
     return fileTreeGenerationRef.current === generation && activeProjectIdRef.current === projectId;
   }, []);
 
+  async function refreshProjectBranch(projectId: string) {
+    try {
+      const branchInfo = await api.git.branches(projectId).catch(() => ({ current: null, branches: [] }));
+      setBranchByProject((prev) => (prev[projectId] === branchInfo.current ? prev : { ...prev, [projectId]: branchInfo.current }));
+      return branchInfo.current;
+    } catch {
+      setBranchByProject((prev) => (prev[projectId] === null ? prev : { ...prev, [projectId]: null }));
+      return null;
+    }
+  }
+
   /**
    * 重新读取项目目录存在性并替换侧栏清单。
    * 缺失目录只标记 missing、不自动移除，避免网络盘/WSL 暂时不可达时丢失项目记录。
@@ -132,8 +143,15 @@ export function useProjectSync(input: UseProjectSyncInput) {
     const next = await api.projects.list();
     setProjects(next);
     if (!activeProjectId && next.length > 0) setActiveProjectId(next[0].id);
-    // 失效目录不能继续触发 Git 扫描，否则手动刷新项目后仍会产生 ENOENT 噪音。
-    for (const p of next) { if (p.worktreeEnabled && !p.missing) void refreshWorktrees(p.id); }
+    // 失效目录与 chat 项目不能继续触发 Git 扫描，否则手动刷新项目后仍会产生 ENOENT 噪音。
+    for (const p of next) {
+      if (p.missing || p.kind === "chat") continue;
+      if (p.worktreeEnabled) {
+        void refreshWorktrees(p.id);
+      } else {
+        void refreshProjectBranch(p.id);
+      }
+    }
     return next;
   }
 
@@ -359,6 +377,8 @@ export function useProjectSync(input: UseProjectSyncInput) {
       setProjects(projectsAfterWorktreeRefresh);
       const childProjects = projectsAfterWorktreeRefresh.filter((p) => p.worktreeParentId === latestProject.id && !p.missing);
       await Promise.all(childProjects.map((child) => refreshProjectSessions(child.id).catch(() => undefined)));
+    } else if (latestProject.kind !== "chat") {
+      await refreshProjectBranch(latestProject.id);
     }
     showToast(t("app.projectRefreshed", {}), 1800);
   }
@@ -402,5 +422,5 @@ export function useProjectSync(input: UseProjectSyncInput) {
     }
   }
 
-  return { worktreesByProject, branchByProject, files, setFiles, gitInfo, setGitInfo, sessionLoadingByProject, setSessionLoadingByProject, visibleProjectChildCountByProject, setVisibleProjectChildCountByProject, refreshProjects, refreshAllProjects, refreshWorktrees, refreshSessions, refreshProjectSessions, refreshFiles, refreshProjectTree, syncDshForeignSessionsIfEnabled, beginFileTreeRequest, isFileTreeRequestCurrent };
+  return { worktreesByProject, branchByProject, setBranchByProject, refreshProjectBranch, files, setFiles, gitInfo, setGitInfo, sessionLoadingByProject, setSessionLoadingByProject, visibleProjectChildCountByProject, setVisibleProjectChildCountByProject, refreshProjects, refreshAllProjects, refreshWorktrees, refreshSessions, refreshProjectSessions, refreshFiles, refreshProjectTree, syncDshForeignSessionsIfEnabled, beginFileTreeRequest, isFileTreeRequestCurrent };
 }

@@ -1,4 +1,4 @@
-import { ChevronRight, ChevronsDownUp, Ellipsis, Filter, Folder, FolderOpen, FolderPlus, Plus, RefreshCw } from "lucide-react";
+import { ChevronRight, ChevronsDownUp, Ellipsis, Filter, Folder, FolderOpen, FolderPlus, GitBranch, Plus, RefreshCw } from "lucide-react";
 import type { DragEvent } from "react";
 import { useAtomValue } from "jotai";
 import type { Project, WorktreeEntry } from "../../../../shared/types";
@@ -116,6 +116,7 @@ export function ProjectTree(props: {
       const dragging = props.controller.drag.sourceProjectId === project.id;
       const dragOver = props.controller.drag.overProjectId === project.id;
       const rootProjectSessions = props.controller.catalog.sessionsByProject[project.id] ?? [];
+      const branch = props.branchByProject?.[project.id];
       // 项目级「运行中」判定：任一 Agent 进程存活（starting/idle/running）即视为运行中。
       // 与 ActiveSessionsTree 活动页同源，保证折叠时的项目 tag 与展开后的子行状态一致。
       const hasLiveAgent = props.controller.catalog.agents.some(
@@ -172,6 +173,16 @@ export function ProjectTree(props: {
                     推到最右——旧布局下点在行尾，鼠标移入时会被右侧浮层按钮盖住。 */}
                 <div className="flex min-w-0 flex-1 items-center gap-1">
                   <strong className={`min-w-0 truncate font-medium${project.missing ? " text-muted-foreground" : ""}`}>{projectDirectoryName}</strong>
+                  {/* 分支标识：若是 Git 仓库且有分支名，展示轻量分支徽标 */}
+                  {branch && !project.missing && (
+                    <span
+                      className="inline-flex min-w-0 max-w-[100px] shrink items-center gap-0.5 rounded px-1 py-0.5 text-[11px] text-muted-foreground/80 hover:text-foreground"
+                      title={t("app.currentBranch", { branch })}
+                    >
+                      <GitBranch size={10} className="shrink-0 opacity-70" aria-hidden="true" />
+                      <span className="truncate font-mono">{branch}</span>
+                    </span>
+                  )}
                   {/* 待确认徽章：当项目下有会话等待用户输入/确认时醒目展示 */}
                   <PendingAskBadge count={pendingAskCount} />
                   {/* 折叠时项目行只剩名称，用黄色状态点提示该工作区仍有 Agent 进程在跑；

@@ -500,6 +500,7 @@ export function App() {
   const {
     worktreesByProject,
     branchByProject,
+    setBranchByProject,
     files,
     setFiles,
     gitInfo,
@@ -902,7 +903,6 @@ export function App() {
     (projectId?: string, silent?: boolean) => refreshFiles(projectId, silent, expandedDirs),
     [expandedDirs, refreshFiles],
   );
-  const [, setBranchByProject] = useState<Record<string, string | null>>({});
   const [expandedSidebarProjects, setExpandedSidebarProjects] = useState<Set<string>>(new Set());
   const expandedSidebarProjectsRef = useRef(expandedSidebarProjects);
   expandedSidebarProjectsRef.current = expandedSidebarProjects;
@@ -3665,11 +3665,12 @@ export function App() {
     ? terminalOwnerKey(terminalOwner)
     : undefined;
 
-  // 分屏栏分支变化后的全局同步：只采纳“栏项目 == 当前聚焦项目”的变化，
-  // 非聚焦栏（另一个 worktree）切分支不得污染右侧 Git 抽屉/侧栏的聚焦态；
-  // 聚焦项目自己的分支早期离开（checkout 后被 4s 轮询追平）也不至于闪回旧值。
+  // 分屏栏分支变化后的全局同步：侧栏各项目的分支即时更新；
+  // 但右侧 Git 抽屉只采纳“栏项目 == 当前聚焦项目”的变化，非聚焦栏（另一个 worktree）
+  // 切分支不得污染右侧 Git 抽屉的聚焦态。
   const handleProjectGitChanged = useCallback(
     (projectId: string, info: GitBranchInfo) => {
+      setBranchByProject((prev) => (prev[projectId] === info.current ? prev : { ...prev, [projectId]: info.current }));
       if (projectId !== activeProjectIdRef.current) return;
       setGitInfo((current) =>
         current.current === info.current &&
@@ -3678,7 +3679,7 @@ export function App() {
           : info,
       );
     },
-    [],
+    [setBranchByProject],
   );
 
   const sessionPaneServices = useMemo(
