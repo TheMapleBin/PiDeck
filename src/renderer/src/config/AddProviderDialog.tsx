@@ -95,6 +95,10 @@ export function AddProviderDialog(props: {
 			supportsReasoningEffort: initial?.compat?.supportsReasoningEffort ?? false,
 			// 三态默认值统一由草稿域判定（见 resolveInitialReasoningContentReplay 注释）
 			requiresReasoningContentOnAssistantMessages: resolveInitialReasoningContentReplay(initial),
+			// strict 工具采样：文件里有显式表态就回显，未表态保持 undefined（下拉显示
+			// 「跟随 pi 默认」）。不做自动推导——真实默认值随协议不同，猜错会让界面与
+			// 线上行为不一致（见 configTypes.ProviderCompat.supportsStrictMode）。
+			supportsStrictMode: initial?.compat?.supportsStrictMode,
 		});
 		setModels(initial?.models ? initial.models.map((model) => ({ ...model })) : []);
 		setFetchedModels(null);

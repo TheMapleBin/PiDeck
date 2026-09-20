@@ -1,12 +1,28 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { cn } from "../../lib/utils";
 import { Button } from "../ui-shadcn/button";
 import { X } from "lucide-react";
-import { Check, RefreshCw, UploadCloud } from "lucide-react";
+import { Check, FolderOpen, RefreshCw, UploadCloud } from "lucide-react";
 import { t } from "../../i18n";
 import type { TranslationKey } from "../../i18n";
 import { Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle } from "../ui-shadcn/dialog";
-import type { CodexSessionSummary, CodexImportReport, ClaudeSessionSummary, ClaudeImportReport, OpenCodeSessionSummary, OpenCodeImportReport, ZCodeSessionSummary, ZCodeImportReport, WorkBuddySessionSummary, WorkBuddyImportReport, CursorSessionSummary, CursorImportReport, Project } from "../../../../shared/types";
+import type {
+	CodexSessionSummary,
+	CodexImportReport,
+	ClaudeSessionSummary,
+	ClaudeImportReport,
+	OpenCodeSessionSummary,
+	OpenCodeImportReport,
+	ZCodeSessionSummary,
+	ZCodeImportReport,
+	WorkBuddySessionSummary,
+	WorkBuddyImportReport,
+	CursorSessionSummary,
+	CursorImportReport,
+	DirectorySessionSummary,
+	DirectoryImportReport,
+	Project,
+} from "../../../../shared/types";
 import { Checkbox } from "../ui-shadcn/checkbox";
 import { Label } from "../../components/ui-shadcn/label";
 
@@ -276,7 +292,8 @@ type ImportSessionLike = {
 	preview: string;
 	updatedAt: number;
 	messageCount: number;
-	sourceSize: number;
+	/** 源文件字节数；目录导入的行没有该字段（缺省按 0 展示，由 renderMeta 覆盖）。 */
+	sourceSize?: number;
 	status: ImportStatusValue;
 };
 
@@ -306,6 +323,12 @@ function SessionImportModal<T extends ImportSessionLike>(props: {
 	onToggle: (sourcePath: string) => void;
 	onToggleAll: () => void;
 	onImport: () => void;
+	/** 头部附加控件（目录导入的「选择目录 + 只看失效目录」）；缺省不渲染。 */
+	headerExtra?: ReactNode;
+	/** 空列表时的替代内容（目录导入被过滤器清空时的提示 +「显示全部」）；缺省用通用空态。 */
+	emptyOverride?: ReactNode;
+	/** 行内附加元信息（目录导入展示原工作目录）；缺省展示源文件体积。 */
+	renderMeta?: (session: T) => ReactNode;
 }) {
 	const selected = new Set(props.selectedPaths);
 	const allSelected = props.sessions.length > 0 && props.sessions.every((session) => selected.has(session.sourcePath));
@@ -324,6 +347,7 @@ function SessionImportModal<T extends ImportSessionLike>(props: {
 				<div className="modal-header-sub">
 					<small>{props.project.name}</small>
 				</div>
+				{props.headerExtra}
 				<div className="codex-import-toolbar">
 					<div>
 						<strong>{copy("importCount", { count: props.sessions.length })}</strong>
@@ -351,10 +375,12 @@ function SessionImportModal<T extends ImportSessionLike>(props: {
 							<span>{copy("scanning")}</span>
 						</div>
 					) : props.sessions.length === 0 ? (
-						<div className="codex-import-empty">
-							<strong>{copy("emptyTitle")}</strong>
-							<span>{copy("emptyDesc")}</span>
-						</div>
+						(props.emptyOverride ?? (
+							<div className="codex-import-empty">
+								<strong>{copy("emptyTitle")}</strong>
+								<span>{copy("emptyDesc")}</span>
+							</div>
+						))
 					) : (
 						<div className="codex-session-list">
 							{props.sessions.map((session) => (
@@ -367,7 +393,7 @@ function SessionImportModal<T extends ImportSessionLike>(props: {
 										</div>
 										<p>{session.preview}</p>
 										<small>
-											{new Date(session.updatedAt).toLocaleString()} · {t("drawer.sessionMessages", { count: session.messageCount })} · {formatBytes(session.sourceSize)}
+											{new Date(session.updatedAt).toLocaleString()} · {t("drawer.sessionMessages", { count: session.messageCount })} · {props.renderMeta ? props.renderMeta(session) : formatBytes(session.sourceSize ?? 0)}
 										</small>
 									</div>
 								</Label>
@@ -423,6 +449,89 @@ function formatCursorStatus(status: CursorSessionSummary["status"]) {
 	if (status === "current") return t("cursor.status.current");
 	if (status === "outdated") return t("cursor.status.outdated");
 	return t("cursor.status.new");
+}
+
+function formatDirectoryStatus(status: ImportStatusValue) {
+	return status === "current" ? t("directoryImport.status.current") : t("directoryImport.status.new");
+}
+
+/**
+ * 目录会话导入弹窗（项目目录移动/改名后找回历史）。
+ * 与其它导入源不同：源目录由用户现选，头部多一行「选择目录 + 只看失效目录」，
+ * 行内元信息展示会话记录里的原工作目录（失效时标注），而不是源文件体积。
+ */
+export function DirectoryImportModal(props: {
+	project: Project;
+	sessions: DirectorySessionSummary[];
+	selectedPaths: string[];
+	loading: boolean;
+	importing: boolean;
+	report: DirectoryImportReport | null;
+	directory: string | null;
+	onlyMissingCwd: boolean;
+	/** 被「只看原目录已失效」过滤掉的会话数（>0 时给出一键显示全部的出口）。 */
+	hiddenByFilter: number;
+	onSetOnlyMissingCwd: (value: boolean) => void;
+	onChooseDirectory: () => void;
+	onClose: () => void;
+	onRefresh: () => void;
+	onToggle: (sourcePath: string) => void;
+	onToggleAll: () => void;
+	onImport: () => void;
+}) {
+	return (
+		<SessionImportModal
+			copyPrefix="directoryImport"
+			formatStatus={formatDirectoryStatus}
+			project={props.project}
+			sessions={props.sessions}
+			selectedPaths={props.selectedPaths}
+			loading={props.loading}
+			importing={props.importing}
+			report={props.report}
+			onClose={props.onClose}
+			onRefresh={props.onRefresh}
+			onToggle={props.onToggle}
+			onToggleAll={props.onToggleAll}
+			onImport={props.onImport}
+			headerExtra={
+				<div className="flex flex-wrap items-center gap-2 px-4 pb-3 text-xs text-muted-foreground">
+					<Button variant="outline" size="sm" className="h-7 gap-1.5 rounded-lg px-2.5 text-xs shadow-none" onClick={props.onChooseDirectory} disabled={props.importing}>
+						<FolderOpen size={14} />
+						{t("directoryImport.chooseDirectory")}
+					</Button>
+					<code className="min-w-0 flex-1 truncate" title={props.directory ?? undefined}>
+						{props.directory ?? t("directoryImport.noDirectory")}
+					</code>
+					<Label className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap">
+						<Checkbox checked={props.onlyMissingCwd} onCheckedChange={(value) => props.onSetOnlyMissingCwd(Boolean(value))} />
+						{t("directoryImport.onlyMissingCwd")}
+					</Label>
+				</div>
+			}
+			renderMeta={(session) =>
+				session.projectPath ? (
+					<span title={session.projectPath}>
+						{t("directoryImport.originDir", { path: displayPath(session.projectPath) })}
+						{!session.projectPathExists && ` · ${t("directoryImport.originMissing")}`}
+					</span>
+				) : (
+					<span>{t("directoryImport.originUnknown")}</span>
+				)
+			}
+			emptyOverride={
+				props.hiddenByFilter > 0 ? (
+					<div className="codex-import-empty">
+						<strong>{t("directoryImport.filteredTitle", { count: props.hiddenByFilter })}</strong>
+						<span>{t("directoryImport.filteredDesc")}</span>
+						<Button variant="outline" size="sm" className="mt-2 h-7 gap-1.5 rounded-lg px-2.5 text-xs shadow-none" onClick={() => props.onSetOnlyMissingCwd(false)}>
+							{t("directoryImport.showAll")}
+						</Button>
+					</div>
+				) : undefined
+			}
+		/>
+	);
 }
 
 export function CursorImportModal(props: {

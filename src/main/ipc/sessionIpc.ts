@@ -4,6 +4,7 @@
  */
 
 import { existsSync } from "node:fs";
+import { isAbsolute } from "node:path";
 import { dialog, ipcMain, type BrowserWindow } from "electron";
 import { ipcChannels } from "../../shared/ipc";
 import { isDshPermissionPreset } from "../../shared/types/agent";
@@ -38,6 +39,8 @@ import { parseSessionProcessEventsFromFile } from "../sessions/sessionProcessEve
 import { downgradeRunningStartedBefore, downgradeStaleRunning } from "../pi/derivedSubagents";
 import { resolveLaunchDefaultOptions, isModelInModelsConfig } from "../sessions/launchDefaults";
 import { BackgroundScanCoordinator } from "../sessions/BackgroundScanCoordinator";
+import { DIRECTORY_IMPORT_MAX_SUMMARIES } from "../sessions/directorySessionImport";
+import type { DirectorySessionImporter } from "../sessions/DirectorySessionImporter";
 
 function isDshModelDiscoveryInput(input: unknown): input is DshModelDiscoveryInput {
 	if (!isRecord(input) || typeof input.settingsNs !== "string" || !input.settingsNs.trim()) return false;
@@ -286,6 +289,8 @@ export type SessionIpcDeps = {
 	zcodeSessionImporter: ZCodeSessionImporter;
 	workbuddySessionImporter: WorkBuddySessionImporter;
 	cursorSessionImporter: CursorSessionImporter;
+	/** 外置目录会话导入（项目目录移动/改名后找回历史；只建 catalog 引用，不复制原文件）。 */
+	directorySessionImporter: DirectorySessionImporter;
 	appLogger: AppLogger;
 	terminalManager: TerminalSessionManager;
 	mainCopy: (key: string, params?: Record<string, string | number>) => string;
@@ -355,6 +360,7 @@ export function registerSessionIpc(deps: SessionIpcDeps): void {
 		zcodeSessionImporter,
 		workbuddySessionImporter,
 		cursorSessionImporter,
+		directorySessionImporter,
 		appLogger,
 		terminalManager,
 		mainCopy,
@@ -1732,4 +1738,51 @@ export function registerSessionIpc(deps: SessionIpcDeps): void {
 		});
 		return result;
 	});
+	// ── 外置目录会话导入（项目目录移动/改名后找回历史）──────────────────────
+	// 与其它导入源的区别：源目录由用户现选，且不复制文件——只把 catalog 记录的项目归属
+	// 改成当前项目（原文件原地不动），所以导入后要广播 catalog 刷新让侧栏立即出现这批历史。
+	ipcMain.handle(ipcChannels.directorySessionsScan, async (_event, projectId: string, dir: unknown) => {
+		const project = projectStore.get(projectId);
+		if (!project) throw new Error(`Project not found: ${projectId}`);
+		const sessions = await directorySessionImporter.scan(requireImportDirectory(dir));
+		void appLogger.debug("session", "Directory sessions scanned", {
+			projectId,
+			count: sessions.length,
+		});
+		return sessions;
+	});
+	ipcMain.handle(ipcChannels.directorySessionsImport, async (_event, projectId: string, dir: unknown, sourcePaths: unknown) => {
+		const project = projectStore.get(projectId);
+		if (!project) throw new Error(`Project not found: ${projectId}`);
+		const report = await directorySessionImporter.import(projectId, requireImportDirectory(dir), requireImportSourcePaths(sourcePaths));
+		void appLogger.info("session", "Directory sessions imported", {
+			projectId,
+			imported: report.imported,
+			failed: report.failed,
+		});
+		if (report.imported > 0) {
+			const window = getMainWindow();
+			if (window && !window.isDestroyed()) {
+				window.webContents.send(ipcChannels.sessionsCatalogRefreshed, { projectId });
+			}
+		}
+		return report;
+	});
+}
+
+/** 目录导入的目录入参校验（渲染层数据不可信）：非空、绝对路径、长度上限。 */
+function requireImportDirectory(raw: unknown): string {
+	if (typeof raw !== "string") throw new Error("Invalid directory path");
+	const dir = raw.trim();
+	if (!dir || dir.length > 32_768) throw new Error("Invalid directory path");
+	// 兼容 Windows 盘符路径与 WSL/Linux 绝对路径；相对路径一律拒绝。
+	if (!isAbsolute(dir) && !/^[A-Za-z]:[\\/]/.test(dir)) throw new Error("Invalid directory path");
+	return dir;
+}
+
+/** 目录导入的选中路径校验：字符串数组 + 条数上限（单次扫描上限内）。 */
+function requireImportSourcePaths(raw: unknown): string[] {
+	if (!Array.isArray(raw)) throw new Error("Invalid source paths");
+	if (raw.length > DIRECTORY_IMPORT_MAX_SUMMARIES * 2) throw new Error("Too many source paths");
+	return raw.filter((item): item is string => typeof item === "string" && Boolean(item.trim()));
 }

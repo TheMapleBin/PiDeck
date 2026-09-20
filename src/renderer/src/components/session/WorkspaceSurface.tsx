@@ -1,7 +1,7 @@
 import { cn } from "../../lib/utils";
 import { useAtom } from "jotai";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
-import { ChevronDown, ChevronRight, ChevronsDownUp, FileText, Folder, FolderOpen, FolderTree, RefreshCw, X } from "lucide-react";
+import { ChevronDown, ChevronRight, ChevronsDownUp, FileText, Folder, FolderOpen, FolderTree, LoaderCircle, RefreshCw, X } from "lucide-react";
 import { normalizeSessionPathForCompare } from "../../agentListDisplay";
 import { SessionSourceBadge } from "./SessionSourceBadge";
 import { Button } from "../ui-shadcn/button";
@@ -519,13 +519,31 @@ function FileNode(props: {
 			<Collapsible open={expanded} onOpenChange={() => onToggleDirectory(node.path)}>
 				<CollapsibleTrigger asChild>
 					<button type="button" className={cn("directory group", fileRowButtonClass, isDragOver && "bg-muted ring-1 ring-border")} style={rowStyle} title={node.relativePath} draggable onDragStart={handleDragStart} onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop} onContextMenu={menu}>
-						<ChevronRight className="file-node-chevron size-3.5 shrink-0 transition-transform group-data-[state=open]:rotate-90" aria-hidden="true" />
+						<ChevronRight
+							className={cn(
+								"file-node-chevron size-3.5 shrink-0 transition-transform",
+								/* 受控 Collapsible 在部分挂载时序下 data-state=open 不可靠，
+							   按 expanded 显式旋转，保证与子树可见性一致。 */
+								expanded ? "rotate-90" : "rotate-0",
+							)}
+							aria-hidden="true"
+						/>
 						<span className="file-node-icon">{fileIconElement(node.name, true, expanded)}</span>
 						<span className="file-node-name">{node.name}</span>
 					</button>
 				</CollapsibleTrigger>
 				<CollapsibleContent>
-					{expanded && node.hasChildren !== false && !node.children && <div className="file-children px-2 py-1 text-xs text-muted-foreground">{t("drawer.lazyLoading")}</div>}
+					{/* 懒加载占位与加载失败态：二者互斥，都不会再盖住文件名。
+					 - 占位独立成行（不是行内绝对定位），children 到位后整行消失；
+					 - hasChildren=false 表示目录 listing 已失败或目录为空，不展示占位。
+					 展开态的 chevron 修正：expanded 且子项未加载时 data-[state=open] 不生效
+					 （Collapsible 由 open 受控，这里直接按 expanded 旋转）。 */}
+					{expanded && node.hasChildren !== false && !node.children && (
+						<div className="file-children flex items-center gap-1.5 px-2 py-1 text-xs text-muted-foreground">
+							<LoaderCircle size={12} className="animate-pideck-spin shrink-0" aria-hidden="true" />
+							<span>{t("drawer.lazyLoading")}</span>
+						</div>
+					)}
 					{node.children && node.children.length > 0 && (
 						<div className="file-children">
 							{node.children.map((child) => (

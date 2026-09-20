@@ -220,3 +220,44 @@ export type CursorImportReport = {
 	imported: number;
 	failed: number;
 };
+
+// ── Directory (外置目录) Session Import Types ──────────────────────────
+//
+// 场景：项目目录被移动/改名后，pi 会话仍按「旧 cwd 的 encoded 分组目录」留在
+// ~/.pi/agent/sessions 下，与新项目的路径不再匹配 → 侧栏看不到历史。
+// 该导入源让用户手动指一个目录（旧项目目录 / pi sessions 根 / 某个 encoded 分组目录），
+// 把其中的会话挂到当前项目下（只建 catalog 引用，不复制、不改写原文件）。
+
+/** 目录会话导入状态：未入册 / 已在 catalog（导入 = 把归属改到当前项目）。 */
+export type DirectoryImportStatus = "new" | "current";
+
+export type DirectorySessionSummary = {
+	id: string;
+	/** 会话 JSONL 绝对路径（导入后即 catalog 的 filePath，原文件保持原地） */
+	sourcePath: string;
+	title: string;
+	preview: string;
+	/** 会话记录里的原工作目录（由 encoded 目录名还原；可能已被移动/改名/删除） */
+	projectPath?: string;
+	/** 原工作目录当前是否仍在磁盘上（false = 目录失效，正是要找回的历史） */
+	projectPathExists: boolean;
+	updatedAt: number;
+	messageCount: number;
+	/** 文件字节数（弹窗展示用；扫描失败时为 0） */
+	sourceSize?: number;
+	status: DirectoryImportStatus;
+};
+
+export type DirectoryImportResult = {
+	id: string;
+	sourcePath: string;
+	success: boolean;
+	title?: string;
+	error?: string;
+};
+
+export type DirectoryImportReport = {
+	results: DirectoryImportResult[];
+	imported: number;
+	failed: number;
+};

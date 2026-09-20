@@ -41,6 +41,8 @@ export type SidebarActions = {
 		reveal: (project: Project) => Promise<void>;
 		openWithEditor: (project: Project) => void;
 		importSessions: (project: Project, source: "codex" | "claude" | "opencode" | "zcode" | "workbuddy" | "cursor") => void;
+		/** 导入其他目录的会话：源目录现选，用于目录移动/改名后找回历史。 */
+		importDirectorySessions: (project: Project) => void;
 		manageResources: (project: Project) => void;
 		/** 打开该项目的自动化任务表；任务归属与运行历史均按项目隔离。 */
 		manageAutomations: (projectId: string) => void;
@@ -470,6 +472,10 @@ export function SidebarContent(props: SidebarContentProps) {
 					}}
 					onImportCursorSessions={() => {
 						actions.projects.importSessions(menuProject, "cursor");
+						controller.closeMenu();
+					}}
+					onImportDirectorySessions={() => {
+						actions.projects.importDirectorySessions(menuProject);
 						controller.closeMenu();
 					}}
 					onManageProjectResources={() => {

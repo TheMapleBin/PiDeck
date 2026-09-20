@@ -326,6 +326,32 @@ test("mergePiProvider compat：只覆盖白名单键，保留 pi 侧其它 compa
 	});
 });
 
+test("pi↔DSH 往返：手写的 supportsStrictMode 不随迁移丢失（白名单外，回写时以原 compat 打底）", () => {
+	const piProvider = {
+		name: "ai88",
+		baseUrl: "https://88api.ai/v1",
+		api: "openai-completions",
+		compat: { supportsDeveloperRole: false, supportsStrictMode: false },
+		models: [{ id: "m" }],
+	};
+	// pi→DSH：DSH 协议没提供这个键，带过去会让整条 settings.update 被拒，所以不收窄进 profile
+	const dsh = mapping.piToDshSnapshot(piProvider);
+	assert.ok(!("supportsStrictMode" in (dsh.profile.compat ?? {})));
+	// DSH→pi 回写：合并以原 compat 为底，用户关掉的开关必须留存，
+	// 否则一次配置迁移就把「修中转站漏工具调用」的开关静默打开了。
+	const back = mapping.dshToPiSnapshot({ name: "ai88", namespace: "llm-pi-ai", profile: dsh.profile });
+	const merged = mapping.mergePiProvider(
+		{
+			providers: {
+				ai88: { models: [{ id: "m" }], compat: { supportsDeveloperRole: true, supportsStrictMode: false } },
+			},
+		},
+		{},
+		back,
+	);
+	assert.equal(merged.models.providers.ai88.compat.supportsStrictMode, false);
+});
+
 test("parseDshSettingsDocument 保留 compat，且丢弃未收窄字段", () => {
 	const parsed = mapping.parseDshSettingsDocument({
 		"llm-pi-ai": {

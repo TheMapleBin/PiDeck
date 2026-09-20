@@ -65,6 +65,13 @@ export function looksDeepSeekBacked(provider: ProviderConfig, providerName?: str
  * requiresReasoningContentOnAssistantMessages 联动：仅当该键缺省（用户未表态）且
  * provider 看着是 DeepSeek 系后端时写 true（见 looksDeepSeekBacked）。显式 true/false
  * 一律尊重——false 是用户「我知道不需要」的表态，不能被自动判定反复打开。
+ *
+ * supportsStrictMode **刻意不做任何推导**：它只在用户显式表态时存在，未表态就不写。
+ * 理由见 configTypes.ProviderCompat.supportsStrictMode——真实默认值随协议不同
+ * （openai-completions 默认开、responses 系默认关），PiDeck 若替他猜一个布尔写盘，
+ * 就会把 pi 的协议判定固化成配置，反而改变线上行为。函数用「原 compat 打底」的写法，
+ * 所以手写在 models.json 里的 supportsStrictMode 会被原样保留、不会被保存流程抹掉。
+ *
  * providerName 不传时只按 baseUrl/模型 ID 判定（旧调用点的兼容路径）。
  */
 export function deriveProviderCompat(provider: ProviderConfig, providerName?: string): ProviderCompat {

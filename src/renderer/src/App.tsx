@@ -56,6 +56,7 @@ import { useDrawerPorts } from "./hooks/useDrawerPorts";
 import { useTerminalDock } from "./hooks/useTerminalDock";
 import { resolveTerminalOwner, terminalOwnerKey } from "./terminalDockState";
 import { useImportFlow } from "./hooks/useImportFlow";
+import { useDirectoryImport } from "./hooks/useDirectoryImport";
 import { useQueuedPrompt } from "./hooks/useQueuedPrompt";
 import { activeAgentIdAtom } from "./hooks/useSessionRuntimeController";
 import { useSessionHistoryMutations } from "./hooks/useSessionHistoryMutations";
@@ -119,7 +120,7 @@ import { useWorktreeActions } from "./hooks/useWorktreeActions";
 import { ChatSessionPane } from "./components/session/ChatSessionPane";
 import { SessionSplitStage } from "./components/session/SessionSplitStage";
 import { splitLayoutSessionIds } from "./utils/sessionSplitEdge";
-import { findLoadedDirectory, loadProjectFileTree, mergeFileTreeChildren } from "./utils/fileTreeLazy";
+import { findLoadedDirectory, loadProjectFileTree, markFileTreeLoadFailed, mergeFileTreeChildren } from "./utils/fileTreeLazy";
 import { SessionTabsBar, type SessionTabsBarProps, type SessionToolAction } from "./components/session/SessionTabsBar";
 import { SessionPaneServicesProvider, type SessionFileOpenContext } from "./components/session/SessionPaneServices";
 import { ProjectEmptyState } from "./components/session/ProjectEmptyState";
@@ -441,6 +442,51 @@ export function App() {
 		setSessionCatalogLoadState,
 		t,
 	});
+	// 文件树镜像：restoreExpandedDirs 等异步回调读取当前树，不依赖渲染闭包。
+	const filesRef = useRef(files);
+	filesRef.current = files;
+
+	/**
+	 * 展开目录自愈：扫描当前树里「已展开但 children 缺失、hasChildren 仍为 true」
+	 * 的目录并按需补拉。修复两类残留场景：
+	 * 1. 目录 listing 被代次/切项目丢弃（#159 兕底路径、旧代次 IPC）后，展开态还在；
+	 * 2. 历史版本失败未打标（hasChildren=true + 无 children）留下的永久占位。
+	 * 返回是否有目录需要修复（含拉取成功/失败）；无目录需要修复时返回 false。
+	 */
+	const restoreExpandedDirs = useCallback(
+		async (projectId: string): Promise<boolean> => {
+			// 从镜像 ref 读当前树：本函数在抽屉打开回调里调用，闭包里的 files 可能是旧渲染帧。
+			const pending: string[] = [];
+			const collectPending = (nodes: FileTreeNode[]) => {
+				for (const node of nodes) {
+					if (node.type !== "directory") continue;
+					// 「已展开 + 无 children + 未标失败」= 占位正在展示或即将展示的目录，需要补拉。
+					if (expandedDirsRef.current.has(node.path) && !Array.isArray(node.children) && node.hasChildren !== false) {
+						pending.push(node.path);
+					}
+					if (node.children?.length) collectPending(node.children);
+				}
+			};
+			collectPending(filesRef.current);
+			if (pending.length === 0) return false;
+			const generation = beginFileTreeRequest();
+			// 父目录先补：子目录 listing 依赖父层先 merge 出节点才能写入。
+			pending.sort((left, right) => left.length - right.length);
+			for (const directory of pending) {
+				try {
+					const children = await api.files.list(projectId, { maxDepth: 0, directory });
+					if (!isFileTreeRequestCurrent(generation, projectId)) return true;
+					setFiles((tree) => mergeFileTreeChildren(tree, directory, children));
+				} catch (error) {
+					console.error("[Files] restore expand failed", directory, error);
+					if (!isFileTreeRequestCurrent(generation, projectId)) return true;
+					setFiles((tree) => markFileTreeLoadFailed(tree, directory));
+				}
+			}
+			return true;
+		},
+		[beginFileTreeRequest, isFileTreeRequestCurrent],
+	);
 
 	// 回答结束后的会话列表后台静默刷新：500ms 尾沿去抖。
 	// 多个 Agent 同时结束回答时只扫描一次，避免重复 IPC 与列表抖动。
@@ -500,6 +546,18 @@ export function App() {
 		scanCursorSessions: api.cursorSessions.scan,
 		importCursorSessionsApi: api.cursorSessions.import,
 		t,
+	});
+
+	// === 外置目录会话导入（目录移动/改名后找回历史）===
+	const {
+		project: directoryImportProject,
+		setProject: setDirectoryImportProject,
+		controller: directoryImportController,
+		open: openDirectoryImport,
+	} = useDirectoryImport({
+		setProjectMenu: () => undefined,
+		refreshProjectSessions,
+		showToast,
 	});
 
 	const rename = useRename({
@@ -781,6 +839,9 @@ export function App() {
 		return projectTarget;
 	}, [terminalOwner, currentSessionId, currentSessionRecord, projects, activeProjectId]);
 	const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
+	// 展开目录镜像：restoreExpandedDirs 在异步回调里读取，避免闭包拿到旧 state。
+	const expandedDirsRef = useRef<Set<string>>(expandedDirs);
+	expandedDirsRef.current = expandedDirs;
 	// 手动刷新/增删改后仍只拉浅层 + 当前展开目录，避免再走整棵 12 层 IPC。
 	const refreshVisibleFiles = useCallback((projectId?: string, silent?: boolean) => refreshFiles(projectId, silent, expandedDirs), [expandedDirs, refreshFiles]);
 	const [, setBranchByProject] = useState<Record<string, string | null>>({});
@@ -1322,12 +1383,20 @@ export function App() {
 					return;
 				}
 				workspace.closeDrawer();
+			} else if (panel === "files" && activeProjectId) {
+				// 打开文件抽屉时先做一次「展开目录自愈」：若树里存在已展开但 children
+				// 缺失、hasChildren 仍为 true 的目录（代次丢失/加载失败等历史残留），
+				// 按需补拉消掉「加载中...」；返回 false 表示没有需要修复的目录，
+				// 才走一次常规静默 refreshFiles。自愈本身不阻塞抽屉打开。
+				void restoreExpandedDirs(activeProjectId).then((repaired) => {
+					if (!repaired) void refreshVisibleFiles(activeProjectId, true);
+				});
+				workspace.openDrawer(panel);
 			} else {
-				if (panel === "files" && activeProjectId) void refreshVisibleFiles(activeProjectId, true);
 				workspace.openDrawer(panel);
 			}
 		},
-		[workspace, gitDrawerDiff, closeGitDiff, activeProjectId, refreshVisibleFiles],
+		[workspace, gitDrawerDiff, closeGitDiff, activeProjectId, refreshVisibleFiles, restoreExpandedDirs],
 	);
 
 	const workspaceChrome = useSessionWorkspaceChrome({
@@ -2650,7 +2719,9 @@ export function App() {
 			try {
 				children = await api.files.list(projectId, { maxDepth: 0, directory: current });
 			} catch {
-				// 超大目录 / 权限问题：停止下钻，保留已加载部分，避免整条链卡死。
+				// 超大目录 / 权限问题：标记当前层「加载失败」，避免展开占位「加载中...」永久盖住文件名；
+				// 保留已加载部分（已 merge 的上层不受影响），用户重新点开可自然重试。
+				setFiles((tree) => markFileTreeLoadFailed(tree, current));
 				break;
 			}
 			if (activeProjectIdRef.current !== projectId) return;
@@ -2703,7 +2774,14 @@ export function App() {
 					if (activeProjectIdRef.current !== projectId) return;
 					setFiles((tree) => mergeFileTreeChildren(tree, path, children));
 				})
-				.catch((error) => console.error("[Files] expand failed", error));
+				.catch((error) => {
+					// 拉取失败（目录被删/无权限/超上限）：不打标的话该目录会永远停在
+					// 「加载中...」占位。标记 hasChildren=false 让占位立刻消失；重新点开
+					// 目录时 findLoadedDirectory 未命中会再次拉取，形成重试入口。
+					console.error("[Files] expand failed", error);
+					if (activeProjectIdRef.current !== projectId) return;
+					setFiles((tree) => markFileTreeLoadFailed(tree, path));
+				});
 			return current;
 		});
 	}
@@ -2879,6 +2957,7 @@ export function App() {
 				if (source === "cursor") return openCursorImport(project);
 				return openOpenCodeImport(project);
 			},
+			importDirectorySessions: (project) => openDirectoryImport(project),
 			manageResources: (project) => setProjectResourcesProject(project),
 			manageAutomations: (projectId) => openAutomationModal(projectId),
 			toggleWorktree: toggleProjectWorktree,
@@ -4063,6 +4142,7 @@ export function App() {
 					{zcodeImportProject && <ImportOverlayHost kind="zcode" project={zcodeImportProject} controller={zcodeImportController} onClose={() => setZcodeImportProject(null)} />}
 					{workbuddyImportProject && <ImportOverlayHost kind="workbuddy" project={workbuddyImportProject} controller={workbuddyImportController} onClose={() => setWorkbuddyImportProject(null)} />}
 					{cursorImportProject && <ImportOverlayHost kind="cursor" project={cursorImportProject} controller={cursorImportController} onClose={() => setCursorImportProject(null)} />}
+					{directoryImportProject && <ImportOverlayHost kind="directory" project={directoryImportProject} controller={directoryImportController} onClose={() => setDirectoryImportProject(null)} />}
 
 					{/* Scratch Pad（草稿本）：根级渲染，避免受 chat-pane grid 影响定位 */}
 					<ScratchPadOverlay controller={scratchPad} />

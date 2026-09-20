@@ -4,6 +4,7 @@ import { RewindPanel } from "./RewindPanel";
 import { DrawerContent } from "../app/AppParts";
 import { SessionTrajectoryPanel } from "../session/trajectory/SessionTrajectoryPanel";
 import { LazyWrapper } from "../../hooks/useLazyComponent";
+import { LoaderCircle } from "lucide-react";
 import type { WorkspaceDrawerPanel } from "../../hooks/useWorkspacePanels";
 import { sessionPillOf, type SessionFilterPill } from "../../sessionFilterPills";
 import { t } from "../../i18n";
@@ -131,17 +132,20 @@ export function DrawerSurface(props: DrawerSurfaceProps) {
 					threshold={0}
 					rootMargin="50px"
 					placeholder={
+						// 整面板懒加载占位：独立居中容器，不会叠在文件名上；加载完成后随内容一起消失。
 						<div
 							style={{
 								display: "flex",
 								alignItems: "center",
 								justifyContent: "center",
+								gap: "6px",
 								height: "100%",
 								color: "var(--text-secondary)",
 								fontSize: "14px",
 							}}
 						>
-							{t("drawer.lazyLoading")}
+							<LoaderCircle size={14} className="animate-pideck-spin" aria-hidden="true" />
+							<span>{t("drawer.lazyLoading")}</span>
 						</div>
 					}
 				>

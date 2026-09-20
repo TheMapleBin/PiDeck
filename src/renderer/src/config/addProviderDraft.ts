@@ -20,6 +20,13 @@ export type AddProviderDraft = {
 		 * undefined = 未触碰，交给保存时的 DeepSeek 特征自动判定（见 modelSpecAutoFill）。
 		 */
 		requiresReasoningContentOnAssistantMessages?: boolean;
+		/**
+		 * strict JSON-schema 工具采样（pi compat.supportsStrictMode）。
+		 * 三态：true/false = 用户显式表态；undefined = 未触碰，保存时不写该键，
+		 * 由 pi 按协议自行判定（openai-completions 默认开、responses 系默认关）。
+		 * 变更背景与关闭原因见 configTypes.ProviderCompat.supportsStrictMode。
+		 */
+		supportsStrictMode?: boolean;
 	};
 	/** 弹窗内维护的模型草稿（新增=空；编辑=现有模型；获取模型勾选后追加）。 */
 	models: ModelItem[];
@@ -61,6 +68,8 @@ export function resolveInitialReasoningContentReplay(
  * compat.requiresReasoningContentOnAssistantMessages 是唯一例外：它只在自己被
  * 赋值（true/false）时写入——false 是「用户否决自动判定」的表态，必须落盘才能压住
  * 保存时的 DeepSeek 特征判定，不能像另两项那样无条件显式写入。
+ * compat.supportsStrictMode 同样只在自己被赋值时写入：它是三态的「用户表态」，
+ * 未表态时不写，避免把 pi 自己的协议判定固化成配置（见 configTypes）。
  */
 export function buildProviderConfigFromDraft(draft: AddProviderDraft): ProviderConfig {
 	const provider: ProviderConfig = { models: draft.models ?? [] };
@@ -71,13 +80,17 @@ export function buildProviderConfigFromDraft(draft: AddProviderDraft): ProviderC
 		provider.headers = setHeaderValue(undefined, "User-Agent", draft.userAgent);
 	}
 	const reasoningContent = draft.compat.requiresReasoningContentOnAssistantMessages;
-	if (draft.compat.supportsDeveloperRole || draft.compat.supportsReasoningEffort || reasoningContent !== undefined) {
+	const strictSampling = draft.compat.supportsStrictMode;
+	if (draft.compat.supportsDeveloperRole || draft.compat.supportsReasoningEffort || reasoningContent !== undefined || strictSampling !== undefined) {
 		provider.compat = {
 			supportsDeveloperRole: draft.compat.supportsDeveloperRole,
 			supportsReasoningEffort: draft.compat.supportsReasoningEffort,
 		};
 		if (reasoningContent !== undefined) {
 			provider.compat.requiresReasoningContentOnAssistantMessages = reasoningContent;
+		}
+		if (strictSampling !== undefined) {
+			provider.compat.supportsStrictMode = strictSampling;
 		}
 	}
 	return provider;
@@ -114,7 +127,10 @@ export function mergeProviderDraft(original: ProviderConfig | undefined, draft: 
 	// compat 合并：保留未知子键；原本没有 compat 且两项都 false 时不凭空创建。
 	// requiresReasoningContentOnAssistantMessages 只在草稿显式赋值时覆盖，未表态则
 	// 沿用文件里的值——否则一次无关编辑就会把用户手写的开关抹回「自动判定」。
+	// supportsStrictMode 同理：未表态（undefined）时不动文件里的值，手写在 models.json
+	// 里的 supportsStrictMode 不会被一次无关编辑抹掉。
 	const reasoningContent = draft.compat.requiresReasoningContentOnAssistantMessages;
+	const strictSampling = draft.compat.supportsStrictMode;
 	const compat: ProviderCompat = {
 		...(original.compat ?? {}),
 		supportsDeveloperRole: draft.compat.supportsDeveloperRole,
@@ -123,7 +139,10 @@ export function mergeProviderDraft(original: ProviderConfig | undefined, draft: 
 	if (reasoningContent !== undefined) {
 		compat.requiresReasoningContentOnAssistantMessages = reasoningContent;
 	}
-	const hasCompat = original.compat != null || draft.compat.supportsDeveloperRole || draft.compat.supportsReasoningEffort || reasoningContent !== undefined;
+	if (strictSampling !== undefined) {
+		compat.supportsStrictMode = strictSampling;
+	}
+	const hasCompat = original.compat != null || draft.compat.supportsDeveloperRole || draft.compat.supportsReasoningEffort || reasoningContent !== undefined || strictSampling !== undefined;
 	if (hasCompat) next.compat = compat;
 	else delete next.compat;
 	return next;
