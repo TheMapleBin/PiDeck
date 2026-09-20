@@ -160,7 +160,8 @@ export class AgentManager {
 	private readonly activeAssistantMessageIds = new Map<string, string>();
 	/** pi 的 toolCallId 贯穿 start/update/end，用它把同一次工具调用合并成一条 UI 记录。 */
 	private readonly toolMessageIds = new Map<string, Map<string, string>>();
-	/** 每个 agent 只保留一条自动重试状态消息，避免短暂 5xx/网络错误把会话刷屏。 */
+	/** 每个 agent 保留一条「进行中」的自动重试状态消息，避免短暂 5xx/网络错误把会话刷屏；
+	 *  一次重试周期（auto_retry_start → auto_retry_end）一张卡，已收敛的卡片不再被改写。 */
 	private readonly retryStatusMessageIds = new Map<string, string>();
 	/** 同一历史会话正在创建 Agent 时共享同一个 Promise，避免快速重复点击/IPC 竞态创建多个进程。 */
 	private readonly creatingSessionAgents = new Map<string, Promise<AgentTab>>();
@@ -4457,7 +4458,7 @@ export class AgentManager {
 			if (typed.willRetry === true) {
 				// agent_end.willRetry 表示 pi 已判定本次错误会进入自动重试；
 				// 此时不写入最终错误，避免用户误以为会话已经失败。
-				if (errorMsg && !this.retryStatusMessageIds.has(agentId)) {
+				if (errorMsg && !this.activeRetryStatusMessageId(agentId)) {
 					this.upsertRetryStatusMessage(
 						agentId,
 						{
@@ -5644,9 +5645,23 @@ export class AgentManager {
 		});
 	}
 
+	/**
+	 * 当前「进行中」的重试状态卡 id（仅 status=running 算数）。
+	 * 一次重试周期一张卡：已收敛成 success/error 的卡片不允许再被下一轮重试改写，
+	 * 否则时间线上永远只剩最后一条「正在自动重试」，用户看不出到底重试过几次（用户反馈）。
+	 * 同一周期内的后续事件（延迟变化等）仍会复用这张运行中卡片。
+	 */
+	private activeRetryStatusMessageId(agentId: string): string | undefined {
+		const messageId = this.retryStatusMessageIds.get(agentId);
+		if (!messageId) return undefined;
+		const message = this.messages.get(agentId)?.find((item) => item.id === messageId);
+		return message?.meta?.status === "running" ? messageId : undefined;
+	}
+
 	private upsertRetryStatusMessage(agentId: string, event: Record<string, unknown>, status: "running" | "success" | "error") {
 		const list = this.messages.get(agentId) ?? [];
-		let messageId = this.retryStatusMessageIds.get(agentId);
+		// 只复用仍在推进的卡片；已收敛（成功/失败）的卡片保持原样，本轮新建一张。
+		let messageId = this.activeRetryStatusMessageId(agentId);
 		let message = messageId ? list.find((item) => item.id === messageId) : undefined;
 		if (!message) {
 			messageId = randomUUID();

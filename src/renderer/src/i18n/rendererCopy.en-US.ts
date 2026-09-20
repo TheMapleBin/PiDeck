@@ -3964,7 +3964,7 @@ export const enUS: Record<TranslationKey, string> = {
 	"diagnostic.systemTitle": "System status",
 	"diagnostic.failureToastTitle": "Session error",
 	"diagnostic.extensionErrorToastTitle": "Extension error",
-	"diagnostic.retryToastTitle": "Auto retry",
+	"diagnostic.retryTitle": "Auto retry",
 	"health.check.pi.installed": "pi installation status",
 	"health.check.pi.installed.hint": "Checks whether pi is installed and reports a version. Sessions cannot start if pi is missing or the version cannot be read.",
 	"health.check.config.parsable": "pi config files parse",

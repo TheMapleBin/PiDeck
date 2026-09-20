@@ -3952,7 +3952,7 @@ export const zhCN = {
 	"diagnostic.systemTitle": "系统状态",
 	"diagnostic.failureToastTitle": "会话失败",
 	"diagnostic.extensionErrorToastTitle": "扩展执行错误",
-	"diagnostic.retryToastTitle": "自动重试",
+	"diagnostic.retryTitle": "自动重试",
 	"health.check.pi.installed": "pi 安装状态",
 	"health.check.pi.installed.hint": "检查 pi 是否已安装且能读出版本。未安装或版本读取失败时，会话无法正常启动。",
 	"health.check.config.parsable": "pi 配置文件可解析",
