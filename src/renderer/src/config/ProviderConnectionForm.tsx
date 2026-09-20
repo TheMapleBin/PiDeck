@@ -48,11 +48,14 @@ export function ProviderConnectionForm(props: {
 		supportsReasoningEffort: boolean;
 		/** 未赋值 = 未表态（保存时按 DeepSeek 特征自动判定）；true/false = 用户显式表态。 */
 		requiresReasoningContentOnAssistantMessages?: boolean;
+		/** 未赋值 = 跟随 pi 协议默认（不写该键）；true/false = 用户显式表态。 */
+		supportsStrictMode?: boolean;
 	};
 	onChangeCompat: (next: {
 		supportsDeveloperRole: boolean;
 		supportsReasoningEffort: boolean;
 		requiresReasoningContentOnAssistantMessages?: boolean;
+		supportsStrictMode?: boolean;
 	}) => void;
 
 	/** ── 快速测试连接 ── */
@@ -301,6 +304,38 @@ export function ProviderConnectionForm(props: {
 							<span>{t("config.reasoningContentReplay")}</span>
 						</Label>
 						<small className="config-compat-item-desc">{t("config.reasoningContentReplayDesc")}</small>
+					</div>
+					<div className="config-compat-item">
+						<Label className="config-checkbox-label">
+							<span>{t("config.strictToolSampling")}</span>
+						</Label>
+						{/* 三态下拉而不是复选框：pi 的 strict 默认值随协议不同（openai-completions 默认开、
+						    responses 系默认关），用「勾/不勾」表达不出「跟随 pi 默认」这一档，
+						    还会让界面显示的开关状态与实际线上行为不一致。选「跟随 pi 默认」时不写该键。 */}
+						<ConfigSelect
+							value={
+								props.compat.supportsStrictMode === undefined
+									? "follow"
+									: props.compat.supportsStrictMode
+										? "on"
+										: "off"
+							}
+							options={[
+								{ value: "follow", label: t("config.strictToolSamplingFollow") },
+								{ value: "on", label: t("config.strictToolSamplingOn") },
+								{ value: "off", label: t("config.strictToolSamplingOff") },
+							]}
+							onChange={(value) =>
+								props.onChangeCompat({
+									// 展开保留未知 compat 子键（如手写的 openRouterRouting），只覆盖面板拥有的项
+									...props.compat,
+									supportsDeveloperRole: props.compat.supportsDeveloperRole || false,
+									supportsReasoningEffort: props.compat.supportsReasoningEffort || false,
+									supportsStrictMode: value === "follow" ? undefined : value === "on",
+								})
+							}
+						/>
+						<small className="config-compat-item-desc">{t("config.strictToolSamplingDesc")}</small>
 					</div>
 				</div>
 			</div>

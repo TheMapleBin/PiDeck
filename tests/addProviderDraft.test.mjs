@@ -297,3 +297,39 @@ test("mergeProviderDraft: 改名场景（调用方迁移 key）内容不丢", ()
   assert.equal(json(merged.oauth), json({ refreshToken: "r1" }));
   assert.equal(merged.authHeader, "X-Api-Key");
 });
+
+// ── supportsStrictMode（pi 0.86 的 strict JSON-schema 工具采样，三态）──────────
+
+test("buildProviderConfigFromDraft: strict 工具采样只在显式表态时写入", () => {
+  // 未表态（undefined）：即使 compat 因其它字段被创建，也不能凭空写这个键——
+  // pi 的 strict 默认值随协议不同（openai-completions 开、responses 系关），
+  // PiDeck 写死一个布尔就等于替 pi 改线上行为。
+  const untouched = buildProviderConfigFromDraft({
+    ...emptyDraft(),
+    compat: { supportsDeveloperRole: false, supportsReasoningEffort: true },
+  });
+  assert.ok(!("supportsStrictMode" in untouched.compat));
+  // 显式关闭（修中转站把工具调用漏成纯文本）→ 必须落盘，否则配置页看到的和实际不一致
+  const optedOut = buildProviderConfigFromDraft({
+    ...emptyDraft(),
+    compat: { supportsDeveloperRole: false, supportsReasoningEffort: false, supportsStrictMode: false },
+  });
+  assert.equal(optedOut.compat.supportsStrictMode, false);
+});
+
+test("mergeProviderDraft: strict 工具采样显式表态覆盖，未表态保留文件里的值", () => {
+  const withFlag = {
+    models: [],
+    compat: { supportsDeveloperRole: false, supportsStrictMode: false },
+  };
+  // 未表态（undefined）→ 保留文件里的 false：一次无关编辑不能把用户关掉的开关
+  // 抹回「跟随 pi 默认」（那会重新发出 strict 工具定义）。
+  const kept = mergeProviderDraft(withFlag, { ...emptyDraft(), baseUrl: "https://x.dev/v1" });
+  assert.equal(kept.compat.supportsStrictMode, false);
+  // 用户改回显式开启 → 覆盖落盘
+  const turnedOn = mergeProviderDraft(withFlag, {
+    ...emptyDraft(),
+    compat: { supportsDeveloperRole: false, supportsReasoningEffort: false, supportsStrictMode: true },
+  });
+  assert.equal(turnedOn.compat.supportsStrictMode, true);
+});

@@ -61,6 +61,10 @@ export type DshProviderProfile = {
  * （openRouterRouting / vercelGatewayRouting 等必须由环境变量显式开启），写进 settings.yaml
  * 一个未经提供的键就会 "compat field ... is not offered" → 整条 settings.update 被拒；
  * pi 侧的 thinkingFormat 等值 DSH 也不一定认。
+ *
+ * supportsStrictMode 刻意不进这个白名单：它是 pi 0.86 才有的键，DSH 协议没有提供，
+ * 写进 settings.yaml 同样会被整条拒绝。pi 侧手写的值不会因此丢失——回写 models.json
+ * 走 mergePiProvider，那边以 asCompatRecord 保留原 compat 全部子键（见该函数注释）。
  */
 export type ProviderCompatFlags = {
 	supportsDeveloperRole?: boolean;
