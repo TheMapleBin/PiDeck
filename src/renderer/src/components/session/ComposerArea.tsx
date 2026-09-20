@@ -70,7 +70,7 @@ function ComposerMeasuredExtras(props: ComposerExtrasProps) {
 	return (
 		<ComposerWidgetLayoutProvider value={widgetLayoutValue}>
 			<>
-				<div className="flex min-h-0 min-w-0 flex-col gap-2 overflow-y-auto overscroll-contain pb-px empty:hidden">
+				<div className="flex min-h-0 min-w-0 flex-col gap-2 overflow-y-auto overscroll-contain pb-px empty:hidden [scrollbar-gutter:stable]">
 					{props.widgets}
 					{props.queuePanel}
 					{props.deliveryNotice}

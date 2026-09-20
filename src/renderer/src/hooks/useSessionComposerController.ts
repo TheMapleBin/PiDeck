@@ -40,6 +40,7 @@ import {
 	stripMarkdownFrontmatter,
 	toSkillInvocationToken,
 	getComposerEnterIntent,
+	resolveComposerHistoryIntent,
 	isComposingKeyboardEvent,
 	isPlanModeSendKey,
 	parseArgumentHint,
@@ -54,7 +55,7 @@ import { SESSION_TAB_DRAG_MIME } from "../utils/sessionSplitEdge";
 import { mergeFileTreeChildren, resolveAtDrillDirectory, shouldLoadFullTreeForAtSearch } from "../utils/fileTreeLazy";
 import { formatFilePathRef, type ComposerChip } from "../components/session/composer/chips";
 import type { ComposerCaretRequest } from "../components/session/composer/types";
-import { getComposerCaretCoords, getComposerCaretOffset, getComposerSelectionRange } from "../components/session/composer/caretCoords";
+import { getComposerCaretCoords, getComposerCaretOffset, getComposerCaretBlockEdge, getComposerSelectionRange, isComposerAtVisualEdge } from "../components/session/composer/caretCoords";
 import { desktopApi } from "../desktopApi";
 import { formatBytes } from "../../../shared/formatBytes";
 import { t } from "../i18n";
@@ -1210,6 +1211,11 @@ export function useSessionComposerController(options: UseSessionComposerControll
 
 	const onKeyDown = useCallback(
 		(event: React.KeyboardEvent<HTMLDivElement>) => {
+			// IME 合成中一律不抢键：↑/↓ 是输入法选词、Esc 是取消合成、Enter 是确认候选。
+			// 放在候选菜单之前，保证菜单分支也走同一判定（TipTap 的 DOM 事件桥接没有
+			// nativeEvent，必须用共享判定口，不能只看 event.nativeEvent?.isComposing）。
+			if (isComposingKeyboardEvent(event)) return;
+
 			if (suggestionsOpen && suggestionItems.length > 0) {
 				if (event.key === "ArrowDown") {
 					event.preventDefault();
@@ -1237,12 +1243,33 @@ export function useSessionComposerController(options: UseSessionComposerControll
 			}
 
 			const liveDraft = liveDomDraftRef.current.sessionId === sessionId ? liveDomDraftRef.current.value : draft;
-			const liveCursor = editorRef.current ? getComposerCaretOffset(editorRef.current) : cursor;
-			const firstLine = !liveDraft.slice(0, liveCursor).includes("\n");
-			const lastLine = !liveDraft.slice(liveCursor).includes("\n");
+			// 一次取选区：from 即光标偏移（折叠时 from === to），同时回答「是否选中了文本」。
+			const liveSelection = editorRef.current ? getComposerSelectionRange(editorRef.current) : { from: cursor, to: cursor };
+			// 块边界取自 ProseMirror state（权威）：不用草稿字符串判「是不是首/末块」，
+			// 因为草稿 atom 在 IME 合成结束后的一帧内可能还没同步上。
+			const blockEdge = getComposerCaretBlockEdge(editorRef.current);
 			const history = getPromptHistory();
+			// 只在方向键上量视觉行盒：endOfTextblock 要遍历段落内的行盒，
+			// 不能让普通输入（每次 keydown 都会走这里）也付这个成本。
+			// 两个方向必须都量：PM 的 endOfTextblock 按 (state, dir) 缓存上一次结果，
+			// 若只量当前方向，窗口缩放/重新换行后同一 state 可能拿到过期的布局结论。
+			const measureEdge = event.key === "ArrowUp" || event.key === "ArrowDown";
+			const atVisualTop = measureEdge && isComposerAtVisualEdge(editorRef.current, "up");
+			const atVisualBottom = measureEdge && isComposerAtVisualEdge(editorRef.current, "down");
+			// 接管判定（含修饰键/选区守卫）全在纯函数里，便于单测。
+			const navIntent = resolveComposerHistoryIntent({
+				key: event.key,
+				atFirstBlock: blockEdge.atFirstBlock,
+				atLastBlock: blockEdge.atLastBlock,
+				atVisualTop,
+				atVisualBottom,
+				historyIndex,
+				historyLength: history.length,
+				modifier: event.shiftKey || event.ctrlKey || event.altKey || event.metaKey,
+				hasSelection: liveSelection.from !== liveSelection.to,
+			});
 
-			if (event.key === "ArrowUp" && firstLine && history.length > 0) {
+			if (navIntent === "recall-older") {
 				event.preventDefault();
 				const nextIndex = historyIndex < 0 ? 0 : Math.min(historyIndex + 1, history.length - 1);
 				if (historyIndex < 0) setSavedDraft(liveDraft);
@@ -1252,7 +1279,7 @@ export function useSessionComposerController(options: UseSessionComposerControll
 				caretRef.current = { pos: history[nextIndex].length, forValue: history[nextIndex] };
 				return;
 			}
-			if (event.key === "ArrowDown" && lastLine && historyIndex >= 0) {
+			if (navIntent === "recall-newer") {
 				event.preventDefault();
 				const nextIndex = historyIndex - 1;
 				const nextDraft = nextIndex >= 0 ? history[nextIndex] : savedDraft;
@@ -1263,7 +1290,7 @@ export function useSessionComposerController(options: UseSessionComposerControll
 				caretRef.current = { pos: nextDraft.length, forValue: nextDraft };
 				return;
 			}
-			if (event.key === "Escape" && historyIndex >= 0) {
+			if (navIntent === "restore-draft") {
 				liveDomDraftRef.current = { sessionId, value: savedDraft };
 				setDraft(savedDraft);
 				setHistoryIndex(-1);
@@ -1280,7 +1307,7 @@ export function useSessionComposerController(options: UseSessionComposerControll
 				void promoteAndSend(resolveBusySendDelivery(isBusy, store.get(busySendDeliveryAtom)));
 			}
 		},
-		[closeSuggestions, draft, getPromptHistory, historyIndex, isBusy, mode, promoteAndSend, savedDraft, selectedSuggestionIndex, selectSuggestion, sendShortcut, sessionId, setDraft, store, suggestionItems, suggestionsOpen],
+		[closeSuggestions, cursor, draft, getPromptHistory, historyIndex, isBusy, mode, promoteAndSend, savedDraft, selectedSuggestionIndex, selectSuggestion, sendShortcut, sessionId, setDraft, store, suggestionItems, suggestionsOpen],
 	);
 
 	const addImageFiles = useCallback(

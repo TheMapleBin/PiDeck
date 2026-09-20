@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync, mkdirSync, chmodSync } from "node:f
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { ImageGenConfigFile } from "../src/shared/types/imagegen";
+import { armStartupOverlayDismissal } from "./startupOverlays";
 
 /**
  * Mock pi fixture（#115 U6）：在隔离 userData 中预置 settings.json，
@@ -175,6 +176,9 @@ export const test = base.extend<MockPiFixture & { seedProjects: SeedProject[] | 
 	window: async ({ app }, use) => {
 		const window = await app.firstWindow();
 		await window.waitForLoadState("domcontentloaded");
+		// 启动引导弹窗会抢焦点/遮拦点击，统一在这里挂上「出现即关」，
+		// 否则会伪装成业务失败（点击超时、打字被吞）。
+		await armStartupOverlayDismissal(window);
 		await use(window);
 	},
 });
