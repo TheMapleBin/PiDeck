@@ -938,8 +938,9 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
 				</div>
 			)}
 
-			{/* Ask 是阻塞式会话步骤，必须参与时间线的正常布局；这样它展开时会推动正文高度，
-          而不是靠 sticky/z-index 覆盖最后一条工具调用或回答。 */}
+			{/* 时间线内的 Ask 通道只服务于并行问询浮层（AskPanelOverlay / OwnedSessionMessageTimeline）；
+			    主会话栏的阻塞式 Ask 已改由 SessionView 钉在对话区下方（issue #230），不再走这里。
+			    这里仍用正常流布局而不是 sticky/z-index，避免覆盖最后一条工具调用或回答。 */}
 			{props.runtimeUi ? <div className="session-runtime-ui mx-auto w-full min-w-0 empty:hidden">{props.runtimeUi}</div> : null}
 
 			{/* 发送清屏垫片（pin-to-top）已于 2026 移除：其与流式跟随有冲突、偶发页面抖动。 */}
