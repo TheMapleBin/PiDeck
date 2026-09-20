@@ -122,6 +122,71 @@ test("保留策略：自动备份（pre-restore/on-save/upgrade）超 MAX_BACKUP
 	}
 });
 
+/**
+ * 回归：同一毫秒内创建的自动备份必须能正确定序，prune 不得删错。
+ * 背景：createdAt 只有毫秒精度，列出时以它为唯一排序键且对相等元素返回 -1，
+ * 破坏排序严格弱序（V8 TimSort 下结果不确定），慢机器（CI）上多份备份落进
+ * 同一毫秒就会把较早的备份当成较新保留，导致断言失败 / 误删最旧备份
+ * （main CI 2026-09-19 实际发生）。
+ * 构造方式：直接按「同毫秒时间戳 + 递增序号」写盘（create 的同毫秒去重回退路径），
+ * 不依赖真实时钟快慢，因此在快机器上也能稳定复现旧实现的缺陷。
+ */
+test("同毫秒创建的自动备份按序号定序，prune 删的是最旧的（时序回归）", () => {
+	const ctx = setup();
+	try {
+		const dir = join(ctx.userData, "config-backups");
+		mkdirSync(dir, { recursive: true });
+		const stamp = "20260919151449957";
+		const createdAt = "2026-09-19T15:14:49.957Z";
+		const makeId = (i) => (i === 0 ? `backup-${stamp}.json` : `backup-${stamp}-${i}.json`);
+		// 写 MAX_BACKUPS+5 份 pre-restore（全部同毫秒，序号 0..MAX_BACKUPS+4）
+		const ids = [];
+		for (let i = 0; i < MAX_BACKUPS + 5; i++) {
+			const id = makeId(i);
+			ids.push(id);
+			writeFileSync(join(dir, id), JSON.stringify({ version: 1, createdAt, appVersion: "1.0.0", reason: "pre-restore", configDir: ctx.configDir, files: { "pi/models.json": "{}" } }), "utf8");
+		}
+		// first-run / manual 用独立（更早的）时间戳，避免覆盖同批次文件而混淆断言。
+		// 两者永不自动删除，是保留策略的对照组。
+		const protectedIds = ["backup-20260101000000000.json", "backup-20260101000000001.json"];
+		writeFileSync(join(dir, protectedIds[0]), JSON.stringify({ version: 1, createdAt: "2026-01-01T00:00:00.000Z", appVersion: "1.0.0", reason: "first-run", configDir: ctx.configDir, files: { "pi/models.json": "{}" } }), "utf8");
+		writeFileSync(join(dir, protectedIds[1]), JSON.stringify({ version: 1, createdAt: "2026-01-01T00:00:00.001Z", appVersion: "1.0.0", reason: "manual", configDir: ctx.configDir, files: { "pi/models.json": "{}" } }), "utf8");
+		// 触发 prune：新创建一份备份即可（create 内部会跑保留策略）
+		const result = ctx.manager.create("pre-restore");
+		assert.equal(result.ok, true);
+
+		const listed = ctx.manager.list();
+		assert.equal(listed.ok, true);
+		// 定序确定：同时间戳按序号降序（列表是「新→旧」）。
+		// 只看手工造的同一批次（新 create 的备份时间戳不同，会排在前面干扰断言）。
+		const autoIds = listed.backups.filter((b) => b.reason === "pre-restore" && b.id.includes(stamp)).map((b) => b.id);
+		assert.ok(autoIds.length > 1, `同批次备份应有多份（实际 ${autoIds.length}）`);
+		const seqOf = (id) => {
+			const m = /^backup-(\d+)(?:-(\d+))?\.json$/.exec(id);
+			return m && m[2] !== undefined ? Number(m[2]) : 0;
+		};
+		for (let i = 1; i < autoIds.length; i++) {
+			assert.ok(seqOf(autoIds[i - 1]) > seqOf(autoIds[i]), `自动备份必须按序号降序（新→旧）：${autoIds.join(", ")}`);
+		}
+		// prune 删掉的是序号最小的（最旧）那批：同批次 MAX_BACKUPS+5 份 + 刚 create 的 1 份，
+		// 自动备份共 MAX_BACKUPS+6 份，保留最近 MAX_BACKUPS 份 → 从序号 MAX_BACKUPS+1 起保留。
+		// 边界：序号 ≤ MAX_BACKUPS 的都被修剪（比保守预期多删一份，因为 create 又添了一份）。
+		const remaining = readdirSync(dir);
+		for (const id of ids.slice(0, MAX_BACKUPS + 1)) {
+			assert.ok(!remaining.includes(id), `应删除最旧的 ${id}（实际保留：${remaining.sort().join(", ")}）`);
+		}
+		for (const id of ids.slice(MAX_BACKUPS + 1)) {
+			assert.ok(remaining.includes(id), `应保留较新的 ${id}（实际保留：${remaining.sort().join(", ")}）`);
+		}
+		// first-run / manual 与保留策略无关，必须仍在
+		for (const id of protectedIds) {
+			assert.ok(remaining.includes(id), `first-run/manual 不得被自动删除：${id}`);
+		}
+	} finally {
+		cleanup(ctx);
+	}
+});
+
 test("read 详情脱敏：auth key / models apiKey 替换为 ***，结构保留", () => {
 	const ctx = setup();
 	try {
