@@ -87,6 +87,22 @@ export function MarkdownLink(
 				),
 			);
 	};
+	// 「默认方式打开」：交给系统按文件关联启动（.md 走用户自己的 Typora / .pdf 走阅读器 / 目录走资源管理器）。
+	// 与左键点击互补：左键把文本后缀交给内置编辑器预览，替代不了用户的本地工具链。
+	// 不做 stat 预检——主进程 shell.openPath 对不存在的路径会返回错误，统一在这里提示，
+	// 少一次 IPC 往返；左键路由之所以 stat，是因为它需要区分目录/图片/文本三种去向。
+	const openWithDefaultApp = () => {
+		if (!resolvedPath) return;
+		void desktopApi.files.open(resolvedPath, scope).catch((error) =>
+			showNotice(
+				t("app.openFileFailed", {
+					error: error instanceof Error ? error.message : String(error),
+				}),
+				undefined,
+				"error",
+			),
+		);
+	};
 	const copyAbsolutePath = () => {
 		if (!resolvedPath) return;
 		void writeClipboard(resolvedPath).then((ok) => {
@@ -145,6 +161,8 @@ export function MarkdownLink(
 						}}
 					/>
 					<DropdownMenuContent align="start" side="bottom" className="min-w-40" onCloseAutoFocus={(e) => e.preventDefault()}>
+						{/* 顺序与文件抽屉右键菜单同序：默认打开 → 定位 → 复制，主操作在首位 */}
+						<DropdownMenuItem onSelect={openWithDefaultApp}>{t("menu.defaultOpen")}</DropdownMenuItem>
 						<DropdownMenuItem onSelect={openInExplorer}>{t("fileLink.openInExplorer")}</DropdownMenuItem>
 						<DropdownMenuItem onSelect={copyRelativePath} disabled={!relativePath}>
 							{t("fileLink.copyRelativePath")}
