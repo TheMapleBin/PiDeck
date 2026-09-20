@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { zstdDecompressSync } from "node:zlib";
 import type { DshForeignSessionItem } from "./dshForeignSync";
 import { readSessionProjectionTitles } from "./dshProjectionCache";
+import { findDshSessionLogFile } from "./dshSessionPath";
 import { consumeTitleEvent, resolveFoldedTitle, type LoggedTitleFold } from "./dshSessionTitleFold";
 
 /**
@@ -14,7 +15,8 @@ import { consumeTitleEvent, resolveFoldedTitle, type LoggedTitleFold } from "./d
  * - 用户要的是「启动侧栏就有会话」，不是「先把 host 拉起来再手动导入」。
  *
  * 布局与 `@deepseek-ai/dsh-session-persistence-jsonl` 一致：
- * `$DSH_HOME/sessions/<workspaceDir>/<sessionId>/session.jsonl.zstd`（或未压缩 `.jsonl`）。
+ * `$DSH_HOME/sessions/<workspaceDir>/<sessionId>/session[.vN].jsonl[.zstd]`（日志文件名带
+ * 「格式代」，v0 无版本名、v1+ 带 `vN`；发现逻辑复用 dshSessionPath.findDshSessionLogFile）。
  * 只读 header 帧/首行：`{ type:'session', id, cwd?, origin?, parentSession?, delegationDepth? }`。
  * 标题不在 header 里。优先官方投影缓存 `session_projcache`；缓存未覆盖的冷会话
  * 再只读日志前缀，按 `foldSessionTitle` last-wins 取 `session/title`，
@@ -130,7 +132,7 @@ export function listForeignSessionsFromDisk(dshHome: string): DshForeignSessionI
 
 /**
  * 从单个会话目录只读折叠标题（归档区复用：.pideck-archive/<sessionId>/ 与
- * sessions 树同构——同目录名/同 session.jsonl[.zstd] 布局）。
+ * sessions 树同构——同目录名/同 session[.vN].jsonl[.zstd] 布局）。
  * 只读 header/前缀，不启动 host、不写缓存；无日志/折叠失败返回 undefined。
  */
 export function foldSessionTitleFromDir(sessionDir: string): string | undefined {
@@ -138,13 +140,11 @@ export function foldSessionTitleFromDir(sessionDir: string): string | undefined 
 	return header?.loggedTitle;
 }
 
-/** 读单个会话目录的 header；优先 zstd，其次未压缩 jsonl。读失败/损坏返回 undefined。 */
+/** 读单个会话目录的 header；按实际 generation 取日志（v1+ 优先），无日志返回 undefined。 */
 function readSessionHeader(sessionDir: string, foldTitle?: FoldTitleOption): ScannedDshSessionHeader | undefined {
-	const zstdPath = join(sessionDir, "session.jsonl.zstd");
-	if (existsSync(zstdPath)) return readZstdHeader(zstdPath, foldTitle);
-	const jsonlPath = join(sessionDir, "session.jsonl");
-	if (existsSync(jsonlPath)) return readJsonlHeader(jsonlPath, foldTitle);
-	return undefined;
+	const log = findDshSessionLogFile(sessionDir);
+	if (!log) return undefined;
+	return log.compressed ? readZstdHeader(log.path, foldTitle) : readJsonlHeader(log.path, foldTitle);
 }
 
 function readZstdHeader(filePath: string, foldTitle: FoldTitleOption | undefined): ScannedDshSessionHeader | undefined {
