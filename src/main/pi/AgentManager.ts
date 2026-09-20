@@ -2499,6 +2499,18 @@ export class AgentManager {
 
 	async setModel(agentId: string, provider: string, modelId: string) {
 		const runtime = this.requireRuntime(agentId);
+		// 幂等短路：pi 的 setModel 会**无条件**写一条 model_change（core/agent-session.js
+		// setModel → sessionManager.appendModelChange，值没变也写，RPC 层只校验模型存在）。
+		// 而 SessionRuntimeCoordinator 的每次激活/重启都会重放会话偏好（applyPreferences），
+		// 于是「模型其实没变」也在会话轨迹里留下一条用户从未操作过的「切换模型」，
+		// 会话列表展示的模型（SessionScanner 取最后一条 model_change）也跟着晃。
+		// 先问 pi 当前模型，相同就什么都不做——不写轨迹，也不重置 thinking 档位。
+		if (await this.isModelAlreadyActive(agentId, provider, modelId)) {
+			// 仍然广播一次 Agent 列表：调用方（激活/重启后重放偏好）依赖这次广播把「已生效的
+			// 模型」同步给渲染层，不能因为没发命令就跳过，否则 Tab 会停在 pi 的启动默认模型上。
+			this.emitState();
+			return this.getRuntimeState(agentId);
+		}
 		// Pi RPC 没有运行中 busy 门禁：set_model 立即更新 Agent state；已经发出的
 		// provider request 不可改写，后续同一 turn step/下一次 request 会读取新模型。
 		const response = await runtime.process.client.request({ type: "set_model", provider, modelId }, 60_000);
@@ -2524,6 +2536,26 @@ export class AgentManager {
 		}
 		this.emitState();
 		return this.getRuntimeState(agentId);
+	}
+
+	/**
+	 * pi 进程当前生效的模型是否就是 (provider, modelId)——setModel 幂等短路的判据。
+	 *
+	 * 只发一次 get_state：全量 getRuntimeState 还要拉 session stats 与文件命中率统计，
+	 * 对一次等值判定过重。任何不确定（RPC 失败、data/model 字段缺失或类型异常）都返回
+	 * false = 「未确认相同」，让调用方照旧发送命令：宁可多写一条 model_change，也不能让
+	 * 会话保存的模型偏好静默不生效。
+	 */
+	private async isModelAlreadyActive(agentId: string, provider: string, modelId: string): Promise<boolean> {
+		const runtime = this.agents.get(agentId);
+		if (!runtime) return false;
+		const response = await runtime.process.client.request({ type: "get_state" }, this.rpcTimeoutMs).catch(() => undefined);
+		if (!response?.success) return false;
+		const data = response.data;
+		if (!isRecord(data) || !isRecord(data.model)) return false;
+		const currentProvider = typeof data.model.provider === "string" ? data.model.provider : undefined;
+		const currentModelId = typeof data.model.id === "string" ? data.model.id : undefined;
+		return currentProvider === provider && currentModelId === modelId;
 	}
 
 	/**
