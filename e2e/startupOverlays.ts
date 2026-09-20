@@ -52,7 +52,13 @@ export async function settleStartupOverlays(window: Page): Promise<void> {
 	let quietSince = 0;
 	const deadline = Date.now() + 15_000;
 	while (Date.now() < deadline) {
-		if (await window.getByRole("dialog").first().isVisible().catch(() => false)) {
+		if (
+			await window
+				.getByRole("dialog")
+				.first()
+				.isVisible()
+				.catch(() => false)
+		) {
 			quietSince = 0;
 			await window.waitForTimeout(150);
 			continue;

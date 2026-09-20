@@ -13,7 +13,9 @@
  * - 合并冲突一律 `merge --abort` 后退出 1，**绝不** `-X ours/theirs` 私自选边；
  * - 不改写历史、不 force push；
  * - 无新提交且本地 target 与远端一致时什么都不做（幂等，可随时跑）；
- * - 任何失败路径都会清理临时 worktree（catch + finally，不用 process.exit 打断清理）。
+ * - 任何失败路径都会清理临时 worktree（catch + finally，不用 process.exit 打断清理）；
+ * - **只在「本文件就是入口」且不在 CI 时才会合并/推送**：纯函数供单测 import，若顶层直接调 main，
+ *   单测 import 就会真的 fetch + 合并 + 推送（2026-09-20 CI 红灯与本机误推 main 的根因）。
  *
  * 用法：
  *   npm run sync:main                        # dev → main，推 origin + atomgit
@@ -27,6 +29,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 const DEFAULT_REMOTE = "origin";
 const ATOMGIT_REMOTE = "atomgit";
@@ -170,6 +173,13 @@ function printSummary(options) {
 }
 
 function main() {
+	// 发布分支的合并必须由人发起：流水线里没有 sync:main 的正当场景（CI 的 contents: read 只是第二道防线），
+	// 所以宁可立刻失败，也不允许 CI 顺手把 main 推上去。
+	if (process.env.CI) {
+		warn("检测到 CI 环境：sync:main 是本地开发脚本，拒绝在流水线里合并/推送 main。");
+		process.exitCode = 1;
+		return;
+	}
 	const options = parseSyncArgs(process.argv.slice(2));
 	const canPushAtomgit = options.pushAtomgit && hasRemote(ATOMGIT_REMOTE);
 	if (options.pushAtomgit && !canPushAtomgit) warn(`ℹ️  未找到 ${ATOMGIT_REMOTE} 远端，本次只推 ${options.remote}。`);
@@ -224,4 +234,6 @@ function main() {
 	}
 }
 
-main();
+// 只有被直接执行为入口时才跑主流程（惯例同 scripts/atomgit-mirror.mjs）：本模块顶层导出纯函数
+// 供 tests/mainSyncScript.test.mjs 直接断言，一旦 import 就执行主流程，单测会真的合并并推 main。
+if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) main();
