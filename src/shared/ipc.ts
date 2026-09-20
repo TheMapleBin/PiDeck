@@ -408,10 +408,10 @@ export const ipcChannels = {
 	gitAheadBehind: "git:ahead-behind",
 	/**
 	 * 订阅某个仓库的 refs 变化（commit/push/fetch/切分支），返回 watchId。
-	 * 主进程按 (projectId, repoPath) 复用 fs.watch 句柄，与 gitUnwatchRefs 成对使用。
+	 * 主进程按 (projectId, repoPath) 复用一份 1.5 秒签名轮询（零句柄），与 gitUnwatchRefs 成对使用。
 	 */
 	gitWatchRefs: "git:watch-refs",
-	/** 退订 refs 监听：计数归零时主进程才关闭句柄（面板卸载 / 切仓库时调用） */
+	/** 退订 refs 监听：计数归零时主进程才停掉该仓库的轮询（面板卸载 / 切仓库时调用） */
 	gitUnwatchRefs: "git:unwatch-refs",
 	/**
 	 * refs 变化推送（主进程 → 渲染层，订阅式）：payload 为 watchId，

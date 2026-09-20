@@ -783,12 +783,12 @@ export function GitPanel(props: GitPanelProps) {
 	/** 本面板的 refs 监听 id：主进程按 (projectId, repoPath) 分配，多仓时每个面板各一份 */
 	const refsWatchIdRef = useRef<string | null>(null);
 
-	// refs 变化推送：AI 在终端里 commit/push/切分支后主进程立即推送，面板重读状态与角标。
-	// 这条通道把「外部改动」的可见延迟从「下一轮 5 秒轮询」压到百毫秒级；5 秒轮询保留为
-	// 兜底（工作区文件改动不写 refs，监听不会触发）。
+	// refs 变化推送：AI 在终端里 commit/push/切分支后主进程检测到 refs 签名变化并推送，
+	// 面板重读状态与角标。检测上限 = 主进程轮询间隔（1.5 秒），比「下一轮 5 秒轮询」快一个档；
+	// 5 秒轮询保留为兜底（工作区文件改动不写 refs，检测不会触发，变更列表仍靠轮询）。
 	//
 	// 三个刻意的约束：
-	// - 订阅/退订必须成对：主进程按 watchId 计数持有 fs.watch 句柄，卸载不退订会残留句柄；
+	// - 订阅/退订必须成对：主进程按 watchId 计数，退订后计数归零才会停掉该仓库的轮询；
 	// - 推送到达时只做 silent 刷新（不 fetch）：否则 fetch → 改写 refs → 再推送，
 	//   会形成往返回环；behind 的远程校正仍走手动刷新与 5 分钟定时器；
 	// - watchId 未就绪或事件不属于本面板（同一条通道 N 个面板共用）时直接忽略。

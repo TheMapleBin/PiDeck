@@ -25,7 +25,7 @@ test("shared/ipc.ts 定义订阅、退订与推送三条通道", () => {
 });
 
 test("主进程按仓库路径订阅/退订，并把事件推给主窗口", () => {
-	// 订阅：路径必须过 requireGitCwd（项目内 + 可选嵌套仓库校验），不能直接把渲染层的路径交给 fs.watch
+	// 订阅：路径必须过 requireGitCwd（项目内 + 可选嵌套仓库校验），不能把渲染层的任意路径拿去反复 stat
 	assert.match(gitIpc, /ipcMain\.handle\(ipcChannels\.gitWatchRefs[\s\S]{0,300}?requireGitCwd\(projectId, repoPath\)/);
 	// 退订：入参校验 + 未知 id 静默忽略（重复退订安全）
 	assert.match(gitIpc, /ipcMain\.handle\(ipcChannels\.gitUnwatchRefs[\s\S]{0,300}?typeof watchId !== "string"[\s\S]{0,200}?gitRefsWatcher\.release\(watchId\)/);

@@ -574,9 +574,9 @@ export function registerGitIpc({ appLogger, mainCopy, gitService, gitRefsWatcher
 		return gitService.getAheadBehind(requireGitCwd(projectId, repoPath));
 	});
 
-	// refs 变化监听：面板挂载时订阅、卸载时退订。commit/push/fetch/切分支会改写 refs，
-	// 主进程推送后渲染层立即重读（延迟从「下一轮轮询」降到百毫秒级）。
-	// 订阅是加速手段而非正确性前提：监听挂不上（非 git / 句柄耗尽）时渲染层仍有轮询兜底。
+	// refs 变化监听：面板挂载时订阅、卸载时退订。commit/push/fetch/切分支会改写 refs 签名，
+	// 主进程检出后立即推送，渲染层重读（延迟上限 = watcher 的轮询间隔 1.5 秒）。
+	// 订阅是加速手段而非正确性前提：非 git 目录、读不到文件时 watcher 静默降级，渲染层仍有轮询兜底。
 	ipcMain.handle(ipcChannels.gitWatchRefs, (_event, projectId: string, repoPath?: string) => {
 		return gitRefsWatcher.acquire(projectId, requireGitCwd(projectId, repoPath));
 	});
