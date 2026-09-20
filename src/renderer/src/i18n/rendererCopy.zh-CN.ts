@@ -542,6 +542,8 @@ export const zhCN = {
 	"app.visionBridgeSeenDesc": "这张图片由视觉模型转换成了文字描述（模型本身不支持看图）",
 	"app.visionBridgeFailed": "视觉桥转换失败",
 	"app.visionBridgeFailedDesc": "图片未能转换成描述，以下为失败原因，可在设置 → 视觉桥中检查模型/接口地址/API Key",
+	"app.visionBridgeNotSent": "图片未发送给模型",
+	"app.visionBridgeNotSentDesc": "当前模型未声明图片输入能力，且视觉桥未启用，这张图没有被转换成文字：可在「配置 → 模型」中为该模型勾选「图片」，或在「设置 → 视觉桥」中启用视觉桥后重新发送",
 	"app.visionBridgeImageLabel": "图片 #{index}",
 	"app.visionConverting": "视觉桥转换中…",
 	"app.visionDetail": "详情",

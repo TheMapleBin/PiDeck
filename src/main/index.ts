@@ -2774,10 +2774,9 @@ function registerIpc() {
 	setPiAiCatalogUserDataDir(app.getPath("userData"));
 	const catalogUpdater = new PiAiCatalogUpdater({
 		userDataDir: app.getPath("userData"),
-		// 目录更新/检测复用应用更新的 GitHub 镜像配置（settings.updateSource），
-		// 国内用户切镜像后自动走代理前缀，无需为目录单独维护一套源。
+		// 目录更新/检测复用应用更新的源偏好（settings.updateSource）：
+		// github → raw 直连优先；atomgit 等 → AtomGit OpenAPI 优先，两者互为兜底。
 		source: () => settingsStore.get().updateSource,
-		customHost: () => settingsStore.get().customUpdateSourceUrl,
 	});
 	// 内置扩展热更新：版本号不跟 PiDeck 应用版本走（见 resources/extensions/extensions-manifest.json），
 	// 打包态 resources 只读，更新写进 userData 覆盖层，路径解析侧覆盖层优先 → 重启会话即生效。

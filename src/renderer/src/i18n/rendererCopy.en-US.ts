@@ -542,6 +542,8 @@ export const enUS: Record<TranslationKey, string> = {
 	"app.visionBridgeSeenDesc": "This image was converted to text by a vision model (the chat model cannot see images)",
 	"app.visionBridgeFailed": "Vision bridge failed",
 	"app.visionBridgeFailedDesc": "The image could not be converted; check model / endpoint / API key in Settings → Vision Bridge",
+	"app.visionBridgeNotSent": "Image not sent to the model",
+	"app.visionBridgeNotSentDesc": "The chat model declares no image input and the vision bridge is off, so this image was never converted to text: tick “image” for the model in Config → Models, or turn the vision bridge on in Settings → Vision Bridge, then send the image again",
 	"app.visionBridgeImageLabel": "Image #{index}",
 	"app.visionConverting": "Vision bridge converting…",
 	"app.visionDetail": "Details",

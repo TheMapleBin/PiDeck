@@ -41,6 +41,7 @@
 - **多栏（分屏）性能** — composer 订阅改按 `sessionId` 的 atomFamily 隔离、后台 Ask 巡检收敛到 App 级单点挂载、时间线控制器改用按会话的 `loadState` 切片订阅：一栏流式输出不再拖着另一栏一起重渲染。
 - **自定义 Git 可执行文件路径全面生效** — 此前只有部分 Git 操作走用户配置的路径，11 处读路径仍硬用 `git`；现在统一走 `currentGitExecutable`，便携版 / 非 PATH 安装的自定义 Git 在所有读操作上同样生效。
 - **会话与事件边界加固** — 停止后迟到的流式事件按「无 runtime」拒绝，不再泄漏死 agent 状态；`agentsLog` / `agentsTextStream` 载荷补齐 `sessionId + runtimeGeneration` 三元组，旧 runtime 的迟到结果一律丢弃；主进程直发渲染层的通道收敛到已订阅白名单；`PiRpcClient` 行缓冲加 8MB 上限（无换行数据不再无限增长）；Git 写操作校验 commit hash 与 reset 模式；超大 diff 按 `maxBytes` 截断，不再直达渲染层；渲染层移除 webview 的 `allowpopups` / `allowfileaccess` 死属性，并清掉一批多余的 `any` 断言与死 IPC 通道常量（感谢 @juzijun233 的加固系列）。
+- **AtomGit 更新源现在真能取到文件了** — 两层各自独立的坏点。其一，`atomgit.com/<owner>/<repo>/raw/<ref>/<path>` 已被 GitCode 前端接管，程序化请求拿到的是 SPA HTML 壳（夹带验证码 SDK），对它做 `JSON.parse` 必然失败。其二，即便换成正确 URL，AtomGit 官方 contents 接口回的是 **base64 信封**（`{type,encoding,content}`），而模型目录那条链路把响应体直接当文本解析，从来没有解码这一步。两层一起修：URL 构造（路径按段编码、分支进 query）与 base64 解码统一收在一份共享模块（`src/main/update/atomGitContents.ts`），由四条取件链路共用——内置扩展热更新、内置提示词/技能热更新、changelog、模型目录——且每对源都保留 GitHub raw 作为另一半兜底，选 AtomGit 只影响快慢、不影响能否成功。已用线上 API 实测（`source: atomgit` → `checkRemote ok`、`remoteVersion 0.86.0`、`update ok`），并加了源码扫描回归守卫：`src/` 下再出现 `${host}/.../raw/` 形式的拼接即红灯。
 
 ### 🙏 致谢
 
