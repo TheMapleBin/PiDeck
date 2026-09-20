@@ -42,8 +42,10 @@ import {
   sessionRuntimeBySessionIdAtomFamily,
   sessionRecordsAtom,
   projectInventoryByIdAtom,
+  projectByIdAtomFamily,
 } from "../../atoms";
 import { t } from "../../i18n";
+import { displayProjectDirectoryName } from "../../rendererUtils";
 import { copyTextWithCopiedNotice } from "../../utils/clipboardNotice";
 import { AnimatedBadge } from "../motion/animated-badge";
 import { sessionStatusBadge } from "../../utils/sessionStatusBadge";
@@ -75,6 +77,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "../ui-shadcn/popover";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui-shadcn/tooltip";
 import { cn } from "../../lib/utils";
 import { SessionBackendBadge } from "./SessionSourceBadge";
 import { TitleScrollText } from "../sidebar/TitleScrollText";
@@ -869,11 +872,15 @@ function EditorWorkbenchTab(props: {
   onPromotePreview?: (tabId: string) => void;
 }) {
   const { tab } = props;
+  // 工作台 Tab 富提示：第一行 tab 标题，第二行完整路径（tab.title 由装配层传入 filePath）。
+  // title 缺省时退化为单行，与旧原生 title 行为一致。
   return (
+    <Tooltip delayDuration={500}>
+      <TooltipTrigger asChild>
     <div
       role="tab"
       aria-selected={Boolean(tab.active)}
-      title={tab.title ?? tab.label}
+      aria-label={tab.title ?? tab.label}
       className={cn(
         "session-tab group relative flex h-7 shrink-0 cursor-pointer select-none items-center rounded-md border px-2 text-caption transition-[color,background-color,border-color,box-shadow,transform] duration-200",
         "w-fit max-w-40",
@@ -929,6 +936,16 @@ function EditorWorkbenchTab(props: {
         />
       )}
     </div>
+      </TooltipTrigger>
+      {tab.title ? (
+        <TooltipContent side="bottom" align="start" className="max-w-80">
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <span className="truncate font-medium">{tab.label}</span>
+            <span className="truncate font-mono text-[11px] text-muted-foreground">{tab.title}</span>
+          </div>
+        </TooltipContent>
+      ) : null}
+    </Tooltip>
   );
 }
 
@@ -1026,6 +1043,10 @@ function SessionTab(props: {
   const { sessionId, active, pinned, preview, dragging } = props;
   const record = useAtomValue(sessionRecordByIdAtomFamily(sessionId));
   const runtime = useAtomValue(sessionRuntimeBySessionIdAtomFamily(sessionId));
+  // Tab hover 富提示的工作区段：会话所属项目的目录名/完整路径。
+  // 无记录（草稿/匿名）或项目已移除时省略，不显示空行。
+  const tabProject = useAtomValue(projectByIdAtomFamily(record?.projectId ?? ""));
+  const workspaceName = tabProject ? displayProjectDirectoryName(tabProject) : undefined;
   const status = runtime?.status;
   // 状态徽章语义与侧栏 SessionTree 状态点一致（idle=蓝、running/starting=黄、error=红）；
   // 重启/停止/重载进行中时统一显示 loading（旋转）；未启动（无 runtime）且无操作不显示徽章，
@@ -1056,11 +1077,16 @@ function SessionTab(props: {
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
+      {/* 富 hover 提示替代原生 title：第一行会话标题，第二行工作区（项目目录名 + 完整路径）。
+          无工作区（草稿/项目缺失）时退化为单行标题，行为与旧 title 一致。
+          delayDuration=500 与 TitleScrollText 的 hoverDelayMs 同拍：快速扫过不弹。 */}
+      <Tooltip delayDuration={500}>
+        <TooltipTrigger asChild>
       <div
         role="tab"
         aria-selected={active}
         data-session-id={sessionId}
-        title={title}
+        aria-label={workspaceName ? `${title} — ${workspaceName}` : title}
         draggable
         onDragStart={props.onDragStart}
         onDragOver={props.onDragOver}
@@ -1191,6 +1217,22 @@ function SessionTab(props: {
           />
         )}
       </div>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" align="start" className="max-w-80">
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <span className="truncate font-medium">{title}</span>
+            {workspaceName ? (
+              <span
+                className="truncate text-[11px] text-muted-foreground"
+                title={tabProject?.path}
+              >
+                {workspaceName}
+                {tabProject?.path && tabProject.path !== workspaceName ? ` · ${tabProject.path}` : ""}
+              </span>
+            ) : null}
+          </div>
+        </TooltipContent>
+      </Tooltip>
       </ContextMenuTrigger>
       <ContextMenuContent className="min-w-40">
         {/* 固定/关闭等 Tab 级操作；运行控制在右上角 ⋯ 菜单 */}
