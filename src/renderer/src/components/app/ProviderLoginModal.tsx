@@ -1,17 +1,17 @@
 import { useEffect, useState } from "react";
 import { useAtomValue, useSetAtom } from "jotai";
 import { AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
-import type { PiAuthFlowEvent } from "../../../../shared/types/piAuth";
 import { closeProviderLoginAtom, providerLoginRequestAtom } from "../../atoms/providerLoginAtoms";
 import { useProviderLoginFlow, type ProviderLoginPhase } from "../../hooks/useProviderLoginFlow";
 import { t } from "../../i18n";
-import { openInSystemBrowser } from "../../utils/openExternal";
+import { pickFlowLogEvents, pickProviderAuthEntry } from "../../utils/providerLoginFlow";
 import { classifyAuthFailure } from "../../utils/providerLoginList";
 import { Alert, AlertDescription, AlertTitle } from "../ui-shadcn/alert";
 import { Button } from "../ui-shadcn/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../ui-shadcn/dialog";
 import { Input } from "../ui-shadcn/input";
 import { ProviderAuthTable } from "./ProviderAuthTable";
+import { AuthEntryCard, FlowLogRow } from "./ProviderLoginFlowRows";
 
 /**
  * 「登录供应商」弹框。
@@ -139,31 +139,46 @@ function RawDetail({ text }: { text: string }) {
 	return <p className="max-h-32 overflow-y-auto break-all font-mono text-xs text-muted-foreground select-text">{text}</p>;
 }
 
-/** 登录进行中：pi 推来的事件流 + 需要用户回答的提问 + 取消。 */
+/** 登录进行中：授权入口（链接/验证码）+ pi 的事件日志 + 需要用户回答的提问 + 取消。 */
 function RunningBody({ flow, state }: { flow: ReturnType<typeof useProviderLoginFlow>; state: Extract<ProviderLoginPhase, { phase: "running" }> }) {
 	const seconds = useElapsedSeconds();
-	const openedBrowser = state.events.some((event) => event.type === "auth_url" || event.type === "device_code");
+	const entry = pickProviderAuthEntry(state.events);
+	const logEvents = pickFlowLogEvents(state.events);
 	return (
 		<div className="space-y-3">
-			<div className="max-h-56 space-y-1 overflow-y-auto rounded-lg bg-muted/40 p-3">
-				{state.events.length === 0 && (
+			{entry ? (
+				<AuthEntryCard entry={entry} />
+			) : (
+				/*
+					还没有授权入口时必须说清「在等谁」：pi 还在等用户回答问题（如 github-copilot 先问
+					Enterprise 域名）时，写「正在申请链接」会让用户干等一个尚未发起的请求。
+					代理提示也常驻在这里：国外供应商要先能连通外网才会下发链接，等到 15 秒的慢提示才说要配代理太晚。
+				*/
+				<div className="space-y-1 rounded-lg border border-dashed border-border p-3">
 					<p className="flex items-center gap-2 text-xs text-muted-foreground">
 						<Loader2 className="size-3.5 animate-spin" />
-						{t("providerLogin.method.oauthHint")}
+						{state.prompt ? t("providerLogin.running.awaitingAnswer") : t("providerLogin.running.awaitingLink")}
 					</p>
-				)}
-				{state.events.map((event, index) => (
-					<FlowEventRow key={index} event={event} />
-				))}
-			</div>
-			{openedBrowser && <p className="text-xs text-muted-foreground">{t("providerLogin.running.browserHint")}</p>}
+					{!state.prompt && <p className="text-xs text-muted-foreground">{t("providerLogin.running.proxyHint")}</p>}
+				</div>
+			)}
+			{logEvents.length > 0 && (
+				<div className="max-h-40 space-y-1 overflow-y-auto rounded-lg bg-muted/40 p-3">
+					{logEvents.map((event, index) => (
+						<FlowLogRow key={index} event={event} />
+					))}
+				</div>
+			)}
+			{/* 提示要说实情：自动打开失败时不能写「已在系统浏览器打开」，改为引导手动打开/复制验证码。 */}
+			{entry && <p className="text-xs text-muted-foreground">{flow.externalOpenFailed ? t("providerLogin.running.linkReadyManualHint") : t("providerLogin.running.linkReadyHint")}</p>}
 			{state.prompt && <PromptRow prompt={state.prompt} onSubmit={(value) => void flow.answerPrompt(value)} />}
 			{/*
 				授权在浏览器完成后，pi 会去供应商换 token；若本机连不上（地区限制/需要代理），
 				这一步会长时间无反馈。只靠转圈用户无法判断「是在等还是已经卡死」，
 				所以超过阈值给一条可操作提示 + 计时，让用户知道该取消/换网络。
+				pi 正在等用户回答时不计时（等的是人，不是网络）。
 			*/}
-			{seconds >= SLOW_HINT_SECONDS && (
+			{!state.prompt && seconds >= SLOW_HINT_SECONDS && (
 				<Alert>
 					<AlertTriangle />
 					<AlertTitle>{t("providerLogin.running.slowTitle", { seconds })}</AlertTitle>
@@ -190,43 +205,6 @@ function useElapsedSeconds(): number {
 		return () => window.clearInterval(timer);
 	}, []);
 	return seconds;
-}
-
-/** 单条 pi 事件；链接走系统浏览器（与应用内浏览器面板的设置无关）。 */
-function FlowEventRow({ event }: { event: PiAuthFlowEvent }) {
-	switch (event.type) {
-		case "auth_url":
-			return (
-				<div className="space-y-1 text-xs">
-					<button type="button" className="break-all text-left text-primary underline" onClick={() => openInSystemBrowser(event.url)}>
-						{event.url}
-					</button>
-					{event.instructions && <p className="text-muted-foreground">{event.instructions}</p>}
-				</div>
-			);
-		case "device_code":
-			return (
-				<div className="space-y-1 text-xs">
-					<p className="font-mono text-base tracking-widest">{event.userCode}</p>
-					<button type="button" className="break-all text-left text-primary underline" onClick={() => openInSystemBrowser(event.verificationUri)}>
-						{event.verificationUri}
-					</button>
-				</div>
-			);
-		case "info":
-			return (
-				<div className="space-y-1 text-xs">
-					<p className="whitespace-pre-wrap break-words">{event.message}</p>
-					{event.links?.map((link) => (
-						<button key={link.url} type="button" className="block break-all text-left text-primary underline" onClick={() => openInSystemBrowser(link.url)}>
-							{link.label || link.url}
-						</button>
-					))}
-				</div>
-			);
-		default:
-			return <p className="whitespace-pre-wrap break-words text-xs text-muted-foreground">{event.message}</p>;
-	}
 }
 
 /** pi 的提问：select 用按钮组，其余用输入框（secret 走密码框）。 */

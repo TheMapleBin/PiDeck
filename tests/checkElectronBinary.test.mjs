@@ -123,7 +123,7 @@ test("resetElectronArtifacts 只删 dist 与 path.txt，占用导致失败时返
 	assert.match(busy.detail, /EBUSY/);
 });
 
-test("repairElectronBinary 按「删标记 → 解压 → 复检」顺序执行，并透传失败原因", () => {
+test("repairElectronBinary 按「删标记 → 解压 → 复检」顺序执行，并透传失败原因", async () => {
 	const steps = [];
 	const fs = {
 		rmSync: (target) => steps.push(`rm:${target}`),
@@ -133,7 +133,7 @@ test("repairElectronBinary 按「删标记 → 解压 → 复检」顺序执行�
 		steps.push("install");
 		return { status: 0 };
 	};
-	const repaired = checkModule.repairElectronBinary({
+	const repaired = await checkModule.repairElectronBinary({
 		electronDir: "/nm/electron",
 		fs,
 		spawn,
@@ -141,14 +141,20 @@ test("repairElectronBinary 按「删标记 → 解压 → 复检」顺序执行�
 			steps.push("probe");
 			return { ok: true, binaryPath: "/nm/electron/dist/electron" };
 		},
+		// install.js 成功就不该碰兜底路径（它要读真实缓存，测试里必须能证明没被调用）。
+		extractFallback: () => {
+			steps.push("fallback");
+			return { ok: false, detail: "不应被调用" };
+		},
 	});
 	assert.equal(repaired.ok, true);
+	assert.equal(repaired.strategy, "installer");
 	// 期望值用 join 拼，避免 Windows 反斜杠路径让断言只在 POSIX 上通过。
 	assert.deepEqual(steps, [`rm:${join("/nm/electron", "dist")}`, `rm:${join("/nm/electron", "path.txt")}`, "install", "probe"]);
 
-	// 解压失败时不应继续做复检（复检会给出误导性的「仍然损坏」结论）。
+	// install.js 起不来时改走本地缓存兜底；两条都失败才算失败，且不做复检（复检会给出误导性结论）。
 	const failedSteps = [];
-	const installFailure = checkModule.repairElectronBinary({
+	const installFailure = await checkModule.repairElectronBinary({
 		electronDir: "/nm/electron",
 		fs: { rmSync: () => {}, existsSync: () => true },
 		spawn: () => {
@@ -159,10 +165,43 @@ test("repairElectronBinary 按「删标记 → 解压 → 复检」顺序执行�
 			failedSteps.push("probe");
 			return { ok: true };
 		},
+		extractFallback: () => {
+			failedSteps.push("fallback");
+			return { ok: false, detail: "本地缓存里没有 electron-v1-win32-x64.zip" };
+		},
 	});
 	assert.equal(installFailure.ok, false);
 	assert.match(installFailure.detail, /install\.js 退出码 1/);
-	assert.deepEqual(failedSteps, ["install"]);
+	// 两段原因都要留下：只报 install.js 的失败会让人以为「重跑一次就好」。
+	assert.match(installFailure.detail, /本地缓存兜底也失败/);
+	assert.match(installFailure.detail, /没有 electron-v1-win32-x64\.zip/);
+	assert.deepEqual(failedSteps, ["install", "fallback"]);
+});
+
+test("repairElectronBinary 在 install.js 联网失败时靠本地缓存 zip 还原（strategy=cache-zip）", async () => {
+	const steps = [];
+	const repaired = await checkModule.repairElectronBinary({
+		electronDir: "/nm/electron",
+		fs: { rmSync: () => {}, existsSync: () => true },
+		spawn: () => {
+			steps.push("install");
+			return { status: 1 };
+		},
+		extractFallback: () => {
+			steps.push("fallback");
+			return { ok: true, zipPath: "/cache/<hash>/electron-v1-win32-x64.zip" };
+		},
+		probe: () => {
+			steps.push("probe");
+			return { ok: true, binaryPath: "/nm/electron/dist/electron.exe" };
+		},
+		log: () => {},
+	});
+	assert.equal(repaired.ok, true);
+	assert.equal(repaired.strategy, "cache-zip");
+	assert.equal(repaired.binaryPath, "/nm/electron/dist/electron.exe");
+	// 兜底之后必须仍然复检：解压成功不等于二进制能起来。
+	assert.deepEqual(steps, ["install", "fallback", "probe"]);
 });
 
 test("readElectronVersion 容错：缺文件或坏 JSON 都返回 null", () => {
@@ -171,14 +210,14 @@ test("readElectronVersion 容错：缺文件或坏 JSON 都返回 null", () => {
 	assert.equal(checkModule.readElectronVersion({ electronDir: "/nm/electron", fs: { existsSync: () => true, readFileSync: () => JSON.stringify({ version: "43.4.0" }) } }), "43.4.0");
 });
 
-test("runCli：健康退出 0；损坏时退出 1 并提示修复；带 --repair 时修复后复检通过才算成功", () => {
+test("runCli：健康退出 0；损坏时退出 1 并提示修复；带 --repair 时修复后复检通过才算成功", async () => {
 	const logs = [];
 	const warns = [];
-	const healthy = checkModule.runCli({ argv: [], probe: () => ({ ok: true, binaryPath: "/x/electron" }), log: (line) => logs.push(line), warn: (line) => warns.push(line) });
+	const healthy = await checkModule.runCli({ argv: [], probe: () => ({ ok: true, binaryPath: "/x/electron" }), log: (line) => logs.push(line), warn: (line) => warns.push(line) });
 	assert.equal(healthy, 0);
 	assert.ok(logs.some((line) => line.startsWith("✓ Electron")));
 
-	const broken = checkModule.runCli({ argv: [], probe: () => ({ ok: false, binaryPath: "/x/electron", detail: "退出码 127" }), log: (line) => logs.push(line), warn: (line) => warns.push(line) });
+	const broken = await checkModule.runCli({ argv: [], probe: () => ({ ok: false, binaryPath: "/x/electron", detail: "退出码 127" }), log: (line) => logs.push(line), warn: (line) => warns.push(line) });
 	assert.equal(broken, 1);
 	assert.ok(warns.some((line) => line.includes("npm run check:electron -- --repair")));
 
@@ -189,23 +228,25 @@ test("runCli：健康退出 0；损坏时退出 1 并提示修复；带 --repair
 	];
 	let probeCalls = 0;
 	const repairCalls = [];
-	const exitCode = checkModule.runCli({
+	const exitCode = await checkModule.runCli({
 		argv: ["--repair"],
 		projectRoot,
 		probe: () => verdicts[Math.min(probeCalls++, verdicts.length - 1)],
 		repair: ({ electronDir }) => {
 			repairCalls.push(electronDir);
-			return { ok: true };
+			// 走兜底路径时 CLI 要额外点明「install.js 联网失败」这层根因。
+			return { ok: true, strategy: "cache-zip" };
 		},
-		log: () => {},
+		log: (line) => logs.push(line),
 		warn: () => {},
 	});
 	assert.equal(exitCode, 0);
 	assert.equal(probeCalls, 2);
 	assert.deepEqual(repairCalls, [join(projectRoot, "node_modules", "electron")]);
+	assert.ok(logs.some((line) => line.includes("本地缓存 zip")));
 
 	// 修复成功但复检仍不通过：必须退出非 0，不能因为「修复跑完了」就报成功。
-	const stillBroken = checkModule.runCli({
+	const stillBroken = await checkModule.runCli({
 		argv: ["--repair"],
 		projectRoot,
 		probe: () => ({ ok: false, binaryPath: "/x/electron", detail: "仍然无法启动" }),
