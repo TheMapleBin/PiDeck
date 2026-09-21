@@ -9,7 +9,7 @@ const sessionTimeline = readFileSync("src/renderer/src/components/session/Sessio
 
 /**
  * 这些是布局回归契约：runtime UI 属于会话时间线的可见交互，不再占用 composer 的
- * flex 高度；输入框仍由 composer 自己完整承载，Ask 也不再创建第二个纵向滚动 owner。
+ * flex 高度；输入框仍由 composer 自己完整承载，Ask 只在自己的底栏滚动，不覆盖输入框。
  */
 test("composer keeps the editor inside the session column", () => {
 	assert.match(composerArea, /className="composer[^\"]*min-h-0[^\"]*overflow-hidden/);

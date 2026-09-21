@@ -81,8 +81,7 @@ export type SessionViewProps = {
 	onSwitchBranch?: (branch: string) => void;
 	ensureSessionId?: (sessionId: string) => Promise<string>;
 	queuePanel?: ReactNode;
-	/** 当前是否有待回答的阻塞式 Ask（与 SessionRuntimeUiOverlay 同代判据）。
-	 *  为 true 时 composer 坍缩到零高，列底整块让位给提问卡。 */
+	/** 当前是否有待回答的阻塞式 Ask（与 SessionRuntimeUiOverlay 同代判据）。 */
 	askPanelVisible?: boolean;
 	runtimeUi?: ReactNode;
 
@@ -207,15 +206,11 @@ export function SessionView({
 	const timelineColumnStyle = {
 		"--session-timeline-min": `${TIMELINE_MIN_HEIGHT}px`,
 	} as CSSProperties;
-	// Ask 底栏与 composer 互斥分高（2026-12 用户反馈：弹卡时输入框压在下面看着不爽，
-	// 连它上方的 todo/改文件/子会话/目标条与统计栏一起让位）：
-	// ask 可见时 composer 通过 max-height:0 + overflow-hidden 坍缩到零高，而不是卸载——
-	// 粘贴转文件的 chip 删盘动作在 composer 的卸载路径上会丢失（orphan 临时文件），
-	// 草稿/附件虽在 atom 里，仍以「不卸载」为更强约束。
-	// 因此两者不会同时占高；不设固定像素上限（2026-12 用户反馈：别限我的卡片高度），
-	// 上限就是「列高 - 对话区保底」，正常情况下卡片不会被截断，超长才内部滚动兜底。
-	const askMaxHeight = `calc(100% - var(--session-timeline-min, ${TIMELINE_MIN_HEIGHT}px))`;
-	const composerMaxHeight = askPanelVisible ? "0px" : `min(${COMPOSER_MAX_HEIGHT}px, calc(100% - var(--session-timeline-min, ${TIMELINE_MIN_HEIGHT}px)))`;
+	// Ask 与 composer 是两个并列的底栏：Ask 只占用自己的空间，不能把输入框压成 0px。
+	// Ask 的高度上限预留 composer 的最小高度，避免两个底栏在窄窗口下互相覆盖；
+	// 超长 Ask 内容在 session-v-ask 内部滚动，输入框始终可见、可聚焦。
+	const askMaxHeight = `calc(100% - var(--session-timeline-min, ${TIMELINE_MIN_HEIGHT}px) - ${COMPOSER_MIN_HEIGHT}px)`;
+	const composerMaxHeight = `min(${COMPOSER_MAX_HEIGHT}px, calc(100% - var(--session-timeline-min, ${TIMELINE_MIN_HEIGHT}px)))`;
 
 	// 终端 Panel 随 terminalOpen 动态挂载，约束注册有一帧延迟。
 	// 折叠/展开用稳态读数 + setLayout：差额全部给 timeline，输入栏不在 Group 里。
@@ -308,7 +303,6 @@ export function SessionView({
 						</div>
 					) : null}
 					{/* 有消息或仍在加载：列底固有高度输入栏。空会话就绪后卸掉，改由起始页居中输入。
-					    Ask 待答期间坍缩到零高（见上方 composerMaxHeight 注释），把列底完全让给提问卡。
               max-height 相对本列：窗口放大后上限抬起，待办/改文件条随内容恢复，不锁死像素。 */}
 					{bottomComposerVisible && (
 						<div
@@ -316,10 +310,7 @@ export function SessionView({
 							style={{
 								maxHeight: composerMaxHeight,
 							}}
-							// 坍缩到 0px 时必须同时 inert + aria-hidden：否则看不见的编辑器仍可被 Tab/点击命中，
-							// 用户会往一个不可见的输入框里打字（React 19 支持 inert 属性）。
-							inert={askPanelVisible}
-							aria-hidden={askPanelVisible || undefined}
+							// Ask 与 composer 并列显示；Ask 出现时保留输入框的可见性与交互性。
 						>
 							<ComposerArea
 								ref={composerRef}

@@ -215,19 +215,20 @@ test("ask owns a pinned slot between the timeline stage and the composer", () =>
 	// 底栏本身是唯一新增的 Ask 滚动层；高度就是「列高 - 对话区保底」，不设固定像素。
 	assert.match(sessionView, /session-v-ask min-h-0 shrink-0 overflow-y-auto overscroll-contain \[scrollbar-gutter:stable\]/);
 	assert.match(sessionView, /\{runtimeUi && askPanelVisible \? \(/);
-	assert.match(sessionView, /const askMaxHeight = `calc\(100% - var\(--session-timeline-min, \$\{TIMELINE_MIN_HEIGHT\}px\)\)`/);
+	assert.match(sessionView, /const askMaxHeight = `calc\(100% - var\(--session-timeline-min, \$\{TIMELINE_MIN_HEIGHT\}px\) - \$\{COMPOSER_MIN_HEIGHT\}px\)`/);
 	// 不设固定像素上限（用户反馈：别限卡片高度）；超长才由内滚兜底。
 	assert.doesNotMatch(sessionView, /ASK_PANEL_MAX_HEIGHT/);
-	// Ask 与 composer 互斥分高（2026-12 用户反馈：弹卡时输入框压在下面看着不爽）：
-	// ask 可见时 composer 坍缩到零高（不是卸载——粘贴文件的删盘动作在卸载路径上会丢）。
-	assert.match(sessionView, /const composerMaxHeight = askPanelVisible \? "0px" : `min\(\$\{COMPOSER_MAX_HEIGHT\}px, calc\(100% - var\(--session-timeline-min, \$\{TIMELINE_MIN_HEIGHT\}px\)\)\)`/);
+	// Ask 与 composer 必须同时可见：Ask 只能在自己的底栏内滚动，不能用 0px 高度覆盖/隐藏输入框。
+	// Ask 的最大高度预留 composer 最小高度，保证输入卡始终有可见空间。
+	assert.match(sessionView, /const askMaxHeight = `calc\(100% - var\(--session-timeline-min, \$\{TIMELINE_MIN_HEIGHT\}px\) - \$\{COMPOSER_MIN_HEIGHT\}px\)`/);
+	assert.match(sessionView, /const composerMaxHeight = `min\(\$\{COMPOSER_MAX_HEIGHT\}px, calc\(100% - var\(--session-timeline-min, \$\{TIMELINE_MIN_HEIGHT\}px\)\)\)`/);
 	assert.match(sessionView, /maxHeight: composerMaxHeight/);
-	// composer 全程挂载（不因 ask 卸载）：否则粘贴转文件的 chip 删盘副作用会丢。
+	// composer 全程挂载：Ask 出现时也不能卸载或 inert 输入框，避免用户失去输入焦点/草稿操作。
 	assert.match(sessionView, /bottomComposerVisible && \(/);
 	assert.doesNotMatch(sessionView, /bottomComposerVisible && !askPanelVisible/);
-	// 坍缩到 0px 时同时 inert + aria-hidden：不可见编辑器不得再被 Tab/点击命中。
-	assert.match(sessionView, /inert=\{askPanelVisible\}/);
-	assert.match(sessionView, /aria-hidden=\{askPanelVisible \|\| undefined\}/);
+	assert.doesNotMatch(sessionView, /inert=\{askPanelVisible\}/);
+	assert.doesNotMatch(sessionView, /aria-hidden=\{askPanelVisible \|\| undefined\}/);
+	assert.doesNotMatch(sessionView, /composerMaxHeight = askPanelVisible \? "0px"/);
 	// 占位判据必须与 overlay 同源，否则 stale runtime 的残留 pending 会让 composer 白让高度。
 	assert.match(sessionView, /askPanelVisible\?: boolean/);
 	const injector = readFileSync("src/renderer/src/components/session/SessionRuntimeInjector.tsx", "utf8");
