@@ -2126,16 +2126,6 @@
 .config-compat-item {
   display: flex;
   flex-direction: column;
-  /* 复选框与下方描述保持 6px 呼吸感（原 2px 贴得太紧，视觉评审指出） */
-  gap: 6px;
-}
-
-.config-compat-item-desc {
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-micro);
-  line-height: 1.35;
-  padding-left: 22px;
-  max-width: 300px;
 }
 
 
