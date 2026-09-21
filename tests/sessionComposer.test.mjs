@@ -316,10 +316,16 @@ test("Composer identity is session-only and send snapshots address the captured 
 
 test("A/B switching cannot clear or restore the other Session draft", () => {
 	const source = sendSource();
-	assert.match(source, /clearSnapshot\(sessionId\)/);
+	// 清空/恢复都抽到了同名前缀的 helper（第三参 keepDraft 供快捷消息直发复用），
+	// 但第一个参数必须仍是本次发送捕获的 sessionId：切到 B 后再回填不能动 B 的草稿。
+	assert.match(source, /clearComposerSnapshot\(sessionId, keepDraft\)/);
 	// 拒绝恢复用原始草稿（rawDraft，含引用 token）：保留 chip 形态供用户修改重发；
 	// unknown 快照仍存展开后文本（已实际投递的内容）
-	assert.match(source, /restoreRejectedSnapshot\(sessionId, rawDraft, imageSnapshot\)/);
+	assert.match(source, /restoreRejectedPrompt\(sessionId, keepDraft, rawDraft, imageSnapshot\)/);
+	assert.match(source, /restoreRejectedSnapshot\(targetSessionId, message, imageSnapshot\)/);
+	// 输入框临时 UI（↑ 历史、DOM 草稿镜像）同样必须留 keepDraft 出口，否则直发会把用户草稿镜像置空
+	assert.match(source, /function resetComposerEphemeralUi\(keepDraft: boolean\) \{\s*if \(keepDraft\) return;/);
+	assert.equal(source.match(/options\.resetComposerUi\?\.\(\)/g)?.length, 1, "resetComposerUi 必须统一走 resetComposerEphemeralUi 收口");
 	assert.match(source, /setDraft\(\{\s*sessionId: targetSessionId/);
 	assert.match(source, /setAttachments\(\{\s*sessionId: targetSessionId/);
 });

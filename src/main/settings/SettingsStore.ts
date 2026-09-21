@@ -8,6 +8,7 @@ import { normalizePinnedSessionIds } from "../../shared/pinnedSessions";
 import { parseBusySendDelivery } from "../../shared/busySendDelivery";
 import { sanitizeShortcutOverrides } from "../../shared/shortcuts";
 import { normalizeThemeSchedule } from "../../shared/themeSchedule";
+import { DEFAULT_QUICK_MESSAGES, normalizeQuickMessages } from "../../shared/quickMessages";
 import { getAppLogger } from "../logging/sharedLogger";
 import { setConfiguredGitPath } from "../git/gitExecutable";
 import { renameWithRetry } from "../utils/fsRetry";
@@ -107,6 +108,9 @@ const defaultSettings: AppSettings = {
 	// 忙碌时发送默认「插入当前回合」（对齐 pi 历史行为）；dsh 会话此前默认排队，
 	// 统一后由本设置项决定，用户可在常用设置→会话中改回。
 	busySendDelivery: "steer",
+	// 快捷消息出厂清单：与设置页「恢复默认」共用同一份来源（shared/quickMessages.ts），
+	// 两处各写一遍必然会漂移成「恢复默认恢复不出出厂那几条」。
+	quickMessages: [...DEFAULT_QUICK_MESSAGES],
 	enableGitManagement: true,
 	gitCommitMessagePrompt: `请根据以下 git diff 生成一条中文 git commit message。
 
@@ -371,6 +375,9 @@ export class SettingsStore {
 			// 快捷键覆盖来自旧 settings.json 时可能是脏值（未知 id / 非法 accelerator）；
 			// 统一清洗，坏条目回落平台默认，避免主进程匹配读到无效键。
 			this.settings.shortcuts = sanitizeShortcutOverrides(parsed.shortcuts, process.platform);
+			// 快捷消息来自旧 JSON 时可能是脏值（非数组/含空白与重复项/超长）；统一清洗后回落，
+			// 避免弹框里出现空行或重复条目。非数组（新增字段的旧数据）回内置清单。
+			this.settings.quickMessages = normalizeQuickMessages(parsed.quickMessages);
 		}
 		// showThinking 不再作为可持久化的独立配置项，完全跟随 pi agent 的 hideThinkingBlock。
 		// 启动时重新读取以确保每次启动都使用最新值，而非缓存的 defaultSettings。
@@ -462,6 +469,10 @@ export class SettingsStore {
 		// 全局快捷键覆盖来自渲染层，入参不可信：只保留已知 id + 合法 accelerator 的条目。
 		if ("shortcuts" in safePatch) {
 			safePatch.shortcuts = sanitizeShortcutOverrides(safePatch.shortcuts, process.platform);
+		}
+		// 快捷消息清单来自渲染层，入参不可信：trim/去重/截断到上限，非数组回内置清单。
+		if ("quickMessages" in safePatch) {
+			safePatch.quickMessages = normalizeQuickMessages(safePatch.quickMessages);
 		}
 		// 更新源 id 归一化（只允许已知枚举：atomgit 第一首选，github 官方；其余历史值回退 atomgit）。
 		if ("updateSource" in safePatch) {

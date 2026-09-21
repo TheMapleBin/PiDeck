@@ -1,6 +1,7 @@
 import { atom } from "jotai";
 import { atomWithStorage } from "jotai/utils";
 import type { BusySendDelivery } from "../../../shared/busySendDelivery";
+import { DEFAULT_QUICK_MESSAGES } from "../../../shared/quickMessages";
 import type { AgentBackend } from "../../../shared/types";
 import { resolveEffectiveAgentBackend } from "../../../shared/types/dshRuntime";
 import { dshRuntimeStatusAtom } from "./dsh-atoms";
@@ -89,6 +90,16 @@ export const effectiveAgentBackendAtom = atom<AgentBackend>((get) => resolveEffe
  * 避免把 settings props 一路透传进深层 hook。默认与 main SettingsStore 保持一致。
  */
 export const busySendDeliveryAtom = atom<BusySendDelivery>("steer");
+
+/**
+ * 快捷消息清单（设置项 quickMessages 的渲染层快照）。
+ *
+ * 为什么要快照：消费方在 composer 底栏深处（弹框按钮），而 settings 是 App 级 state；
+ * 一路透传 props 会把设置依赖带进会话视图族。App 在 settings 变化时写入本 atom，
+ * 弹框按需读取（与 busySendDeliveryAtom 同一模式）。
+ * 初值取内置清单，保证设置未加载完成时按钮已可用。
+ */
+export const quickMessagesAtom = atom<string[]>([...DEFAULT_QUICK_MESSAGES]);
 
 /**
  * 侧栏展开的项目 id 集合（有 id = 展开）。

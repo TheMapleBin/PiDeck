@@ -61,6 +61,7 @@ const FIELD_CATALOG: readonly FieldCatalogEntry[] = [
 	{ field: "workspaceContentOpenMode", tab: "common", itemKey: "settings.workspaceContentOpenMode" },
 	{ field: "expandInterimDuringStream", tab: "common", itemKey: "settings.expandInterimDuringStream" },
 	{ field: "collapsePrevRunsOnNewTurn", tab: "common", itemKey: "settings.collapsePrevRunsOnNewTurn" },
+	{ field: "quickMessages", tab: "common", itemKey: "settings.quickMessages" },
 	{ field: "idleAgentAutoRelease", tab: "common", itemKey: "settings.idleAgentAutoRelease" },
 	{ field: "idleAgentKeepCount", tab: "common", itemKey: "settings.idleAgentKeepCount" },
 	{ field: "idleAgentTimeoutMin", tab: "common", itemKey: "settings.idleAgentTimeoutMin" },

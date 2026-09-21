@@ -115,6 +115,13 @@ export type AppSettings = {
 	 * （pi streamingBehavior / DSH sessions.prompt mode）。缺省 "steer"，解析见 shared/busySendDelivery.ts。
 	 */
 	busySendDelivery: BusySendDelivery;
+	/**
+	 * 输入框底栏「快捷消息」弹框里的条目，数组顺序 = 弹框展示顺序。
+	 * 出厂值见 shared/quickMessages.ts 的 DEFAULT_QUICK_MESSAGES；用户在
+	 * 「设置 → 常用设置 → 快捷消息」增删改。空数组表示用户主动清空（不回填内置）。
+	 * 落盘边界由 normalizeQuickMessages 清洗（trim/去重/上限截断）。
+	 */
+	quickMessages: string[];
 	/** 是否启用会话右侧的 Git 源代码管理入口与面板，默认开启以保持升级前行为。 */
 	enableGitManagement: boolean;
 	/** Git 提交摘要生成提示词模板，{diff} 会被替换为实际 diff 内容 */

@@ -1,5 +1,6 @@
 import type { PiDesktopApi } from "../../preload";
 import { createDefaultExternalEditorSettings, createDefaultSecurityConfig, createDefaultSoundAlertSettings, DEFAULT_PET_SCALE } from "../../shared/types";
+import { DEFAULT_QUICK_MESSAGES } from "../../shared/quickMessages";
 import type { AppSettings, FileTreeNode, Project, SessionRecord, SessionSummary, TerminalDataEvent, TerminalExitEvent, TerminalTab } from "../../shared/types";
 import type { ResourceImportKind } from "../../shared/types/resourceImport";
 import { t } from "./i18n";
@@ -104,6 +105,7 @@ let previewSettings: AppSettings = {
 	sessionTabOpenMode: "preview",
 	// 与 SettingsStore 默认一致：忙碌时发送默认「插入当前回合」
 	busySendDelivery: "steer",
+	quickMessages: [...DEFAULT_QUICK_MESSAGES],
 	enableGitManagement: true,
 	gitCommitMessagePrompt: "",
 	gitCommitMessageProvider: "",

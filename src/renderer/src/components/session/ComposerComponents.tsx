@@ -255,6 +255,8 @@ export function ComposerBottomBar(props: {
 	feishuIndicator?: ReactNode;
 	/** 安全等级选择器（自包含组件，注入到左下角工具组） */
 	securityControl?: ReactNode;
+	/** 快捷消息入口（自包含组件，摆在安全控制位右侧，符合「权限右边」的固定习惯） */
+	quickMessagesControl?: ReactNode;
 	voiceControls: ReactNode;
 	sendControls: ReactNode;
 	onPickModel: () => void;
@@ -458,8 +460,14 @@ export function ComposerBottomBar(props: {
 					</DropdownMenu>
 					{props.feishuIndicator}
 					{/* 生图模式无 pi/DSH runtime：安全等级（pi 安全门）与 DSH 权限预设都对图片生成无意义，
-					   且 SecurityControl 按 backend 分发时没有 imagegen 分支会误显示成 pi 安全等级菜单，故直接屏蔽。 */}
-					{isImageGenMode ? null : props.securityControl}
+					   且 SecurityControl 按 backend 分发时没有 imagegen 分支会误显示成 pi 安全等级菜单；
+					   快捷消息同理（正文是给对话模型的指令），两个控制位一起屏蔽。 */}
+					{isImageGenMode ? null : (
+						<>
+							{props.securityControl}
+							{props.quickMessagesControl}
+						</>
+					)}
 				</div>
 				<div className={`composer-bottom-center flex min-w-0 flex-1 items-center justify-center gap-4${isImageGenMode ? " overflow-x-auto overflow-y-hidden [scrollbar-width:none]" : " overflow-hidden"}`}>
 					{isImageGenMode && props.imageGenOptions ? (
