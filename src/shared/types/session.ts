@@ -162,9 +162,8 @@ export type ArchivedDshSession = {
 };
 
 /**
- * pi 归档区会话清单行：会话摘要 + 归档前的原始路径（index.json 反查）。
- * originalPath 用于把归档会话按项目归属过滤（弹窗归档视图不再全量）；
- * 索引缺失/损坏的极旧归档为 undefined，弹窗不展示（配置页仍全局可恢复）。
+ * pi 归档区会话清单行：summary 的 projectPath 来自归档 JSONL 的 cwd，用于按项目归属；
+ * originalPath 是归档路径到原文件路径的索引，恢复时必需。
  */
 export type ArchivedPiSession = {
 	summary: SessionSummary;

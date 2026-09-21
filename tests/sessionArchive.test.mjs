@@ -156,6 +156,24 @@ test("archive moves the session into .pideck-archive and list no longer returns 
 		);
 		const item = archivedList.find((s) => s.summary.filePath === archived);
 		assert.equal(item?.originalPath, sessionPath, "listArchived must carry the original path from index.json");
+		assert.equal(item?.summary.projectPath, "c:/proj", "archived summary must retain the JSONL cwd for project attribution");
+	} finally {
+		rmSync(home, { recursive: true, force: true });
+	}
+});
+
+test("readSummary preserves WSL cwd casing for archived project attribution", async () => {
+	const home = mkdtempSync(join(tmpdir(), "pideck-archive-wsl-cwd-"));
+	try {
+		const { SessionScanner } = loadSessionScanner(home);
+		const scanner = new SessionScanner();
+		await scanner.configureWsl({ distro: "Ubuntu", user: "dev", linuxHome: "/home/dev", windowsHome: "\\\\wsl.localhost\\Ubuntu\\home\\dev" });
+		scanner.readWslFileVersion = async () => ({ mtimeMs: 1, size: 256 });
+		scanner.readWslFileHead = async () => `${JSON.stringify({ type: "session", id: "wsl-archive", cwd: "/home/dev/Work" })}\n`;
+		scanner.inferWslParentSessionFromPath = async () => undefined;
+
+		const summary = await scanner.readSummary("/home/dev/.pi/agent/sessions/.pideck-archive/archive.jsonl");
+		assert.equal(summary?.projectPath, "/home/dev/Work");
 	} finally {
 		rmSync(home, { recursive: true, force: true });
 	}
