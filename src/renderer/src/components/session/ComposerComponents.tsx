@@ -22,7 +22,7 @@ import { resolveComposerThinkingLevel } from "../../utils/thinkingDisplay";
 import { WELCOME_MODEL_KEY, isWelcomeModelLost, readWelcomeModelPreference, readWelcomeThinkingPreference, shouldClearWelcomePreference } from "../../utils/chatSessionBootstrap";
 import { useBackendModelCatalog } from "../../hooks/useBackendModelCatalog";
 import { CommandPickerGroup, CommandPickerPanel, type CommandPickerFilter } from "../ui-shadcn/command-picker";
-import { THINKING_LEVELS, computeModelPickerDefaultExpanded, groupModelsByProvider, modelPickerSearchFilter, modelRowLabels, orderProviderGroups, resolveModelPickerBody } from "./sessionPickerOptions";
+import { THINKING_LEVELS, computeModelPickerDefaultExpanded, groupModelsByProvider, modelPickerSearchFilter, modelRowLabel, orderProviderGroups, resolveModelPickerBody } from "./sessionPickerOptions";
 import type { AgentBackend, AgentRuntimeState, AvailableModel, ComposerAgentMode, GitBranchInfo, ModelListFailReason, ModelListReport, SessionRecord, UsageProbeBackend } from "../../../../shared/types";
 
 /** 单个 extension widget 卡片：可折叠标题栏 + 内容行，支持手动关闭 */
@@ -815,9 +815,8 @@ export function ModelPicker(props: {
 		// 分组各渲染一行时，value 必须唯一，否则鼠标悬停/键盘选中会让两行同时高亮。
 		// data-picker-value 仍保留模型 key，供面板“当前模型滚动定位”使用。
 		const itemValue = valueOverride ?? modelKey;
-		// 主行显示 name（配置页「名称」列，用户可自定义），副行保留 provider/id 唯一标识：
-		// 收藏栏/跨供应商搜索没有分组标题提供 provider 上下文，只显示 name 无法分辨同名的不同渠道。
-		const labels = modelRowLabels(model);
+		// 行文案：provider/名称，单行（原双行「name + provider/id」视觉太重，id 收进 tooltip）。
+		const labels = modelRowLabel(model);
 		return (
 			<CommandItem key={itemValue} value={itemValue} data-picker-value={modelKey} keywords={[model.name ?? "", model.id, model.provider, modelKey]} onSelect={() => props.onPick(model)} className="group min-h-9 items-center gap-2 rounded-md px-2.5 py-1">
 				{/* 收藏/取消收藏按钮：填充星为收藏，空心为未收藏 */}
@@ -835,9 +834,8 @@ export function ModelPicker(props: {
 						<Star size={14} strokeWidth={1.8} fill={favorited ? "currentColor" : "none"} />
 					</button>
 				)}
-				<span className="flex min-w-0 flex-1 flex-col gap-0.5" title={labels.primary === model.id ? modelKey : `${labels.primary} · ${modelKey}`}>
-					<span className="min-w-0 truncate text-control font-medium text-foreground">{labels.primary}</span>
-					<span className="min-w-0 truncate font-mono text-[11px] text-text-tertiary">{labels.secondary}</span>
+				<span className="min-w-0 flex-1 truncate font-mono text-control font-medium text-foreground" title={labels === modelKey ? undefined : `${labels} · ${modelKey}`}>
+					{labels}
 				</span>
 				{/* 隐藏模型操作按钮：悬停时显示，点击将模型放入隐藏列表 */}
 				{props.onToggleHideModel && !favorited && (
@@ -901,13 +899,12 @@ export function ModelPicker(props: {
 						<CommandPickerGroup id="hidden-models" label={t("app.modelHiddenSection")} count={hiddenModelList.length} countText={t("app.modelHiddenCount", { count: hiddenModelList.length })}>
 							{hiddenModelList.map((model) => {
 								const modelKey = `${model.provider}/${model.id}`;
-								// 与可见行同一套文案规则（主行 name 回落 id，副行 provider/id），只是整体弱化显示。
-								const labels = modelRowLabels(model);
+								// 与可见行同一套文案规则（provider/名称，单行），只是整体弱化显示。
+								const labels = modelRowLabel(model);
 								return (
 									<CommandItem key={`hidden/${modelKey}`} value={`hidden/${modelKey}`} data-picker-value={modelKey} keywords={[model.name ?? "", model.id, model.provider, modelKey]} className="group min-h-9 items-center gap-2 rounded-md px-2.5 py-1 text-muted-foreground" onSelect={() => props.onPick(model)}>
-										<span className="flex min-w-0 flex-1 flex-col gap-0.5" title={modelKey}>
-											<span className="min-w-0 truncate text-control font-medium opacity-70">{labels.primary}</span>
-											<span className="min-w-0 truncate font-mono text-[11px] text-text-tertiary opacity-70">{labels.secondary}</span>
+										<span className="min-w-0 flex-1 truncate font-mono text-control opacity-70" title={labels === modelKey ? undefined : `${labels} · ${modelKey}`}>
+											{labels}
 										</span>
 										<button
 											type="button"

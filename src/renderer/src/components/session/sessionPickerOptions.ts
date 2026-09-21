@@ -127,16 +127,16 @@ export function orderProviderGroups(providers: string[], recentProviders?: strin
 }
 
 /**
- * 模型选择器行的两段文本：主行展示名（name 回落 id），副行 `provider/id` 唯一标识。
+ * 模型选择器行文案：单行 `provider/名称`。
  *
- * 为什么主行不再直接显示 provider/id：name 是用户在「模型」页配置的显示名（渠道别名、
- * 中文名很常见），只显示 id 时同名不同渠道的模型难以分辨。副行必须保留 provider/id——
- * 收藏栏与已隐藏栏都会跨供应商混排，此时没有分组标题提供 provider 上下文。
- * name 缺失或仅含空白时主行回退 id（副行仍带 provider 前缀，不比原来更少信息）。
+ * 名称取用户在「模型」页配置的 name（渠道别名、中文名很常见）——提供商返回的 id 可能
+ * 又长又乱，用自定义名称映射更好认；name 缺失或仅含空白时回退 id。provider 前缀必须
+ * 保留：收藏栏与已隐藏栏跨供应商混排，没有分组标题提供上下文，且不同渠道可能取了
+ * 同一个别名。底层唯一标识 provider/id 不占版面，只出现在悬停 tooltip 与搜索关键词里。
  */
-export function modelRowLabels(model: { id: string; name?: string; provider: string }): { primary: string; secondary: string } {
+export function modelRowLabel(model: { id: string; name?: string; provider: string }): string {
 	const name = model.name?.trim();
-	return { primary: name ? name : model.id, secondary: `${model.provider}/${model.id}` };
+	return `${model.provider}/${name ? name : model.id}`;
 }
 
 /**
