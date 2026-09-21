@@ -81,7 +81,7 @@
 
 ## 📋 Changelog
 
-> **Latest: v0.7.7-beta** (2026-09-20)
+> **Latest: v0.7.7-beta** (2026-09-21)
 
 ### v0.7.7-beta Release Highlights
 - 🚀 **Search workspace files by name (#215)**
