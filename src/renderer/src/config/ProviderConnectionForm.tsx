@@ -308,17 +308,20 @@ export function ProviderConnectionForm(props: {
 							</span>
 						</Label>
 					</div>
+					{/* 严格工具采样是「三态下拉」不是复选框，与上面三项并排时必须靠 .config-compat-item
+					    的横向排列（见 surfaces.css），否则标签独占一行、下拉落第二行，整组被撑成两行。
+					    这里刻意不再用 config-checkbox-label：它带 cursor:pointer 且是 <label>，
+					    但本项内没有可切换的控件，点文字没任何反应会误导。 */}
 					<div className="config-compat-item">
-						<Label className="config-checkbox-label">
-							<span>
-								{t("config.strictToolSampling")}
-								<CompatLabelHint tipKey="config.strictToolSamplingDesc" />
-							</span>
-						</Label>
+						<span className="text-control text-text-primary">
+							{t("config.strictToolSampling")}
+							<CompatLabelHint tipKey="config.strictToolSamplingDesc" />
+						</span>
 						{/* 三态下拉而不是复选框：pi 的 strict 默认值随协议不同（openai-completions 默认开、
 						    responses 系默认关），用「勾/不勾」表达不出「跟随 pi 默认」这一档，
 						    还会让界面显示的开关状态与实际线上行为不一致。选「跟随 pi 默认」时不写该键。 */}
 						<ConfigSelect
+							triggerClassName="w-auto min-w-28"
 							value={props.compat.supportsStrictMode === undefined ? "follow" : props.compat.supportsStrictMode ? "on" : "off"}
 							options={[
 								{ value: "follow", label: t("config.strictToolSamplingFollow") },

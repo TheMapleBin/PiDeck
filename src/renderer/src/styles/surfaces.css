@@ -2123,9 +2123,14 @@
   flex-wrap: wrap;
 }
 
+/* 兼容性配置项：横向一行（复选框 + 标签，或 标签 + 三态下拉）。
+   早期这里是 column —— 给常驻的兼容性说明小字留第二行；说明收进 tooltip 后该方向
+   失去意义，留着会把「严格工具采样」（标签 + 下拉）拆成两行，整组高度不齐、
+   下拉也和上面三个复选框错位。 */
 .config-compat-item {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  gap: 6px;
 }
 
 
