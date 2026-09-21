@@ -49,7 +49,7 @@ test("sidebar workspace wrapper stays transparent", () => {
 
 test("sidebar child titles use the shared width clamp and hover-scroll component", () => {
 	assert.match(sessionTree, /import \{ TitleScrollText \} from "\.\/TitleScrollText"/);
-	assert.match(sessionTree, /<TitleScrollText\s+text=\{child\.agent\.title\}\s+className="font-medium"\s+\/>/);
+	assert.match(sessionTree, /<TitleScrollText\s+text=\{displayTitle\}\s+className="font-medium"\s+\/>/);
 	assert.match(sessionTree, /标题被截断时 hover 滚动展示全文/);
 	assert.match(activeSessionsTree, /import \{ TitleScrollText \} from "\.\/TitleScrollText"/);
 	assert.match(activeSessionsTree, /<TitleScrollText text=\{displayTitle\} className="font-medium" \/>/);

@@ -27,6 +27,8 @@ const MAX_TITLE_ATTEMPTS = 2;
 const TITLE_MAX_TOKENS = 512;
 /** 首轮预算被推理吃光时的升级预算：长思考模型至少还有一轮完整的正文空间。 */
 const TITLE_MAX_TOKENS_ESCALATED = 2048;
+/** Main process accepts this marker only immediately before the matching session_info change. */
+const AUTO_TITLE_STATUS_KEY = "pideck:auto-title";
 
 const TITLE_SYSTEM_PROMPT = `You generate a concise title for a coding assistant conversation.
 Return only one plain-text title on one line, with no explanation, quotes, Markdown, emoji, or "Title:" prefix.
@@ -486,6 +488,15 @@ export default function piDeckSessionTitle(pi: ExtensionAPI): void {
 		current?.controller.abort();
 	};
 
+	/** Mark this exact name so PiDeck can distinguish our auto rename from /name or TUI writes. */
+	const markAutomaticTitle = (ctx: ExtensionContext, title: string) => {
+		try {
+			ctx.ui.setStatus(AUTO_TITLE_STATUS_KEY, title);
+		} catch {
+			// A non-interactive host can reject status UI; the pi session rename still proceeds.
+		}
+	};
+
 	pi.on("session_start", (event, ctx) => {
 		cancelPending();
 		runtimeGeneration += 1;
@@ -574,6 +585,7 @@ export default function piDeckSessionTitle(pi: ExtensionAPI): void {
 			titleAttemptRunGeneration = agentRunGeneration;
 			applyingAutoTitle = true;
 			try {
+				markAutomaticTitle(ctx, input.title);
 				pi.setSessionName(input.title);
 			} catch {
 				// session 已在销毁/替换时，丢弃即可。
@@ -605,6 +617,7 @@ export default function piDeckSessionTitle(pi: ExtensionAPI): void {
 				if (!title || !isCurrent()) return;
 				applyingAutoTitle = true;
 				try {
+					markAutomaticTitle(ctx, title);
 					pi.setSessionName(title);
 				} catch {
 					// session 已在销毁/替换时，丢弃旁路结果即可。

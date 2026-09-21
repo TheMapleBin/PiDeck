@@ -103,7 +103,7 @@ test("unchanged files with real titles do not trigger pointless title reads", as
 	}
 });
 
-test("an externally appended pi session_info refreshes an existing real catalog title", async () => {
+test("an externally appended pi session_info cannot overwrite an existing catalog title", async () => {
 	const { SessionCatalog } = loadCatalog();
 	const dir = await mkdtemp(join(tmpdir(), "pideck-catalog-title-external-rename-"));
 	try {
@@ -120,16 +120,56 @@ test("an externally appended pi session_info refreshes an existing real catalog 
 		assert.equal(initial.title, "PiDeck 旧标题");
 		assert.equal(fetcherCalls, 0);
 
-		// pi-tui /name 会在 JSONL 末尾追加 session_info，同时改变 mtime/size；轻量扫描
-		// 虽不带 name，也必须回读标题并覆盖 catalog 中已有的真实标题。
+		// pi-tui /name 会在 JSONL 追加 session_info 并改变 mtime/size；扫描可继续读它做
+		// 文件有效性/结构元数据校验，但 PiDeck catalog 已有显示标题时不得被反向覆盖。
 		const [renamed] = await catalog.mergeScanned("project-1", [lightSummary({ updatedAt: 2000 })]);
-		assert.equal(renamed.title, "pi-tui 重命名后的标题");
+		assert.equal(renamed.title, "PiDeck 旧标题");
 		assert.equal(fetcherCalls, 1);
 
 		currentTitle = "不应在未变化时重复读取";
 		const [unchanged] = await catalog.mergeScanned("project-1", [lightSummary({ updatedAt: 2000 })]);
-		assert.equal(unchanged.title, "pi-tui 重命名后的标题");
+		assert.equal(unchanged.title, "PiDeck 旧标题");
 		assert.equal(fetcherCalls, 1);
+	} finally {
+		await rm(dir, { recursive: true, force: true });
+	}
+});
+
+test("automatic title claims an unowned placeholder once", async () => {
+	const { SessionCatalog } = loadCatalog();
+	const dir = await mkdtemp(join(tmpdir(), "pideck-catalog-auto-title-"));
+	try {
+		const catalog = new SessionCatalog(join(dir, "sessions.json"));
+		await catalog.load();
+		const [draft] = await catalog.mergeScanned("project-1", [lightSummary()]);
+		assert.equal(draft.title, "Untitled");
+
+		const automatic = await catalog.applyAutomaticTitle(draft.id, "自动生成标题");
+		assert.equal(automatic.title, "自动生成标题");
+		const lateAutomatic = await catalog.applyAutomaticTitle(draft.id, "不得覆盖的第二个自动标题");
+		assert.equal(lateAutomatic.title, "自动生成标题");
+	} finally {
+		await rm(dir, { recursive: true, force: true });
+	}
+});
+
+test("manual ownership blocks an in-flight automatic title and later JSONL names", async () => {
+	const { SessionCatalog } = loadCatalog();
+	const dir = await mkdtemp(join(tmpdir(), "pideck-catalog-manual-title-"));
+	try {
+		const catalog = new SessionCatalog(join(dir, "sessions.json"));
+		await catalog.load();
+		const [draft] = await catalog.mergeScanned("project-1", [lightSummary()]);
+
+		// sessionIpc calls this before its asynchronous set_session_name request.
+		await catalog.claimTitleOwnership(draft.id);
+		const lateAutomatic = await catalog.applyAutomaticTitle(draft.id, "自动标题迟到结果");
+		assert.equal(lateAutomatic.title, "Untitled");
+
+		const manual = await catalog.update(draft.id, { title: "A-123" });
+		assert.equal(manual.title, "A-123");
+		const [afterExternalRename] = await catalog.mergeScanned("project-1", [lightSummary({ name: "A", updatedAt: 2000 })]);
+		assert.equal(afterExternalRename.title, "A-123");
 	} finally {
 		await rm(dir, { recursive: true, force: true });
 	}
@@ -174,14 +214,12 @@ test("a non-authoritative first-message fallback must not overwrite an existing 
 		assert.equal(afterSecondRound.title, "Add usage probe config", "weak fallback must not clobber the real title");
 		assert.equal(fetcherCalls, 1);
 
-		// 权威来源（命中 session_info，pi-tui 外部改名）仍应覆盖。
-		let authoritative = true;
+		// 即使 fetcher 明确命中新的 session_info，已有 catalog 标题仍保持不变。
 		const authoritativeFetcher = async () => ({ name: "pi-tui 重命名后的标题", valid: true, nameFromSessionInfo: true });
-		void authoritative;
 		const catalog2 = new SessionCatalog(join(dir, "sessions.json"), {}, undefined, authoritativeFetcher);
 		await catalog2.load();
 		const [renamed] = await catalog2.mergeScanned("project-1", [lightSummary({ updatedAt: 3000 })]);
-		assert.equal(renamed.title, "pi-tui 重命名后的标题");
+		assert.equal(renamed.title, "Add usage probe config");
 	} finally {
 		await rm(dir, { recursive: true, force: true });
 	}

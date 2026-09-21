@@ -149,7 +149,7 @@ process.on("unhandledRejection", (reason) => {
 });
 import { ipcChannels } from "../shared/ipc";
 import { mainProcessT, normalizeMainProcessLocale, type MainProcessLocale, type MainProcessTranslationKey } from "../shared/i18n/mainProcessCopy";
-import { buildSessionOriginKey, canonicalizeSessionPath, looksLikePiSessionFileStem, toAbsoluteSessionPath } from "../shared/sessionIdentity";
+import { buildSessionOriginKey, canonicalizeSessionPath, toAbsoluteSessionPath } from "../shared/sessionIdentity";
 import type {
 	AgentTab,
 	AgentUiRequest,
@@ -929,6 +929,7 @@ const feishuSessionRuntimeBindings: SessionRuntimeBindingGateway = {
 			title: input.title,
 			environment,
 			source: "pi",
+			titleLocked: true,
 		});
 		return { sessionId: draft.id };
 	},
@@ -993,6 +994,7 @@ const feishuSessionRuntimeBindings: SessionRuntimeBindingGateway = {
 				title: input.agent.title || "Feishu session",
 				environment,
 				source,
+				titleLocked: true,
 			});
 			sessionId = draft.id;
 		}
@@ -2468,9 +2470,7 @@ function registerIpc() {
 				if (firstLine) {
 					// 自动命名只取首行，不在存储层硬截断；标题展示由侧栏窗口负责钳制，
 					// hover 时滚动展示全文。否则 "(fork)" 或英文单词可能被写成残片。
-					await sessionCatalog.update(sessionId, {
-						title: firstLine,
-					});
+					await sessionCatalog.applyAutomaticTitle(sessionId, firstLine);
 					mainWindow?.webContents.send(ipcChannels.sessionsCatalogRefreshed, { projectId: entry.projectId });
 				}
 			}
@@ -3668,6 +3668,7 @@ app
 					projectId: input.projectId,
 					title: input.title?.trim() || mainCopy("session.newTitle"),
 					environment: settingsStore.get().wslEnabled ? "wsl" : "native",
+					titleLocked: false,
 					model: input.model,
 					thinkingLevel: input.thinkingLevel,
 				});
@@ -3678,6 +3679,8 @@ app
 				if (!entry) throw new Error(mainCopy("session.notFound"));
 				const title = patch.title?.trim();
 				if (title && title !== entry.title) {
+					// Keep the same manual-over-auto ordering as the IPC domain handler.
+					await sessionCatalog.claimTitleOwnership(sessionId);
 					const target = sessionRuntimeCoordinator.getTarget(sessionId);
 					if (target) {
 						const renamed = await sessionRuntimeCoordinator.renameRuntime(target, title);
@@ -3959,18 +3962,16 @@ app
 		);
 		idleAgentReleaser.start();
 		quitCleanup.register("idle-agent-releaser", () => idleAgentReleaser?.stop());
-		// pi 运行时标题（首轮自动改名 / session_info_changed / rename）写回 catalog：
-		// 侧栏 SessionTree 与 Tab 栏读的是 SessionRecord.title，不是 AgentTab.title。
-		// DSH 已有同语义的 onTitleChanged；pi 以前只 emitState，回话后 UI 仍停在「新会话」。
-		agentManager.setTitleChangedHandler((agentId, title) => {
+		// 只有 PiDeck 自动命名扩展的专用 marker 才能领取 fresh placeholder。
+		// pi /name、JSONL session_info 与重启 get_state 都不会经过这里，catalog 因而
+		// 始终是侧栏和 Tab 的显示标题权威。
+		agentManager.setAutomaticTitleChangedHandler((agentId, title) => {
 			const sessionId = sessionRuntimeCoordinator?.getSessionId(agentId);
 			if (!sessionId) return;
 			const entry = sessionCatalog.get(sessionId);
-			// pi 默认 sessionName 是文件名时间戳：不能盖掉「新会话」或用户已有标题。
 			if (!entry || entry.title === title) return;
-			if (looksLikePiSessionFileStem(title)) return;
 			void sessionCatalog
-				.update(sessionId, { title })
+				.applyAutomaticTitle(sessionId, title)
 				.then(() => {
 					if (mainWindow && !mainWindow.isDestroyed()) {
 						mainWindow.webContents.send(ipcChannels.sessionsCatalogRefreshed, {
@@ -3979,7 +3980,7 @@ app
 					}
 				})
 				.catch((error: unknown) => {
-					void appLogger.warn("session", "Pi title sync to catalog failed", {
+					void appLogger.warn("session", "Pi automatic title sync to catalog failed", {
 						agentId,
 						sessionId,
 						title,

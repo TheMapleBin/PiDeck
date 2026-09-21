@@ -73,6 +73,7 @@ function createHarness({ enabled = true, entries = [], titleName, authBaseUrl, h
 	const handlers = new Map();
 	const completeCalls = [];
 	const setNames = [];
+	const statusUpdates = [];
 	const sessionManager = {
 		getSessionId: () => sessionId,
 		getBranch: () => branch,
@@ -83,6 +84,11 @@ function createHarness({ enabled = true, entries = [], titleName, authBaseUrl, h
 		cwd: "C:/project",
 		sessionManager,
 		model: hasModel ? { provider: "test-provider", id: "test-model" } : undefined,
+		ui: {
+			setStatus(key, text) {
+				statusUpdates.push({ key, text });
+			},
+		},
 		modelRegistry: {
 			getApiKeyAndHeaders:
 				authResolver ??
@@ -119,6 +125,7 @@ function createHarness({ enabled = true, entries = [], titleName, authBaseUrl, h
 		completeCalls,
 		handlers,
 		setNames,
+		statusUpdates,
 		setBranch(next) {
 			branch = next;
 		},
@@ -170,6 +177,7 @@ test("首轮 settled 后只用最小独立 context 生成标题并写回 session
 	await flushAsyncWork();
 
 	assert.deepEqual(harness.setNames, ["修复登录流程"]);
+	assert.deepEqual(harness.statusUpdates, [{ key: "pideck:auto-title", text: "修复登录流程" }]);
 	assert.equal(harness.completeCalls.length, 1);
 	const request = harness.completeCalls[0];
 	assert.equal(request.titleContext.tools, undefined);

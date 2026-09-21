@@ -93,10 +93,8 @@ function cleanScanTitle(value?: string): string | undefined {
  * session_info 名 > 旧版私有 sessionName > 首条 user 文本 > 首条 assistant 文本）。
  * 推断不出返回 undefined（空文件/只有 tool 消息），由调用方兜底 Untitled。
  *
- * @returns { name, fromSessionInfo }：fromSessionInfo 标记标题是否直接取自 session_info
- *（或旧版私有 sessionName 行）——只有这类权威来源才允许覆盖 catalog 已有真实标题；
- * 首条消息回退是弱信号，会话文件变大后 session_info 可能落在头/尾窗口盲区，
- * 弱回退不能把用户/自动命名的标题冲掉（2026-09 用户现场）。
+ * @returns { name, fromSessionInfo }：fromSessionInfo 仅保留来源信息，供诊断与
+ * 首次发现标题推断使用。PiDeck catalog 已有记录后不再接受任何 JSONL 名称反向写入。
  */
 function inferScanNameFromLines(lines: string[], extractText: (content: unknown) => string): { name?: string; fromSessionInfo: boolean } {
 	let latestSessionInfoName: string | undefined;
@@ -126,8 +124,8 @@ function inferScanNameFromLines(lines: string[], extractText: (content: unknown)
 			if (text && message.role === "assistant" && !firstAssistantText) firstAssistantText = text;
 		}
 	}
-	// 取出 clean 前先保留「是否来自 session_info」判定：clean 后也可能是 timestamp/stem，
-	// 此时权威性随其一并失效（时间戳名同样不能覆盖真实标题）。
+	// 取出 clean 前先保留来源标记：清洗后也可能是 timestamp/stem，
+	// 此时它不再能作为 session_info 标题使用。
 	const infoName = cleanScanTitle(latestSessionInfoName) || cleanScanTitle(name);
 	if (infoName) return { name: infoName, fromSessionInfo: true };
 	// 首条 user 可能是展开后的 `/模板名` / `&会话引用` 块：先剥块正文，只拿用户自己写的字当回退标题，
@@ -166,6 +164,12 @@ export class SessionScanner {
 	private static readonly SUMMARY_PARSE_MAX_BYTES = 1024 * 1024;
 	/** 轻量补名读取窗口：头部用于校验会话/首条消息，尾部用于捕获 pi `/name` 追加的最新 session_info。 */
 	private static readonly SUMMARY_NAME_WINDOW_BYTES = 64 * 1024;
+	/**
+	 * 头尾窗口之间可能正好藏着较新的 session_info。小会话以流式方式完整扫一遍，
+	 * 精确复现 pi "最后一条 session_info" 语义；仍不 materialize 全文件。
+	 * 大会话继续受窗口上界保护，且 catalog 不会接受其外部标题反向写入。
+	 */
+	private static readonly SUMMARY_NAME_FULL_SCAN_MAX_BYTES = 1024 * 1024;
 	/**
 	 * 整文件读入的体量上限：超过即拒绝（抛可读错误）。
 	 *
@@ -1950,12 +1954,35 @@ export class SessionScanner {
 	}
 
 	/**
-	 * 有界读取文件头 + 文件尾，返回会话头原文、推断标题与权威性标记（不读完整正文、不写摘要缓存）。
-	 * pi `/name` 会在 JSONL 末尾追加 session_info，只读头部会永久看不到大会话的外部改名；
-	 * 因此头部负责有效性/首条消息，尾部负责最新 session_info；文件超过单窗大小才补读尾部。
-	 *
-	 * nameFromSessionInfo=false 表示标题只是首条消息回退（session_info 落在头/尾窗口盲区），
-	 * 弱信号不得覆盖 catalog 已有真实标题（2026-09 自动命名被第二轮消息挤掉盲区后回退覆盖的现场）。
+	 * 小会话精确取最后一条 session_info，避免头/尾两个窗口之间的最新改名被遗漏。
+	 * 使用流式扫描而非 readFile：即便阈值调整也不会把整份 JSONL 放进主进程堆。
+	 */
+	private async inferLatestSessionInfoFromSmallFile(filePath: string, end: number): Promise<string | undefined> {
+		let latestName: string | undefined;
+		await scanJsonlLines(
+			this.hostPathFor(filePath),
+			(line) => {
+				let parsed: unknown;
+				try {
+					parsed = JSON.parse(line);
+				} catch {
+					return;
+				}
+				if (!isSessionScanLine(parsed) || parsed.type !== "session_info") return;
+				const candidate = typeof parsed.name === "string" ? parsed.name : parsed.data?.name;
+				const title = cleanScanTitle(candidate);
+				if (title) latestName = title;
+			},
+			// Read only through the size snapshot: a concurrently growing session must not
+			// turn this nominally small-file probe into an unbounded scan.
+			{ end, yieldEveryLines: Number.MAX_SAFE_INTEGER },
+		);
+		return latestName;
+	}
+
+	/**
+	 * 有界读取文件头 + 文件尾，并在小会话中精确扫描最后一个 session_info。
+	 * 返回会话头原文、推断标题与来源标记（不写摘要缓存）。
 	 */
 	private async readHeadAndInfer(filePath: string): Promise<{ raw: string; name: string | undefined; nameFromSessionInfo: boolean } | null> {
 		const isWsl = this.isWslPath(filePath);
@@ -1970,6 +1997,12 @@ export class SessionScanner {
 			}
 			// 头/尾窗口边界可能截断半行；inferScanNameFromLines 会跳过不可解析行。
 			const inferred = inferScanNameFromLines(titleText.split(/\r?\n/).filter(Boolean), (content) => this.extractText(content));
+			if (version.size <= SessionScanner.SUMMARY_NAME_FULL_SCAN_MAX_BYTES && version.size > windowBytes) {
+				const latestSessionInfoName = await this.inferLatestSessionInfoFromSmallFile(filePath, version.size);
+				if (latestSessionInfoName) {
+					return { raw: head, name: latestSessionInfoName, nameFromSessionInfo: true };
+				}
+			}
 			return { raw: head, name: inferred.name, nameFromSessionInfo: inferred.fromSessionInfo };
 		} catch {
 			// 读不到（权限/锁定/不存在）：返回 null，调用方按 best-effort 处理，不拒绝文件。
@@ -2022,9 +2055,9 @@ export class SessionScanner {
 	 * 读有界头部并同时校验会话头有效性：transcript 等无 type 头的产物会被标记
 	 * valid:false，供 catalog 在 mergeScanned 时拒绝索引（#168）。读不到文件时
 	 * 返回空对象（valid 缺省 = 不拒绝），兼容权限/锁定文件不被误删。
-	 * nameFromSessionInfo 标记标题是否来自 session_info（权威）：只有权威来源才允许
-	 * 覆盖 catalog 已有真实标题，首条消息回退仅用于占位标题补名（2026-09 修复）。
-	 * 与 inferSessionNameFromFile 共用同一次有界读头部，补名与校验不重复读盘。
+	 * nameFromSessionInfo 只描述 title 的文件来源；catalog 仅在首次发现或未确认的
+	 * 占位标题阶段采用该名称，后续 pi/TUI 改名不会覆盖 PiDeck 显示标题。
+	 * 与 inferSessionNameFromFile 共用同一次读取，补名与校验不重复读盘。
 	 */
 	async inferSessionNameAndValidity(filePath: string): Promise<{ name?: string; nameFromSessionInfo?: boolean; valid?: boolean; parentSessionPath?: string; forked?: boolean }> {
 		const head = await this.readHeadAndInfer(filePath);

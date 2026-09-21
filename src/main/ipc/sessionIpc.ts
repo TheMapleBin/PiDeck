@@ -608,6 +608,7 @@ export function registerSessionIpc(deps: SessionIpcDeps): void {
 			projectId: input.projectId,
 			title: input.title?.trim() || mainCopy("session.newTitle"),
 			environment: settingsStore.get().wslEnabled ? "wsl" : "native",
+			titleLocked: false,
 			// 后端透传：仅接受白名单枚举，其余视为 pi（渲染层不可信输入校验在边界）。
 			backend: input.backend === "dsh" ? "dsh" : undefined,
 			model,
@@ -670,6 +671,9 @@ export function registerSessionIpc(deps: SessionIpcDeps): void {
 		}
 		const title = patch.title?.trim();
 		if (title && title !== entry.title) {
+			// Reserve the catalog before the asynchronous pi rename. A late automatic-title
+			// result must observe manual ownership even while set_session_name is in flight.
+			await sessionCatalog.claimTitleOwnership(sessionId);
 			const target = sessionRuntimeCoordinator.getTarget(sessionId);
 			if (target) {
 				const renamed = await sessionRuntimeCoordinator.renameRuntime(target, title);

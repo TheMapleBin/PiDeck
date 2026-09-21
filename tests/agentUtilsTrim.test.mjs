@@ -163,25 +163,23 @@ test("inferTitleFromMessages preserves long prompts for the visual sidebar clamp
 	assert.equal(inferTitleFromMessages([{ role: "user", text: prompt }]), prompt);
 });
 
-test("pi runtime title changes notify catalog the same way DSH does", () => {
-	// 侧栏/Tab 读 SessionRecord.title。DSH 已有 onTitleChanged → catalog.update → catalog-refreshed；
-	// pi 必须走同一条，否则 refreshAutoTitle 只改 AgentTab，回话后 UI 仍显示「新会话」。
+test("only PiDeck automatic titles can write runtime names back to the catalog", () => {
+	// The catalog is the display authority. Runtime session_info changes remain transient;
+	// only the bundled extension's marker can claim an unowned placeholder title.
 	const agentManager = readFileSync("src/main/pi/AgentManager.ts", "utf8");
 	const index = readFileSync("src/main/index.ts", "utf8");
 	const utils = readFileSync("src/main/pi/agentUtils.ts", "utf8");
 	assert.match(utils, /session\.newTitle/);
 	assert.match(utils, /session\.dshUntitled/);
-	assert.match(agentManager, /setTitleChangedHandler\(/);
-	assert.match(agentManager, /if \(changed \|\| forceCatalogSync\) this\.onTitleChanged\?\.\(agentId, next\)/);
-	assert.match(agentManager, /applyRuntimeTitle\(agentId, data\?\.sessionName \?\? runtime\.tab\.title, false, true\)/);
-	assert.match(agentManager, /looksLikePiSessionFileStem\(next\)/);
-	assert.match(agentManager, /piSessionName/);
-	assert.match(agentManager, /return this\.applyRuntimeTitle\(agentId, nextTitle\)/);
-	assert.match(index, /agentManager\.setTitleChangedHandler\(/);
-	// 链式调用可能被格式化拆行（sessionCatalog 与 .update 分行）：容忍换行。
-	assert.match(index, /sessionCatalog\s*\.?\s*update\(\s*sessionId,\s*\{\s*title\s*\}\)/);
+	assert.match(agentManager, /setAutomaticTitleChangedHandler\(/);
+	assert.match(agentManager, /pendingAutomaticTitles/);
+	assert.match(agentManager, /automaticMarker\?\.title === name/);
+	assert.doesNotMatch(agentManager, /forceCatalogSync/);
+	assert.match(agentManager, /return this\.applyRuntimeTitle\(agentId, nextTitle, true, true\)/);
+	assert.match(index, /agentManager\.setAutomaticTitleChangedHandler\(/);
+	assert.match(index, /sessionCatalog\s*\.?\s*applyAutomaticTitle\(sessionId, title\)/);
 	assert.match(index, /sessionsCatalogRefreshed/);
-	assert.match(index, /Pi title sync to catalog failed/);
+	assert.match(index, /Pi automatic title sync to catalog failed/);
 });
 
 // 回归 2026-10 #250：首条消息带 /模板 时，展开后的 `<prompt_template …>` 是发给模型的指令包装，
