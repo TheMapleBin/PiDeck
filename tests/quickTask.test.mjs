@@ -29,9 +29,13 @@ test("path validation rejects relative, non-directory and missing paths, accepti
 		const path = join(root, "中文 space & task");
 		await mkdir(path);
 		assert.equal(await validateQuickTaskPath(path), path);
-		await assert.rejects(validateQuickTaskPath("relative"), /INVALID_PATH/);
-		await assert.rejects(validateQuickTaskPath(path + "\u0000"), /INVALID_PATH/);
-		await assert.rejects(validateQuickTaskPath(join(root, "missing")));
+		// 失败一律带稳定错误码（渲染层据此映射 i18n），不再抛 QUICK_TASK_* 这类内部串。
+		await assert.rejects(validateQuickTaskPath("relative"), (error) => error.code === "invalidPath");
+		await assert.rejects(validateQuickTaskPath(path + "\u0000"), (error) => error.code === "invalidPath");
+		await assert.rejects(validateQuickTaskPath(join(root, "missing")), (error) => error.code === "notFound");
+		const file = join(root, "plain.txt");
+		await writeFile(file, "x");
+		await assert.rejects(validateQuickTaskPath(file), (error) => error.code === "notDirectory");
 	} finally {
 		await rm(root, { recursive: true, force: true });
 	}
@@ -140,7 +144,26 @@ test("inaccessible directories are reported without any session/runtime capabili
 		},
 	});
 	await controller.open("C:\\denied");
-	assert.match(controller.getState().error, /EACCES/);
+	// 主进程只回稳定错误码（渲染层映射 i18n 文案）；裸 errno 文本不得跨 IPC 进 UI。
+	assert.equal(controller.getState().error, "permissionDenied");
+});
+
+test("path validation failures carry stable codes instead of raw messages", async () => {
+	for (const [value, expected] of [
+		["relative", "invalidPath"],
+		["C:\\bad\u0000name", "invalidPath"],
+	]) {
+		await assert.rejects(validateQuickTaskPath(value), (error) => error.code === expected);
+	}
+	const root = await mkdtemp(join(tmpdir(), "pideck-quick-task-code-"));
+	try {
+		await assert.rejects(validateQuickTaskPath(join(root, "missing")), (error) => error.code === "notFound");
+		const file = join(root, "a.txt");
+		await writeFile(file, "x");
+		await assert.rejects(validateQuickTaskPath(file), (error) => error.code === "notDirectory");
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
 });
 
 test("small displays clamp size and position inside work area", () => {
@@ -223,7 +246,7 @@ test("quick task settings IPC rejects non-boolean inputs and reports actual regi
 			"../integrations/shellContextMenu": {},
 		},
 	});
-	load("src/main/ipc/shellMenuIpc.ts").registerShellMenuIpc({ appLogger: { warn() {} }, menuTitle: "Open" });
+	load("src/main/ipc/shellMenuIpc.ts").registerShellMenuIpc({ appLogger: { warn() {} }, menuTitle: "Open", quickTaskTitle: "Task" });
 	const set = handlers.get("shell-menu:quick-task-set-enabled");
 	await assert.rejects(set({}, "true"), /INVALID_ENABLED/);
 	assert.equal((await set({}, true)).registered, true);

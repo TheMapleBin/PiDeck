@@ -6,7 +6,7 @@ import { t } from "../../i18n";
 /** Reuses the normal ChatSessionPane, including approvals, stop, progress and errors. */
 export function QuickTaskSurface({ task, children }: { task: ReturnType<typeof useQuickTask>; children: ReactNode }) {
 	return (
-		<div data-testid="quick-task-window" className="flex h-full min-h-0 flex-col bg-background text-foreground">
+		<div ref={task.surfaceRef} data-testid="quick-task-window" className="flex h-full min-h-0 flex-col bg-background text-foreground">
 			<header className="flex shrink-0 flex-col gap-2 border-b border-border p-3">
 				<div className="flex items-center justify-between gap-2">
 					<strong>{t("quickTask.title")}</strong>

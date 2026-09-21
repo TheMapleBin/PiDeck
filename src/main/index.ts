@@ -259,7 +259,7 @@ import { toWslLinuxPath, toWindowsHostPath } from "./wsl/WslPaths";
 import { registerProjectsIpc } from "./ipc/projectsIpc";
 import { registerUsageStatsIpc } from "./ipc/usageStatsIpc";
 import { UsageStatsService } from "./usageStats/UsageStatsService";
-import { readLastWindowBounds, saveLastWindowBounds } from "./windowState";
+import { constrainWindowBoundsToWorkArea, MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH, readLastWindowBounds, saveLastWindowBounds } from "./windowState";
 import { createRendererCrashRecoveryGuard } from "./window/rendererCrashRecovery";
 import { registerBackgroundImageProtocol, registerBackgroundsIpc } from "./ipc/backgroundsIpc";
 import { registerGitIpc } from "./ipc/gitIpc";
@@ -290,7 +290,7 @@ import { fetchModelList, refreshModelCatalogIfStale, refreshModelList } from "./
 import { registerFilesIpc } from "./ipc/filesIpc";
 import { registerClipboardIpc } from "./ipc/clipboardIpc";
 import { registerShellMenuIpc } from "./ipc/shellMenuIpc";
-import { QuickTaskController } from "./quickTask/QuickTaskController";
+import { QuickTaskWindowChrome } from "./quickTask/quickTaskWindowChrome";
 import { registerQuickTaskIpc } from "./ipc/quickTaskIpc";
 import { BROWSER_PANEL_PARTITION as BROWSER_PANEL_PARTITION_SHARED, isAllowedBrowserPanelUrl as isAllowedBrowserPanelUrlShared } from "./browser/browserSecurity";
 import { WebServiceManager } from "./web/WebServiceManager";
@@ -317,12 +317,11 @@ import { createMacManualUpdateChecker } from "./update/macManualUpdate";
 import { UpdateService } from "./update/UpdateService";
 
 let mainWindow: BrowserWindow | null = null;
-const quickTaskController = new QuickTaskController({
+// 紧凑模式（右键小任务）与主窗口几何的接线统一收在 quickTaskWindowChrome：
+// 本文件不再出现紧凑模式的激活判断、屏幕几何计算与「关闭=返回工作台」的拦截逻辑。
+const quickTaskChrome = new QuickTaskWindowChrome({
 	getWindow: () => mainWindow,
-	workArea: (bounds) => screen.getDisplayMatching(bounds).workArea,
-	publish: (state) => {
-		if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(ipcChannels.quickTaskChanged, state);
-	},
+	saveWorkbenchBounds: (size) => saveLastWindowBounds(app.getPath("userData"), size),
 });
 let tray: Tray | null = null;
 /** 标记是否由用户主动退出（托盘菜单「退出」），区别于窗口关闭隐藏到托盘 */
@@ -1183,11 +1182,7 @@ function handleVersionFocusRequest(payload?: FocusPayload) {
 	const target = extractFocusTargetFromArgv(payload?.argv);
 	const activateSession = async () => {
 		if (!target) return;
-		if (target.quickTaskPath || target.quickTaskDesktop) {
-			await quickTaskController.open(target.quickTaskDesktop ? app.getPath("desktop") : target.quickTaskPath!);
-			return;
-		}
-		if (quickTaskController.isActive()) quickTaskController.exit();
+		if (await quickTaskChrome.applyLaunchTarget(target)) return;
 		// 文件夹右键打开：已收录目录直接跳项目（渲染层 selectProjectCommand）；
 		// 未收录目录推 projectPath，渲染层弹确认框走新增项目流程。
 		if (target.projectPath) {
@@ -1497,13 +1492,18 @@ async function createWindow() {
 		startupBounds = resolveStartupWindowBounds(requestedMode);
 	}
 
+	// x/y 未持久化时以主显示器为确定的恢复目标；纯逻辑同时收敛尺寸并在 workArea 内居中。
+	const startupWindowBounds = constrainWindowBoundsToWorkArea(startupBounds, screen.getPrimaryDisplay().workArea);
+
 	mainWindow = new BrowserWindow({
 		show: showMainWindowImmediately,
 		backgroundColor,
-		width: startupBounds.width,
-		height: startupBounds.height,
-		minWidth: 880,
-		minHeight: 640,
+		x: startupWindowBounds.x,
+		y: startupWindowBounds.y,
+		width: startupWindowBounds.width,
+		height: startupWindowBounds.height,
+		minWidth: MIN_WINDOW_WIDTH,
+		minHeight: MIN_WINDOW_HEIGHT,
 		// 多 worktree 并行 dev：标题带分支名，任务栏/Alt-Tab 一眼区分窗口
 		title: isolateDevByGitBranch && !isSharedDevBranch(devGitBranch) ? `PiDeck · ${devGitBranch}` : "PiDeck",
 		icon: iconPath,
@@ -1641,20 +1641,11 @@ async function createWindow() {
 	// 供下次 startupWindowMode="last" 启动使用；隐藏到托盘不记录（窗口未关闭）。
 	// 注意：mainWindow 为模块级可空变量，此处用创建后的局部引用确保非空
 	const windowForState = createdWindow;
-	windowForState.on("close", () => {
-		if (!windowForState.isDestroyed()) {
-			const normal = quickTaskController.getWorkbenchBounds() ?? (windowForState.isMaximized() || windowForState.isFullScreen() ? windowForState.getNormalBounds() : windowForState.getBounds());
-			saveLastWindowBounds(app.getPath("userData"), { width: normal.width, height: normal.height });
-		}
-	});
+	windowForState.on("close", () => quickTaskChrome.saveWorkbenchBoundsOnClose(windowForState));
 
 	// 关闭窗口时根据设置决定：隐藏到托盘还是正常退出
 	mainWindow.on("close", (event) => {
-		if (!isQuitting && quickTaskController.isActive()) {
-			event.preventDefault();
-			quickTaskController.exit();
-			return;
-		}
+		if (!isQuitting && quickTaskChrome.interceptClose(event)) return;
 		if (!isQuitting && settingsStore.get().closeToTray) {
 			event.preventDefault();
 			mainWindow?.hide();
@@ -3074,7 +3065,7 @@ function registerIpc() {
 		menuTitle: mainCopy("shellMenu.openWithPiDeck"),
 		quickTaskTitle: mainCopy("shellMenu.quickTask"),
 	});
-	registerQuickTaskIpc(quickTaskController);
+	registerQuickTaskIpc(quickTaskChrome.controller);
 }
 
 function sendTelemetryHeartbeat() {
@@ -4017,9 +4008,7 @@ app
 		// Quick tasks should not wait for unrelated WSL/proxy startup probes. The controller
 		// retains validated intent until the renderer subscribes or requests its snapshot.
 		const coldStartTarget = extractFocusTargetFromArgv(process.argv);
-		if (coldStartTarget?.quickTaskPath || coldStartTarget?.quickTaskDesktop) {
-			await quickTaskController.open(coldStartTarget.quickTaskDesktop ? app.getPath("desktop") : coldStartTarget.quickTaskPath!);
-		}
+		await quickTaskChrome.applyLaunchTarget(coldStartTarget);
 		setupTray();
 		// 粘贴文件启动清理：删除超过保留期的落盘文件（fire-and-forget，不挡首帧）
 		void cleanupPasteFiles?.().catch((error: unknown) => {

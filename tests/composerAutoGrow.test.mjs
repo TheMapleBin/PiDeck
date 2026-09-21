@@ -24,7 +24,10 @@ test("composer is intrinsic chrome inside the timeline column, not a resizable p
 	assert.doesNotMatch(sessionView, /growComposerWithinTimelineBudget/);
 	assert.match(sessionView, /id="timeline"/);
 	assert.match(sessionView, /session-v-composer/);
-	assert.match(sessionView, /maxHeight: `min\(\$\{COMPOSER_MAX_HEIGHT\}px, calc\(100% - var\(--session-timeline-min/);
+	// 上限走 composerMaxHeight 常量；ask 待答期间坍缩到 0px 让位（见 askLayoutRegression），
+	// 其余情况仍是 COMPOSER_MAX_HEIGHT + 对话区保底。
+	assert.match(sessionView, /maxHeight: composerMaxHeight/);
+	assert.match(sessionView, /const composerMaxHeight = askPanelVisible \? "0px" : `min\(\$\{COMPOSER_MAX_HEIGHT\}px, calc\(100% - var\(--session-timeline-min/);
 	assert.match(sessionView, /session-v-timeline-stage/);
 	assert.match(foundation, /\.session-v-composer \.composer \{[\s\S]*?height:\s*auto;/);
 	assert.doesNotMatch(foundation, /\.session-v-timeline > \*/);

@@ -15,8 +15,8 @@ export function QuickTaskMenuSetting() {
 			.then((value) => {
 				if (alive) setState(value);
 			})
-			.catch((e: unknown) => {
-				if (alive) setError(String(e));
+			.catch(() => {
+				if (alive) setError(t("quickTask.error.unknown"));
 			});
 		return () => {
 			alive = false;
@@ -36,8 +36,8 @@ export function QuickTaskMenuSetting() {
 					void desktopApi.shellMenu
 						.setQuickTaskEnabled(enabled)
 						.then(setState)
-						.catch((e: unknown) => {
-							setError(String(e));
+						.catch(() => {
+							setError(t("quickTask.error.unknown"));
 							void desktopApi.shellMenu
 								.getQuickTaskState()
 								.then(setState)
