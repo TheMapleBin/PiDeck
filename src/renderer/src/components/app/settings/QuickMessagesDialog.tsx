@@ -40,7 +40,7 @@ export function QuickMessagesDialog(props: { open: boolean; onOpenChange: (open:
 							{rows.length === 0 ? <p className="py-3 text-caption text-muted-foreground">{t("settings.quickMessagesEmpty")}</p> : null}
 							{rows.map((text, index) => (
 								<div key={index} className="flex min-w-0 items-center gap-1">
-									<Input value={text} maxLength={MAX_QUICK_MESSAGE_LENGTH} placeholder={t("settings.quickMessagesPlaceholder")} onChange={(event) => editor.setItem(index, event.target.value)} onBlur={editor.flushPending} className="min-w-0 flex-1" />
+									<Input autoFocus={index === rows.length - 1 && text === ""} value={text} maxLength={MAX_QUICK_MESSAGE_LENGTH} placeholder={t("settings.quickMessagesPlaceholder")} onChange={(event) => editor.setItem(index, event.target.value)} onBlur={editor.flushPending} className="min-w-0 flex-1" />
 									<Button type="button" variant="ghost" size="icon-sm" title={t("settings.quickMessagesMoveUp")} aria-label={t("settings.quickMessagesMoveUp")} disabled={index === 0} onClick={() => editor.moveItem(index, -1)}>
 										<ArrowUp size={14} strokeWidth={1.8} aria-hidden="true" />
 									</Button>

@@ -15,7 +15,7 @@ const COMMIT_DEBOUNCE_MS = 400;
  *
  * 为什么要有本地 draft：主进程保存时会 normalize（去首尾空白/去重/截断），
  * 若每次按键都把清洗结果写回输入框，用户打的空格会被当场吃掉、光标乱跳。
- * 所以打字先进 draft（400ms 合并写盘），结构性操作（增删/排序/恢复默认）立即写盘，
+ * 所以打字先进 draft（400ms 合并写盘），结构性操作（删除/排序/恢复默认）立即写盘，
  * 并在没有未落盘编辑时把界面交还给文件内容（显示清洗后的真实结果）。
  *
  * 空行是允许的编辑中间态（新增后还没填）：主进程 normalize 会丢弃，界面不为此报错。
@@ -48,15 +48,15 @@ export function useQuickMessageEditor() {
 
 	useEffect(() => () => flushPending(), [flushPending]);
 
-	/** 结构性操作（增删/排序/恢复默认）：立刻写文件，并回读主进程清洗后的结果。 */
+	/** 结构性操作（删除/排序/恢复默认）：立刻写文件，并回读主进程清洗后的结果。 */
 	const commitNow = useCallback(
 		async (next: string[]) => {
 			clearPending();
 			setDraft(next);
 			const ok = await save(next);
 			if (!ok) return;
-			// 期间用户又打字了就别抢回界面，继续用他的 draft。
-			if (pendingRef.current === null) setDraft(null);
+			// 只有这次提交仍拥有草稿时才回读清洗结果；迟到回包不能抹掉新输入或新空行。
+			setDraft((current) => (current === next ? null : current));
 			showNotice(t("settings.quickMessagesSaved"), 2000);
 		},
 		[clearPending, save],
@@ -107,8 +107,12 @@ export function useQuickMessageEditor() {
 		error,
 		/** 改某一行文本（合并写盘）。 */
 		setItem: (index: number, text: string) => commitSoon(rows.map((item, current) => (current === index ? text : item))),
-		/** 末尾追加一个空行（立即写盘；空行由主进程清洗时丢弃，因此只有真的填了字才落库）。 */
-		addItem: () => void commitNow([...rows, ""]),
+		/** 末尾追加一个可编辑空行。空行暂不进入配置文件，但必须留在 draft 里让用户填写。 */
+		addItem: () => {
+			if (rows.length >= MAX_QUICK_MESSAGES) return;
+			// 空行没有可持久化内容，先保留本地草稿；输入后由 commitSoon 保存。
+			setDraft([...rows, ""]);
+		},
 		removeItem: (index: number) => void commitNow(rows.filter((_, current) => current !== index)),
 		/** 与相邻条目交换位置：越界直接忽略（首行上移 / 末行下移）。 */
 		moveItem: (index: number, delta: -1 | 1) => {

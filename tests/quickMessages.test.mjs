@@ -31,9 +31,9 @@ const plain = (value) => JSON.parse(JSON.stringify(value));
 
 // ── 出厂清单（resources/quick-messages.default.json） ──────────────────
 
-test("随包出厂清单：含用户点名的四条高频指令，且无重复、不超长、不超上限", () => {
+test("随包出厂清单：含用户点名的高频指令，且无重复、不超长、不超上限", () => {
 	const items = readDefaults().items;
-	for (const item of ["继续", "提交", "推送", "提交推送"]) {
+	for (const item of ["继续", "提交", "推送", "提交推送", "你好，你是什么模型"]) {
 		assert.ok(items.includes(item), `出厂清单缺少「${item}」`);
 	}
 	assert.equal(new Set(items).size, items.length, "出厂清单出现重复条目");
@@ -475,7 +475,7 @@ test("分页：非法页大小收敛为 1 条/页（不会得到 Infinity 页）
 	assert.deepEqual(paginateQuickMessages(["a", "b"], 1, 0).items, ["a"]);
 });
 
-test("分页：页大小与出厂条目数对齐（16 条出厂量正好两页，弹框高度可控）", () => {
+test("分页：页大小固定为 8，出厂清单按实际条数分页", () => {
 	assert.equal(QUICK_MESSAGE_PAGE_SIZE, 8);
-	assert.equal(paginateQuickMessages(readDefaults().items, 1).totalPages, 2);
+	assert.equal(paginateQuickMessages(readDefaults().items, 1).totalPages, Math.ceil(readDefaults().items.length / QUICK_MESSAGE_PAGE_SIZE));
 });
