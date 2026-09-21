@@ -339,15 +339,7 @@ export function AppShell(props: AppShellProps) {
 
 	if (props.compactContent)
 		return (
-			<div
-				className={[
-					"wechat-shell quick-task-shell",
-					useNativeTitleBar ? "" : "custom-titlebar-enabled",
-					!useNativeTitleBar && platform === "darwin" ? "mac-custom-titlebar" : "",
-				]
-					.filter(Boolean)
-					.join(" ")}
-			>
+			<div className={["wechat-shell quick-task-shell", useNativeTitleBar ? "" : "custom-titlebar-enabled", !useNativeTitleBar && platform === "darwin" ? "mac-custom-titlebar" : ""].filter(Boolean).join(" ")}>
 				<AppHeader
 					useNativeTitleBar={useNativeTitleBar}
 					platform={platform}

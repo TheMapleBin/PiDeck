@@ -21,6 +21,7 @@ import { TitleScrollText } from "../sidebar/TitleScrollText";
 
 import { SESSION_TAB_DRAG_MIME } from "../../utils/sessionSplitEdge";
 import { buildProjectTabGroups, type ProjectTabGroup } from "../../utils/sessionTabGroups";
+import { SESSION_TAB_BADGE_EXTRA_WIDTH } from "../../../../shared/sessionTabWidth";
 
 /**
  * 分屏组预设色板（浏览器标签组风格）。
@@ -99,6 +100,12 @@ export type SessionToolAction = {
 
 export type SessionTabsBarProps = {
 	tabs: readonly string[];
+	/**
+	 * 会话 Tab 最大宽度（px，80–400）：来自外观设置 sessionTabMaxWidth，
+	 * 经 SESSION_TAB_BADGE_EXTRA_WIDTH 换算后写入 CSS 变量控制各 Tab 封顶。
+	 * 不设下限宽度：Tab 仍按内容收缩，短标题不受影响。
+	 */
+	tabMaxWidth: number;
 	pinnedTabs: readonly string[];
 	/** VS Code 式预览 Tab（斜体）；至多一个 */
 	previewTabId?: string | null;
@@ -199,7 +206,7 @@ export type SessionTabsBarProps = {
 };
 
 export function SessionTabsBar(props: SessionTabsBarProps) {
-	const { tabs, pinnedTabs, currentSessionId, previewTabId } = props;
+	const { tabs, pinnedTabs, currentSessionId, previewTabId, tabMaxWidth } = props;
 	const tabItems = useMemo(() => tabs.map((sessionId) => ({ sessionId })), [tabs]);
 	const dragSourceRef = useRef<string | null>(null);
 	const dragTargetRef = useRef<{ targetId: string; position: "before" | "after" } | null>(null);
@@ -354,8 +361,17 @@ export function SessionTabsBar(props: SessionTabsBarProps) {
 
 	// 下拉经 Portal 挂到 body；勿写 px-*（会盖掉自定义标题栏为窗口控件留的 padding-right）。
 	// 抽屉开关始终在本栏最右侧；打开抽屉后靠 CSS 取消窗口控件让位，避免按钮被空出一截。
+	// --session-tab-max-*：外观设置可调的 Tab 宽度上限，徽标 Tab 额外加 28px（见 shared/sessionTabWidth.ts）。
 	return (
-		<div className="session-tabs-bar flex h-10 shrink-0 items-center gap-1 overflow-x-clip border-b border-border/40 bg-background/80 pl-[max(0.5rem,var(--session-tabs-left-inset,0.5rem))]">
+		<div
+			className="session-tabs-bar flex h-10 shrink-0 items-center gap-1 overflow-x-clip border-b border-border/40 bg-background/80 pl-[max(0.5rem,var(--session-tabs-left-inset,0.5rem))]"
+			style={
+				{
+					"--session-tab-max-w": `${tabMaxWidth}px`,
+					"--session-tab-max-w-badged": `${tabMaxWidth + SESSION_TAB_BADGE_EXTRA_WIDTH}px`,
+				} as CSSProperties
+			}
+		>
 			{props.listCollapsed && props.onToggleListCollapsed ? (
 				<Button type="button" variant="ghost" size="icon-sm" className="list-toggle-native size-7 shrink-0" aria-label={t("app.expandList")} title={t("app.expandList")} onClick={props.onToggleListCollapsed}>
 					<PanelLeft className="size-3.5" aria-hidden="true" />
@@ -708,7 +724,9 @@ function EditorWorkbenchTab(props: {
 					aria-label={tab.title ?? tab.label}
 					className={cn(
 						"session-tab group relative flex h-7 shrink-0 cursor-pointer select-none items-center rounded-md border px-2 text-micro transition-[color,background-color,border-color,box-shadow,transform] duration-200",
-						"w-fit max-w-44",
+						// 工作台文件/Diff Tab 宽度上限跟随外观设置（--session-tab-max-w 由 SessionTabsBar 根注入），
+						// 与会话 Tab 统一宽度来源，不再保留旧固定值。
+						"w-fit max-w-(--session-tab-max-w)",
 						// hover 底改用 accent-soft（主题淡背景 token，随 data-accent 切换）而非 accent/50：
 						// 半透明的 accent/50 叠在 #ffffff 上 ≈ #eff1f3，浅色主题下几乎看不到底色、只有文字变色，
 						// 鼠标掠过像“闪一下”（用户反馈「悬停太丑」）；opaque 的 accent-soft 底色稳定可辨且不随背景沾染。
@@ -911,8 +929,9 @@ function SessionTab(props: {
 								"session-tab group relative flex h-7 shrink-0 cursor-pointer select-none items-center rounded-md border px-2 text-micro transition-[color,background-color,border-color,box-shadow,transform] duration-200",
 								// 固定 Tab 与普通 Tab 同宽策略（按内容收缩）：固定 Tab 无关闭按钮，
 								// hover 不会因按钮出现而跳动，无需 w-20 占位；固定宽度反而让 Pin 图标挤占标题空间。
-								// 有 DSH/生图徽标或模式 chip 时放宽上限（见上方 hasLeadingBadges 注释）。
-								hasLeadingBadges ? "w-fit max-w-[132px]" : "w-fit max-w-[104px]",
+								// 有 DSH/生图徽标或模式 chip 时放宽上限：基础上限 + 徽标预留 28px
+								// （SESSION_TAB_BADGE_EXTRA_WIDTH，旧 132/104 差值）。
+								hasLeadingBadges ? "w-fit max-w-(--session-tab-max-w-badged)" : "w-fit max-w-(--session-tab-max-w)",
 								dragging && "opacity-50",
 								// 选中态：灰色柔和实底（bg-accent = --color-bg-active，与左侧 SessionTree 选中行一致），
 								// 背景由下方共享 layoutId 的 motion.span spring 滑到当前 Tab；不做黑色实底/阴影/底部条。

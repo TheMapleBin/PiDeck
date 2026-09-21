@@ -154,6 +154,7 @@ let previewSettings: AppSettings = {
 	workspaceContentOpenMode: "split",
 	contentMaxWidth: 1800,
 	chatContentWidthPct: 80,
+	sessionTabMaxWidth: 104,
 	maxEditorFileSizeMB: 5,
 	externalEditors: createDefaultExternalEditorSettings(),
 
