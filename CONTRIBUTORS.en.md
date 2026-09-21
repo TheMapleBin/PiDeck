@@ -23,7 +23,7 @@ Thanks to everyone who has contributed to PiDeck!
 - **lerrorgk** ([@lerrorgk](https://github.com/lerrorgk)) — Fixed nicobailon pi-subagents async dispatch being mis-marked complete; panel entries now include the full task description (#206)
 - **juzijun233** ([@juzijun233](https://github.com/juzijun233)) — Stability and security hardening series: login-shell PATH probing moved to async warm-up (startup freeze gone), late streaming events after a stop rejected as "no runtime", event payloads carrying sessionId + runtimeGeneration, main-process direct sends restricted to the subscribed-channel allowlist, oversized diff truncation, PiRpcClient line-buffer cap, Git write validation of commit hash and reset mode, per-session subscription isolation so split panes no longer drag each other, plus webview dead attributes and redundant any assertions
 - **xiaYuTian11** ([@xiaYuTian11](https://github.com/xiaYuTian11)) — Current Git branch in the sidebar project tree (#232), timeline scroll jitter and jump-to-top/bottom fixes (#224), session tab width cap and font size (#226), skill rename routed by skill type so markdown skills no longer move the skill root (#227)
-- **Q-xuan** ([@Q-xuan](https://github.com/Q-xuan)) — Inline-code file references are clickable again (#228)
+- **Q-xuan** ([@Q-xuan](https://github.com/Q-xuan)) — Inline-code file references are clickable again (#228); bracketed LaTeX formulas now render (#251)
 
 And everyone who filed issues, shared feedback, and helped spread the word.
 
