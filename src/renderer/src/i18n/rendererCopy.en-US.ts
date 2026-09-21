@@ -1087,7 +1087,10 @@ export const enUS: Record<TranslationKey, string> = {
 	"app.promptTemplateEmptyBody": "Prompt template /{name} has no content. Edit the template to add content first.",
 	// ── Quick messages (composer-bar button + popover) ──
 	"app.quickMessagesTitle": "Quick messages",
-	"app.quickMessagesHint": "Click an item to insert it; the button on its right sends it right away",
+	"app.quickMessagesHint": "Click an item to insert it; the button on its right sends it right away (Enter inserts the first)",
+	"app.quickMessagesSearch": "Search quick messages…",
+	"app.quickMessagesNoMatch": "No matching messages",
+	"app.quickMessagesCount": "{count} items",
 	"app.quickMessagesSend": "Send now",
 	"app.quickMessagesEmpty": "No quick messages yet — use “Manage quick messages” below to add some",
 	"app.quickMessagesManage": "Manage quick messages",

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
+import { QUICK_MESSAGE_PAGE_SIZE, filterQuickMessages, paginateQuickMessages } from "../src/renderer/src/components/session/quickMessagePickerModel.ts";
 
 const quickMessages = loadTsCommonJs("src/shared/quickMessages.ts");
 const { MAX_QUICK_MESSAGES, MAX_QUICK_MESSAGE_LENGTH, normalizeQuickMessages, sanitizeQuickMessagesFile } = quickMessages;
@@ -329,13 +330,32 @@ test("弹框：每次打开都从磁盘重读（手工编辑配置文件后无�
 	assert.match(readSource("src/renderer/src/components/app/settings/QuickMessagesSetting.tsx"), /await refresh\(\);/, "设置页要能用「重新读取」同步外部编辑");
 });
 
-test("弹框条目：直发按钮必须 stopPropagation（Radix 菜单项在 click 阶段选中=插入）", () => {
-	const source = readSource("src/renderer/src/components/session/QuickMessageMenu.tsx");
-	const sendButton = source.slice(source.indexOf('title={t("app.quickMessagesSend")}'));
-	assert.match(sendButton, /event\.stopPropagation\(\);/);
-	assert.match(sendButton, /setOpen\(false\);/);
-	assert.match(source, /onSelect=\{\(\) => props\.onInsert\(text\)\}/);
-	assert.match(source, /openSettings\(\{ tab: "common", section: "common-quick-messages" \}\)/);
+test("弹框形状：Popover + 紧凑表格 + 搜索 + 分页（不再是一列铺到底的菜单）", () => {
+	const menu = readSource("src/renderer/src/components/session/QuickMessageMenu.tsx");
+	assert.match(menu, /<PopoverContent[\s\S]{0,260}?<QuickMessagePicker/, "浮层内容是专用组件");
+	assert.ok(!/from "\.\.\/ui-shadcn\/dropdown-menu"/.test(menu), "条目多时菜单会顶穿窗口：不该再引 DropdownMenu 做长清单");
+	// 「管理」入口仍要直达设置页那一行（锚点由 settingsFieldAnchors 索引 + SettingRow.anchor 提供）
+	assert.match(menu, /openSettings\(\{ tab: "common", section: "common-quick-messages" \}\)/);
+
+	const picker = readSource("src/renderer/src/components/session/QuickMessagePicker.tsx");
+	assert.match(picker, /placeholder=\{t\("app\.quickMessagesSearch"\)\}/, "顶部要有搜索框");
+	assert.match(picker, /<Pagination page=\{paged\.page\} totalPages=\{paged\.totalPages\}/, "页脚复用共享分页控件");
+	assert.match(picker, /paginateQuickMessages\(filtered, page\)/);
+	assert.match(picker, /<Table className="table-fixed">/, "固定表格布局：长条目截断，不把弹框撑宽");
+});
+
+test("弹框条目：插入与直发是两个独立按钮，不会一次点击触发两个动作", () => {
+	const picker = readSource("src/renderer/src/components/session/QuickMessagePicker.tsx");
+	assert.match(picker, /onClick=\{\(\) => props\.onInsert\(text\)\}/);
+	assert.match(picker, /onClick=\{\(\) => props\.onSend\(text\)\}/);
+	assert.ok(!/<TableRow[^>]*onClick=/.test(picker), "行级点击会让插入与直发叠在一起（旧版靠菜单 stopPropagation 才行）");
+	assert.match(picker, /disabled=\{props\.sendDisabled\}/);
+});
+
+test("弹框交互：回车插入首条，且放过中文输入法组字（isComposing）", () => {
+	const picker = readSource("src/renderer/src/components/session/QuickMessagePicker.tsx");
+	assert.match(picker, /if \(event\.key !== "Enter" \|\| event\.nativeEvent\.isComposing\) return;/);
+	assert.match(picker, /const first = paged\.items\[0\];/);
 });
 
 test("设置页：即时保存配置文件，且不再参与设置弹框的草案/脏标记", () => {
@@ -365,6 +385,10 @@ test("设置页：遗留字段不再被渲染层直接读写（App 也不再往 
 test("文案：入口/设置项关键 key 中英都有（缺一个界面就露出 key 名）", () => {
 	const keys = [
 		"app.quickMessagesTitle",
+		"app.quickMessagesHint",
+		"app.quickMessagesSearch",
+		"app.quickMessagesNoMatch",
+		"app.quickMessagesCount",
 		"app.quickMessagesSend",
 		"app.quickMessagesManage",
 		"app.quickMessagesEmpty",
@@ -389,4 +413,48 @@ test("文案：入口/设置项关键 key 中英都有（缺一个界面就露�
 			assert.ok(text && text !== key, `${locale} 缺文案: ${key}`);
 		}
 	}
+});
+
+// ── 弹框视图模型（搜索 + 分页，纯函数） ──────────────────────────────
+
+test("搜索过滤：空词/纯空白返回全量，大小写不敏感，只做子串匹配（不做模糊）", () => {
+	assert.deepEqual(filterQuickMessages(["继续", "Continue", "提交推送"], ""), ["继续", "Continue", "提交推送"]);
+	assert.deepEqual(filterQuickMessages(["继续", "Continue"], "   "), ["继续", "Continue"]);
+	assert.deepEqual(filterQuickMessages(["继续", "Continue"], "cont"), ["Continue"]);
+	// 「提交」命中两条含该子串的条目，顺序保持配置顺序
+	assert.deepEqual(filterQuickMessages(["提交", "提交推送", "推送"], "提交"), ["提交", "提交推送"]);
+	// 模糊子序列（「提推」不是任何条目的连续子串）不该命中，否则短词会搜出一堆无关条目
+	assert.deepEqual(filterQuickMessages(["提交推送"], "提推"), []);
+});
+
+test("分页：按页大小切片，totalPages 向上取整", () => {
+	const items = Array.from({ length: 16 }, (_, index) => `item-${index}`);
+	const first = paginateQuickMessages(items, 1);
+	assert.equal(first.totalPages, 2);
+	assert.equal(first.page, 1);
+	assert.deepEqual(first.items, items.slice(0, 8));
+	assert.deepEqual(paginateQuickMessages(items, 2).items, items.slice(8, 16));
+});
+
+test("分页：页码越界夹紧、非数字回第 1 页（搜索截短后不会渲染空页）", () => {
+	// 只剩 2 条却停在旧的第 9 页：夹紧回第 1 页并给出内容
+	assert.equal(paginateQuickMessages(["a", "b"], 9, 8).page, 1);
+	assert.deepEqual(paginateQuickMessages(["a", "b"], 9, 8).items, ["a", "b"]);
+	assert.equal(paginateQuickMessages(["a"], 0).page, 1);
+	assert.equal(paginateQuickMessages(["a"], Number.NaN).page, 1);
+	// 空清单是「1 页空内容」而不是 0 页：界面上不该出现「第 0 页」
+	assert.equal(paginateQuickMessages([], 3).totalPages, 1);
+	assert.equal(paginateQuickMessages([], 3).page, 1);
+	assert.deepEqual(paginateQuickMessages([], 3).items, []);
+});
+
+test("分页：非法页大小收敛为 1 条/页（不会得到 Infinity 页）", () => {
+	assert.equal(paginateQuickMessages(["a", "b"], 1, 0).totalPages, 2);
+	assert.equal(paginateQuickMessages(["a", "b"], 1, Number.NaN).totalPages, 2);
+	assert.deepEqual(paginateQuickMessages(["a", "b"], 1, 0).items, ["a"]);
+});
+
+test("分页：页大小与出厂条目数对齐（16 条出厂量正好两页，弹框高度可控）", () => {
+	assert.equal(QUICK_MESSAGE_PAGE_SIZE, 8);
+	assert.equal(paginateQuickMessages(readDefaults().items, 1).totalPages, 2);
 });

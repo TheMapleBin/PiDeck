@@ -1084,7 +1084,10 @@ export const zhCN = {
 	"app.promptTemplateEmptyBody": "提示词模板「/{name}」正文为空，请先编辑模板补充内容",
 	// ── 快捷消息（底栏按钮 + 弹框）──
 	"app.quickMessagesTitle": "快捷消息",
-	"app.quickMessagesHint": "点条目插入输入框，条目右侧按钮直接发送",
+	"app.quickMessagesHint": "点条目插入输入框，条目右侧按钮直接发送（回车插入首条）",
+	"app.quickMessagesSearch": "搜索快捷消息…",
+	"app.quickMessagesNoMatch": "没有匹配的条目",
+	"app.quickMessagesCount": "共 {count} 条",
 	"app.quickMessagesSend": "直接发送",
 	"app.quickMessagesEmpty": "还没有快捷消息，点下面的「管理快捷消息」添加",
 	"app.quickMessagesManage": "管理快捷消息",
