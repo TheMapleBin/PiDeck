@@ -162,7 +162,11 @@ test("prepend scroll compensation is skipped while following bottom and pins the
 	assert.match(source, /if \(autoScrollRef\.current \|\| anchor\.value\.generation !== historyBrowseGenerationRef\.current\) \{\n\s*loadMoreAnchorRef\.current = undefined;\n\s*return;\n\s*\}/);
 	assert.match(source, /if \(anchor\.value\.preserveAtTop\) \{\n\s*pinBrowseRow\(\);/);
 	assert.doesNotMatch(source, /timeline\.scrollTop = nextScrollTop/);
-	assert.match(source, /requestAnimationFrame\(\(\) => \{\n\s*programmaticScrollRef\.current = false;/);
+	// 顶部不补偿路径仍需抑制本帧 scroll；守卫由代数化 rAF 清理，不能再用会
+	// 被定时窗口永久锁住的独立 boolean。
+	assert.match(source, /if \(nextScrollTop === null\) \{[\s\S]{0,180}?markProgrammaticScroll\(\);/);
+	assert.match(source, /finishProgrammaticScrollFrame\(guard, generation\)/);
+	assert.doesNotMatch(source, /programmaticScrollRef/);
 });
 
 test("escaping follow mode and expanding the window unlock the stick-to-bottom engine", () => {
@@ -204,7 +208,7 @@ test("auto history load consumes engine intent without a competing scroll listen
 	assert.match(source, /const setUserScrollIntent = useCallback/);
 	assert.match(source, /if \(intent !== "up"\) return;/);
 	assert.match(source, /userScrollIntentFrameRef\.current = window\.requestAnimationFrame/);
-	assert.match(source, /if \([\s\S]*?programmaticScrollRef\.current[\s\S]*?\) return;/);
+	assert.match(source, /if \(isProgrammaticScrollActive\(programmaticScrollGuardRef\.current, performance\.now\(\)\)\) return;/);
 	assert.match(source, /HISTORY_AUTO_LOAD_THRESHOLD/);
 	assert.doesNotMatch(source, /timeline\.addEventListener\("scroll", onScroll/);
 });

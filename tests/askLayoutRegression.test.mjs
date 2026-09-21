@@ -105,15 +105,22 @@ test("Ask options render as full-width horizontal bars, one per row", () => {
 	// 2026-12 用户反馈：2/4 列栅格在长文案下把选项压成窄条，标签与说明挤在一起。
 	// 单选/多选/单卡三条渲染路径统一改成整行横条（flex-col + w-full），
 	// 与 WebTimeline 的既有选项语言一致；不得退回 grid-cols-* 栅格。
-	const bars = overlay.match(/className="flex min-w-0 flex-col gap-1.5"/g) ?? [];
+	const bars = overlay.match(/className="flex min-w-0 flex-col gap-2"/g) ?? [];
 	assert.equal(bars.length, 3, "batch select / batch multi_select / single select must all be one-per-row bars");
 	assert.doesNotMatch(overlay, /grid-cols-[24]/);
 	// 横条高度由内容决定（长描述自然换行），不再靠 72px 固定最小高度对齐栅格单元。
 	assert.doesNotMatch(overlay, /min-h-\[72px\]/);
-	// 横条收紧为紧凑密度（2026-12 用户反馈：横条不够紧密）：26px 下限 + 3px 纵向内边距 + 收紧行高。
-	assert.match(overlay, /ask-inline-bar-option h-auto min-h-\[26px\] w-full min-w-0 max-w-none flex-col items-start justify-center gap-0 px-2 py-\[3px\] text-left break-words whitespace-normal/);
-	assert.match(overlay, /text-caption font-medium leading-\[1\.35\] text-text-primary/);
-	assert.match(overlay, /text-\[10px\] font-normal leading-\[1\.3\] text-text-tertiary/);
+	// 横条密度：整行横条 + 32px 下限 + 6px 纵向内边距。
+	// 2026-12 用户反馈「很密集不舒服」：曾压到 26px/3px/1.35，观感过挤。
+	assert.match(overlay, /ask-inline-bar-option h-auto min-h-\[32px\] w-full min-w-0 max-w-none items-center justify-start gap-1\.5 px-2\.5 py-1\.5 text-left break-words whitespace-normal/);
+	// 说明与标签同一行、同字号（text-caption）、空格分隔，只靠颜色淡（tertiary）区分——
+	// 用户反馈：说明别用小字、也别压成第二行（大屏上又小又局限）；禁止再引入破折号/小字。
+	assert.match(overlay, /<span className="text-text-primary">\{label\}<\/span>/);
+	assert.match(overlay, /<span className="text-text-tertiary">\{` \$\{description\}`\}<\/span>/);
+	assert.doesNotMatch(overlay, /text-micro font-normal leading-\[1\.5\] text-text-tertiary/);
+	assert.doesNotMatch(overlay, / — \$\{description\}/);
+	// 说明同一行后横条是单行布局，不再 flex-col 两行堆叠。
+	assert.doesNotMatch(overlay, /min-h-\[32px\][^"]*flex-col/);
 	// 题号行「详情 i/n」已删（用户反馈：多余，tab 已有序号 + 头部有进度）。
 	assert.doesNotMatch(overlay, /common\.details/);
 });
@@ -123,7 +130,7 @@ test("Plan/simple select options render as single-row optically aligned buttons"
 	// live 卡选项改为单行：固定高度 + 标签不缩 + 说明 truncate，等宽等高光学对齐。
 	// TimelineEventCards 的 AskQuestionCard 死代码与其专属 CSS 已删除（2026-08 清理），
 	// 该视觉语言现只由 SessionRuntimeUiOverlay 的 ask-inline-bar-option 承载。
-	assert.match(overlay, /ask-inline-bar-option h-\[26px\] w-full min-w-0 max-w-none items-center justify-start gap-2 px-2 py-0 text-left/);
+	assert.match(overlay, /ask-inline-bar-option h-\[32px\] w-full min-w-0 max-w-none items-center justify-start gap-2 px-2\.5 py-0 text-left/);
 	assert.match(overlay, /max-w-\[45%\] shrink-0 truncate text-caption font-medium leading-none text-text-primary/);
 	assert.match(overlay, /min-w-0 flex-1 truncate text-micro leading-none text-text-tertiary/);
 });
@@ -208,20 +215,19 @@ test("ask owns a pinned slot between the timeline stage and the composer", () =>
 	// 底栏本身是唯一新增的 Ask 滚动层；高度就是「列高 - 对话区保底」，不设固定像素。
 	assert.match(sessionView, /session-v-ask min-h-0 shrink-0 overflow-y-auto overscroll-contain \[scrollbar-gutter:stable\]/);
 	assert.match(sessionView, /\{runtimeUi && askPanelVisible \? \(/);
-	assert.match(sessionView, /const askMaxHeight = `calc\(100% - var\(--session-timeline-min, \$\{TIMELINE_MIN_HEIGHT\}px\) - \$\{COMPOSER_MIN_HEIGHT\}px\)`/);
+	assert.match(sessionView, /const askMaxHeight = `calc\(100% - var\(--session-timeline-min, \$\{TIMELINE_MIN_HEIGHT\}px\)\)`/);
 	// 不设固定像素上限（用户反馈：别限卡片高度）；超长才由内滚兜底。
 	assert.doesNotMatch(sessionView, /ASK_PANEL_MAX_HEIGHT/);
-	// Ask 与 composer 必须同时可见：Ask 只能在自己的底栏内滚动，不能用 0px 高度覆盖/隐藏输入框。
-	// Ask 的最大高度预留 composer 最小高度，保证输入卡始终有可见空间。
-	assert.match(sessionView, /const askMaxHeight = `calc\(100% - var\(--session-timeline-min, \$\{TIMELINE_MIN_HEIGHT\}px\) - \$\{COMPOSER_MIN_HEIGHT\}px\)`/);
-	assert.match(sessionView, /const composerMaxHeight = `min\(\$\{COMPOSER_MAX_HEIGHT\}px, calc\(100% - var\(--session-timeline-min, \$\{TIMELINE_MIN_HEIGHT\}px\)\)\)`/);
+	// Ask 与 composer 互斥分高（issue #230 定案 B：弹卡时卡片独占列底，输入框坍缩到零高）。
+	// 不卸载——粘贴转文件的删盘动作在 composer 卸载路径上会丢（orphan 临时文件）。
+	assert.match(sessionView, /const composerMaxHeight = askPanelVisible \? "0px" : `min\(\$\{COMPOSER_MAX_HEIGHT\}px, calc\(100% - var\(--session-timeline-min, \$\{TIMELINE_MIN_HEIGHT\}px\)\)\)`/);
 	assert.match(sessionView, /maxHeight: composerMaxHeight/);
-	// composer 全程挂载：Ask 出现时也不能卸载或 inert 输入框，避免用户失去输入焦点/草稿操作。
+	// composer 全程挂载（不因 ask 卸载）；坍缩到 0px 时同时 inert + aria-hidden，
+	// 不可见编辑器不得再被 Tab/点击命中（否则用户会往隐形输入框里打字）。
 	assert.match(sessionView, /bottomComposerVisible && \(/);
-	assert.doesNotMatch(sessionView, /bottomComposerVisible && !askPanelVisible/);
-	assert.doesNotMatch(sessionView, /inert=\{askPanelVisible\}/);
-	assert.doesNotMatch(sessionView, /aria-hidden=\{askPanelVisible \|\| undefined\}/);
-	assert.doesNotMatch(sessionView, /composerMaxHeight = askPanelVisible \? "0px"/);
+	assert.match(sessionView, /inert=\{askPanelVisible\}/);
+	assert.match(sessionView, /aria-hidden=\{askPanelVisible \|\| undefined\}/);
+	assert.doesNotMatch(sessionView, /composerMaxHeight = `min\(\$\{COMPOSER_MAX_HEIGHT\}px/);
 	// 占位判据必须与 overlay 同源，否则 stale runtime 的残留 pending 会让 composer 白让高度。
 	assert.match(sessionView, /askPanelVisible\?: boolean/);
 	const injector = readFileSync("src/renderer/src/components/session/SessionRuntimeInjector.tsx", "utf8");

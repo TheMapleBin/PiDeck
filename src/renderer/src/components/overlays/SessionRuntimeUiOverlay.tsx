@@ -143,9 +143,11 @@ function BatchAskInlineBar(props: { request: AgentUiRequest; responding: boolean
 		return { answers: nextAnswers, labels: nextLabels, custom: nextCustom };
 	}
 
-	function submitText(question: AgentUiBatchQuestion) {
+	/** 自定义输入（select 的「其他」）与纯输入题的提交：写入答案并按策略自动前进。 */
+	function submitText(question: AgentUiBatchQuestion): boolean {
 		const value = inputValues[question.id]?.trim();
-		if (value) commitAnswer(question.id, value, value, question.type === "select");
+		if (!value) return false;
+		return answerAndAdvance(question, value, value, question.type === "select");
 	}
 
 	function submitAnswers(overrides?: { answers?: Record<string, BatchAnswer>; labels?: Record<string, string>; custom?: Set<string> }) {
@@ -316,7 +318,7 @@ function BatchQuestion(props: {
 	responding: boolean;
 	onAnswer: (value: BatchAnswer, label?: string, wasCustom?: boolean) => boolean;
 	onInputChange: (value: string) => void;
-	onSubmitInput: () => void;
+	onSubmitInput: () => boolean;
 	onPrevious?: () => void;
 	onNext: () => void;
 	nextDisabled: boolean;
@@ -334,6 +336,11 @@ function BatchQuestion(props: {
 	}, [props.questionIndex]);
 	const answer = (value: BatchAnswer, label?: string, wasCustom?: boolean) => {
 		if (!props.onAnswer(value, label, wasCustom)) return;
+		refocusAfterAdvanceRef.current = true;
+	};
+	// 自定义输入/纯输入题提交后同样可能自动前进，输入框随换题卸载，焦点要一起收回。
+	const submitInput = () => {
+		if (!props.onSubmitInput()) return;
 		refocusAfterAdvanceRef.current = true;
 	};
 	return (
@@ -359,7 +366,7 @@ function BatchQuestion(props: {
 				}
 			}}
 		>
-			<div className="mb-1 text-caption font-medium leading-[1.4] break-words text-text-primary">{question.question}</div>
+			<div className="mb-1.5 text-control font-medium leading-[1.5] break-words text-text-primary">{question.question}</div>
 			<div className="ask-batch-question-body">
 				{question.type === "confirm" ? (
 					<div className="flex gap-2">
@@ -395,7 +402,7 @@ function BatchQuestion(props: {
 					<>
 						{/* 选项一律整行横条（2026-12 用户反馈）：栅格 2/4 列在长文案下会被压成窄条，
 						    横条让标签与说明各自有整行宽度，长文案也能完整换行；外层时间线是唯一滚动容器。 */}
-						<div className="flex min-w-0 flex-col gap-1.5">
+						<div className="flex min-w-0 flex-col gap-2">
 							{question.options.map((option, index) => {
 								const rawLabel = typeof option === "string" ? option : option.label;
 								const parsed = typeof option === "string" ? splitAskOption(option) : { label: rawLabel, description: option.description };
@@ -405,7 +412,7 @@ function BatchQuestion(props: {
 								return (
 									<Button
 										key={`${question.id}:${index}`}
-										className={`ask-inline-bar-option h-auto min-h-[26px] w-full min-w-0 max-w-none flex-col items-start justify-center gap-0 px-2 py-[3px] text-left break-words whitespace-normal${props.answer === value ? ` ${ASK_OPTION_SELECTED_CLASS}` : ""}`}
+										className={`ask-inline-bar-option h-auto min-h-[32px] w-full min-w-0 max-w-none items-center justify-start gap-1.5 px-2.5 py-1.5 text-left break-words whitespace-normal${props.answer === value ? ` ${ASK_OPTION_SELECTED_CLASS}` : ""}`}
 										variant="outline"
 										disabled={props.responding}
 										onClick={() => {
@@ -414,17 +421,13 @@ function BatchQuestion(props: {
 										}}
 									>
 										{/* 选中态对勾标记：主题色 accent 对比度低时只靠边框/背景变色难分辨已选项 */}
-										<span className="flex min-w-0 max-w-full items-center gap-1">
-											{props.answer === value ? <Check size={14} className="shrink-0 text-[var(--color-success)]" aria-hidden="true" /> : null}
-											<span className="min-w-0 max-w-full break-words whitespace-normal text-caption font-medium leading-[1.35] text-text-primary" title={label}>
-												{label}
-											</span>
+										{props.answer === value ? <Check size={14} className="shrink-0 text-[var(--color-success)]" aria-hidden="true" /> : null}
+										{/* 说明与标签同一行、同字号、空格分隔，只靠颜色区分（2026-12 用户反馈：
+										    说明别用小字、也别放第二行——小屏还好，大屏上又小又局限）。 */}
+										<span className="min-w-0 flex-1 whitespace-normal break-words text-caption leading-[1.45]">
+											<span className="text-text-primary">{label}</span>
+											{description ? <span className="text-text-tertiary">{` ${description}`}</span> : null}
 										</span>
-										{description ? (
-											<span className="min-w-0 max-w-full break-words whitespace-normal text-[10px] font-normal leading-[1.3] text-text-tertiary" title={description}>
-												{description}
-											</span>
-										) : null}
 									</Button>
 								);
 							})}
@@ -440,11 +443,11 @@ function BatchQuestion(props: {
 									onKeyDown={(event) => {
 										if (event.key === "Enter") {
 											event.preventDefault();
-											props.onSubmitInput();
+											submitInput();
 										}
 									}}
 								/>
-								<Button variant="default" disabled={props.responding || !props.inputValue.trim()} onClick={props.onSubmitInput}>
+								<Button variant="default" disabled={props.responding || !props.inputValue.trim()} onClick={submitInput}>
 									{t("ask.submit")}
 								</Button>
 							</div>
@@ -454,7 +457,7 @@ function BatchQuestion(props: {
 					<>
 						{/* 多选：checkbox 语义（选中打勾，再点取消），选完走底部的下一题/提交全部。
 						    与单选一致用整行横条，保证勾选态与文案在长选项下都可读。 */}
-						<div className="flex min-w-0 flex-col gap-1.5">
+						<div className="flex min-w-0 flex-col gap-2">
 							{question.options.map((option, index) => {
 								const rawLabel = typeof option === "string" ? option : option.label;
 								const parsed = typeof option === "string" ? splitAskOption(option) : { label: rawLabel, description: option.description };
@@ -466,7 +469,7 @@ function BatchQuestion(props: {
 								return (
 									<Button
 										key={`${question.id}:${index}`}
-										className={`ask-inline-bar-option h-auto min-h-[26px] w-full min-w-0 max-w-none flex-col items-start justify-center gap-0 px-2 py-[3px] text-left break-words whitespace-normal${selected ? ` ${ASK_OPTION_SELECTED_CLASS}` : ""}`}
+										className={`ask-inline-bar-option h-auto min-h-[32px] w-full min-w-0 max-w-none items-center justify-start gap-1.5 px-2.5 py-1.5 text-left break-words whitespace-normal${selected ? ` ${ASK_OPTION_SELECTED_CLASS}` : ""}`}
 										variant="outline"
 										disabled={props.responding}
 										onClick={() => {
@@ -477,17 +480,11 @@ function BatchQuestion(props: {
 										}}
 									>
 										{/* 选中态对勾标记：主题色 accent 对比度低时只靠边框/背景变色难分辨已选项 */}
-										<span className="flex min-w-0 max-w-full items-center gap-1">
-											{selected ? <Check size={14} className="shrink-0 text-[var(--color-success)]" aria-hidden="true" /> : null}
-											<span className="min-w-0 max-w-full break-words whitespace-normal text-caption font-medium leading-[1.35] text-text-primary" title={label}>
-												{label}
-											</span>
+										{selected ? <Check size={14} className="shrink-0 text-[var(--color-success)]" aria-hidden="true" /> : null}
+										<span className="min-w-0 flex-1 whitespace-normal break-words text-caption leading-[1.45]">
+											<span className="text-text-primary">{label}</span>
+											{description ? <span className="text-text-tertiary">{` ${description}`}</span> : null}
 										</span>
-										{description ? (
-											<span className="min-w-0 max-w-full break-words whitespace-normal text-[10px] font-normal leading-[1.3] text-text-tertiary" title={description}>
-												{description}
-											</span>
-										) : null}
 									</Button>
 								);
 							})}
@@ -524,12 +521,12 @@ function BatchQuestion(props: {
 								// IME 合成中的回车只用于选字/提交候选，不能当作提交键
 								if (event.key === "Enter" && !isComposingKeyboardEvent(event)) {
 									event.preventDefault();
-									props.onSubmitInput();
+									submitInput();
 								}
 							}}
 						/>
 						{/* 纯输入题的按钮与输入框并排；不能使用 w-full，否则 Button 的 shrink-0 会把输入框压成窄条。 */}
-						<Button className="shrink-0" variant="default" disabled={props.responding || !props.inputValue.trim()} onClick={props.onSubmitInput}>
+						<Button className="shrink-0" variant="default" disabled={props.responding || !props.inputValue.trim()} onClick={submitInput}>
 							{t("ask.submit")}
 						</Button>
 					</div>
@@ -650,7 +647,7 @@ export function SessionRuntimeUiOverlay({ sessionId, runtime, ui, responder, onE
 			>
 				{request.method === "select" && request.options?.length ? (
 					// 单卡选项同样整行横条：横条比双列栅格更耐长文案，也与批量卡的选项语言一致。
-					<div className="flex min-w-0 flex-col gap-1.5">
+					<div className="flex min-w-0 flex-col gap-2">
 						{request.options.map((option) => {
 							const parsed = splitAskOption(option);
 							return (
@@ -658,7 +655,7 @@ export function SessionRuntimeUiOverlay({ sessionId, runtime, ui, responder, onE
 									key={`${request.requestId}:${option}`}
 									// 单行选项（2026-12 用户反馈：上下两行文本对不齐）：标签+说明同行，
 									// 固定高度 + 说明 truncate（title 兔底全文），等宽等高实现光学对齐。
-									className={`ask-inline-bar-option h-[26px] w-full min-w-0 max-w-none items-center justify-start gap-2 px-2 py-0 text-left${selectedOption === option ? ` ${ASK_OPTION_SELECTED_CLASS}` : ""}`}
+									className={`ask-inline-bar-option h-[32px] w-full min-w-0 max-w-none items-center justify-start gap-2 px-2.5 py-0 text-left${selectedOption === option ? ` ${ASK_OPTION_SELECTED_CLASS}` : ""}`}
 									variant="outline"
 									disabled={responding}
 									onClick={() => {

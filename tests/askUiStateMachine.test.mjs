@@ -87,12 +87,12 @@ test("resolveActiveAskRequest: 同代且 pending 时才返回请求", () => {
 
 test("shouldAutoAdvanceBatchAnswer: 多题批次的单值选择才自动前进", () => {
 	const { shouldAutoAdvanceBatchAnswer } = loadAskUi();
-	// select / confirm 是单值选择，选完即自动前进（issue #230 第 1 点）
+	// select / confirm / input 是「一次提交即完成本题」，答完即自动前进（issue #230 第 1 点）
 	assert.equal(shouldAutoAdvanceBatchAnswer({ type: "select", total: 3 }), true);
 	assert.equal(shouldAutoAdvanceBatchAnswer({ type: "confirm", total: 3 }), true);
-	// multi_select 需多次勾选、input/editor 需输入，不能自动跳
+	assert.equal(shouldAutoAdvanceBatchAnswer({ type: "input", total: 3 }), true);
+	// multi_select 需多次勾选，editor 每次击键都写答案（会打字即跳题），都不能自动跳
 	assert.equal(shouldAutoAdvanceBatchAnswer({ type: "multi_select", total: 3 }), false);
-	assert.equal(shouldAutoAdvanceBatchAnswer({ type: "input", total: 3 }), false);
 	assert.equal(shouldAutoAdvanceBatchAnswer({ type: "editor", total: 3 }), false);
 	// 单题批次不自动：卡片本身就是确认卡，点选项即提交等于删掉确认步骤，误触无法反悔。
 	assert.equal(shouldAutoAdvanceBatchAnswer({ type: "select", total: 1 }), false);

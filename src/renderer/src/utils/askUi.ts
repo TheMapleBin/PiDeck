@@ -79,14 +79,16 @@ export function resolveActiveAskRequest(runtime: AskRuntimeBinding | undefined, 
  * 批量卡「选完自动前进」策略（issue #230 第 1 点：点完一题不能自动跳下一题）。
  *
  * 只有单值选择（select / confirm）选完即自动前进：
- * - multi_select 需要多次勾选，input/editor 需要输入，都不能自动跳；
+ * - multi_select 要多次勾选，不能跳；
+ * - editor 的 onChange 每次击键都会写入答案，绝不能自动前进（否则打第一个字就跳题）；
+ * - input（点提交/回车）与 select 的自定义文本提交也算「一次提交完成本题」，同样自动；
  * - 单题批次（total <= 1）不自动：卡片本身就是确认卡，点选项即提交等于删掉确认步骤，
  *   误触后无法反悔；未题（total > 1）也自动，去向由调用方决定：
  *   非末题 → 下一题；末题 → 审阅页（review）或直接提交全部。
  */
 export function shouldAutoAdvanceBatchAnswer(input: { type: AgentUiBatchQuestion["type"]; total: number }): boolean {
 	if (input.total <= 1) return false;
-	return input.type === "select" || input.type === "confirm";
+	return input.type === "select" || input.type === "confirm" || input.type === "input";
 }
 
 /** select 的选项是否可点击（有选项时才渲染选项按钮） */

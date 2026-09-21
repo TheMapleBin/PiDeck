@@ -1,12 +1,10 @@
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
-import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createRequire } from "node:module";
 import test from "node:test";
-import ts from "typescript";
-import vm from "node:vm";
+import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
 /**
  * SessionCatalog 占位标题回填测试（fetchTitle 注入链路）。
@@ -18,42 +16,13 @@ import vm from "node:vm";
 
 const nodeRequire = createRequire(import.meta.url);
 
-function compileModule(filePath, imports = {}) {
-	const source = readFileSync(filePath, "utf8");
-	const output = ts.transpileModule(source, {
-		compilerOptions: {
-			module: ts.ModuleKind.CommonJS,
-			target: ts.ScriptTarget.ES2022,
-		},
-		fileName: filePath,
-	}).outputText;
-	const module = { exports: {} };
-	const localRequire = (specifier) => imports[specifier] ?? nodeRequire(specifier);
-	vm.runInNewContext(
-		output,
-		{
-			module,
-			exports: module.exports,
-			require: localRequire,
-			console,
-			setTimeout,
-			clearTimeout,
-		},
-		{ filename: filePath },
-	);
-	return module.exports;
-}
-
+/** 加载生产 SessionCatalog：相对 import 由 helper 按源文件目录解析，生产代码新增本地依赖不会再炸 loader。 */
 function loadCatalog(fsPromises = nodeRequire("node:fs/promises")) {
-	const identity = compileModule("src/shared/sessionIdentity.ts");
-	const fsRetry = compileModule("src/main/utils/fsRetry.ts", {
-		"node:fs/promises": fsPromises,
-	});
-	return compileModule("src/main/sessions/SessionCatalog.ts", {
-		"../../shared/sessionIdentity": identity,
-		"../utils/fsRetry": fsRetry,
-		"../logging/sharedLogger": { getAppLogger: () => null },
-		"node:fs/promises": fsPromises,
+	return loadTsCommonJs("src/main/sessions/SessionCatalog.ts", {
+		stubs: {
+			"node:fs/promises": fsPromises,
+			"../logging/sharedLogger": { getAppLogger: () => null },
+		},
 	});
 }
 
@@ -301,6 +270,38 @@ test("legacy tintinweb orphans get parentSessionPath backfilled and persisted", 
 		const onDisk = JSON.parse(await nodeRequire("node:fs/promises").readFile(join(dir, "sessions.json"), "utf8"));
 		const persisted = onDisk.sessions?.find((entry) => entry.filePath === childPath);
 		assert.equal(persisted?.parentSessionPath, parentPath, "backfilled parent link must persist to disk");
+	} finally {
+		await rm(dir, { recursive: true, force: true });
+	}
+});
+
+// 回归 2026-10 #250：旧版本把展开后的 `<prompt_template …>` 原文写进了 catalog 标题。
+// 它既不是 Untitled 也不是文件名，补名链路原本永远不会再碰它 —— 必须按占位名处理才能自愈。
+test("a polluted expanded-block title is treated as a placeholder and gets backfilled", async () => {
+	const { SessionCatalog } = loadCatalog();
+	const dir = await mkdtemp(join(tmpdir(), "pideck-catalog-title-dirty-"));
+	try {
+		let fetcherCalls = 0;
+		const fetcher = async () => {
+			fetcherCalls += 1;
+			return { name: "how are you", valid: true, nameFromSessionInfo: false };
+		};
+		const catalog = new SessionCatalog(join(dir, "sessions.json"), {}, undefined, fetcher);
+		await catalog.load();
+		const dirtyTitle = '<prompt_template name="翻译官"> # 翻译官工作规则 规则正文';
+		const [dirty] = await catalog.mergeScanned("project-1", [lightSummary({ name: dirtyTitle, updatedAt: 1000 })]);
+		assert.equal(dirty.title, dirtyTitle);
+		assert.equal(fetcherCalls, 0, "summary 自带名称时不触发补名读盘");
+
+		// 同一文件版本（周期扫描）：脏标题必须仍被当成占位名，触发补名并允许弱回退覆盖。
+		const [healed] = await catalog.mergeScanned("project-1", [lightSummary({ updatedAt: 1000 })]);
+		assert.equal(healed.title, "how are you");
+		assert.equal(fetcherCalls, 1);
+
+		// 标题已恢复成真实名称后不再重复读盘。
+		const [stable] = await catalog.mergeScanned("project-1", [lightSummary({ updatedAt: 1000 })]);
+		assert.equal(stable.title, "how are you");
+		assert.equal(fetcherCalls, 1);
 	} finally {
 		await rm(dir, { recursive: true, force: true });
 	}

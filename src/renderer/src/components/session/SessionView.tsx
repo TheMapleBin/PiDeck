@@ -206,11 +206,14 @@ export function SessionView({
 	const timelineColumnStyle = {
 		"--session-timeline-min": `${TIMELINE_MIN_HEIGHT}px`,
 	} as CSSProperties;
-	// Ask 与 composer 是两个并列的底栏：Ask 只占用自己的空间，不能把输入框压成 0px。
-	// Ask 的高度上限预留 composer 的最小高度，避免两个底栏在窄窗口下互相覆盖；
-	// 超长 Ask 内容在 session-v-ask 内部滚动，输入框始终可见、可聚焦。
-	const askMaxHeight = `calc(100% - var(--session-timeline-min, ${TIMELINE_MIN_HEIGHT}px) - ${COMPOSER_MIN_HEIGHT}px)`;
-	const composerMaxHeight = `min(${COMPOSER_MAX_HEIGHT}px, calc(100% - var(--session-timeline-min, ${TIMELINE_MIN_HEIGHT}px)))`;
+	// Ask 底栏与 composer 互斥分高（issue #230 定案，2026-12 用户拍板 B：卡片接管列底）：
+	// ask 可见时 composer 通过 max-height:0 + overflow-hidden 坍缩到零高，而不是卸载——
+	// 粘贴转文件的 chip 删盘动作在 composer 的卸载路径上会丢失（orphan 临时文件），
+	// 草稿/附件虽在 atom 里，仍以「不卸载」为更强约束。
+	// 因此两者不会同时占高；不设固定像素上限（用户反馈：别限我的卡片高度），
+	// 上限就是「列高 - 对话区保底」，正常情况下卡片不会被截断，超长才内部滚动兜底。
+	const askMaxHeight = `calc(100% - var(--session-timeline-min, ${TIMELINE_MIN_HEIGHT}px))`;
+	const composerMaxHeight = askPanelVisible ? "0px" : `min(${COMPOSER_MAX_HEIGHT}px, calc(100% - var(--session-timeline-min, ${TIMELINE_MIN_HEIGHT}px)))`;
 
 	// 终端 Panel 随 terminalOpen 动态挂载，约束注册有一帧延迟。
 	// 折叠/展开用稳态读数 + setLayout：差额全部给 timeline，输入栏不在 Group 里。
@@ -310,7 +313,10 @@ export function SessionView({
 							style={{
 								maxHeight: composerMaxHeight,
 							}}
-							// Ask 与 composer 并列显示；Ask 出现时保留输入框的可见性与交互性。
+							// 坍缩到 0px 时必须同时 inert + aria-hidden：否则看不见的编辑器仍可被 Tab/点击命中，
+							// 用户会往一个不可见的输入框里打字（React 19 支持 inert 属性）。
+							inert={askPanelVisible}
+							aria-hidden={askPanelVisible || undefined}
 						>
 							<ComposerArea
 								ref={composerRef}

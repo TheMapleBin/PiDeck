@@ -42,6 +42,17 @@ export const RECENT_SESSIONS_INITIAL_VISIBLE = 10;
 export const RECENT_SESSIONS_PAGE_SIZE = 10;
 
 /**
+ * 「加载更多」旁「收起」入口的显示门槛：可见条数超过首页时才值得给。
+ *
+ * 默认 10 条本身收不起来（收起来仍是 10 条），所以只有用户点过「加载更多」
+ * 才可能出现收起；与项目页 `hasExpandedChildren`（存在显式计数即视为展开过）
+ * 同一语义，只是这里用「条数 > 首页」表达，避免再存一份布尔标记。
+ */
+export function canCollapseRecent(visibleCount: number): boolean {
+	return visibleCount > RECENT_SESSIONS_INITIAL_VISIBLE;
+}
+
+/**
  * 收集活动行：跨项目取全部 runtime 绑定 Agent，按更新时间倒序。
  *
  * 不过滤终态（error/closed）：这类会话进程虽已结束，但 Tab 还开着、需要能从活动页

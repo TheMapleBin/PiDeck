@@ -52,6 +52,8 @@ export const enUS: Record<TranslationKey, string> = {
 	"app.sidebarRecentShown": "Showing {shown}/{total}",
 	"app.sidebarRecentLoadMore": "Load more",
 	"app.sidebarRecentLoadMoreHint": "Load {count} more sessions",
+	"app.sidebarRecentCollapse": "Collapse",
+	"app.sidebarRecentCollapseHint": "Collapse back to the default {count}",
 	"app.sidebarHistory": "History",
 	"app.confirm": "Confirm",
 	"app.createAgent": "Start Agent",

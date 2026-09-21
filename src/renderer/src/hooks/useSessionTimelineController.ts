@@ -24,6 +24,7 @@ import {
 import type { MessageScrollerScrollApi } from "../components/agents/message-scroller";
 import { TURN_WINDOW_AUTO_EXPAND_THRESHOLD, resolveAutoExpandThreshold } from "./timeline/autoExpandThreshold";
 import { shouldAutoExpandRenderWindow, shouldApplyDelayedHistoryResult } from "./timeline/scrollHistoryPolicy";
+import { beginProgrammaticScroll, clearProgrammaticScroll, createProgrammaticScrollGuard, finishProgrammaticScrollFrame, isProgrammaticScrollActive } from "./timeline/programmaticScrollGuard";
 import { browsePinScrollTop, followBrowsePinAfterUserScroll, shouldCompensateBrowsePin, type BrowsePin } from "./timeline/browsePin";
 import { countUserTurns, TIMELINE_MOUNTED_TURN_LIMIT, TIMELINE_SCROLLED_TURN_LIMIT, TIMELINE_WINDOW_EXPAND_STEP } from "../components/session/timeline/turnRenderWindow";
 import { estimateJumpExpandTurns, resolveJumpPendingAction } from "../components/session/timeline/jumpWindowPolicy";
@@ -408,7 +409,7 @@ export function useSessionTimelineController(options: { sessionId?: string; mess
 		// The rAF below still coalesces the settled position and atom persistence.
 		currentAnchorRef.current = computeCurrentAnchor();
 		// restoreAt / 扩窗补偿派发的 scroll：只更新冻住那一行的 expected，不改钉到新的第一可见行。
-		if (!programmaticScrollRef.current && !autoScrollRef.current) {
+		if (!isProgrammaticScrollActive(programmaticScrollGuardRef.current, performance.now()) && !autoScrollRef.current) {
 			if (browsePinFrozenRef.current && browsePinRef.current) {
 				const top = measureBrowsePinViewportTop(timelineRef.current, browsePinRef.current.messageId);
 				browsePinRef.current = followBrowsePinAfterUserScroll(browsePinRef.current, top);
@@ -606,8 +607,7 @@ export function useSessionTimelineController(options: { sessionId?: string; mess
 	const [restorePhase, setRestorePhase] = useState<"pending" | "complete">("pending");
 	// 与 autoScroll 初始值保持一致（有锚点的会话首帧即不跟底），避免首帧 ref/state 不一致
 	const autoScrollRef = useRef(autoScroll);
-	const programmaticScrollRef = useRef(false);
-	const programmaticScrollUntilRef = useRef(0);
+	const programmaticScrollGuardRef = useRef(createProgrammaticScrollGuard());
 	/**
 	 * 历史浏览代数：回底/切会话时递增。在途历史分页与扩窗任务捕获发起时代数，
 	 * 返回时若已过期只允许写缓存，不得再驱动 DOM 扩窗/锚点恢复（迟到结果
@@ -840,6 +840,23 @@ export function useSessionTimelineController(options: { sessionId?: string; mess
 		highlightTimersRef.current.set(timer, timer);
 	}, []);
 
+	const clearProgrammaticTimelineScroll = useCallback(() => {
+		clearProgrammaticScroll(programmaticScrollGuardRef.current);
+	}, []);
+	/**
+	 * Mark controller-owned movement so its resulting scroll events cannot be
+	 * consumed as history intent. Timed windows expire from the deadline itself;
+	 * one-frame windows use a generation token so stale rAF cleanup is harmless.
+	 */
+	const markProgrammaticScroll = useCallback((durationMs = 0) => {
+		const guard = programmaticScrollGuardRef.current;
+		const generation = beginProgrammaticScroll(guard, performance.now(), durationMs);
+		if (durationMs > 0) return;
+		window.requestAnimationFrame(() => {
+			finishProgrammaticScrollFrame(guard, generation);
+		});
+	}, []);
+
 	const scrollToBottom = useCallback(() => {
 		const requestOwnerKey = ownerKey;
 		if (ownerKeyRef.current !== requestOwnerKey) return;
@@ -850,13 +867,7 @@ export function useSessionTimelineController(options: { sessionId?: string; mess
 		invalidateHistoryBrowsing();
 		settleScrollCancelRef.current?.();
 		settleScrollCancelRef.current = undefined;
-		programmaticScrollUntilRef.current = 0;
-		programmaticScrollRef.current = true;
-		window.requestAnimationFrame(() => {
-			if (programmaticScrollUntilRef.current === 0) {
-				programmaticScrollRef.current = false;
-			}
-		});
+		markProgrammaticScroll();
 		autoScrollRef.current = true;
 		setAutoScroll(true);
 		setShowScrollToBottom(false);
@@ -875,7 +886,7 @@ export function useSessionTimelineController(options: { sessionId?: string; mess
 			top: timeline.scrollHeight,
 			behavior: reduceMotion ? "instant" : "smooth",
 		});
-	}, [invalidateHistoryBrowsing, ownerKey]);
+	}, [invalidateHistoryBrowsing, markProgrammaticScroll, ownerKey]);
 
 	/**
 	 * The outline rail is a sibling of the scroll viewport, so its wheel event
@@ -896,22 +907,6 @@ export function useSessionTimelineController(options: { sessionId?: string; mess
 		},
 		[ownerKey],
 	);
-	/** 标记一次程序化滚动（turn 窗口展开补偿等组件内补偿用），抑制用户意图消费。
-	 *  durationMs > 0 时按时间窗口抑制：连续 smooth scroll 会派发多个 scroll 事件，
-	 *  单次 boolean 在下一帧自动清除，避免吞掉后续真实输入。 */
-	const markProgrammaticScroll = useCallback((durationMs = 0) => {
-		programmaticScrollRef.current = true;
-		programmaticScrollUntilRef.current = durationMs > 0 ? performance.now() + durationMs : 0;
-		if (durationMs === 0) {
-			// 单次抑制若没有产生 scroll 事件（赋值后位移为 0），rAF 兜底清除，
-			// 避免吞掉用户下一次真实滚动。
-			window.requestAnimationFrame(() => {
-				if (programmaticScrollUntilRef.current === 0) {
-					programmaticScrollRef.current = false;
-				}
-			});
-		}
-	}, []);
 
 	/**
 	 * 顶部插入内容后钉住当前视口。必须走 restoreAt：原生 scrollTop 赋值不会解锁引擎，
@@ -1036,8 +1031,7 @@ export function useSessionTimelineController(options: { sessionId?: string; mess
 				if (cancelled) return;
 				cancelled = true;
 				timeline.removeEventListener("pointerdown", onScrollbarPointerDown, true);
-				programmaticScrollUntilRef.current = 0;
-				programmaticScrollRef.current = false;
+				clearProgrammaticTimelineScroll();
 				cancelAnimation();
 				settleScrollCancelRef.current = undefined;
 			};
@@ -1053,14 +1047,13 @@ export function useSessionTimelineController(options: { sessionId?: string; mess
 				onComplete: () => {
 					completed = true;
 					timeline.removeEventListener("pointerdown", onScrollbarPointerDown, true);
-					programmaticScrollUntilRef.current = 0;
-					programmaticScrollRef.current = false;
+					clearProgrammaticTimelineScroll();
 					settleScrollCancelRef.current = undefined;
 				},
 			});
 			if (!completed) settleScrollCancelRef.current = () => interrupt();
 		},
-		[markProgrammaticScroll, ownerKey],
+		[clearProgrammaticTimelineScroll, markProgrammaticScroll, ownerKey],
 	);
 
 	const setAutoScrollFromScroller = useCallback(
@@ -1339,8 +1332,7 @@ export function useSessionTimelineController(options: { sessionId?: string; mess
 		skipBrowsePinRef.current = false;
 		// 切会话：取消旧会话遗留的挂起跳转与动画状态。
 		setPendingJump(undefined);
-		programmaticScrollRef.current = false;
-		programmaticScrollUntilRef.current = 0;
+		clearProgrammaticTimelineScroll();
 		settleScrollCancelRef.current?.();
 		settleScrollCancelRef.current = undefined;
 		// 会话切换：清掉上一会话的置顶垫片与动画标记
@@ -1351,7 +1343,7 @@ export function useSessionTimelineController(options: { sessionId?: string; mess
 			userScrollIntentFrameRef.current = undefined;
 		}
 		return clearHighlightTimers;
-	}, [clearHighlightTimers, ownerKey]);
+	}, [clearHighlightTimers, clearProgrammaticTimelineScroll, ownerKey]);
 
 	useLayoutEffect(() => {
 		if (ownerKey === LEGACY_OWNER_KEY) return;
@@ -1491,7 +1483,7 @@ export function useSessionTimelineController(options: { sessionId?: string; mess
 			userScrollIntentFrameRef.current = window.requestAnimationFrame(() => {
 				userScrollIntentFrameRef.current = undefined;
 				if (!controllerEnabled || ownerKeyRef.current !== requestOwnerKey) return;
-				if (performance.now() < programmaticScrollUntilRef.current || programmaticScrollRef.current) return;
+				if (isProgrammaticScrollActive(programmaticScrollGuardRef.current, performance.now())) return;
 				const timeline = timelineRef.current;
 				if (!timeline) return;
 
@@ -1556,15 +1548,12 @@ export function useSessionTimelineController(options: { sessionId?: string; mess
 		const nextScrollTop = resolveTimelineTopCompensation(anchor.value.top, heightDelta);
 		if (nextScrollTop === null) {
 			loadMoreAnchorRef.current = undefined;
-			programmaticScrollRef.current = true;
-			const topFrame = requestAnimationFrame(() => {
-				programmaticScrollRef.current = false;
-			});
-			return () => cancelAnimationFrame(topFrame);
+			markProgrammaticScroll();
+			return;
 		}
 		pinViewportAfterPrepend(nextScrollTop);
 		loadMoreAnchorRef.current = undefined;
-	}, [controllerEnabled, ownerKey, pinBrowseRow, pinViewportAfterPrepend, visibleMessages.length]);
+	}, [controllerEnabled, markProgrammaticScroll, ownerKey, pinBrowseRow, pinViewportAfterPrepend, visibleMessages.length]);
 
 	// 浏览态内容后增高（历史 Markdown 轻量→全量、图片、mermaid）：扩窗那一帧的补偿不够，
 	// 按钉住的行继续补漂移。跟随时不碰——吸底引擎负责下方增长。
