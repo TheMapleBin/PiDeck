@@ -183,3 +183,25 @@ test("pi runtime title changes notify catalog the same way DSH does", () => {
 	assert.match(index, /sessionsCatalogRefreshed/);
 	assert.match(index, /Pi title sync to catalog failed/);
 });
+
+// 回归 2026-10 #250：首条消息带 /模板 时，展开后的 `<prompt_template …>` 是发给模型的指令包装，
+// 不是用户意图。占位标题必须只取块外文本，否则侧栏先显示 XML 原文，总结失败就一直留着。
+test("inferTitleFromMessages strips expanded reference blocks from the first user message", () => {
+	const { formatPromptTemplateBlock } = loadTsCommonJs("src/shared/expandedRefBlocks.ts");
+	const template = formatPromptTemplateBlock("翻译官", "# 翻译官工作规则\n" + "规则正文。".repeat(500));
+	assert.equal(inferTitleFromMessages([{ role: "user", text: `${template}\n\nhow are you` }]), "how are you");
+	// 只插了模板没写正文：用模板名当标题，而不是把两千字模板正文塞进侧栏。
+	assert.equal(inferTitleFromMessages([{ role: "user", text: template }]), "/翻译官");
+	// 引用块（❝引用 / &会话）同样只保留用户自己的话。
+	assert.equal(inferTitleFromMessages([{ role: "user", text: '<quoted_context label="引用A" message_id="m1">\nA 全文\n</quoted_context>\n照着改' }]), "照着改");
+	assert.equal(inferTitleFromMessages([{ role: "user", text: '<referenced_session name="会话B">\n[User]: x\n</referenced_session>' }]), "&会话B");
+});
+
+test("isDefaultAgentTitle treats un-folded reference block titles as placeholders", () => {
+	// 旧代码已经把 XML 写进 catalog 的会话必须能自愈：判定为占位名，下一次消息即可重新命名。
+	assert.equal(isDefaultAgentTitle('<prompt_template name="翻译官"> # 翻译官工作规则 规则正文', project, translateTitle), true);
+	assert.equal(isDefaultAgentTitle('<prompt_template name="翻译官">', project, translateTitle), true);
+	// 正常标题（含用户手写的尖括号文本）不受影响。
+	assert.equal(isDefaultAgentTitle("修复登录流程", project, translateTitle), false);
+	assert.equal(isDefaultAgentTitle("<skill> 是什么意思", project, translateTitle), false);
+});

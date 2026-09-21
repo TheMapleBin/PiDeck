@@ -237,3 +237,25 @@ test("inferSessionNameFromFile returns undefined for files without inferable mes
 		rmSync(home, { recursive: true, force: true });
 	}
 });
+
+// 回归 2026-10 #250：首条 user 是展开后的自包含块（/模板、&会话、❝引用）时，
+// 头部补名必须只回退到块外文本，否则重开/扫描会把 `<prompt_template …>` 原文写回 catalog。
+test("inferSessionNameFromFile strips expanded reference blocks from the first user text", async () => {
+	const home = mkdtempSync(join(tmpdir(), "pi-scan-title-template-"));
+	const { SessionScanner: Scanner } = loadSessionScanner(home);
+	try {
+		const dir = join(home, ".pi", "agent", "sessions", "--C--Users-14012-pi-desktop-dev--");
+		const template = `<prompt_template name="翻译官">\n# 翻译官工作规则\n${"规则正文。".repeat(500)}\n</prompt_template>`;
+		const withText = join(dir, "2026-08-22T04-22-29-162Z_abc.jsonl");
+		writeSession(withText, [makeHeader("abc"), makeUser("u1", `${template}\n\nhow are you`)]);
+		const scanner = new Scanner();
+		assert.equal(await scanner.inferSessionNameFromFile(withText), "how are you");
+
+		// 只插了模板没写正文：回退到模板名（块标签），不是 XML 原文、也不是空标题。
+		const onlyTemplate = join(dir, "2026-08-22T04-22-29-163Z_def.jsonl");
+		writeSession(onlyTemplate, [makeHeader("def"), makeUser("u1", template)]);
+		assert.equal(await scanner.inferSessionNameFromFile(onlyTemplate), "/翻译官");
+	} finally {
+		rmSync(home, { recursive: true, force: true });
+	}
+});

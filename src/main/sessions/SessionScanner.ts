@@ -11,7 +11,7 @@ import { getCodexSessionThreadInfo } from "../../shared/codexSessionMeta";
 import { isInSubagentArtifactsDir, isValidPiSessionFileHead, looksLikePiSessionFileStem, SUBAGENT_ARTIFACTS_DIR_NAME } from "../../shared/sessionIdentity";
 import { extractMessageText, extractThinkingRaw } from "../pi/messageContent";
 import { isRoleMessageRole } from "../pi/sessionEntryIds";
-import { replaceExpandedRefBlocksWithLabels } from "../../shared/expandedRefBlocks";
+import { replaceExpandedRefBlocksWithLabels, textForSessionTitle } from "../../shared/expandedRefBlocks";
 import { toWindowsHostPath, toWslLinuxPath, type WslEnvironment } from "../wsl/WslPaths";
 import { getAppLogger } from "../logging/sharedLogger";
 import { isLegacySessionNameEntry, isLegacySessionNameLine, stripLegacySessionNameLine, tryRestorePathGluedHeader } from "./sessionNameLine";
@@ -130,7 +130,9 @@ function inferScanNameFromLines(lines: string[], extractText: (content: unknown)
 	// 此时权威性随其一并失效（时间戳名同样不能覆盖真实标题）。
 	const infoName = cleanScanTitle(latestSessionInfoName) || cleanScanTitle(name);
 	if (infoName) return { name: infoName, fromSessionInfo: true };
-	const fallback = cleanScanTitle(firstUserText) || cleanScanTitle(firstAssistantText);
+	// 首条 user 可能是展开后的 `/模板名` / `&会话引用` 块：先剥块正文，只拿用户自己写的字当回退标题，
+	// 否则重开/扫描会把 `<prompt_template …>` 原文写回 catalog（与 inferTitleFromMessages 同一套清洗）。
+	const fallback = cleanScanTitle(textForSessionTitle(firstUserText)) || cleanScanTitle(firstAssistantText);
 	if (fallback) return { name: fallback, fromSessionInfo: false };
 	return { name: undefined, fromSessionInfo: false };
 }

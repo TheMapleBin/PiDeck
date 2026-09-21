@@ -6,6 +6,7 @@ import type { SessionProxyOverride } from "../../shared/types/session";
 import { getAppLogger } from "../logging/sharedLogger";
 import { renameWithRetry } from "../utils/fsRetry";
 import { buildSessionOriginKey, buildSummaryOriginKey, canonicalizeSessionPath, collectSessionSubtreeIds, getImportedSessionSourceId, getSessionEnvironment, isInSubagentArtifactsDir, looksLikePiSessionFileStem } from "../../shared/sessionIdentity";
+import { looksLikeExpandedRefBlockTitle } from "../../shared/expandedRefBlocks";
 
 export type SessionCatalogEntry = {
 	id: string;
@@ -110,6 +111,9 @@ function catalogDisplayTitle(title: string | undefined): string | undefined {
 function isPlaceholderCatalogTitle(title: string | undefined): boolean {
 	if (!title) return true;
 	if (looksLikePiSessionFileStem(title)) return true;
+	// 未折叠的块原文标题（`<prompt_template …>` 等历史脏数据）同样是占位名：
+	// 允许全量扫描/头部补名把它换成首条消息，否则它会一直留在侧栏。
+	if (looksLikeExpandedRefBlockTitle(title)) return true;
 	return /^untitled(?: session)?$/i.test(title);
 }
 
