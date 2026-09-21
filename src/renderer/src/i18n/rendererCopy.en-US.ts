@@ -3891,9 +3891,11 @@ export const enUS: Record<TranslationKey, string> = {
 	"settings.busySendDeliverySteer": "Insert into current turn (deliver now)",
 	"settings.busySendDeliveryFollowUp": "Queue for next turn (send when the reply finishes)",
 	"settings.quickMessagesSection": "Quick messages",
-	"settings.quickMessagesSectionDesc":
-		"The list opened by the quick-message button in the composer bar: click an item to insert it into the draft, or use the button on its right to send it right away (your half-written draft is left untouched). Edits are written to the config file immediately — they do not follow this dialog's Save/Cancel.",
+	"settings.quickMessagesSectionDesc": "The list opened by the quick-message button in the composer bar. Edits are written to the config file right away — editing that file by hand works too.",
 	"settings.quickMessages": "Quick message items",
+	"settings.quickMessagesConfigure": "Configure…",
+	"settings.quickMessagesPreviewEmpty": "No items yet",
+	"settings.quickMessagesDone": "Done",
 	"settings.quickMessagesDesc": "The order here is the order in the popup — keep the most-used on top. Up to {max} items; blank rows are dropped when saving.",
 	"settings.quickMessagesEmpty": "No quick messages yet: add one, or restore the built-in list.",
 	"settings.quickMessagesPlaceholder": "e.g. continue",

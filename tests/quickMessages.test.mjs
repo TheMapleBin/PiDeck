@@ -327,7 +327,8 @@ test("弹框：每次打开都从磁盘重读（手工编辑配置文件后无�
 	assert.match(source, /onOpenChange=\{[\s\S]{0,200}?if \(next\) void refresh\(\)/, "打开弹框时应重读文件");
 	const hook = readSource("src/renderer/src/hooks/useQuickMessages.ts");
 	assert.match(hook, /const refresh = useCallback\(async \(\) => \{/);
-	assert.match(readSource("src/renderer/src/components/app/settings/QuickMessagesSetting.tsx"), /await refresh\(\);/, "设置页要能用「重新读取」同步外部编辑");
+	assert.match(readSource("src/renderer/src/hooks/useQuickMessageEditor.ts"), /await refresh\(\);/, "「重新读取」要真的重读磁盘（同步外部编辑）");
+	assert.match(readSource("src/renderer/src/components/app/settings/QuickMessagesDialog.tsx"), /onClick=\{\(\) => void editor\.reload\(\)\}/, "设置弹框里要能手动重新读取");
 });
 
 test("弹框形状：Popover + 紧凑表格 + 搜索 + 分页（不再是一列铺到底的菜单）", () => {
@@ -358,15 +359,32 @@ test("弹框交互：回车插入首条，且放过中文输入法组字（isCom
 	assert.match(picker, /const first = paged\.items\[0\];/);
 });
 
-test("设置页：即时保存配置文件，且不再参与设置弹框的草案/脏标记", () => {
-	const source = readSource("src/renderer/src/components/app/settings/QuickMessagesSetting.tsx");
-	assert.match(source, /anchor="common-quick-messages"/);
-	assert.match(source, /const \{ [^}]*save,[^}]*refresh,[^}]*openFile \} = useQuickMessages\(\)/);
+test("设置页：只留一行预览 + 配置更多入口，清单编辑搬到弹框（不再把 16 行铺进设置页）", () => {
+	const row = readSource("src/renderer/src/components/app/settings/QuickMessagesSetting.tsx");
+	assert.match(row, /anchor="common-quick-messages"/);
+	assert.match(row, /<QuickMessagesDialog open=\{dialogOpen\}/);
+	assert.match(row, /t\("settings\.quickMessagesConfigure"\)/);
+	// 行里不该再有逐条输入/排序控件：那正是把设置页撑长一屏半的原因
+	for (const leaked of ["<Input", "ArrowUp", "Trash2", "commitSoon", "save("]) {
+		assert.ok(!row.includes(leaked), `设置行不该包含 ${leaked}`);
+	}
+	// 预览只取前几条（用户要求「只显示几个」）
+	assert.match(row, /const preview = items\.slice\(0, PREVIEW_COUNT\)/);
+
+	const dialog = readSource("src/renderer/src/components/app/settings/QuickMessagesDialog.tsx");
+	assert.match(dialog, /max-h-\[min\(52vh,420px\)\][^"]*overflow-y-auto/, "弹框里的列表要自己滚，高度不随条数增长");
+});
+
+test("设置页：即时保存配置文件（打字合并 + 结构性操作立即 + 关闭时补写）", () => {
+	const editor = readSource("src/renderer/src/hooks/useQuickMessageEditor.ts");
+	assert.match(editor, /const \{ [^}]*save,[^}]*refresh,[^}]*openFile \} = useQuickMessages\(\)/);
 	// 打字合并写盘 + 结构性操作立刻写盘：两条路径都必须真的落到 save()
-	assert.match(source, /void save\(next\);/);
-	assert.match(source, /const ok = await save\(next\);/);
+	assert.match(editor, /void save\(next\);/);
+	assert.match(editor, /const ok = await save\(next\);/);
+	// 卸载时补写：否则「敲完直接关弹框」会丢掉最后几个字
+	assert.match(editor, /useEffect\(\(\) => \(\) => flushPending\(\), \[flushPending\]\)/);
 	// 组件不再接收 draft props（否则又会被卷进全局保存）
-	assert.ok(!/props\.value|props\.onChange/.test(source), "维护区应自持状态，不接收 draft props");
+	assert.ok(!/props\.value|props\.onChange/.test(editor), "维护区应自持状态，不接收 draft props");
 
 	const commonTab = readSource("src/renderer/src/components/app/settings/CommonTab.tsx");
 	assert.match(commonTab, /<QuickMessagesSetting \/>/);
@@ -396,6 +414,9 @@ test("文案：入口/设置项关键 key 中英都有（缺一个界面就露�
 		"settings.quickMessages",
 		"settings.quickMessagesSection",
 		"settings.quickMessagesDesc",
+		"settings.quickMessagesConfigure",
+		"settings.quickMessagesPreviewEmpty",
+		"settings.quickMessagesDone",
 		"settings.quickMessagesAdd",
 		"settings.quickMessagesReset",
 		"settings.quickMessagesSaved",
