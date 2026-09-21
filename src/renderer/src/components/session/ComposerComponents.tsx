@@ -231,6 +231,9 @@ export function ComposerBottomBar(props: {
 	disabled?: boolean;
 	/** thinking 按钮专用禁用：仅在 Agent 启动中禁用，运行中由后端决定是否接受修改。 */
 	thinkingDisabled?: boolean;
+	/** 分支切换专用禁用：agent 运行中保持锁定（切分支会真的改动工作区文件，
+	 *  正在跑的代码被换掉有风险）；「+」菜单等草稿/下一轮配置类入口不跟随此锁。 */
+	branchDisabled?: boolean;
 	/** 模型按钮专用禁用：仅启动中禁用；运行中优先直接交给后端，busy 时才排到下一轮。 */
 	modelDisabled?: boolean;
 	/** 生成进行中已选定、本轮结束后才套到 Agent 的模型（显示为 from→to）。 */
@@ -521,7 +524,7 @@ export function ComposerBottomBar(props: {
 					{/* 分支只读 chip 升级为可切换下拉：当前分支即触发器，展开列表选目标分支后
 					    先弹确认（切换会携带未提交更改），确认后才调栏级 switchBranch（绑定本栏项目）。 */}
 					{props.gitInfo?.current && props.onSwitchBranch ? (
-						<ComposerBranchSwitcher gitInfo={props.gitInfo} disabled={props.disabled} onSwitchBranch={props.onSwitchBranch} />
+						<ComposerBranchSwitcher gitInfo={props.gitInfo} disabled={props.branchDisabled ?? props.disabled} onSwitchBranch={props.onSwitchBranch} />
 					) : props.gitInfo?.current ? (
 						<span
 							className="composer-bar-branch inline-flex max-w-[12rem] items-center gap-1.5 truncate px-1.5 text-sm font-semibold text-foreground/75"
