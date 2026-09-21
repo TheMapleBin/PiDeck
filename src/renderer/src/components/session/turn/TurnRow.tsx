@@ -23,6 +23,7 @@ import { InterimAnswer } from "./InterimAnswer";
 import { ProcessSummaryToggle } from "./ProcessSummaryToggle";
 import { TurnAuthorHeader } from "./TurnAuthorHeader";
 import { ThinkingStep } from "./ThinkingStep";
+import { RetryStep } from "./RetryStep";
 import { ToolStep } from "./ToolStep";
 import { useTurnExecution } from "./useTurnExecution";
 import type { DiffFileHandler } from "../ToolCallComponents";
@@ -303,6 +304,9 @@ export const TurnRow = memo(function TurnRow(props: TurnRowProps) {
 										itemKey = item.entry.id;
 										if (item.entry.kind === "thinking-entry") {
 											content = <ThinkingStep group={item.entry.group} hidden={!stepsVisible} showThinking={props.showThinking} onOpenExternal={props.onOpenExternal} onOpenFile={props.onOpenFile} />;
+										} else if (item.entry.kind === "retry-entry") {
+											// 自动重试过程行：与工具/思考同层，失败红、运行中旋转（见 RetryStep 注释）
+											content = <RetryStep group={{ kind: "retry-group", id: item.entry.id, message: item.entry.message }} hidden={!stepsVisible} />;
 										} else {
 											content = <ToolStep group={item.entry.group} hidden={!stepsVisible} stopped={props.agentRunning !== true} sessionId={props.sessionId} onOpenFile={props.onOpenFile} />;
 										}

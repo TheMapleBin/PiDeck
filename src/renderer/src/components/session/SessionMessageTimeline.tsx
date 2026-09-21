@@ -19,7 +19,7 @@ import { t } from "../../i18n";
 import { cn } from "../../lib/utils";
 import { Loader2, LoaderCircle, Power } from "lucide-react";
 import { showNotice } from "../../utils/notice";
-import { composeFailureNotice, isTransientRetryCard, reduceFailureNoticePass, type FailureNoticePassState } from "./timelineFailureNotice";
+import { composeFailureNotice, isRetryStatusMessage, reduceFailureNoticePass, type FailureNoticePassState } from "./timelineFailureNotice";
 import { SessionStartSurface } from "./SessionStartSurface";
 import { NotifyMessageCard, shouldRenderNotifyCard } from "./NotifyMessageCard";
 import { MessageScroller } from "../agents/message-scroller";
@@ -971,11 +971,13 @@ export function SessionMessageTimeline(props: SessionMessageTimelineProps) {
 								return null;
 							}
 							// 重试成功卡是瞬态卡：连续重试每个周期各留一张，堆成一排「自动重试成功」很难看
-							// （用户反馈）。成功由 toast 即时报告，这里不渲染；进行中的重试卡与失败卡照常
-							// 渲染（失败要留痕，见 isTransientRetryCard）。
-							if (isTransientRetryCard(message)) return null;
-							// 系统诊断（含自动重试状态）一律渲染卡片：重试此前只弹 toast，
-							// 用户事后无从确认重试发生/重试到第几次，这里与 toast 并存留痕。
+							// （用户反馈）。成功由 toast 即时报告，这里不渲染。
+							// 自动重试状态卡（含运行中/失败）已收进所属 agent-run 内部作为过程行
+							// （groupToolMessages 的 retry-group 分支 → TurnRow RetryStep），
+							// 留痕职责由过程行承担，不再在时间线顶层渲染独立大卡片——
+							// 旧形态与工具时间线割裂且插在工具与后续回答之间（顺序错乱根因）。
+							if (isRetryStatusMessage(message)) return null;
+							// 系统诊断渲染卡片留痕（与 toast 并存，见 timelineFailureNotice）。
 							return <DiagnosticMessageCard key={message.id} message={message} />;
 						}
 						return null;
