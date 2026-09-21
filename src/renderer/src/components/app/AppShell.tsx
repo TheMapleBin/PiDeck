@@ -339,7 +339,15 @@ export function AppShell(props: AppShellProps) {
 
 	if (props.compactContent)
 		return (
-			<div className={cn("flex h-screen min-h-0 flex-col", !useNativeTitleBar && "custom-titlebar-enabled")}>
+			<div
+				className={[
+					"wechat-shell quick-task-shell",
+					useNativeTitleBar ? "" : "custom-titlebar-enabled",
+					!useNativeTitleBar && platform === "darwin" ? "mac-custom-titlebar" : "",
+				]
+					.filter(Boolean)
+					.join(" ")}
+			>
 				<AppHeader
 					useNativeTitleBar={useNativeTitleBar}
 					platform={platform}
@@ -351,7 +359,7 @@ export function AppShell(props: AppShellProps) {
 					onWindowMaximizedChange={onWindowMaximizedChange}
 					closeWindow={closeWindow}
 				/>
-				<main ref={chatPaneRef} className={cn("flex min-h-0 flex-1 flex-col", !useNativeTitleBar && "pt-10")}>
+				<main ref={chatPaneRef} className="flex min-h-0 flex-1 flex-col">
 					{props.compactContent}
 				</main>
 				{children}
