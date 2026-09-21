@@ -22,7 +22,7 @@ import { resolveComposerThinkingLevel } from "../../utils/thinkingDisplay";
 import { WELCOME_MODEL_KEY, isWelcomeModelLost, readWelcomeModelPreference, readWelcomeThinkingPreference, shouldClearWelcomePreference } from "../../utils/chatSessionBootstrap";
 import { useBackendModelCatalog } from "../../hooks/useBackendModelCatalog";
 import { CommandPickerGroup, CommandPickerPanel, type CommandPickerFilter } from "../ui-shadcn/command-picker";
-import { THINKING_LEVELS, computeModelPickerDefaultExpanded, groupModelsByProvider, modelPickerSearchFilter, modelRowLabel, orderProviderGroups, resolveModelPickerBody } from "./sessionPickerOptions";
+import { THINKING_LEVELS, computeModelPickerDefaultExpanded, groupModelsByProvider, modelPickerSearchFilter, modelRowLabel, modelRowName, orderProviderGroups, resolveModelPickerBody } from "./sessionPickerOptions";
 import type { AgentBackend, AgentRuntimeState, AvailableModel, ComposerAgentMode, GitBranchInfo, ModelListFailReason, ModelListReport, SessionRecord, UsageProbeBackend } from "../../../../shared/types";
 
 /** 单个 extension widget 卡片：可折叠标题栏 + 内容行，支持手动关闭 */
@@ -834,7 +834,7 @@ export function ModelPicker(props: {
 						<Star size={14} strokeWidth={1.8} fill={favorited ? "currentColor" : "none"} />
 					</button>
 				)}
-				<span className="min-w-0 flex-1 truncate font-mono text-control font-medium text-foreground" title={labels === modelKey ? undefined : `${labels} · ${modelKey}`}>
+				<span className="min-w-0 flex-1 truncate font-mono text-control font-medium text-foreground" title={`${modelRowName(model)} · ${modelKey}`}>
 					{labels}
 				</span>
 				{/* 隐藏模型操作按钮：悬停时显示，点击将模型放入隐藏列表 */}
@@ -903,7 +903,7 @@ export function ModelPicker(props: {
 								const labels = modelRowLabel(model);
 								return (
 									<CommandItem key={`hidden/${modelKey}`} value={`hidden/${modelKey}`} data-picker-value={modelKey} keywords={[model.name ?? "", model.id, model.provider, modelKey]} className="group min-h-9 items-center gap-2 rounded-md px-2.5 py-1 text-muted-foreground" onSelect={() => props.onPick(model)}>
-										<span className="min-w-0 flex-1 truncate font-mono text-control opacity-70" title={labels === modelKey ? undefined : `${labels} · ${modelKey}`}>
+										<span className="min-w-0 flex-1 truncate font-mono text-control opacity-70" title={`${modelRowName(model)} · ${modelKey}`}>
 											{labels}
 										</span>
 										<button
