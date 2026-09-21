@@ -10,13 +10,13 @@ import { Input } from "../ui-shadcn/input";
  * 放在工具栏与会话列表之间、滚动容器之外：列表本身很长，搜索框必须始终可见。
  * 命中数单独展示——列表是增量渲染的，屏幕上看到的行数不代表命中数。
  */
-export function ImportListSearchRow(props: { value: string; onChange: (value: string) => void; matchedCount: number; totalCount: number }) {
+export function ImportListSearchRow(props: { value: string; onChange: (value: string) => void; matchedCount: number; totalCount: number; placeholder?: string; label?: string }) {
 	const searching = props.value.trim().length > 0;
 	return (
 		<div className="flex items-center gap-3 border-b border-border-subtle bg-bg-muted px-4 py-2">
 			<label className="relative block min-w-0 flex-1">
 				<Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-				<Input type="search" value={props.value} onChange={(event) => props.onChange(event.currentTarget.value)} placeholder={t("importList.searchPlaceholder")} aria-label={t("importList.searchLabel")} className="h-8 pl-8 text-xs" />
+				<Input type="search" value={props.value} onChange={(event) => props.onChange(event.currentTarget.value)} placeholder={props.placeholder ?? t("importList.searchPlaceholder")} aria-label={props.label ?? t("importList.searchLabel")} className="h-8 pl-8 text-xs" />
 			</label>
 			{searching && (
 				<span className="shrink-0 text-xs text-text-tertiary" aria-live="polite">

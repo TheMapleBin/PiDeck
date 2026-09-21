@@ -1314,6 +1314,8 @@ export const enUS: Record<TranslationKey, string> = {
 	"directoryImport.chooseOther": "Choose another folder",
 	"directoryImport.sourceListTitle": "Existing session folders ({count})",
 	"directoryImport.sourceListDesc": "Pick one to list its sessions; only folders that actually hold sessions are listed",
+	"directoryImport.searchPlaceholder": "Search project path / group folder",
+	"directoryImport.searchLabel": "Search session folders",
 	"directoryImport.sourceListEmpty": "No pi session folders found",
 	"directoryImport.sourceListEmptyDesc": "pi session folders look like ~/.pi/agent/sessions/--D--work-old--. You can also pick a folder manually.",
 	"directoryImport.sourceMeta": "{count} sessions · used {time}",

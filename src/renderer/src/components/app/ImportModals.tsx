@@ -432,7 +432,8 @@ function SessionImportModal<T extends ImportSessionLike>(props: {
 					</div>
 				</div>
 				{!props.bodyOverride && !props.loading && props.sessions.length > 0 && <ImportListSearchRow value={filter.query} onChange={filter.setQuery} matchedCount={filter.matched.length} totalCount={filter.totalCount} />}
-				<div className="codex-import-body" ref={listRef}>
+				{/* 目录来源首屏自带内边距与滚动区（搜索行需全宽贴着工具栏），所以这里去掉 body 的 12px 内边距。 */}
+				<div className={props.bodyOverride ? "codex-import-body p-0" : "codex-import-body"} ref={listRef}>
 					{props.bodyOverride ? (
 						props.bodyOverride
 					) : props.loading ? (

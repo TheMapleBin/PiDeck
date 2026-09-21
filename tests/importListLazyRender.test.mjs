@@ -9,8 +9,19 @@ import test from "node:test";
  */
 const MODALS_SOURCE = readFileSync("src/renderer/src/components/app/ImportModals.tsx", "utf8");
 const WINDOW_HOOK_SOURCE = readFileSync("src/renderer/src/hooks/useLazyListWindow.ts", "utf8");
+const SOURCE_LIST_SOURCE = readFileSync("src/renderer/src/components/app/DirectoryImportSourceList.tsx", "utf8");
 
 const count = (source, pattern) => [...source.matchAll(pattern)].length;
+
+test("导入来源首屏（目录列表）同样走搜索 + 增量渲染", () => {
+	assert.match(SOURCE_LIST_SOURCE, /useImportSessionFilter\(/);
+	assert.match(SOURCE_LIST_SOURCE, /useLazyListWindow\(/);
+	// 目录卡片只能来自窗口切片，禁止直接遍历 props.sources 全量渲染。
+	assert.match(SOURCE_LIST_SOURCE, /listWindow\s*\.\s*visible\s*\.\s*map\(/);
+	assert.equal(count(SOURCE_LIST_SOURCE, /props\s*\.\s*sources\s*\.\s*map\(/g), 0);
+	// 搜索行必须渲染在自带滚动区之外（否则列表滚动时搜索框会跟着滚走）。
+	assert.match(SOURCE_LIST_SOURCE, /<ImportListSearchRow[\s\S]{0,600}?ref=\{scrollRef\}/);
+});
 
 test("导入弹窗的会话行只来自增量渲染窗口", () => {
 	// Codex 父行 / 未关联子代理 / 通用列表：三处都必须走窗口切片。

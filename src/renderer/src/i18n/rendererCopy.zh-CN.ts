@@ -1311,6 +1311,8 @@ export const zhCN = {
 	"directoryImport.chooseOther": "选择其他目录",
 	"directoryImport.sourceListTitle": "现有会话目录（{count}）",
 	"directoryImport.sourceListDesc": "点选一个即可列出其中的会话；列表只含真有会话的目录",
+	"directoryImport.searchPlaceholder": "搜索项目路径 / 分组目录",
+	"directoryImport.searchLabel": "搜索会话目录",
 	"directoryImport.sourceListEmpty": "没有找到 pi 的会话目录",
 	"directoryImport.sourceListEmptyDesc": "pi 的会话目录形如 ~/.pi/agent/sessions/--D--work-old--。也可以直接手动选一个目录。",
 	"directoryImport.sourceMeta": "{count} 个会话 · 使用于 {time}",
