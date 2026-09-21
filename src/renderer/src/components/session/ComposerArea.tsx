@@ -96,6 +96,8 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
 		// 预览 Tab 里发消息 → 自动晋升常驻（由 App 装配的 SessionPaneServices 提供）
 		onPromoteSession: useSessionPaneServices().promoteSessionToPermanent,
 		onCreateSession: useSessionPaneServices().runCreateSessionDraft,
+		// 输入框 `/login`：桌面接管后打开登录供应商弹框（pi 的登录只在它的 CLI 层）
+		onProviderLogin: useSessionPaneServices().openProviderLogin,
 	});
 
 	const modelPendingMap = useAtomValue(modelPendingByIdAtom);

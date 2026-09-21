@@ -47,6 +47,7 @@ import { useAnnouncementNotifier } from "./hooks/useAnnouncementNotifier";
 import { useModelsVerifyNotifier } from "./hooks/useModelsVerifyNotifier";
 import { useBackgroundAskPatrol } from "./hooks/useBackgroundAskPatrol";
 import { announcementCenterOpenAtom, announcementNotificationEnabledAtom } from "./atoms/announcement-atoms";
+import { openProviderLoginAtom } from "./atoms/providerLoginAtoms";
 import { useSessionLayout } from "./hooks/useSessionLayout";
 import { useFileEditor } from "./hooks/useFileEditor";
 import { resolveFileLinkPath } from "./utils/filePathLinks";
@@ -192,6 +193,8 @@ export function App() {
 	const setCurrentSessionId = useSetAtom(currentSessionIdAtom);
 	const replaceProjectSessions = useSetAtom(replaceProjectSessionsAtom);
 	const openAutomationModal = useSetAtom(openAutomationModalAtom);
+	// `/login`：打开供应商登录弹框（弹框自己从 atom 取预选供应商）。
+	const openProviderLogin = useSetAtom(openProviderLoginAtom);
 	const setProjects = useSetAtom(replaceProjectInventoryAtom);
 	const applyRuntimeEvent = useSetAtom(applySessionRuntimeEventAtom);
 	const upsertSession = useSetAtom(upsertSessionAtom);
@@ -3384,6 +3387,7 @@ export function App() {
 			onPreviewImage: setPreviewImage,
 			abortAgent,
 			restartActiveAgent,
+			openProviderLogin,
 			runCreateSessionDraft: async () => {
 				await createSessionDraftWithTab();
 			},
@@ -3454,6 +3458,7 @@ export function App() {
 			queueFlushBySessionRef,
 			restartActiveAgent,
 			restartingAgentId,
+			openProviderLogin,
 			resendUserMessage,
 			sessionDurationByAgent,
 			settings.showThinking,

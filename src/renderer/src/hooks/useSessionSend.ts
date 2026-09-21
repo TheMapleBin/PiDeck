@@ -1,6 +1,7 @@
 import { useSetAtom, useStore } from "jotai";
 import { useRef } from "react";
 import type { ComposerAgentMode, ImageContent, SendSessionPromptInput, SendSessionPromptResult, SessionRuntimeTarget } from "../../../shared/types";
+import { classifyComposerSlashCommand } from "../utils/composerSlashCommand";
 import {
 	bindSessionRuntimeAtom,
 	bumpNewTurnCollapseTickAtom,
@@ -57,6 +58,8 @@ export type UseSessionSendOptions = {
 	compact: (target: SessionRuntimeTarget, prompt?: string) => Promise<void>;
 	/** `/new`：桌面拦截后新建 Agent 会话（不发给 pi）。 */
 	createNewSession?: () => Promise<void>;
+	/** `/login [providerId]`：桌面拦截后打开登录供应商弹框（pi 的登录只在它的 CLI 层，走认证例外通道）。 */
+	openProviderLogin?: (providerId?: string) => void;
 	resetComposerUi?: () => void;
 	recordPromptHistory?: (sessionId: string, message: string) => void;
 	refreshProject?: (projectId: string) => void;
@@ -209,8 +212,19 @@ export function useSessionSend(options: UseSessionSendOptions) {
 		sendingSessionIdsRef.current.add(sourceSessionId);
 		const requestId = crypto.randomUUID();
 		const trimmedMessage = message.trim();
-		const isNewCommand = /^\/new\s*$/.test(trimmedMessage);
-		const isCompactCommand = /^\/compact(?:\s|$)/.test(trimmedMessage);
+		// 接管类命令统一由纯函数分类：这里只分派，不再散落正则（见 utils/composerSlashCommand.ts）。
+		const slashCommand = classifyComposerSlashCommand(trimmedMessage);
+		if (slashCommand.kind === "login") {
+			// `/login` 同样不是发给模型的消息：不写乐观用户气泡、不 ensureSessionId，
+			// 也不占 sending 锁（弹框里的登录与后续发送互不干扰）。
+			clearSnapshot(sourceSessionId);
+			options.resetComposerUi?.();
+			sendingSessionIdsRef.current.delete(sourceSessionId);
+			options.openProviderLogin?.(slashCommand.providerId);
+			return;
+		}
+		const isNewCommand = slashCommand.kind === "new";
+		const isCompactCommand = slashCommand.kind === "compact";
 		if (isNewCommand) {
 			// 不写乐观用户气泡、不 ensureSessionId：/new 是桌面 chrome，不是发给模型的消息。
 			clearSnapshot(sourceSessionId);
@@ -302,7 +316,8 @@ export function useSessionSend(options: UseSessionSendOptions) {
 				// No Agent yet — let normal send path start Agent first;
 				// pi will handle /compact command once active.
 			} else {
-				const compactPrompt = trimmedMessage.replace(/^\/compact\s*/, "").trim();
+				// 提示词由分类器统一剥离（`/compact` 后的内容按 pi 语义是自定义提示词）。
+				const compactPrompt = slashCommand.kind === "compact" ? slashCommand.prompt : "";
 				clearSnapshot(sessionId);
 				options.resetComposerUi?.();
 				try {

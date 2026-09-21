@@ -194,6 +194,10 @@
         "to": "xueprompts.db"
       },
       {
+        "from": "resources/pi-auth-host.mjs",
+        "to": "pi-auth-host.mjs"
+      },
+      {
         "from": "resources/pi-ai-catalog.json",
         "to": "pi-ai-catalog.json"
       },

@@ -140,6 +140,8 @@ export type UseSessionComposerControllerOptions = {
 	onPromoteSession?: (sessionId: string) => void;
 	/** `/new` 拦截后新建会话（与侧栏 + 同源）；来自 SessionPaneServices。 */
 	onCreateSession?: () => Promise<void>;
+	/** `/login` 拦截后打开登录供应商弹框；来自 SessionPaneServices。 */
+	onProviderLogin?: (providerId?: string) => void;
 	/** Passed through to useSessionSend.enqueue. */
 	enqueue?: (sessionId: string, snapshot: EnqueuePromptSnapshot) => boolean;
 };
@@ -965,6 +967,7 @@ export function useSessionComposerController(options: UseSessionComposerControll
 		},
 		onDraftMutation: markDraftMutation,
 		createNewSession: options.onCreateSession,
+		openProviderLogin: options.onProviderLogin,
 		compact: async (target, prompt) => {
 			await runManualCompact(target, prompt);
 		},

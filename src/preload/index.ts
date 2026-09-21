@@ -192,6 +192,19 @@ const api = {
 		onChanged: (callback: (state: import("../shared/types/quickTask").QuickTaskState) => void) => subscribe(ipcChannels.quickTaskChanged, callback),
 		exit: () => ipcRenderer.invoke(ipcChannels.quickTaskExit) as Promise<void>,
 	},
+	/**
+	 * pi 供应商认证（`/login`）：pi 的登录只在它的 CLI 交互层存在，应用内登录走
+	 * 这条例外通道（见 AGENTS.md「认证例外通道」）。调用方就是登录弹框。
+	 */
+	piAuth: {
+		listProviders: () => ipcRenderer.invoke(ipcChannels.piAuthListProviders) as Promise<{ ok: true; list: import("../shared/types/piAuth").PiAuthProviderList } | { ok: false; errorKind: import("../shared/types/piAuth").PiAuthErrorKind; error: string }>,
+		login: (request: import("../shared/types/piAuth").PiAuthLoginRequest) => ipcRenderer.invoke(ipcChannels.piAuthLogin, request) as Promise<import("../shared/types/piAuth").PiAuthLoginResult>,
+		/** 回填 pi 的提问（授权码/API key 等）；false = 提问已失效（取消或超时后迟到） */
+		answerPrompt: (promptId: string, value: string) => ipcRenderer.invoke(ipcChannels.piAuthAnswerPrompt, { promptId, value }) as Promise<boolean>,
+		cancel: () => ipcRenderer.invoke(ipcChannels.piAuthCancel) as Promise<boolean>,
+		logout: (providerId: string) => ipcRenderer.invoke(ipcChannels.piAuthLogout, providerId) as Promise<import("../shared/types/piAuth").PiAuthLogoutResult>,
+		onFlowUpdate: (callback: (update: import("../shared/types/piAuth").PiAuthFlowUpdate) => void) => subscribe(ipcChannels.piAuthFlowUpdate, callback),
+	},
 	shellMenu: {
 		getQuickTaskState: () => ipcRenderer.invoke(ipcChannels.shellMenuQuickTaskGetState) as Promise<{ supported: boolean; registered: boolean }>,
 		setQuickTaskEnabled: (enabled: boolean) => ipcRenderer.invoke(ipcChannels.shellMenuQuickTaskSetEnabled, enabled) as Promise<{ supported: boolean; registered: boolean }>,

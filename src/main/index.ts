@@ -209,6 +209,8 @@ import { DshAgentManager } from "./dsh/DshAgentManager";
 import { startDshHostInBackground } from "./dsh/startDshHostInBackground";
 import { importForeignSession, knownForeignSessionIds, syncForeignSessions, type DshForeignSyncDeps } from "./dsh/dshForeignSync";
 import { PiLocator } from "./pi/PiLocator";
+import { PiAuthService } from "./pi/auth/PiAuthService";
+import { resolvePiAuthHostLaunch } from "./pi/auth/piAuthHostLaunch";
 import { testPiProxy } from "./pi/PiProxyTester";
 import { SessionScanner } from "./sessions/SessionScanner";
 import { resolveLaunchDefaultOptions, isModelInModelsConfig } from "./sessions/launchDefaults";
@@ -299,6 +301,7 @@ import { AppLogger } from "./logging/AppLogger";
 import { setAppLogger } from "./logging/sharedLogger";
 import { RpcLogger } from "./logging/RpcLogger";
 import { registerEditorsIpc } from "./ipc/editorsIpc";
+import { registerPiAuthIpc } from "./ipc/piAuthIpc";
 import { detectExternalEditors, listConfiguredExternalEditors, mergeDetectedExternalEditors, openProjectInEditor, validateExternalEditorCommand } from "./editors/EditorDetector";
 import { FeishuBridge, type SessionRuntimeBindingGateway } from "./feishu/FeishuBridge";
 import { feishuT, normalizeFeishuLocale, type FeishuLocale } from "./feishu/FeishuI18n";
@@ -398,6 +401,11 @@ let environmentDoctor: EnvironmentDoctor | null = null;
 let logBundleExporter: LogBundleExporter | null = null;
 let feishuBridge: FeishuBridge | null = null;
 let usageStatsService: UsageStatsService | null = null;
+/**
+ * 供应商认证服务（`/login` 弹框的后端）：pi 的登录只在它的 CLI 交互层存在，
+ * 应用内登录必须绕过 RPC 直调 pi 的认证 API，见 AGENTS.md「认证例外通道」。
+ */
+let piAuthService: PiAuthService | null = null;
 /** 粘贴文件启动清理（registerIpc 阶段赋值；whenReady 后 fire-and-forget 执行） */
 let cleanupPasteFiles: (() => Promise<number>) | undefined;
 
@@ -2326,6 +2334,8 @@ function resolveBuiltInExtensionRoots(): BuiltInExtensionPathRoots {
 function registerIpc() {
 	// 用量统计：业务在 UsageStatsService，handler 薄层只校验/适配
 	registerUsageStatsIpc(ipcMain, usageStatsService);
+	// 供应商认证（/login）：同样只做校验/适配，进程与协议在 PiAuthService
+	registerPiAuthIpc(ipcMain, piAuthService);
 
 	if (automationStore && automationScheduler && automationRunCoordinator) {
 		registerAutomationIpc({
@@ -3201,6 +3211,32 @@ app
 		quitCleanup.register("git-refs-watcher", () => gitRefsWatcher.disposeAll());
 		worktreeService = new WorktreeService(mainCopy);
 		piLocator = new PiLocator(mainCopy);
+		// 认证助手（见 AGENTS.md「认证例外通道」）：每次操作现解析 pi 入口，
+		// 用户改自定义 pi 路径/代理后无需重启即可生效。
+		piAuthService = new PiAuthService({
+			resolveLaunch: () =>
+				resolvePiAuthHostLaunch({
+					settings: settingsStore.get(),
+					locator: piLocator as PiLocator,
+					userDataPath: app.getPath("userData"),
+					appPath: app.getAppPath(),
+					resourcesPath: process.resourcesPath,
+					isPackaged: app.isPackaged,
+				}),
+			logger: {
+				debug: (message) => void appLogger?.debug("pi-auth", message),
+				info: (message) => void appLogger?.info("pi-auth", message),
+				warn: (message) => void appLogger?.warn("pi-auth", message),
+				error: (message) => void appLogger?.error("pi-auth", message),
+			},
+		});
+		// 登录流程推送：弹框开着时才有接收方，窗口没了就静默丢弃（主进程仍会把结果落地）。
+		piAuthService.setFlowSink((update) => {
+			if (!mainWindow || mainWindow.isDestroyed()) return;
+			mainWindow.webContents.send(ipcChannels.piAuthFlowUpdate, update);
+		});
+		// C12：退出清理登记（before-quit 统一 runAll）——登录子进程必须随之回收。
+		quitCleanup.register("pi-auth", () => piAuthService?.dispose());
 		// DSH 用量链路（backend="dsh"）：配置落 $DSH_HOME/usage-probes.json、凭据从
 		// $DSH_HOME/.credentials.yaml 读，与 pi 侧链路（~/.pi/agent）完全同构、互不干扰。
 		// DSH_HOME 解析与 DshHost 同一套（设置覆盖 > ~/.dsh > 应用私有目录），getter 每次求值，

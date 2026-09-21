@@ -827,4 +827,16 @@ export const ipcChannels = {
 	shellMenuQuickTaskSetEnabled: "shell-menu:quick-task-set-enabled",
 	/** 渲染层 → 主进程：启用/取消资源管理器右键菜单注册 */
 	shellMenuSetEnabled: "shell-menu:set-enabled",
+
+	// ===== pi 供应商认证（登录/登出）=====
+	// 这是 PiDeck 访问 pi 内部能力的唯一例外通道：pi 的供应商登录只在它的 CLI 里，
+	// 没有 RPC 与扩展入口，所以由 PiDeck 拉起认证助手进程调用 pi 官方认证 API。
+	// 边界与纪律见仓库根 AGENTS.md「认证例外通道」，禁止在此通道上扩展非认证能力。
+	piAuthListProviders: "pi-auth:list-providers",
+	piAuthLogin: "pi-auth:login",
+	piAuthAnswerPrompt: "pi-auth:answer-prompt",
+	piAuthCancel: "pi-auth:cancel",
+	piAuthLogout: "pi-auth:logout",
+	/** 主进程 → 渲染层：登录流程的事件/提问推送 */
+	piAuthFlowUpdate: "pi-auth:flow-update",
 } as const;

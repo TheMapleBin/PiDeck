@@ -233,6 +233,16 @@ export function createPreviewApi(): PiDesktopApi {
 		clipboard: clipboardStub,
 		// 资源管理器右键菜单预览桩：预览环境无注册表操作，一律报不支持
 		quickTask: { getState: async () => ({ active: false, requestId: 0 }), onChanged: () => () => undefined, exit: async () => undefined },
+		// 预览模式没有真实 pi 认证宿主；提供与 preload 同形状的安全空实现，
+		// 避免新增认证能力让静态预览整站无法通过类型检查或初始化。
+		piAuth: {
+			listProviders: async () => ({ ok: false as const, errorKind: "sdk-unavailable" as const, error: "Pi auth is unavailable in preview mode." }),
+			login: async ({ providerId }: { providerId: string }) => ({ ok: false, cancelled: false, providerId, errorKind: "sdk-unavailable" as const, error: "Pi auth is unavailable in preview mode." }),
+			answerPrompt: async () => false,
+			cancel: async () => false,
+			logout: async (providerId: string) => ({ ok: false, providerId, error: "Pi auth is unavailable in preview mode." }),
+			onFlowUpdate: () => () => undefined,
+		},
 		shellMenu: {
 			getQuickTaskState: async () => ({ supported: false, registered: false }),
 			setQuickTaskEnabled: async () => ({ supported: false, registered: false }),
