@@ -1004,8 +1004,8 @@ export function useSessionComposerController(options: UseSessionComposerControll
 	const generateImage = useCallback(async () => {
 		const prompt = draft.trim();
 		if (!prompt || generatingImage) return;
-		const provider = findImageGenProvider(imageGenConfig, activeImageGenProviderId) ?? imageGenConfig.providers[0];
-		const modelId = provider && provider.models.includes(activeImageGenModelId) ? activeImageGenModelId : (provider?.models[0] ?? "");
+		const provider = findImageGenProvider(imageGenConfig, activeImageGenProviderId);
+		const modelId = provider?.models.includes(activeImageGenModelId) ? activeImageGenModelId : "";
 		if (!provider?.id || !modelId || !provider.baseUrl.trim() || !provider.apiKey.trim()) {
 			showNotice(t("imagegen.error.notConfigured"), 5000);
 			return;
