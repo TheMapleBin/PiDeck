@@ -193,12 +193,15 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
 											onPick={composer.suggestions.pick}
 										/>
 									) : null}
-									{/* 运行中允许后端尝试切换思考强度；是否能作用于当前回合由具体 Agent 后端决定。 */}
+									{/* 运行中只锁「会话启动瞬间」（isStarting）：「+」菜单（附件/技能/提示词/模式）
+									    与模式退出×都是改草稿或下一轮生效的配置，busy 时开放；
+									    分支切换会动工作区文件，用 branchDisabled 单独保留 busy 锁。 */}
 									<ComposerBottomBar
 										sessionId={props.sessionId}
 										state={composer.runtime?.state}
 										runtimeLive={isLiveRuntimeStatus(composer.runtime?.status)}
-										disabled={composer.isBusy || composer.isStarting}
+										disabled={composer.isStarting}
+										branchDisabled={composer.isBusy || composer.isStarting}
 										thinkingDisabled={composer.isStarting}
 										modelDisabled={composer.isStarting}
 										modelPending={modelPendingMap[props.sessionId]}
