@@ -127,6 +127,19 @@ export function orderProviderGroups(providers: string[], recentProviders?: strin
 }
 
 /**
+ * 模型选择器行的两段文本：主行展示名（name 回落 id），副行 `provider/id` 唯一标识。
+ *
+ * 为什么主行不再直接显示 provider/id：name 是用户在「模型」页配置的显示名（渠道别名、
+ * 中文名很常见），只显示 id 时同名不同渠道的模型难以分辨。副行必须保留 provider/id——
+ * 收藏栏与已隐藏栏都会跨供应商混排，此时没有分组标题提供 provider 上下文。
+ * name 缺失或仅含空白时主行回退 id（副行仍带 provider 前缀，不比原来更少信息）。
+ */
+export function modelRowLabels(model: { id: string; name?: string; provider: string }): { primary: string; secondary: string } {
+	const name = model.name?.trim();
+	return { primary: name ? name : model.id, secondary: `${model.provider}/${model.id}` };
+}
+
+/**
  * 模型选择器搜索过滤：子串精确匹配（替代 cmdk 内置 fuzzy）。
  *
  * 为什么不用默认 fuzzy：cmdk 1.1 的 command-score 对「任意子序列」都返回 >0 即显示，
