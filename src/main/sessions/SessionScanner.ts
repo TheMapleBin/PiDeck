@@ -1018,7 +1018,7 @@ export class SessionScanner {
 		return [this.defaultSessionsRoot];
 	}
 
-	/** 列出当前环境全部已归档会话（供恢复 UI 展示；带归档前原始路径供按项目归属过滤） */
+	/** 列出当前环境全部已归档会话（摘要从 JSONL 的 cwd 取 projectPath；原路径供恢复索引） */
 	async listArchived(): Promise<ArchivedPiSession[]> {
 		// 归档目录可能分布在任意扫描根下（默认全局根 + 项目 sessionDir），
 		// 用最近一次 list() 记录的扫描根集合遍历；未扫描过时退回默认根。
@@ -1037,7 +1037,7 @@ export class SessionScanner {
 				if (!summary) continue;
 				results.push({
 					summary,
-					// 索引缺失/损坏的极旧归档没有原始路径：弹窗不展示（配置页仍可全局恢复）。
+					// 索引缺失/损坏的极旧归档无法自动恢复；会话管理项目页会将其隐藏。
 					...(index[file] ? { originalPath: index[file] } : {}),
 				});
 			}
@@ -1890,7 +1890,7 @@ export class SessionScanner {
 		const summary: SessionSummary = {
 			id: filePath,
 			filePath,
-			projectPath: projectPath ? this.normalize(projectPath) : this.inferProjectPathFromFile(filePath),
+			projectPath: projectPath ? this.canonicalProjectPath(projectPath, isWsl) : this.inferProjectPathFromFile(filePath),
 			name: inferredName,
 			preview: preview.slice(0, 160),
 			updatedAt: info.mtimeMs,
@@ -2244,8 +2244,13 @@ export class SessionScanner {
 		}
 	}
 
+	private canonicalProjectPath(path: string, wsl: boolean) {
+		const normalized = path.replace(/\\/g, "/").replace(/\/+$/, "");
+		return wsl ? normalized : normalized.toLowerCase();
+	}
+
 	private normalize(path: string) {
-		return path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+		return this.canonicalProjectPath(path, false);
 	}
 
 	private safePathToken(path: string) {

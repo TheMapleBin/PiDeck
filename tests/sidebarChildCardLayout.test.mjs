@@ -110,13 +110,14 @@ test("sidebar omits the redundant projects heading and tabs shrink to their titl
 	// 项目标签不再作为独立分组标题，而是收拢到 Chats/项目分段 beUI Tab 的 trigger 文案
 	assert.match(sidebarContent, /<TabsTrigger[\s\S]{0,500}value="projects"[\s\S]{0,500}\{t\("app\.sidebarProjects"\)\}/);
 	// 固定 Tab 与普通 Tab 同宽策略：不再用 w-20 固定宽度（Pin 图标挤占标题空间）
-	// 宽度上限：会话 Tab 104px / 带前置徽章 132px（176/224 → 116/148 → 本轮再小一档）；
-	// 工作台文件 Tab 仍是 176px（max-w-44）——两者同栏但类型不同，本轮未同步收窄。
-	assert.match(tabBar, /"w-fit max-w-44",/);
-	assert.match(tabBar, /hasLeadingBadges \? "w-fit max-w-\[132px\]" : "w-fit max-w-\[104px\]",/);
-	// 回潮守卫：会话 Tab 不得回到 148/116（上一版）及 176/224 等旧上限（工作台 Tab 的 max-w-44 不在此断言内）
-	assert.doesNotMatch(tabBar, /hasLeadingBadges \? "w-fit max-w-(44|52|56|64|\[116px\]|\[148px\])/);
-	assert.doesNotMatch(tabBar, /max-w-52|max-w-64/);
+	// 宽度上限改为外观设置可调（sessionTabMaxWidth）：会话 Tab 与工作台文件/Diff Tab 同栏同源，
+	// 统一读根节点注入的 CSS 变量 --session-tab-max-w；带前置徽章（Pin/DSH/plan chip）的 Tab
+	// 读 +SESSION_TAB_BADGE_EXTRA_WIDTH 的 --session-tab-max-w-badged（见 shared/sessionTabWidth.ts）。
+	assert.match(tabBar, /"w-fit max-w-\(--session-tab-max-w\)",/);
+	assert.match(tabBar, /hasLeadingBadges \? "w-fit max-w-\(--session-tab-max-w-badged\)" : "w-fit max-w-\(--session-tab-max-w\)",/);
+	// 回潮守卫：宽度上限不得再写死像素值（104/116/132/148/176/224 等历史上限），必须走 CSS 变量
+	assert.doesNotMatch(tabBar, /w-fit max-w-\[?\d/);
+	assert.doesNotMatch(tabBar, /max-w-(?:44|52|56|64)\b/);
 	assert.doesNotMatch(tabBar, /pinned \? "w-20"/);
 	assert.match(tabBar, /session-tabs-scroll (?:relative )?flex (?:h-full )?min-w-0 flex-1/);
 	assert.match(tabBar, /session-tabs-actions flex shrink-0/);
