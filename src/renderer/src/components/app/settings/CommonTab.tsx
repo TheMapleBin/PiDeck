@@ -11,6 +11,7 @@ import { SettingsSection } from "./SettingsStorageTab";
 import { DirtyMarker, SettingBox, SettingRow, SettingSwitchRow } from "./SettingRows";
 import { VoiceTranscriptionSettingsSection } from "./VoiceTranscriptionSettingsSection";
 import { QuickTaskMenuSetting } from "./QuickTaskMenuSetting";
+import { QuickMessagesSetting } from "./QuickMessagesSetting";
 
 type CommonTabProps = {
 	draft: AppSettings;
@@ -290,6 +291,11 @@ export const CommonTab = memo(function CommonTab(props: CommonTabProps) {
 				{/* 流式对话设置：中间过程与本轮修改文件的默认展示行为。 */}
 				<SettingSwitchRow anchor="common-expand-interim-during-stream" title={t("settings.expandInterimDuringStream")} description={t("settings.expandInterimDuringStreamDesc")} checked={draft.expandInterimDuringStream} onChange={(checked) => updateDraft({ expandInterimDuringStream: checked })} />
 				<SettingSwitchRow anchor="common-collapse-prev-runs" title={t("settings.collapsePrevRunsOnNewTurn")} description={t("settings.collapsePrevRunsOnNewTurnDesc")} checked={draft.collapsePrevRunsOnNewTurn} onChange={(checked) => updateDraft({ collapsePrevRunsOnNewTurn: checked })} />
+			</SettingsSection>
+
+			{/* 快捷消息：数据在 userData/quick-messages.json，本区自持编辑状态并即时落盘（不参与全局草案/取消）。 */}
+			<SettingsSection title={t("settings.quickMessagesSection")} description={t("settings.quickMessagesSectionDesc")}>
+				<QuickMessagesSetting />
 			</SettingsSection>
 
 			{/* 闲置 Agent 内存优化：自动释放长时间闲置的 agent 进程，降低多会话内存占用 */}

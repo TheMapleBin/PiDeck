@@ -76,6 +76,12 @@ export const ipcChannels = {
 	catalogUpdateRestorePrevious: "catalog:update-restore-previous",
 	/** 模型目录打开文件：用系统默认程序打开当前生效目录文件（覆盖层优先，否则内置） */
 	catalogOpenFile: "catalog:open-file",
+	/** 快捷消息：读取 userData/quick-messages.json（文件缺失时用随包资源清单种子化） */
+	quickMessagesGet: "quick-messages:get",
+	/** 快捷消息：整体保存条目数组（顺序即弹框顺序，空数组代表用户清空） */
+	quickMessagesSave: "quick-messages:save",
+	/** 快捷消息：用系统默认程序打开配置文件（路径由主进程解析，渲染层不传路径） */
+	quickMessagesOpenFile: "quick-messages:open-file",
 	sessionsList: "sessions:list",
 	/** Session-first catalog APIs. */
 	sessionsCatalogList: "sessions:catalog-list",
