@@ -12,6 +12,7 @@ import type { CatalogCheckResult, CatalogUpdateResult, CatalogUpdateStatus } fro
 import type { BuiltInExtensionsCheckResult, BuiltInExtensionsUpdateResult, BuiltInExtensionsUpdateStatus } from "../shared/types/extensionsUpdate";
 import type { BuiltinContentCheckResult, BuiltinContentUpdateResult, BuiltinContentUpdateStatus } from "../shared/types/contentUpdate";
 import type { VoiceTranscriptionPublicConfig, VoiceTranscriptionRequest, VoiceTranscriptionResult, VoiceTranscriptionSaveInput, VoiceTranscriptionSaveResult } from "../shared/types/voiceTranscription";
+import type { QuickMessagesSaveResult, QuickMessagesSnapshot } from "../shared/types/quickMessages";
 import type {
 	YaoPromptListResult,
 	YaoPromptDetailResult,
@@ -1316,6 +1317,15 @@ const api = {
 		restorePrevious: () => ipcRenderer.invoke(ipcChannels.catalogUpdateRestorePrevious) as Promise<CatalogUpdateResult>,
 		/** 用系统默认程序打开当前生效的目录文件（覆盖层优先，否则内置） */
 		openFile: () => ipcRenderer.invoke(ipcChannels.catalogOpenFile) as Promise<void>,
+	},
+
+	// ── 快捷消息（独立配置文件 userData/quick-messages.json，可直接编辑） ──
+	quickMessages: {
+		get: () => ipcRenderer.invoke(ipcChannels.quickMessagesGet) as Promise<QuickMessagesSnapshot>,
+		/** 整体保存条目数组（顺序即弹框顺序，空数组 = 清空） */
+		save: (items: string[]) => ipcRenderer.invoke(ipcChannels.quickMessagesSave, items) as Promise<QuickMessagesSaveResult>,
+		/** 用系统默认程序打开配置文件（路径由主进程解析，文件不存在时会先生成） */
+		openFile: () => ipcRenderer.invoke(ipcChannels.quickMessagesOpenFile) as Promise<void>,
 	},
 
 	// ── 定时任务与自动化 ──

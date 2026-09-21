@@ -1,16 +1,18 @@
 /**
  * 快捷消息（composer 底栏「快捷消息」弹框里一键插入 / 直发的一句话指令）。
  *
- * 为什么放在 shared：主进程 SettingsStore 用它「兜底默认 + 保存时清洗」（用户可能手工改坏
- * settings.json），渲染层用同一份清单做首屏兜底与「恢复默认」——两处各写一份必然会漂移成
- * 「恢复默认恢复不出出厂那几条」。
+ * 数据流（2026-09 起改为「配置文件为准」）：
+ * - 唯一数据源是用户配置文件 `userData/quick-messages.json`（主进程 QuickMessageStore 读写，用户可直接编辑）；
+ * - 内置清单放在随包资源 `resources/quick-messages.default.json`，**不再硬编码在代码里**——
+ *   改出厂条目只需改 JSON，不必动 TS；文件缺失时首次读取会用它种子化用户配置文件；
+ * - 本模块只放两端共用的「上限 / 文件名 / 清洗」，settings.json 里的同名旧字段已废弃，
+ *   仅作为首次迁移的种子（见 QuickMessageStore）。
  *
- * 清单按「高频在前」排序：弹框不分组、不做搜索，前几条就是每天最常点的。
- * 内容取舍（见下方注释）：只收工作指令，不收闲聊/自测用词（hello、test、你是什么模型…），
- * 那些放进去只会把真正常用的项挤到下面。
+ * 为什么清洗放 shared：主进程读写文件、渲染层增删条目都走同一份规则，
+ * 两处各写一份必然会漂移成「界面允许但落盘被截掉」。
  */
 
-/** 上界：弹框一屏放得下十几条，再多就该用提示词模板；同时挡住 settings.json 被塞爆。 */
+/** 上界：弹框一屏放得下十几条，再多就该用提示词模板；同时挡住配置文件被塞爆。 */
 export const MAX_QUICK_MESSAGES = 30;
 
 /**
@@ -19,44 +21,32 @@ export const MAX_QUICK_MESSAGES = 30;
  */
 export const MAX_QUICK_MESSAGE_LENGTH = 200;
 
-/**
- * 出厂清单（16 条）。顺序即弹框展示顺序，改动等于改用户的第一屏，需谨慎。
- *
- * 前 4 条是最高频的「推进指令」（继续 / 提交 / 推送 / 提交推送），
- * 之后依次是「约束语气」（中文回答 / 完整文件 / 只改该改的）、「排查口令」与「流程口令」。
- */
-export const DEFAULT_QUICK_MESSAGES: readonly string[] = [
-	"继续",
-	"提交",
-	"推送",
-	"提交推送",
-	"用中文回答我",
-	"给出完整可运行的文件",
-	"只改我提到的部分，不要顺手改其它代码",
-	"参考项目里已有的实现和代码风格",
-	"不要添加不必要的注释",
-	"请仔细思考，确保正确且完整实现",
-	"再确认一下",
-	"还是不对，请重新排查",
-	"还是无法运行，先看报错再修",
-	"先检索查证再回答，不要凭猜测下结论",
-	"先别写代码，先梳理方案",
-	"review 一下这个 commit",
-];
+/** 用户配置文件（userData 下）与出厂资源文件的文件名，主进程与文档共用同一常量避免写错。 */
+export const QUICK_MESSAGES_FILE_NAME = "quick-messages.json";
+export const QUICK_MESSAGES_DEFAULT_RESOURCE_NAME = "quick-messages.default.json";
+
+/** 配置文件结构版本；将来结构变更时用它做迁移判据（当前只为可读性写入）。 */
+export const QUICK_MESSAGES_FILE_VERSION = 1;
+
+/** 配置文件结构：`{ version, items }`；items 顺序即弹框展示顺序。 */
+export type QuickMessagesFile = {
+	version: number;
+	items: string[];
+};
 
 /**
- * 清洗快捷消息清单：主进程加载 / 保存、渲染层兜底都走这里，保证各入口结果一致。
+ * 清洗条目：主进程加载 / 保存、渲染层增删都走这里，保证各入口结果一致。
  *
  * 规则与理由：
- * - 非数组（含 undefined）→ 回退出厂清单：字段缺失代表「旧 settings.json 还没这个字段」，
- *   而不是「用户清空了」；真正的清空是一个显式空数组；
+ * - 非数组或字段缺失 → 空数组（**不再回退出厂清单**：出厂清单在资源文件里，
+ *   由 QuickMessageStore 决定要不要种子化；显式空数组就是「用户清空了」）；
  * - 空白条目直接丢弃（误触回车留下的空行，留着重启后就是一个点不出效果的按钮）；
  * - 超长按上限截断而非丢弃（用户写了长句说明他确实想用，只是超了界面能接受的量级）；
  * - 去重（大小写无关）：弹框里两条一模一样的条目只会让人点错；
  * - 超出上限的部分丢弃：上限是防御性的，正常维护到不了。
  */
 export function normalizeQuickMessages(value: unknown): string[] {
-	if (!Array.isArray(value)) return [...DEFAULT_QUICK_MESSAGES];
+	if (!Array.isArray(value)) return [];
 	const seen = new Set<string>();
 	const result: string[] = [];
 	for (const item of value) {
@@ -71,4 +61,23 @@ export function normalizeQuickMessages(value: unknown): string[] {
 		if (result.length >= MAX_QUICK_MESSAGES) break;
 	}
 	return result;
+}
+
+/**
+ * 解析配置文件内容。
+ *
+ * 返回 null 表示「这不是一份可识别的快捷消息配置」——调用方据此走种子化流程；
+ * 返回 `{ items: [] }` 是合法结果，代表用户主动清空（不能与「文件损坏」混为一谈，否则清空后重启会复活出厂清单）。
+ * 同时接受裸数组写法（`["继续","提交"]`）：用户手写配置时最自然的形式，没必要逼他包一层对象。
+ */
+export function sanitizeQuickMessagesFile(raw: unknown): QuickMessagesFile | null {
+	if (Array.isArray(raw)) return { version: QUICK_MESSAGES_FILE_VERSION, items: normalizeQuickMessages(raw) };
+	if (!raw || typeof raw !== "object") return null;
+	const record = raw as Record<string, unknown>;
+	if (!("items" in record)) return null;
+	// items 不是数组 = 文件被改坏了，**不是**「清空」：交给调用方备份 + 重建，
+	// 否则手写的 `"items": "继续"` 会被静默当成空清单，用户内容消失且连 .bak 都没有。
+	if (!Array.isArray(record.items)) return null;
+	const version = typeof record.version === "number" && Number.isFinite(record.version) ? record.version : QUICK_MESSAGES_FILE_VERSION;
+	return { version, items: normalizeQuickMessages(record.items) };
 }

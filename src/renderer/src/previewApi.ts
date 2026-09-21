@@ -1,11 +1,13 @@
 import type { PiDesktopApi } from "../../preload";
 import { createDefaultExternalEditorSettings, createDefaultSecurityConfig, createDefaultSoundAlertSettings, DEFAULT_PET_SCALE } from "../../shared/types";
-import { DEFAULT_QUICK_MESSAGES } from "../../shared/quickMessages";
 import type { AppSettings, FileTreeNode, Project, SessionRecord, SessionSummary, TerminalDataEvent, TerminalExitEvent, TerminalTab } from "../../shared/types";
 import type { ResourceImportKind } from "../../shared/types/resourceImport";
 import { t } from "./i18n";
 
 const now = Date.now();
+
+/** 快捷消息预览夹具：预览/截图需要一个非空弹框；真实数据在 userData/quick-messages.json。 */
+const PREVIEW_QUICK_MESSAGES: readonly string[] = ["继续", "提交", "推送", "提交推送"];
 
 const projects: Project[] = [
 	{
@@ -102,10 +104,10 @@ let previewSettings: AppSettings = {
 	disabledSkills: [],
 	/** 提示词模板禁用列表：与 SettingsStore 默认一致，预览壳不启用模板白名单 */
 	disabledPrompts: [],
-	sessionTabOpenMode: "preview",
-	// 与 SettingsStore 默认一致：忙碌时发送默认「插入当前回合」
+	sessionTabOpenMode: "preview", // 与 SettingsStore 默认一致：忙碌时发送默认「插入当前回合」
 	busySendDelivery: "steer",
-	quickMessages: [...DEFAULT_QUICK_MESSAGES],
+	// 遗留字段：快捷消息已改存独立配置文件（预览模式没有真实文件，见下方 quickMessages 预览桩）
+	quickMessages: [],
 	enableGitManagement: true,
 	gitCommitMessagePrompt: "",
 	gitCommitMessageProvider: "",
@@ -1602,6 +1604,22 @@ export function createPreviewApi(): PiDesktopApi {
 			updateFromGithub: async () => ({ ok: false, code: "network", message: "preview stub" }),
 			restore: async () => ({ ok: true, updated: false }),
 			restorePrevious: async () => ({ ok: false, code: "no-backup", message: "preview stub" }),
+			openFile: async () => undefined,
+		},
+		// 快捷消息预览桩：预览模式没有真实配置文件（配置在 userData/quick-messages.json），
+		// 用固定夹具让弹框在预览/截图里可用，不假装能读写磁盘。
+		quickMessages: {
+			get: async () => ({
+				items: [...PREVIEW_QUICK_MESSAGES],
+				defaults: [...PREVIEW_QUICK_MESSAGES],
+				filePath: "(preview)",
+				seeded: false,
+				defaultsAvailable: false,
+			}),
+			save: async (items) => ({
+				ok: true as const,
+				snapshot: { items, defaults: [...PREVIEW_QUICK_MESSAGES], filePath: "(preview)", seeded: false, defaultsAvailable: false },
+			}),
 			openFile: async () => undefined,
 		},
 		automation: {

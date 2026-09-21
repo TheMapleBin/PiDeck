@@ -194,6 +194,10 @@
         "to": "xueprompts.db"
       },
       {
+        "from": "resources/quick-messages.default.json",
+        "to": "quick-messages.default.json"
+      },
+      {
         "from": "resources/pi-auth-host.mjs",
         "to": "pi-auth-host.mjs"
       },

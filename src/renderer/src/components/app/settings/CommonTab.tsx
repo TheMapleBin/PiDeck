@@ -293,9 +293,9 @@ export const CommonTab = memo(function CommonTab(props: CommonTabProps) {
 				<SettingSwitchRow anchor="common-collapse-prev-runs" title={t("settings.collapsePrevRunsOnNewTurn")} description={t("settings.collapsePrevRunsOnNewTurnDesc")} checked={draft.collapsePrevRunsOnNewTurn} onChange={(checked) => updateDraft({ collapsePrevRunsOnNewTurn: checked })} />
 			</SettingsSection>
 
-			{/* 快捷消息：输入框底栏弹框的内容维护入口（条目顺序 = 弹框顺序）。 */}
+			{/* 快捷消息：数据在 userData/quick-messages.json，本区自持编辑状态并即时落盘（不参与全局草案/取消）。 */}
 			<SettingsSection title={t("settings.quickMessagesSection")} description={t("settings.quickMessagesSectionDesc")}>
-				<QuickMessagesSetting value={draft.quickMessages} onChange={(next) => updateDraft({ quickMessages: next })} dirty={isDirty("quickMessages")} />
+				<QuickMessagesSetting />
 			</SettingsSection>
 
 			{/* 闲置 Agent 内存优化：自动释放长时间闲置的 agent 进程，降低多会话内存占用 */}

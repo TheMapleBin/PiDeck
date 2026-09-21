@@ -286,6 +286,9 @@ import { registerSystemIpc } from "./ipc/systemIpc";
 import { registerResourceImportIpc } from "./ipc/resourceImportIpc";
 import { registerBackupIpc } from "./ipc/backupIpc";
 import { registerCatalogIpc } from "./ipc/catalogIpc";
+import { registerQuickMessagesIpc } from "./ipc/quickMessagesIpc";
+import { QuickMessageStore } from "./quickmessages/QuickMessageStore";
+import { QUICK_MESSAGES_DEFAULT_RESOURCE_NAME, QUICK_MESSAGES_FILE_NAME } from "../shared/quickMessages";
 import { getPiAiCatalogIndex, lookupPiAiCatalogEntry, setPiAiCatalogUserDataDir } from "./pi/piAiBuiltinCatalog";
 import { PiAiCatalogUpdater } from "./pi/PiAiCatalogUpdater";
 import { fetchModelList, refreshModelCatalogIfStale, refreshModelList } from "./pi/modelListCache";
@@ -2866,6 +2869,16 @@ function registerIpc() {
 	}
 	updateService.start();
 	registerCatalogIpc(catalogUpdater);
+	// 快捷消息：唯一数据源是用户配置文件（可手工编辑），出厂清单来自随包资源文件。
+	// 两个路径只在此处解析，避免“读 A 写 B”的漂移（与 extensions 覆盖层同源的教训）。
+	const quickMessageStore = new QuickMessageStore({
+		getConfigPath: () => join(app.getPath("userData"), QUICK_MESSAGES_FILE_NAME),
+		getDefaultConfigPath: () => (app.isPackaged ? join(process.resourcesPath, QUICK_MESSAGES_DEFAULT_RESOURCE_NAME) : join(app.getAppPath(), "resources", QUICK_MESSAGES_DEFAULT_RESOURCE_NAME)),
+		// 旧版本把清单存在 settings.json：仅作首次种子化来源，升级后用户的已改条目不能丢。
+		getLegacyItems: () => settingsStore.get().quickMessages,
+		log: (scope, message, detail) => void appLogger.info(scope, message, detail),
+	});
+	registerQuickMessagesIpc(quickMessageStore, (scope, message, detail) => void appLogger.info(scope, message, detail));
 	registerBuiltInExtensionIpc(builtInExtensionsUpdater);
 	// TokenDance 目录 store 是共享实例：渲染层目录展示与一键安装（写入配置）读同一份缓存。
 	const tokendanceCatalogStore = new TokendanceCatalogStore({

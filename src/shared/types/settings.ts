@@ -116,10 +116,11 @@ export type AppSettings = {
 	 */
 	busySendDelivery: BusySendDelivery;
 	/**
-	 * 输入框底栏「快捷消息」弹框里的条目，数组顺序 = 弹框展示顺序。
-	 * 出厂值见 shared/quickMessages.ts 的 DEFAULT_QUICK_MESSAGES；用户在
-	 * 「设置 → 常用设置 → 快捷消息」增删改。空数组表示用户主动清空（不回填内置）。
-	 * 落盘边界由 normalizeQuickMessages 清洗（trim/去重/上限截断）。
+	 * **遗留字段**：输入框底栏「快捷消息」的条目曾存在这里。
+	 * 现已改为独立配置文件 userData/quick-messages.json（主进程 QuickMessageStore，读写都操作该文件），
+	 * 出厂清单在随包资源 resources/quick-messages.default.json。
+	 * 保留此字段只为升级时作「首次迁移种子」：用户升级后已改过的条目不能丢；
+	 * 渲染层不再读写它（改走 quickMessages:get / quickMessages:save）。
 	 */
 	quickMessages: string[];
 	/** 是否启用会话右侧的 Git 源代码管理入口与面板，默认开启以保持升级前行为。 */
@@ -261,6 +262,12 @@ export type AppSettings = {
 	 * 消息与输入框共享同一留白（--chat-content-pct），分屏窄栏时由容器查询自动收敛到 100%。
 	 */
 	chatContentWidthPct: number;
+	/**
+	 * 会话 Tab 最大宽度（px，80–400，默认 104=旧硬编码值）。仅封顶不设下限宽度：
+	 * Tab 按内容收缩（w-fit），短标题的 Tab 不受影响；有前置徽标时上限另加
+	 * SESSION_TAB_BADGE_EXTRA_WIDTH（28px，旧 132px 差值）。外观设置滑杆可调。
+	 */
+	sessionTabMaxWidth: number;
 	/** 编辑器最大文件大小（MB），超过此大小的文件不加载编辑器。默认 5MB。 */
 	maxEditorFileSizeMB: number;
 	/** 外部编辑器配置：首次异步检测后保存，用户可在设置中手动覆盖路径。 */

@@ -29,9 +29,9 @@ import { buildSettingsCommands, type PaletteCommand } from "./utils/commandPalet
 import { CommandPalette } from "./components/overlays/CommandPalette";
 import { CommandPaletteOnboarding, markCommandPaletteOnboardingSeen } from "./components/overlays/CommandPaletteOnboarding";
 import { desktopApi as api, isLanWeb, missingElectronPreload } from "./desktopApi";
-import { turnFlowSettingsAtom, defaultAgentBackendAtom, effectiveAgentBackendAtom, busySendDeliveryAtom, quickMessagesAtom, imageGenConfigAtom, dshRuntimeStatusAtom, openSettingsAtom, openAutomationModalAtom, sessionRecordsAtom, bumpNewTurnCollapseTickAtom } from "./atoms";
+import { turnFlowSettingsAtom, defaultAgentBackendAtom, effectiveAgentBackendAtom, busySendDeliveryAtom, imageGenConfigAtom, dshRuntimeStatusAtom, openSettingsAtom, openAutomationModalAtom, sessionRecordsAtom, bumpNewTurnCollapseTickAtom } from "./atoms";
 import { resolveBusySendDelivery } from "../../shared/busySendDelivery";
-import { DEFAULT_QUICK_MESSAGES } from "../../shared/quickMessages";
+import { SESSION_TAB_MAX_WIDTH_DEFAULT } from "../../shared/sessionTabWidth";
 import { FILE_TREE_ABSOLUTE_MAX_DEPTH } from "../../shared/fileTree";
 // 文件链接路由：图片类型走弹窗预览
 const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp", "svg", "avif", "bmp", "ico"]);
@@ -640,8 +640,9 @@ export function App() {
 		autoSessionTitle: false,
 		// 与 main SettingsStore 默认一致：忙碌时发送默认「插入当前回合」
 		busySendDelivery: "steer",
-		// 首屏先给出厂清单，settings.get 返回后由 useEffect 覆盖为落盘值
-		quickMessages: [...DEFAULT_QUICK_MESSAGES],
+		// 遗留字段：快捷消息已改存独立配置文件 userData/quick-messages.json（见 useQuickMessages），
+		// 这里保留字段只为满足 AppSettings 类型，内容不再被读取。
+		quickMessages: [],
 		enableGitManagement: true,
 		gitCommitMessagePrompt: "请根据以下 git diff 生成一条中文 git commit message。\n\n变更描述：\n{diff}\n\nGitmoji 对应关系：\n✨ feat - 新功能\n🐛 fix - Bug 修复\n📚 docs - 文档更新\n💎 style - 代码格式\n♻️ refactor - 重构\n🧪 test - 测试\n🔧 chore - 构建/工具",
 		gitCommitMessageProvider: "",
@@ -687,6 +688,7 @@ export function App() {
 		workspaceContentOpenMode: "split",
 		contentMaxWidth: 1800,
 		chatContentWidthPct: 80,
+		sessionTabMaxWidth: SESSION_TAB_MAX_WIDTH_DEFAULT,
 		maxEditorFileSizeMB: 5,
 		externalEditors: createDefaultExternalEditorSettings(),
 
@@ -754,14 +756,6 @@ export function App() {
 	useEffect(() => {
 		setBusySendDelivery(settings.busySendDelivery);
 	}, [settings.busySendDelivery, setBusySendDelivery]);
-
-	// 快捷消息清单同步给输入框底栏弹框：设置保存后无需重挂载会话即可生效。
-	// settings 里缺字段（旧 settings.json 且主进程未回填）时回内置清单，
-	// 不能落成空数组——那会让弹框凭空显示「还没有快捷消息」。
-	const setQuickMessages = useSetAtom(quickMessagesAtom);
-	useEffect(() => {
-		setQuickMessages(settings.quickMessages ?? [...DEFAULT_QUICK_MESSAGES]);
-	}, [settings.quickMessages, setQuickMessages]);
 
 	// 启动预热：应用起来后把「已开启用量查询」的供应商各查一次（串行错峰），
 	// 打开模型/认证页即可直接看到徽章数值，不必先手动刷新。
@@ -3304,6 +3298,8 @@ export function App() {
 
 	const sessionTabsProps = {
 		tabs: workspaceChrome.sessionTabIds,
+		// 会话 Tab 宽度上限（外观设置可调，默认 104px）：SessionTabsBar 据此写 CSS 变量控制各 Tab 封顶。
+		tabMaxWidth: settings.sessionTabMaxWidth,
 		pinnedTabs: workspaceChrome.pinnedSessionTabIds,
 		previewTabId: workspaceChrome.previewSessionTabId,
 		currentSessionId,
