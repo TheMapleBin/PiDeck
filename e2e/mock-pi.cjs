@@ -317,7 +317,9 @@ function startStream(userText, options = {}) {
 	const burst = userText.includes("BURST");
 	// prompt 含 "MDEMO" 时回复富 markdown，用于截图巡检渲染元素（链接/代码/表格/引用）
 	// raw 模式（Ask 回答回显）：不套模板、不截断，保证长 JSON 答案完整回传
-	const reply = options.raw
+	const reply = userText.startsWith("MATH_REPRO\n")
+		? userText.slice("MATH_REPRO\n".length)
+		: options.raw
 		? userText
 		: userText.includes("BURST")
 		? "Mock 回复：「BURST」" +
