@@ -313,6 +313,10 @@ function makeFakeHost({ muxFrames = [], failRespond = false, modelsValue = undef
 		getHomeDir() {
 			return "C:\\fake-dsh-home";
 		},
+		/** 与真实 DshHost 同源：会话文件路径按 workspaceDirFor 编码（WSL 转换在 DshHost 内完成）。 */
+		sessionFilePath(cwd, sessionId) {
+			return dshSessionFilePath(this.getHomeDir(), cwd, sessionId);
+		},
 		/** 冷读会话 cursor（0.1.5 session/page 的 throughSeq 来源）：夹具按日志长度模拟。 */
 		async readSessionCursor(sessionId) {
 			const log = historyBySession.get(sessionId) ?? [];
@@ -363,6 +367,9 @@ function makeColdStartHost() {
 		async resolveWorkspaceId(cwd) {
 			await this.ensureStarted();
 			return inner.host.resolveWorkspaceId(cwd);
+		},
+		sessionFilePath(cwd, sessionId) {
+			return inner.host.sessionFilePath(cwd, sessionId);
 		},
 		/** 冷读 cursor 与桥同步：真实 DshHost.bridgeRpc 先 ensureStarted，冷启动下同样要等。 */
 		async readSessionCursor(sessionId) {

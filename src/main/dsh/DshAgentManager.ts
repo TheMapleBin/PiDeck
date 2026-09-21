@@ -30,8 +30,6 @@ import {
 import { applyDshControlEvent, beginDshCancel, type DshControlState } from "./dshRuntimeControl";
 import { toDshAvailableModels } from "./dshModels";
 import { approvalUiRequest, buildDshRejectValue, buildDshRespondValue, parseDshApprovalFrame, parseDshQuestionFrame, questionUiRequest, type DshApprovalFrame, type DshQuestionFrame } from "./dshApprovalBridge";
-// DSH 会话持久化路径编码（与 DshHost 归档共用同一 workspace 目录名规则）
-import { dshSessionFilePath } from "./dshSessionPath";
 import { assembleDshHistoryEntries, countDshUserMessages, DSH_HISTORY_DEFAULT_TURN_PAGE_SIZE, normalizeDshTurnPageSize, planDshHistoryRounds, trimToOldestTurnStart } from "./dshHistoryPagePlan";
 
 const DSH_PROJECTION_KEYS = ["contextPressure", "contextBreakdown", "tokenUsage", "sessionStats", "todos"];
@@ -186,9 +184,10 @@ export class DshAgentManager implements SessionAgentGateway {
 	/**
 	 * 按 cwd + dsh sessionId 推导 host 会话文件路径（F5：渲染层右键「复制会话文件路径」用，
 	 * 历史会话无运行时 tab 时也拿得到）。DSH 会话文件是 zstd 压缩日志，路径仅作定位。
+	 * 目录编码交给 DshHost（按 host 视角路径推导，WSL 项目必须是 H:\... 形式）。
 	 */
 	resolveSessionFilePath(cwd: string, dshSessionId: string): string {
-		return dshSessionFilePath(this.dshHost.getHomeDir(), cwd, dshSessionId);
+		return this.dshHost.sessionFilePath(cwd, dshSessionId);
 	}
 
 	async create(input: CreateAgentInput): Promise<AgentTab> {
@@ -277,7 +276,7 @@ export class DshAgentManager implements SessionAgentGateway {
 			agentPreset: attachedAgentPreset ?? createdAgentPreset,
 			createdAt: Date.now(),
 			// DSH 会话文件（侧栏右键「复制会话文件路径」；attach 时同步写回 catalog 记录）
-			sessionPath: dshSessionFilePath(this.dshHost.getHomeDir(), cwd, sessionId),
+			sessionPath: this.dshHost.sessionFilePath(cwd, sessionId),
 		};
 		const runtime: DshAgentRuntime = {
 			tab,
@@ -502,7 +501,7 @@ export class DshAgentManager implements SessionAgentGateway {
 			status: "idle",
 			createdAt: Date.now(),
 			// attach 同一会话：文件路径不变（沿用旧 id 的 host 会话文件）
-			sessionPath: dshSessionFilePath(this.dshHost.getHomeDir(), cwd, sessionId),
+			sessionPath: this.dshHost.sessionFilePath(cwd, sessionId),
 		};
 		const runtime: DshAgentRuntime = {
 			tab,
@@ -1477,7 +1476,7 @@ export class DshAgentManager implements SessionAgentGateway {
 			status: "idle",
 			createdAt: Date.now(),
 			// fork/clone 产生新 dsh sessionId：会话文件路径同步更新
-			sessionPath: dshSessionFilePath(this.dshHost.getHomeDir(), runtime.cwd, newSessionId),
+			sessionPath: this.dshHost.sessionFilePath(runtime.cwd, newSessionId),
 		};
 		const nextRuntime: DshAgentRuntime = {
 			...runtime,

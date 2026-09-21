@@ -2988,6 +2988,9 @@ function registerIpc() {
 		configureConfigManagerWsl: (env) => configManager.configureWsl(env),
 		configureXuePromptManagerWsl: (env) => xuePromptManager.configureWsl(env),
 		configureAgentManagerWsl: (env) => agentManager.configureWsl(env),
+		// DSH host 同样需要 WSL 环境：它拿到的 workspace 路径必须是 Windows 主机路径
+		// （WSL 模式下项目是 /mnt/...，host 的 realpath 会算到 C:\mnt 而报 ENOENT）。
+		configureDshHostWsl: (env) => dshHost.configureWsl(env),
 		sessionCommandIpcError,
 		// 重启路径需要同步 isQuitting / 停服务，避免 closeToTray 吞掉 relaunch
 		webServiceManager,
@@ -3977,6 +3980,9 @@ app
 				});
 				await sessionScanner.configureWsl(wslEnv);
 				agentManager.configureWsl(wslEnv);
+				// DSH host 是 Windows 原生进程：WSL 项目的 workspace 路径与会话目录编码
+				// 都要按主机路径算，否则 workspace.resolve 失败、会话建不出来。
+				dshHost.configureWsl(wslEnv);
 				skillManager.configureWsl(wslEnv);
 				promptManager.configureWsl(wslEnv);
 				extensionManager.configureWsl(wslEnv);
@@ -3989,6 +3995,7 @@ app
 			} else {
 				sessionScanner.clearWsl();
 				agentManager.configureWsl(null);
+				dshHost.configureWsl(null);
 				skillManager.configureWsl(null);
 				promptManager.configureWsl(null);
 				extensionManager.configureWsl(null);
