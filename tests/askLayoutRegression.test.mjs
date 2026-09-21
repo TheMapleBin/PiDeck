@@ -105,15 +105,22 @@ test("Ask options render as full-width horizontal bars, one per row", () => {
 	// 2026-12 用户反馈：2/4 列栅格在长文案下把选项压成窄条，标签与说明挤在一起。
 	// 单选/多选/单卡三条渲染路径统一改成整行横条（flex-col + w-full），
 	// 与 WebTimeline 的既有选项语言一致；不得退回 grid-cols-* 栅格。
-	const bars = overlay.match(/className="flex min-w-0 flex-col gap-1.5"/g) ?? [];
+	const bars = overlay.match(/className="flex min-w-0 flex-col gap-2"/g) ?? [];
 	assert.equal(bars.length, 3, "batch select / batch multi_select / single select must all be one-per-row bars");
 	assert.doesNotMatch(overlay, /grid-cols-[24]/);
 	// 横条高度由内容决定（长描述自然换行），不再靠 72px 固定最小高度对齐栅格单元。
 	assert.doesNotMatch(overlay, /min-h-\[72px\]/);
-	// 横条收紧为紧凑密度（2026-12 用户反馈：横条不够紧密）：26px 下限 + 3px 纵向内边距 + 收紧行高。
-	assert.match(overlay, /ask-inline-bar-option h-auto min-h-\[26px\] w-full min-w-0 max-w-none flex-col items-start justify-center gap-0 px-2 py-\[3px\] text-left break-words whitespace-normal/);
-	assert.match(overlay, /text-caption font-medium leading-\[1\.35\] text-text-primary/);
-	assert.match(overlay, /text-\[10px\] font-normal leading-\[1\.3\] text-text-tertiary/);
+	// 横条密度：整行横条 + 32px 下限 + 6px 纵向内边距。
+	// 2026-12 用户反馈「很密集不舒服」：曾压到 26px/3px/1.35，观感过挤。
+	assert.match(overlay, /ask-inline-bar-option h-auto min-h-\[32px\] w-full min-w-0 max-w-none items-center justify-start gap-1\.5 px-2\.5 py-1\.5 text-left break-words whitespace-normal/);
+	// 说明与标签同一行、同字号（text-caption）、空格分隔，只靠颜色淡（tertiary）区分——
+	// 用户反馈：说明别用小字、也别压成第二行（大屏上又小又局限）；禁止再引入破折号/小字。
+	assert.match(overlay, /<span className="text-text-primary">\{label\}<\/span>/);
+	assert.match(overlay, /<span className="text-text-tertiary">\{` \$\{description\}`\}<\/span>/);
+	assert.doesNotMatch(overlay, /text-micro font-normal leading-\[1\.5\] text-text-tertiary/);
+	assert.doesNotMatch(overlay, / — \$\{description\}/);
+	// 说明同一行后横条是单行布局，不再 flex-col 两行堆叠。
+	assert.doesNotMatch(overlay, /min-h-\[32px\][^"]*flex-col/);
 	// 题号行「详情 i/n」已删（用户反馈：多余，tab 已有序号 + 头部有进度）。
 	assert.doesNotMatch(overlay, /common\.details/);
 });
@@ -123,7 +130,7 @@ test("Plan/simple select options render as single-row optically aligned buttons"
 	// live 卡选项改为单行：固定高度 + 标签不缩 + 说明 truncate，等宽等高光学对齐。
 	// TimelineEventCards 的 AskQuestionCard 死代码与其专属 CSS 已删除（2026-08 清理），
 	// 该视觉语言现只由 SessionRuntimeUiOverlay 的 ask-inline-bar-option 承载。
-	assert.match(overlay, /ask-inline-bar-option h-\[26px\] w-full min-w-0 max-w-none items-center justify-start gap-2 px-2 py-0 text-left/);
+	assert.match(overlay, /ask-inline-bar-option h-\[32px\] w-full min-w-0 max-w-none items-center justify-start gap-2 px-2\.5 py-0 text-left/);
 	assert.match(overlay, /max-w-\[45%\] shrink-0 truncate text-caption font-medium leading-none text-text-primary/);
 	assert.match(overlay, /min-w-0 flex-1 truncate text-micro leading-none text-text-tertiary/);
 });
