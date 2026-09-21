@@ -1981,15 +1981,18 @@ export class SessionScanner {
 	}
 
 	/**
-	 * 有界读取文件头 + 文件尾，并在小会话中精确扫描最后一个 session_info。
-	 * 返回会话头原文、推断标题与来源标记（不写摘要缓存）。
+	 * `includeTitle=true` 时有界读取头尾，并在小会话中精确扫描最后一个 session_info。
+	 * `false` 时只读取有界头部，供已锁定 catalog 记录补结构元数据而不触碰标题窗口。
 	 */
-	private async readHeadAndInfer(filePath: string): Promise<{ raw: string; name: string | undefined; nameFromSessionInfo: boolean } | null> {
+	private async readHeadAndInfer(filePath: string, includeTitle = true): Promise<{ raw: string; name: string | undefined; nameFromSessionInfo: boolean } | null> {
 		const isWsl = this.isWslPath(filePath);
 		try {
-			const version = isWsl ? await this.readWslFileVersion(filePath) : await stat(filePath);
 			const windowBytes = SessionScanner.SUMMARY_NAME_WINDOW_BYTES;
 			const head = isWsl ? await this.readWslFileHead(filePath, windowBytes) : await this.readLocalFilePrefix(filePath, windowBytes);
+			// Locked catalog records only need the bounded header for structural metadata.
+			// Avoid stat/tail/full-file title work when their persisted title is already final.
+			if (!includeTitle) return { raw: head, name: undefined, nameFromSessionInfo: false };
+			const version = isWsl ? await this.readWslFileVersion(filePath) : await stat(filePath);
 			let titleText = head;
 			if (version.size > windowBytes) {
 				const tail = isWsl ? await this.readWslFileTail(filePath, windowBytes) : await this.readLocalFileSuffix(filePath, windowBytes, version.size);
@@ -2012,7 +2015,7 @@ export class SessionScanner {
 
 	/**
 	 * 有界读文件头部推断会话标题（不读完整正文、不写摘要缓存）。
-	 * 供 SessionCatalog 对「标题仍是占位符」的会话补名——轻量扫描（listPathSummary）不带 name，
+	 * 供 SessionCatalog 对新发现或未锁定 provisional 会话补名——轻量扫描（listPathSummary）不带 name，
 	 * 未打开过的 pi 会话若只在打开/重命名时才能获得标题，侧栏会一直 Untitled。
 	 */
 	async inferSessionNameFromFile(filePath: string): Promise<string | undefined> {
@@ -2056,11 +2059,11 @@ export class SessionScanner {
 	 * valid:false，供 catalog 在 mergeScanned 时拒绝索引（#168）。读不到文件时
 	 * 返回空对象（valid 缺省 = 不拒绝），兼容权限/锁定文件不被误删。
 	 * nameFromSessionInfo 只描述 title 的文件来源；catalog 仅在首次发现或未确认的
-	 * 占位标题阶段采用该名称，后续 pi/TUI 改名不会覆盖 PiDeck 显示标题。
-	 * 与 inferSessionNameFromFile 共用同一次读取，补名与校验不重复读盘。
+	 * provisional 标题阶段采用该名称，后续 pi/TUI 改名不会覆盖 PiDeck 显示标题。
+	 * `includeTitle:false` 只返回头部有效性和结构元数据，不读取尾部或小文件全文。
 	 */
-	async inferSessionNameAndValidity(filePath: string): Promise<{ name?: string; nameFromSessionInfo?: boolean; valid?: boolean; parentSessionPath?: string; forked?: boolean }> {
-		const head = await this.readHeadAndInfer(filePath);
+	async inferSessionNameAndValidity(filePath: string, options: { includeTitle?: boolean } = {}): Promise<{ name?: string; nameFromSessionInfo?: boolean; valid?: boolean; parentSessionPath?: string; forked?: boolean }> {
+		const head = await this.readHeadAndInfer(filePath, options.includeTitle !== false);
 		if (!head) return {};
 		const parentSessionPath = await this.detectFlatSubagentParentFromHead(filePath, head.raw);
 		const forked = this.detectForkedFromHead(head.raw);
@@ -2125,7 +2128,7 @@ export class SessionScanner {
 	 * 仅读头部（SUMMARY_NAME_WINDOW_BYTES），不触碰完整正文。
 	 */
 	async probeTintinwebSubagentParent(filePath: string): Promise<string | undefined> {
-		const head = await this.readHeadAndInfer(filePath);
+		const head = await this.readHeadAndInfer(filePath, false);
 		if (!head) return undefined;
 		return this.detectFlatSubagentParentFromHead(filePath, head.raw);
 	}

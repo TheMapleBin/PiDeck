@@ -80,7 +80,7 @@ type SessionCatalogContext = {
  */
 export type SessionFilePathResolver = (projectId: string, filePath: string, environment: SessionEnvironment) => string;
 
-/** 会话标题读取与有效性校验的合并结果：name 仅用于首次索引或未确认的占位标题；
+/** 会话标题读取与有效性校验的合并结果：name 仅用于首次索引或未确认的 provisional 标题；
  * valid:false 表示文件非有效 Pi 会话（如 pi-subagents transcript 转储，首条记录用 recordType 而无 type 头），
  * mergeScanned 应拒绝索引该文件（#168）；parentSessionPath 仅供平铺子代理形态
  * （@tintinweb/pi-subagents：parentSession header + 会话名 <agent>#<8hex>）回填父关系，
@@ -89,10 +89,15 @@ export type SessionFilePathResolver = (projectId: string, filePath: string, envi
  * 只做列表 (fork) 标记，不影响 parentSessionPath 的折叠语义。 */
 export type SessionTitleFetchResult = { name?: string; nameFromSessionInfo?: boolean; valid?: boolean; parentSessionPath?: string; forked?: boolean };
 
+export type SessionTitleFetchOptions = {
+	/** false = only inspect the bounded header for structural metadata; do not read name windows. */
+	includeTitle?: boolean;
+};
+
 /** 标题刷新 + 会话头有效性校验：装配层注入（实现为 SessionScanner.inferSessionNameAndValidity，
  * 见 main/index.ts）。读取结果为首次发现和未确认 provisional 标题提供初始化值；已有 catalog 标题
  * 不再跟随 pi-tui /name 或 JSONL 的后续变化。 */
-export type SessionTitleFetcher = (filePath: string) => Promise<SessionTitleFetchResult>;
+export type SessionTitleFetcher = (filePath: string, options?: SessionTitleFetchOptions) => Promise<SessionTitleFetchResult>;
 
 /** 扫描未读正文时没有 session_info。pi JSONL 文件名是时间戳，不能当标题，否则侧栏全是日期。 */
 function scannedFileStemTitle(filePath: string): string {
@@ -1038,9 +1043,10 @@ export class SessionCatalog {
 		);
 	}
 
-	/** 对新文件、未确认的 provisional 标题，或需要校验结构元数据的变更文件读取会话头尾。
-	 * 已有 catalog 标题不从这里同步：PiDeck 显示名不兼容 pi-tui /name 的反向写入。
-	 * 标题读取仍顺带校验会话头、补平铺子代理父关系和 fork 标记。 */
+	/** 对新文件、未确认 provisional 标题，或需要一次性回填旧子代理父关系的条目读取会话头。
+	 * 已锁定 catalog 标题不会因为文件 mtime 变化而补读：PiDeck 已持久化显示名，
+	 * 也不再关心 JSONL 中段或尾部追加的 session_info。标题读取仍顺带校验会话头、
+	 * 补平铺子代理父关系和 fork 标记。 */
 	private async collectScannedTitles(summaries: SessionSummary[], context: SessionCatalogContext): Promise<{ names: Map<string, string>; invalid: Set<string>; parents: Map<string, string>; forked: Map<string, boolean> }> {
 		const names = new Map<string, string>();
 		const invalid = new Set<string>();
@@ -1048,20 +1054,23 @@ export class SessionCatalog {
 		const forked = new Map<string, boolean>();
 		if (!this.fetchTitle) return { names, invalid, parents, forked };
 		const byOrigin = new Map(this.entries.filter((entry) => entry.originKey).map((entry) => [entry.originKey!, entry]));
-		const wanted: Array<{ originKey: string; filePath: string }> = [];
+		const wanted: Array<{ originKey: string; filePath: string; includeTitle: boolean }> = [];
 		for (const summary of summaries) {
 			const originKey = buildSummaryOriginKey(summary, context);
-			// readSummary 全量路径已携带权威标题，无需再次读盘。
-			if (catalogDisplayTitle(summary.name)) continue;
 			const existing = byOrigin.get(originKey);
-			if (existing) {
+			if (existing && isTitleLocked(existing)) {
+				// Existing PiDeck-owned sessions do not need title freshness. The only
+				// retained disk probe repairs a legacy flat subagent's missing parent link,
+				// and requests header-only metadata rather than a full title scan.
 				const tintinwebOrphan = existing.source === "pi" && !existing.parentSessionPath && /^[^#]+#[0-9a-f]{8}$/i.test(existing.title);
-				const fileVersionChanged = existing.updatedAt !== summary.updatedAt;
-				const needsInitialTitle = !isTitleLocked(existing);
-				// 标题本身不需要重读，但文件变化仍要做有效性校验和结构元数据补齐。
-				if (!needsInitialTitle && !tintinwebOrphan && !fileVersionChanged) continue;
+				if (tintinwebOrphan) wanted.push({ originKey, filePath: summary.filePath, includeTitle: false });
+				continue;
 			}
-			wanted.push({ originKey, filePath: summary.filePath });
+			// readSummary 全量路径已携带初始名称，无需再次读盘。
+			if (catalogDisplayTitle(summary.name)) continue;
+			// New files and explicitly unlocked provisional records need one exact title
+			// read; every other locked record remains entirely out of this path.
+			wanted.push({ originKey, filePath: summary.filePath, includeTitle: true });
 		}
 		if (wanted.length === 0) return { names, invalid, parents, forked };
 		// 有界并行读头部；限制并发避免 WSL 环境一次拉起过多 wsl.exe。
@@ -1071,9 +1080,9 @@ export class SessionCatalog {
 		const workers = Array.from({ length: Math.min(CONCURRENCY, wanted.length) }, async () => {
 			while (cursor < wanted.length) {
 				const item = wanted[cursor++];
-				const result = await this.fetchTitle!(item.filePath).catch(() => undefined);
+				const result = await this.fetchTitle!(item.filePath, { includeTitle: item.includeTitle }).catch(() => undefined);
 				if (!result) continue;
-				if (result.name) {
+				if (item.includeTitle && result.name) {
 					names.set(item.originKey, result.name);
 				}
 				// valid 显式为 false 才拒绝；缺省（读不到/未校验）保留原行为

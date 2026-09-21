@@ -213,6 +213,32 @@ test("inferSessionNameAndValidity finds the latest session_info in the former he
 	}
 });
 
+test("metadata-only inference does not enter title tail or full-file paths", async () => {
+	const home = mkdtempSync(join(tmpdir(), "pi-scan-title-metadata-only-"));
+	const { SessionScanner: Scanner } = loadSessionScanner(home);
+	try {
+		const file = join(home, ".pi", "agent", "sessions", "--C--Users-14012-pi-desktop-dev--", "2026-08-22T04-22-29-162Z_abc.jsonl");
+		const padding = "x".repeat(70 * 1024);
+		writeSession(file, [makeHeader("abc"), makeAssistant("a1", padding), { type: "session_info", id: "i1", parentId: "a1", timestamp: "2026-08-22T04:23:00.000Z", name: "A-456" }, makeAssistant("a2", padding)]);
+		const scanner = new Scanner();
+		// TypeScript private methods are regular methods at runtime. Throwing here proves
+		// the metadata-only branch returns after the bounded head read.
+		scanner.readLocalFileSuffix = async () => {
+			throw new Error("metadata-only probe must not read the tail");
+		};
+		scanner.inferLatestSessionInfoFromSmallFile = async () => {
+			throw new Error("metadata-only probe must not stream the title");
+		};
+
+		const inferred = await scanner.inferSessionNameAndValidity(file, { includeTitle: false });
+		assert.equal(inferred.name, undefined);
+		assert.equal(inferred.nameFromSessionInfo, false);
+		assert.equal(inferred.valid, true);
+	} finally {
+		rmSync(home, { recursive: true, force: true });
+	}
+});
+
 test("inferSessionNameFromFile skips pi timestamp stems and untitled text", async () => {
 	const home = mkdtempSync(join(tmpdir(), "pi-scan-title-skip-"));
 	const { SessionScanner: Scanner } = loadSessionScanner(home);

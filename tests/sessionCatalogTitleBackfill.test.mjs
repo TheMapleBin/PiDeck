@@ -10,8 +10,8 @@ import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
  * SessionCatalog 占位标题回填测试（fetchTitle 注入链路）。
  *
  * 背景：侧栏轻量扫描（listPathSummary）不带 name，未打开过的 pi 会话标题落成
- * Untitled。mergeScanned 通过注入的 SessionTitleFetcher 对占位标题做有界读头部补名：
- * 只读「标题仍是占位符」的文件，已有真实标题的条目不触发读盘。
+ * Untitled。mergeScanned 通过注入的 SessionTitleFetcher 对新发现或未锁定 provisional
+ * 条目做有界标题读取；已有真实 catalog 标题的记录不再因文件变化触发读盘。
  */
 
 const nodeRequire = createRequire(import.meta.url);
@@ -120,16 +120,16 @@ test("an externally appended pi session_info cannot overwrite an existing catalo
 		assert.equal(initial.title, "PiDeck 旧标题");
 		assert.equal(fetcherCalls, 0);
 
-		// pi-tui /name 会在 JSONL 追加 session_info 并改变 mtime/size；扫描可继续读它做
-		// 文件有效性/结构元数据校验，但 PiDeck catalog 已有显示标题时不得被反向覆盖。
+		// pi-tui /name 会在 JSONL 追加 session_info 并改变 mtime/size；catalog 已有
+		// PiDeck-owned 标题时，刷新甚至不再读取该文件，只保留持久化显示名。
 		const [renamed] = await catalog.mergeScanned("project-1", [lightSummary({ updatedAt: 2000 })]);
 		assert.equal(renamed.title, "PiDeck 旧标题");
-		assert.equal(fetcherCalls, 1);
+		assert.equal(fetcherCalls, 0);
 
-		currentTitle = "不应在未变化时重复读取";
+		currentTitle = "锁定记录不得因后续刷新读盘";
 		const [unchanged] = await catalog.mergeScanned("project-1", [lightSummary({ updatedAt: 2000 })]);
 		assert.equal(unchanged.title, "PiDeck 旧标题");
-		assert.equal(fetcherCalls, 1);
+		assert.equal(fetcherCalls, 0);
 	} finally {
 		await rm(dir, { recursive: true, force: true });
 	}
@@ -209,10 +209,10 @@ test("a non-authoritative first-message fallback must not overwrite an existing 
 		assert.equal(initial.title, "Add usage probe config");
 		assert.equal(fetcherCalls, 0);
 
-		// 第二轮：文件版本变化触发补名回读，但回读结果是弱回退（没命中 session_info）。
+		// 第二轮即使文件版本变化，锁定记录也不做补名读取；PiDeck 已有最终展示标题。
 		const [afterSecondRound] = await catalog.mergeScanned("project-1", [lightSummary({ updatedAt: 2000 })]);
-		assert.equal(afterSecondRound.title, "Add usage probe config", "weak fallback must not clobber the real title");
-		assert.equal(fetcherCalls, 1);
+		assert.equal(afterSecondRound.title, "Add usage probe config", "locked catalog title must not be re-read from JSONL");
+		assert.equal(fetcherCalls, 0);
 
 		// 即使 fetcher 明确命中新的 session_info，已有 catalog 标题仍保持不变。
 		const authoritativeFetcher = async () => ({ name: "pi-tui 重命名后的标题", valid: true, nameFromSessionInfo: true });
@@ -292,18 +292,24 @@ test("legacy tintinweb orphans get parentSessionPath backfilled and persisted", 
 	try {
 		const childPath = "C:/sessions/2026-08-22T04-23-00-162Z_child.jsonl";
 		const parentPath = "C:/sessions/2026-08-22T04-22-29-162Z_parent.jsonl";
-		// 无 fetcher 首次合并：孤儿条目落库（无父关系，旧版行为）。
+		// 无 fetcher 首次合并：模拟旧 catalog 已有真实子代理名，但没有父关系。
 		const plain = new SessionCatalog(join(dir, "sessions.json"));
 		await plain.load();
-		const [orphan] = await plain.mergeScanned("project-1", [lightSummary({ id: childPath, filePath: childPath })]);
+		const [orphan] = await plain.mergeScanned("project-1", [lightSummary({ id: childPath, filePath: childPath, name: "Explore#a1b2c3d4" })]);
 		assert.equal(orphan.parentSessionPath, undefined, "legacy index has no parent link yet");
 
-		// 升级后的 fetcher（会探测到父）：嫌疑名回检应重新读头并补父关系。
-		const fetcher = async (filePath) => (filePath === childPath ? { name: "Explore#a1b2c3d4", valid: true, parentSessionPath: parentPath } : { name: "Parent" });
+		// 升级后的 fetcher（会探测到父）：只读头元数据补父关系，不能再为标题扫描中段。
+		const fetchOptions = [];
+		const fetcher = async (filePath, options) => {
+			fetchOptions.push(options);
+			return filePath === childPath ? { name: "Explore#a1b2c3d4", valid: true, parentSessionPath: parentPath } : { name: "Parent" };
+		};
 		const upgraded = new SessionCatalog(join(dir, "sessions.json"), {}, undefined, fetcher);
 		await upgraded.load();
 		const [repaired] = await upgraded.mergeScanned("project-1", [lightSummary({ id: childPath, filePath: childPath })]);
 		assert.equal(repaired.parentSessionPath, parentPath, "orphan parent link must be backfilled");
+		assert.equal(fetchOptions.length, 1);
+		assert.equal(fetchOptions[0]?.includeTitle, false, "legacy structural repair must request header-only metadata");
 		// 落入磁盘：下次扫描无需再探测读盘。
 		const onDisk = JSON.parse(await nodeRequire("node:fs/promises").readFile(join(dir, "sessions.json"), "utf8"));
 		const persisted = onDisk.sessions?.find((entry) => entry.filePath === childPath);
