@@ -36,6 +36,7 @@ import type {
 	ArchivedDshSession,
 } from "../../shared/types";
 import { parseSessionProcessEventsFromFile } from "../sessions/sessionProcessEventsFile";
+import { dshUnavailablePageFor } from "../dsh/dshManualStop";
 import { downgradeRunningStartedBefore, downgradeStaleRunning } from "../pi/derivedSubagents";
 import { resolveLaunchDefaultOptions, isModelInModelsConfig } from "../sessions/launchDefaults";
 import { BackgroundScanCoordinator } from "../sessions/BackgroundScanCoordinator";
@@ -869,7 +870,17 @@ export function registerSessionIpc(deps: SessionIpcDeps): void {
 		// （游标 = 事件 seq），与 pi 的磁盘分页同形状（messages/total/nextBefore）；
 		// 第三条参数在 pi 路径是「轮数」，所以 DSH 这里按 turnCount 传（main 侧换算消息预算）。
 		if (entry?.backend === "dsh" && entry.dshSessionId && readDshHistoryPage) {
-			return readDshHistoryPage(entry.dshSessionId, before, { turnCount: pageSize });
+			try {
+				return await readDshHistoryPage(entry.dshSessionId, before, { turnCount: pageSize });
+			} catch (error) {
+				// 手动停止态下历史读取必然失败且不会自愈（预热/按需兜底/崩溃重启全被门控）：
+				// 转成带原因的空页，让渲染层出「运行时已停止 + 启动 host」专态，而不是把
+				// host 未运行报成「会话文件已删除/路径失效」——DSH 会话没有 pi 会话文件。
+				// 其余错误（host 崩溃 / 文件损坏）继续抛，渲染层按普通失败处理。
+				const unavailable = dshUnavailablePageFor(error);
+				if (unavailable) return unavailable;
+				throw error;
+			}
 		}
 		if (entry?.backend === "imagegen" || !entry?.filePath) {
 			// imagegen 后端会话（可能残留无意义 pi filePath）或纯生图草稿：

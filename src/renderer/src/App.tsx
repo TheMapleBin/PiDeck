@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { showNotice, type NoticeKind } from "./utils/notice";
 import { copyTextWithCopiedNotice } from "./utils/clipboardNotice";
+import { sessionHistoryUnavailableState } from "./utils/sessionHistoryAvailability";
 import { buildSettingsCommands, type PaletteCommand } from "./utils/commandPaletteCommands";
 import { CommandPalette } from "./components/overlays/CommandPalette";
 import { CommandPaletteOnboarding, markCommandPaletteOnboardingSeen } from "./components/overlays/CommandPaletteOnboarding";
@@ -2120,6 +2121,13 @@ export function App() {
 		setSessionMessageLoadState({ sessionId, state: { status: "loading" } });
 		try {
 			const page = await api.sessions.readRecordMessagePage(sessionId, undefined, 100);
+			// DSH host 被手动停止：读盘返回带原因的空页，不是「空会话」。
+			// 必须早退，否则 force 写空缓存会把这个会话洗成空白（看着像数据丢了）。
+			const unavailable = sessionHistoryUnavailableState(page);
+			if (unavailable) {
+				setSessionMessageLoadState({ sessionId, state: unavailable });
+				return;
+			}
 			setCacheMessages({
 				sessionId,
 				messages: page.messages,

@@ -4019,6 +4019,12 @@ export const enUS: Record<TranslationKey, string> = {
 	"editor.unsavedMarker": " · Unsaved",
 	"timeline.loadFailed": "Session history failed to load",
 	"timeline.loadFailedHint": "Cannot read the session file; it may have been deleted or its path is stale. Retry, or check the session files under the project directory.",
+	// DSH host manually stopped: not a stale session file (DSH sessions have no pi session
+	// file) but a deliberately stopped runtime that will not self-heal — the copy must point
+	// at "Start host", the only way back.
+	"timeline.dshHostStopped": "DSH runtime is manually stopped",
+	"timeline.dshHostStoppedHint": 'This session\'s history lives on the DSH side and needs the host online. You stopped it manually in settings, so PiDeck will not start it automatically — click "Start host and retry" to resume.',
+	"timeline.dshHostStoppedStart": "Start host and retry",
 	"common.retry": "Retry",
 	"timeline.loadingMore": "Loading...",
 	"timeline.loadEarlierTurns": "Show {count} earlier turns",

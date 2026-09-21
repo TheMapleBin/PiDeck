@@ -3,7 +3,9 @@ import { atom, useAtomValue, useSetAtom, useStore } from "jotai";
 import { animateScrollTop, pinScrollDurationMs } from "../lib/pinTurnScroll";
 import { selectAtom } from "jotai/utils";
 import { desktopApi } from "../desktopApi";
-import type { AgentRuntimeState, ChatMessage, SessionRecord } from "../../../shared/types";
+import type { AgentRuntimeState, ChatMessage, SessionMessagePage, SessionRecord } from "../../../shared/types";
+import { t } from "../i18n";
+import { sessionHistoryUnavailableState } from "../utils/sessionHistoryAvailability";
 import {
 	cacheSessionMessagesAtom,
 	clearSessionHistoryAtom,
@@ -313,6 +315,11 @@ export type SessionTimelineController = {
 	 * 绕过「已加载 + 有缓存就跳过」和 runtime 缓存守卫。
 	 */
 	reloadFromDisk: () => Promise<void>;
+	/**
+	 * DSH host 被手动停止时的恢复入口：先显式启动 host（唯一能解开手动停止标记的
+	 * 路径），再重载本会话历史。返回是否启动成功；false 时调用方给用户提示。
+	 */
+	startDshHostAndReload: () => Promise<boolean>;
 };
 
 export function useSessionTimelineController(options: { sessionId?: string; messages?: ChatMessage[] }): SessionTimelineController {
@@ -483,8 +490,16 @@ export function useSessionTimelineController(options: { sessionId?: string; mess
 
 		void desktopApi.sessions
 			.readRecordMessagePage(sessionId, undefined, DISK_INITIAL_TURN_PAGE_SIZE)
-			.then((page: { messages: ChatMessage[]; total: number; nextBefore: number | null }) => {
+			.then((page: SessionMessagePage) => {
 				if (latestLoadBySession.get(sessionId) !== sequence) return;
+				// DSH host 被手动停止：历史暂时读不了——不是空历史、也不是会话文件失效。
+				// 必须进专态而不是写空缓存，写缓存会把它显示成空会话 + 起始页，
+				// 用户看到「这个会话没了」而真实原因是运行时被自己停了（2026-09 反馈）。
+				const unavailable = sessionHistoryUnavailableState(page);
+				if (unavailable) {
+					setLoadState({ sessionId, state: unavailable });
+					return;
+				}
 				cacheMessages({
 					sessionId,
 					messages: page.messages,
@@ -515,6 +530,13 @@ export function useSessionTimelineController(options: { sessionId?: string; mess
 		try {
 			const page = await desktopApi.sessions.readRecordMessagePage(sessionId, undefined, DISK_INITIAL_TURN_PAGE_SIZE);
 			if (latestLoadBySession.get(sessionId) !== sequence) return;
+			// 与首屏同源：手动停止态下重试仍不会成功，保持专态
+			//（否则「重试」会把错误态洗成空会话，又回到用户看到的错误方向）。
+			const unavailable = sessionHistoryUnavailableState(page);
+			if (unavailable) {
+				setLoadState({ sessionId, state: unavailable });
+				return;
+			}
 			cacheMessages({
 				sessionId,
 				messages: page.messages,
@@ -536,6 +558,22 @@ export function useSessionTimelineController(options: { sessionId?: string; mess
 			throw error;
 		}
 	}, [cacheMessages, options.sessionId, setLoadState]);
+
+	/**
+	 * DSH host 被手动停止时的恢复入口（时间线专态的「启动 host 并重试」）。
+	 *
+	 * 为什么不能只重试读盘：手动停止态不会自愈——预热 / 按需兜底 / 崩溃重启 /
+	 * runtime 安装恢复全被 isManualStopped 门控拒掉（见 dshManualStop），只有用户
+	 * 显式 startDshHost（主进程清标记后 boot）才能恢复。所以先启动、再重载。
+	 */
+	const startDshHostAndReload = useCallback(async () => {
+		// 启动失败不抛：保持专态等用户再点（真正原因会由后续读盘的错误态/日志暴露）。
+		const started = await desktopApi.sessions.startDshHost().catch(() => false);
+		if (!started) return false;
+		// reloadFromDisk 失败会自行写 error 态并 rethrow，这里不重复上报。
+		await reloadFromDisk().catch(() => undefined);
+		return true;
+	}, [reloadFromDisk]);
 
 	const diskPage = controllerEnabled && cachedEntry?.source === "disk" ? cachedEntry.page : undefined;
 	// ── 激活显示窗口（2026-08 激活分页）──
@@ -1092,8 +1130,14 @@ export function useSessionTimelineController(options: { sessionId?: string; mess
 				setLoadMoreError(null);
 				void desktopApi.sessions
 					.readRecordMessagePage(sessionId, before, RUNTIME_HISTORY_TURN_PAGE_SIZE)
-					.then((page: { messages: ChatMessage[]; total: number; nextBefore: number | null }) => {
+					.then((page: SessionMessagePage) => {
 						if (latestLoadBySession.get(sessionId) !== sequence) return;
+						// 翻页期间 host 被停：保留已加载内容，出可辨识的失败行（静默丢弃这一页
+						// 会让「加载更多」看起来没反应），下次点击仍可重试。
+						if (sessionHistoryUnavailableState(page)) {
+							setLoadMoreError(t("timeline.dshHostStopped"));
+							return;
+						}
 						if (prependMessagePage({ sessionId, before, expectedRevision, page })) {
 							// 历史消息页最多只开放一个 3 轮 cohort；数据页可能按消息数返回很多轮，
 							// 不能再固定 +10 把 DOM 一次性解锁，剩余已加载数据交给本地扩窗。
@@ -1148,8 +1192,13 @@ export function useSessionTimelineController(options: { sessionId?: string; mess
 					.readRecordMessagePage(sessionId, before ?? (anchorFilePos !== undefined ? anchorFilePos : undefined), RUNTIME_HISTORY_TURN_PAGE_SIZE, {
 						beforeEntryId: anchorEntryId ?? runtimeHistory?.nextBeforeEntryId ?? undefined,
 					})
-					.then((page) => {
+					.then((page: SessionMessagePage) => {
 						if (latestLoadBySession.get(sessionId) !== sequence) return;
+						// 与 disk 翻页同一语义：host 被停时不把空页当新历史，出失败行
+						if (sessionHistoryUnavailableState(page)) {
+							setLoadMoreError(t("timeline.dshHostStopped"));
+							return;
+						}
 						if (prependHistoryPage({ sessionId, expectedRevision, before, page })) {
 							// runtime history 页与 DOM 使用同一 3 轮 cohort；缓存命中和文件回退
 							// 都只开放实际带回的轮数，避免数据 +3、窗口却 +10。
@@ -1617,5 +1666,6 @@ export function useSessionTimelineController(options: { sessionId?: string; mess
 		isSurfaceLoading,
 		knownEmpty,
 		reloadFromDisk,
+		startDshHostAndReload,
 	};
 }

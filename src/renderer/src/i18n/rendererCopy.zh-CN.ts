@@ -4009,6 +4009,11 @@ export const zhCN = {
 	"editor.unsavedMarker": " · 未保存",
 	"timeline.loadFailed": "会话历史加载失败",
 	"timeline.loadFailedHint": "无法读取会话文件，可能已被删除或路径失效。可重试，或检查该项目目录下的会话文件。",
+	// DSH host 被手动停止：不是文件失效（DSH 会话没有 pi 会话文件），而是运行时没在跑，
+	// 且手动停止态不会自愈——文案必须给出「启动 host」这个唯一恢复路径。
+	"timeline.dshHostStopped": "DSH 运行时已手动停止",
+	"timeline.dshHostStoppedHint": "这个会话的历史存在 DSH 侧，需要 host 在线才能读取。你在设置里手动停止了它，PiDeck 不会自动启动——点「启动 host 并重试」即可恢复。",
+	"timeline.dshHostStoppedStart": "启动 host 并重试",
 	"common.retry": "重试",
 	"timeline.loadingMore": "加载中...",
 	"timeline.loadEarlierTurns": "显示更早的 {count} 轮对话",
