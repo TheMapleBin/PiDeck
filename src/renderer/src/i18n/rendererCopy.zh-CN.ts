@@ -51,6 +51,8 @@ export const zhCN = {
 	"app.sidebarRecentShown": "已显示 {shown}/{total}",
 	"app.sidebarRecentLoadMore": "加载更多",
 	"app.sidebarRecentLoadMoreHint": "再加载 {count} 个会话",
+	"app.sidebarRecentCollapse": "收起",
+	"app.sidebarRecentCollapseHint": "收起到默认 {count} 条",
 	"app.sidebarHistory": "历史会话",
 	"app.confirm": "确认",
 	"app.createAgent": "启动 Agent",

@@ -17,12 +17,14 @@ const sidebarDir = "src/renderer/src/components/sidebar/";
 const activeSessionsTree = readFileSync(`${sidebarDir}ActiveSessionsTree.tsx`, "utf8");
 const recentSessionsSection = readFileSync(`${sidebarDir}RecentSessionsSection.tsx`, "utf8");
 const sessionTree = readFileSync(`${sidebarDir}SessionTree.tsx`, "utf8");
+const foundationStyles = readFileSync("src/renderer/src/styles/foundation.css", "utf8");
+const workspaceStyles = readFileSync("src/renderer/src/styles/workspace.css", "utf8");
 const sidebarContent = readFileSync(`${sidebarDir}SidebarContent.tsx`, "utf8");
 const appSource = readFileSync("src/renderer/src/App.tsx", "utf8");
 const zhCopy = readFileSync("src/renderer/src/i18n/rendererCopy.zh-CN.ts", "utf8");
 const enCopy = readFileSync("src/renderer/src/i18n/rendererCopy.en-US.ts", "utf8");
 
-const { RECENT_SESSIONS_INITIAL_VISIBLE, RECENT_SESSIONS_PAGE_SIZE, collectActiveSessionRows, collectRecentSessionRows, growRecentVisible } = loadTsCommonJs("src/renderer/src/components/sidebar/activitySessionsModel.ts");
+const { RECENT_SESSIONS_INITIAL_VISIBLE, RECENT_SESSIONS_PAGE_SIZE, collectActiveSessionRows, collectRecentSessionRows, growRecentVisible, canCollapseRecent } = loadTsCommonJs("src/renderer/src/components/sidebar/activitySessionsModel.ts");
 
 /** 按 `const name = "..."` 抽取类名常量：不做正则转义，避免格式改动让断言整组失效。 */
 function extractStringConst(source, name) {
@@ -203,25 +205,39 @@ describe("最近会话区渲染契约", () => {
 		assert.doesNotMatch(recentSessionsSection, /<TitleScrollText\b[^>]*\bdisabled\b/);
 	});
 
-	test("分段顺序：活动行在上、最近会话在下，且同处一个列表容器", () => {
+	test("分段顺序：活动行在上、最近会话在下，两段各自成区（下半部分常驻）", () => {
+		const paneStart = activeSessionsTree.indexOf('className="active-sessions-pane');
 		const listStart = activeSessionsTree.indexOf('className="active-sessions-list');
 		const activeRowsIndex = activeSessionsTree.indexOf("liveRows.map(");
+		const recentPaneIndex = activeSessionsTree.indexOf('className="recent-sessions-pane');
 		const recentIndex = activeSessionsTree.indexOf("<RecentSessionsSection");
-		assert.ok(listStart !== -1, "活动页需要一个列表容器");
+		assert.ok(paneStart !== -1, "活动页需要一个上下分区的容器");
+		assert.ok(listStart !== -1, "活动页需要上半列表容器");
 		assert.ok(activeRowsIndex !== -1, "活动行仍在该组件内渲染");
-		assert.ok(recentIndex !== -1, "最近会话区必须挂在活动页");
-		assert.ok(listStart < activeRowsIndex, "列表容器必须包裹活动行");
+		assert.ok(recentIndex !== -1, "最近会话区区必须挂在活动页");
+		assert.ok(paneStart < listStart, "上半列表包在分区容器内");
+		assert.ok(listStart < activeRowsIndex, "上半列表容器必须包裹活动行");
+		assert.ok(recentPaneIndex !== -1 && recentIndex !== -1, "最近会话需要自己的下半区容器");
 		assert.ok(activeRowsIndex < recentIndex, "最近会话区必须排在活动行下方");
+		// 上下两半共用 1fr 平分：行数多时不会把另一半挤走，各自滚动
+		assert.ok((activeSessionsTree.match(/flex min-h-0 flex-1 flex-col/g) ?? []).length >= 2, "上下两半都要 min-h-0 + flex-1");
+		assert.ok((activeSessionsTree.match(/overflow-y-auto/g) ?? []).length >= 2, "上下两半各自滚动");
+	});
+
+	test("分页条常驻本区下缘（悬浮，不用滚到底）", () => {
+		assert.match(recentSessionsSection, /sticky bottom-0/);
 	});
 
 	test("两段之间有分界线与段落标题，并显示已显示/总数计数", () => {
 		// 分界线：上边框 + 段落标题、计数行；标题在计数左侧（标题左对齐、计数右对齐）
-		assert.match(recentSessionsSection, /border-t border-border-subtle/);
+		assert.match(recentSessionsSection, /border-t border-border\/40/);
 		const headerIndex = recentSessionsSection.indexOf('t("app.sidebarRecentSessions")');
 		const countIndex = recentSessionsSection.indexOf("props.visibleCount}/{props.totalCount}");
 		assert.ok(headerIndex !== -1, "段落标题必须显示「最近会话」");
 		assert.ok(countIndex !== -1, "段落标题必须显示 x/y 计数");
 		assert.ok(headerIndex < countIndex, "标题在计数之前");
+		// 标题加粗：与项目页分组标题同档（否则会被当成又一行会话）
+		assert.match(recentSessionsSection, /text-caption font-semibold text-muted-foreground">\{t\("app\.sidebarRecentSessions"\)\}/);
 	});
 
 	test("默认 10 条由 RECENT_SESSIONS_INITIAL_VISIBLE 驱动，不写死数字", () => {
@@ -233,6 +249,40 @@ describe("最近会话区渲染契约", () => {
 		assert.match(recentSessionsSection, /onClick=\{props\.onLoadMore\}/);
 		assert.match(recentSessionsSection, /remainingCount > 0/);
 		assert.match(activeSessionsTree, /setRecentVisibleCount\(\(current\) => growRecentVisible\(current, recent\.totalCount\)\)/);
+	});
+
+	test("展开过就并列给「收起」，回到首页条数（与项目页「查看更多 / 收起」同语义）", () => {
+		assert.match(recentSessionsSection, /onClick=\{props\.onCollapse\}/);
+		assert.match(recentSessionsSection, /canCollapse &&/);
+		assert.match(activeSessionsTree, /onCollapse=\{\(\) => setRecentVisibleCount\(RECENT_SESSIONS_INITIAL_VISIBLE\)\}/);
+		// 收起门槛与服务端模型同源：默认 10 条本身收不起来，故以「超过首页」为准
+		assert.equal(canCollapseRecent(RECENT_SESSIONS_INITIAL_VISIBLE), false);
+		assert.equal(canCollapseRecent(RECENT_SESSIONS_INITIAL_VISIBLE + RECENT_SESSIONS_PAGE_SIZE), true);
+	});
+
+	test("分页行与项目页「查看更多 / 收起」逐字同款（行高/布局必须一致）", () => {
+		// 基座逐字相等：同一功能在两页不能长出两套行皮
+		assert.equal(extractStringConst(recentSessionsSection, "moreRowClass"), "session-more-btn session-more-row h-auto min-w-0 w-auto flex-1 justify-start px-2 text-micro opacity-80 transition-opacity hover:opacity-100");
+		assert.equal(extractStringConst(recentSessionsSection, "collapseRowClass"), "session-more-row h-auto shrink-0 w-auto justify-start px-2 text-micro opacity-80 transition-opacity hover:opacity-100");
+		assert.match(sessionTree, /className=\{`session-more-btn h-auto min-w-0 w-auto flex-1 justify-start px-2 text-micro opacity-80 transition-opacity hover:opacity-100/);
+		assert.match(sessionTree, /className=\{`h-auto shrink-0 w-auto justify-start px-2 text-micro opacity-80 transition-opacity hover:opacity-100/);
+	});
+
+	test("分页行比会话行矮一档（26px 对 32px，两处共用同一条高度）", () => {
+		// 项目页（legacy 作用域）+ 活动页（基座）都得压到 26px，否则两处又会长短不一
+		assert.match(foundationStyles, /\.session-more-row,\s*\n\.session-more-btn\s*\{[\s\S]{0,300}?min-height:\s*26px/);
+		assert.match(workspaceStyles, /\.chat-list-pane\.v3-braun[\s\S]{0,400}?\.worktree-sessions-more\s*\{[\s\S]{0,200}?min-height:\s*26px/);
+		// 会话行仍是 32px（min-h-8）：层级差不能被反转
+		assert.match(sessionTree, /min-h-8/);
+	});
+
+	test("分页行与会话行左对齐（不再往右推 14px）", () => {
+		// 基座不能再用 margin-left / padding-left 把入口推离会话标题列
+		assert.doesNotMatch(foundationStyles, /\.session-more-row\s*\{[\s\S]{0,200}?margin-left:\s*8px/);
+		// 基座（.agent-more-row, .session-more-row）也不得再往右推；`.worktree-sessions-more`
+		// 是子树专用类（width: calc(100% - 8px)），不在本次对齐范围内。
+		assert.doesNotMatch(foundationStyles, /\.agent-more-row,\s*\n\.session-more-row\s*\{[\s\S]{0,600}?margin:[^;]*8px/);
+		assert.doesNotMatch(foundationStyles, /\.agent-more-row,\s*\n\.session-more-row\s*\{[\s\S]{0,600}?padding:[^;]*14px/);
 	});
 
 	test("最近会话为空时整段消失（不留悬空分界线）", () => {
@@ -256,9 +306,12 @@ describe("最近会话区渲染契约", () => {
 	});
 
 	test("新增文案在中英文两份 copy 中都存在", () => {
-		for (const key of ["app.sidebarRecentSessions", "app.sidebarRecentShown", "app.sidebarRecentLoadMore", "app.sidebarRecentLoadMoreHint"]) {
+		for (const key of ["app.sidebarRecentSessions", "app.sidebarRecentShown", "app.sidebarRecentLoadMore", "app.sidebarRecentLoadMoreHint", "app.sidebarRecentCollapse", "app.sidebarRecentCollapseHint"]) {
 			assert.match(zhCopy, new RegExp(`"${key}":`), `zh-CN 缺少 ${key}`);
 			assert.match(enCopy, new RegExp(`"${key}":`), `en-US 缺少 ${key}`);
 		}
+		// 收起文案与项目页「收起」同字面，两处入口名字一致
+		assert.match(zhCopy, /"app\.sidebarRecentCollapse": "收起"/);
+		assert.match(enCopy, /"app\.sidebarRecentCollapse": "Collapse"/);
 	});
 });

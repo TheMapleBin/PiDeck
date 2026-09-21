@@ -2402,6 +2402,11 @@ select:focus-visible {
 }
 .agent-more-row,
 .session-more-row {
+  /* 分页行（查看更多 / 收起 / 加载更多）的基座：只保留 flex 骨架与右侧数字对齐。
+     横向留白/对齐交给 JSX 的 `px-2`，与会话行（`px-2`）逐像素对齐——
+     旧值 margin-left 8px + padding-left 14px 把入口推得比会话标题右 14px，用户看到「没对齐」。
+     （注：本注释必须留在块内，块的紧邻上方写注释会让 sidebarRowAlignment 的
+     选择器解析把注释当成选择器前缀，导致「rule for .agent-more-row not found」。） */
   position: relative;
   /* 同 .agent-row：button 的 width:auto 是 shrink-to-fit，fill-available 扣除 margin 撑满。 */
   width: -webkit-fill-available;
@@ -2410,8 +2415,8 @@ select:focus-visible {
   align-items: center;
   gap: 7px;
   min-height: 26px;
-  margin: 2px 0 2px 8px;
-  padding: 4px 6px 4px 14px;
+  margin: 2px 0;
+  padding: 2px 8px;
   border: 0;
   border-radius: var(--radius-md);
   background: transparent;
@@ -2554,8 +2559,16 @@ select:focus-visible {
   flex-shrink: 0;
 }
 .session-more-row {
-  margin-left: 8px;
+  /* 横向留白与对齐统一交给 JSX 的 px-2（与会话行对齐）；这里只保留底部收尾间距。 */
   margin-bottom: 6px;
+}
+.session-more-row,
+.session-more-btn {
+  /* 「查看更多 / 收起 / 加载更多」行：统一压到 26px，比会话行（32px）矮一档。
+     两处入口（项目页 SessionTree、活动页「最近会话」）共用这一条高度，
+     避免同一个功能在不同页里长得不一样（用户要求两处对齐）。 */
+  min-height: 26px;
+  padding: 2px 8px;
 }
 /* 「查看更多」按钮：数字需靠右对齐到会话行的时间列，故按钮本体必须是
    fill-available 宽的 flex 容器（ml-auto 依赖父级 flex）。
