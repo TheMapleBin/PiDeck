@@ -22,7 +22,7 @@
  *   宿主 → 助手: {cmd:"list"} | {cmd:"login",providerId,type} |
  *                {cmd:"answer",id,value} | {cmd:"cancel"} | {cmd:"logout",providerId}
  *   助手 → 宿主: {type:"ready",protocolVersion,piVersion}
- *                {type:"providers",providers:[...]}（含已登录状态）
+ *                {type:"providers",providers:[...]}（含已登录状态与 builtIn 来源标记）
  *                {type:"event",event}            pi 的 AuthEvent 原样透传
  *                {type:"prompt",id,prompt}       需要宿主回答
  *                {type:"prompt-cancelled",id}     pi 侧自行解决了该提问
@@ -163,8 +163,10 @@ function answerPrompt(id, prompt) {
  * - apiKey 无 `login` 说明只能用环境变量/AWS profile 之类的外部凭据，
  *   标记 `ambientOnly`，宿主不给它「录入密钥」入口。
  * - 完全没有认证方式的供应商（云端网关类）无法登录，直接过滤掉。
+ * - `builtIn` 标记这条来自 pi 内置目录（而非 `models.json` 里用户自定义的供应商），
+ *   由宿主决定要不要展示——助手只报告事实，不做产品取舍。
  */
-function describeProvider(runtime, provider) {
+function describeProvider(runtime, provider, builtinIds) {
 	const oauth = provider.auth?.oauth;
 	const apiKey = provider.auth?.apiKey;
 	if (!oauth && !apiKey) return null;
@@ -177,13 +179,39 @@ function describeProvider(runtime, provider) {
 		apiKey: apiKey ? { name: apiKey.name, canLogin: typeof apiKey.login === "function" } : undefined,
 		ambientOnly: Boolean(apiKey) && typeof apiKey.login !== "function",
 		credential,
+		// 判定不出来时不写该字段（JSON 会丢掉 undefined），宿主按「未知=保留」处理。
+		builtIn: builtinIds ? builtinIds.has(provider.id) : undefined,
 	};
 }
 
+/**
+ * pi 内置支持的供应商 id 集合。
+ *
+ * 为什么需要：`runtime.getProviders()` 是「pi 内置目录 + `models.json` 自定义供应商」
+ * 的合并结果，自定义项的认证描述由 pi 兜底合成（`apiKey.name` 恒为 "API key"），
+ * 混在登录列表里既没有信息量（密钥早在模型设置里填过），又会淹掉真正可登录的项。
+ *
+ * `defaultBuiltins` 是 pi 运行时上的普通字段（不是 #private），但毕竟属于内部结构，
+ * 因此取不到时返回 null 让宿主保持旧行为（多显示）而不是把列表清空；
+ * `getRegisteredProviderIds()` 是公开方法，扩展注册的认证供应商同样算 pi 支持。
+ */
+function collectBuiltinProviderIds(runtime) {
+	const ids = new Set();
+	const defaults = runtime.defaultBuiltins;
+	if (defaults && typeof defaults.keys === "function") {
+		for (const id of defaults.keys()) ids.add(id);
+	}
+	if (typeof runtime.getRegisteredProviderIds === "function") {
+		for (const id of runtime.getRegisteredProviderIds()) ids.add(id);
+	}
+	return ids.size > 0 ? ids : null;
+}
+
 async function handleList(runtime) {
+	const builtinIds = collectBuiltinProviderIds(runtime);
 	const providers = runtime
 		.getProviders()
-		.map((provider) => describeProvider(runtime, provider))
+		.map((provider) => describeProvider(runtime, provider, builtinIds))
 		.filter(Boolean)
 		.sort((a, b) => a.name.localeCompare(b.name));
 	send({ type: "providers", providers, piVersion: sdkVersion });

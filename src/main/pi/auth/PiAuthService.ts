@@ -32,10 +32,13 @@ const DEFAULT_SHORT_OPERATION_TIMEOUT_MS = 15_000;
  */
 const DEFAULT_LOGIN_TIMEOUT_MS = 10 * 60_000;
 
+/** 助手进程上报的供应商条目；比跨 IPC 契约多一个来源标记（可选：旧助手/判定不出时不带）。 */
+type HostAuthProviderOption = PiAuthProviderOption & { builtIn?: boolean };
+
 /** 助手的 stdout 消息（协议 v1）。仅主进程侧使用，不跨进程，因此不放进 shared。 */
 type HostMessage =
 	| { type: "ready"; protocolVersion?: number; piVersion?: string | null }
-	| { type: "providers"; providers?: PiAuthProviderOption[]; piVersion?: string | null }
+	| { type: "providers"; providers?: HostAuthProviderOption[]; piVersion?: string | null }
 	| { type: "event"; event: unknown }
 	| { type: "prompt"; id: string; prompt: { kind: string; message: string; placeholder?: string; options?: readonly { id: string; label: string; description?: string }[] } }
 	| { type: "prompt-cancelled"; id: string }
@@ -51,6 +54,19 @@ export type PiAuthLogger = {
 	warn: (message: string) => void;
 	error: (message: string) => void;
 };
+
+/**
+ * 只保留 pi 自己支持的认证供应商，滤掉 `models.json` 里用户自定义的供应商。
+ *
+ * 为什么要在宿主侧过滤：pi 的 `getProviders()` 把「内置目录 + 本地自定义」合成一份，
+ * 自定义项的认证描述是 pi 兜底生成的（`apiKey.name` 恒为 "API key"），列进登录列表
+ * 既没有信息量（密钥早已在模型设置里填过），又会把真正可登录的项淹掉。
+ * 只有 `builtIn === false` 才算「明确非内置」；字段缺失（pi 改了内部结构、旧助手）
+ * 一律保留——宁可多显示，也不能把供应商列表清空。
+ */
+export function filterSupportedAuthProviders(providers: HostAuthProviderOption[]): PiAuthProviderOption[] {
+	return providers.filter((provider) => provider.builtIn !== false);
+}
 
 export type PiAuthLaunchResolver = () => PiAuthHostLaunch;
 
@@ -218,7 +234,7 @@ export class PiAuthService {
 			const outcome = await this.awaitOutcome(session, (message) => message.type === "providers", "列出供应商", this.shortTimeoutMs);
 			if (outcome.kind === "error") return { ok: false, errorKind: outcome.errorKind, error: outcome.message };
 			const message = outcome.message as Extract<HostMessage, { type: "providers" }>;
-			return { ok: true, list: { providers: message.providers ?? [], piVersion: message.piVersion ?? undefined } };
+			return { ok: true, list: { providers: filterSupportedAuthProviders(message.providers ?? []), piVersion: message.piVersion ?? undefined } };
 		} finally {
 			session.settle({ kind: "error", errorKind: "protocol", message: "list finished" });
 		}
