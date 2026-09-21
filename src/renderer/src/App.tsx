@@ -2940,6 +2940,25 @@ export function App() {
 		}
 	}
 
+	/**
+	 * 按需加载单个项目的会话 catalog：已 loading/ready 的项目直接跳过。
+	 * 空项目也可能已经成功加载，所以用 catalog 状态区分「空结果」和「尚未扫描」。
+	 *
+	 * silent 区分两种触发意图：
+	 * - false（默认，用户点选/展开项目）：走常规加载态，侧栏会显示该项在加载；
+	 * - true（活动页「最近会话」跨项目预热）：后台静默拉取，不挂 loading 态、不装 catalog
+	 *   看门狗——用户只是看了眼活动页，不该让侧栏一堆项目同时转圈。
+	 * 两者共用同一处「什么时候该扫、什么时候该跳过」判断，避免规则漂移。
+	 */
+	const ensureProjectCatalogLoaded = useCallback(
+		(projectId: string, silent = false) => {
+			const loadState = store.get(sessionCatalogLoadStateAtom)[projectId];
+			if (loadState?.status === "loading" || loadState?.status === "ready") return;
+			void refreshProjectSessions(projectId, silent).catch(() => undefined);
+		},
+		[store, refreshProjectSessions],
+	);
+
 	const sidebarActions: SidebarActions = {
 		projects: {
 			add: addProject,
@@ -2948,11 +2967,8 @@ export function App() {
 				// 点开目录只选中项目并显示引导页：不自动创建会话，避免每点一个目录都
 				// 悄悄新建一个 agent 会话 tab。创建由用户手动点「启动 Agent / 临时对话」
 				// 触发；启动时首项目自动选中除外（见 bootstrapProps.onProjectsChanged）。
-				// 空项目也可能已经成功加载；用 catalog 状态区分“空结果”和“尚未扫描”。
-				const loadState = store.get(sessionCatalogLoadStateAtom)[projectId];
-				if (loadState?.status !== "loading" && loadState?.status !== "ready") {
-					void refreshProjectSessions(projectId).catch(() => undefined);
-				}
+				// 项目点击选中即按需加载 catalog（已加载/加载中的跳过）。
+				ensureProjectCatalogLoaded(projectId);
 			},
 			refresh: async (projectId) => {
 				const project = projects.find((candidate) => candidate.id === projectId);
@@ -2988,6 +3004,10 @@ export function App() {
 			// 侧栏单击模式由设置 sessionTabOpenMode 控制（默认 preview=临时预览，发消息自动晋升常驻）；
 			// 双击仍是显式常驻。tabMode 为 undefined 时用当前设置值。
 			open: (projectId, sessionId, tabMode) => openSidebarSessionByIdWithTab(projectId, sessionId, tabMode ?? settings.sessionTabOpenMode),
+			// 活动页「最近会话」跨项目展示：后台静默预热尚未扫描的项目 catalog。
+			ensureCatalogsLoaded: (projectIds) => {
+				for (const projectId of projectIds) ensureProjectCatalogLoaded(projectId, true);
+			},
 			beginDrag: workspaceChrome.beginDrag,
 			endDrag: workspaceChrome.endDrag,
 			createDraft: async (projectId) => {

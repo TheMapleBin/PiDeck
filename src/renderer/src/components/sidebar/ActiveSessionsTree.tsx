@@ -1,6 +1,6 @@
 import { Ellipsis } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAtomValue } from "jotai";
-import type { AgentTab, SessionRecord } from "../../../../shared/types";
 import { sessionStatusDotClass } from "../../agentListDisplay";
 import { sessionRecordToSummary } from "../../atoms";
 import { sessionRuntimeUiByIdAtom } from "../../atoms/session-atoms";
@@ -16,6 +16,8 @@ import { SessionHoverCard } from "./SessionHoverCard";
 import { TitleScrollText } from "./TitleScrollText";
 import { SESSION_TAB_DRAG_MIME } from "../../utils/sessionSplitEdge";
 import { formatRelativeTime } from "../../utils/relativeTime";
+import { RECENT_SESSIONS_INITIAL_VISIBLE, collectActiveSessionRows, collectRecentSessionRows, growRecentVisible } from "./activitySessionsModel";
+import { RecentSessionsSection } from "./RecentSessionsSection";
 
 /** 活动页行样式：与 SessionTree 会话行同尺寸同圆角，但选中底不需要（活动页行不持久）。 */
 const activeRowClass =
@@ -38,33 +40,37 @@ export function ActiveSessionsTree(props: { controller: SidebarController; actio
 	// 活动页以会话为粒度，待确认标记直接按本行 sessionId 判定，
 	// 避免订阅项目级聚合值导致一个会话的 ask 点亮整页。
 	const sessionRuntimeUiById = useAtomValue(sessionRuntimeUiByIdAtom);
-	// 收集所有项目下已绑定 runtime 的 agent，并解析其绑定会话记录（sessionId → record）。
-	// catalog.agents 只含 runtime 绑定（detached 已被 agentInventoryAtom 排除），
+	// 活动行：跨项目收集所有已绑定 runtime 的 Agent（live + 终态）。
+	// catalog 只含 runtime 绑定（detached 已被 agentInventoryAtom 排除），
 	// 因此不再按 isLiveRuntimeStatus 过滤——否则 error/closed 的失败会话会从活动页消失。
-	const liveRows: {
-		agent: AgentTab;
-		projectId: string;
-		record?: SessionRecord;
-		sortAt: number;
-	}[] = [];
-	for (const project of controller.catalog.projects) {
-		const sessions = controller.catalog.sessionsByProject[project.id] ?? [];
-		for (const agent of controller.catalog.agents) {
-			if (agent.projectId !== project.id) continue;
-			// 绑定会话：runtimeBySessionId 反查（最可靠），否则按 sessionPath 匹配历史记录。
-			const bound = sessions.find((session) => controller.catalog.runtimeBySessionId[session.id]?.agentId === agent.id) ?? sessions.find((session) => session.filePath === agent.sessionPath);
-			liveRows.push({
-				agent,
-				projectId: project.id,
-				record: bound,
-				// 有绑定记录按会话更新时间排，全新 Agent 按创建时间（排在会话之后）。
-				sortAt: bound ? bound.updatedAt : agent.createdAt,
-			});
-		}
-	}
-	liveRows.sort((left, right) => right.sortAt - left.sortAt);
+	// 收集与排序规则在 activitySessionsModel（纯函数可单测），catalog 引用稳定时 memo 复用结果。
+	const liveRows = useMemo(() => collectActiveSessionRows(controller.catalog), [controller.catalog]);
+	// 「最近会话」可见条数：默认 10 条，手动「加载更多」每次 +10。行数受控是性能要求——
+	// 侧栏一次性渲染几百行历史会明显卡顿（用户反馈）。
+	const [recentVisibleCount, setRecentVisibleCount] = useState(RECENT_SESSIONS_INITIAL_VISIBLE);
+	const recent = useMemo(() => collectRecentSessionRows({ catalog: controller.catalog, activeRows: liveRows, visibleCount: recentVisibleCount }), [controller.catalog, liveRows, recentVisibleCount]);
+	// 「最近」是跨项目数据，而项目 catalog 只在展开/选中该项目时才扫描。
+	// 活动页挂载时把尚未扫描的项目排进按需扫描（主进程立即返回目录缓存、后台扫描去重+冷却，
+	// 见 BackgroundScanCoordinator），否则重启后活动区与最近区会同时为空——
+	// 这正是用户要求补「最近」的起因。已在 loading/ready 的项目在 App 侧直接跳过，
+	// 且以静默方式预热（不挂 loading 态、不装看门狗），避免侧栏一堆项目同时转圈。
+	const projectIds = useMemo(() => controller.catalog.projects.map((project) => project.id), [controller.catalog.projects]);
+	const ensureCatalogsLoaded = props.actions.sessions.ensureCatalogsLoaded;
+	// 每个项目只请求一次：动作引用可能随 App 每次渲染变化，若不记住已请求的项目，
+	// 失败/空结果项目会被反复重试，形成扫描请求风暴。重试交给项目刷新入口或重进活动页。
+	const requestedProjectIdsRef = useRef<Set<string>>(new Set());
+	useEffect(() => {
+		const pending = projectIds.filter((projectId) => !requestedProjectIdsRef.current.has(projectId));
+		if (pending.length === 0) return;
+		for (const projectId of pending) requestedProjectIdsRef.current.add(projectId);
+		ensureCatalogsLoaded(pending);
+	}, [ensureCatalogsLoaded, projectIds]);
 
-	if (liveRows.length === 0) {
+	const hasRecent = recent.rows.length > 0;
+
+	// 两段都空才是真正的空态；只有活动区空时用一行提示顶替，
+	// 不能让 h-full 空态占满高度把下方「最近」挤出视野。
+	if (liveRows.length === 0 && !hasRecent) {
 		return (
 			<div className="active-sessions-empty flex h-full min-h-0 flex-col items-center justify-center gap-2 px-4 py-8 text-center">
 				<div className="text-caption text-muted-foreground">{t("app.sidebarActiveEmpty")}</div>
@@ -74,6 +80,7 @@ export function ActiveSessionsTree(props: { controller: SidebarController; actio
 
 	return (
 		<div className="active-sessions-list flex flex-col gap-0">
+			{liveRows.length === 0 ? <div className="px-2 py-1.5 text-caption text-muted-foreground">{t("app.sidebarActiveEmpty")}</div> : null}
 			{liveRows.map(({ agent, projectId, record, sortAt }) => {
 				const sessionId = record?.id;
 				const selected = sessionId === props.currentSessionId;
@@ -142,6 +149,7 @@ export function ActiveSessionsTree(props: { controller: SidebarController; actio
 					</div>
 				);
 			})}
+			<RecentSessionsSection controller={controller} actions={props.actions} currentSessionId={props.currentSessionId} rows={recent.rows} totalCount={recent.totalCount} visibleCount={recentVisibleCount} onLoadMore={() => setRecentVisibleCount((current) => growRecentVisible(current, recent.totalCount))} />
 		</div>
 	);
 }
