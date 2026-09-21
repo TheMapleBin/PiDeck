@@ -40,9 +40,11 @@ test("footer sizes to content and does not hug a measured pixel height", () => {
 	assert.doesNotMatch(composerArea, /ResizeObserver/);
 	assert.doesNotMatch(composerArea, /defaultHeight/);
 	assert.match(composerArea, /style=\{composerFooterStyle\(\)\}/);
-	// widget 卡片共用这一层纵向滚动；必须预留原生 thin scrollbar 槽位，
-	// 否则临界溢出时滚动条开关会改变卡片宽度并触发二次布局。
-	assert.match(composerArea, /className="[^"]*overflow-y-auto[^"]*\[scrollbar-gutter:stable\][^"]*"/);
+	// widget 卡片列不预留 scrollbar 槽位：卡片必须与输入框/消息列同宽（同源 100%）。
+	// 待办条的滚动条闪烁由旋转图标 AABB 撑高 scrollHeight 引起，应在 SessionTodoStrip 修
+	// （见 sessionTodoStrip 契约测试），不要在这层加 scrollbar-gutter 兜底。
+	assert.match(composerArea, /className="flex min-h-0 min-w-0 flex-col gap-2 overflow-y-auto overscroll-contain pb-px empty:hidden"/);
+	assert.doesNotMatch(composerArea, /overflow-y-auto[^"]*\[scrollbar-gutter:stable\]/);
 	assert.match(composerArea, /composer-box relative flex w-full min-w-0 shrink-0 flex-col/);
 	assert.doesNotMatch(composerArea, /composer-box relative flex min-h-0 w-full min-w-0 flex-1 flex-col/);
 });

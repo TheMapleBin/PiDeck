@@ -70,7 +70,12 @@ function ComposerMeasuredExtras(props: ComposerExtrasProps) {
 	return (
 		<ComposerWidgetLayoutProvider value={widgetLayoutValue}>
 			<>
-				<div className="flex min-h-0 min-w-0 flex-col gap-2 overflow-y-auto overscroll-contain pb-px empty:hidden [scrollbar-gutter:stable]">
+				{/* 卡片列不预留 scrollbar 槽位：这层是「窗口不够高时兜底滚动」的容器，
+				    卡片宽度必须与下方输入框/消息列同宽（100% 同源，见 chatContentWidth）。
+				    曾加过 [scrollbar-gutter:stable] 试图治待办条滚动条闪烁，但真正闪的是
+				    待办条自己的 ul（旋转图标 AABB 撑高 scrollHeight，见 SessionTodoStrip
+				    ProgressGlyph 注释），gutter 治不了，还会把卡片压窄 10px。 */}
+				<div className="flex min-h-0 min-w-0 flex-col gap-2 overflow-y-auto overscroll-contain pb-px empty:hidden">
 					{props.widgets}
 					{props.queuePanel}
 					{props.deliveryNotice}
