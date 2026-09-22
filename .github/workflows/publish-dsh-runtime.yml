@@ -88,7 +88,13 @@ jobs:
           node-version: 24.13.0
 
       # 交叉解析不需要完整 npm ci（runtime 闭包由 pack 脚本在隔离目录自装），
-      # 只需给脚本准备 semver（范围匹配用）。
+      # 但要补齐脚本自己的裸 import：tar 是 prod 依赖（--omit=dev 只装这条树，本地
+      # 3 秒 / 92 包），semver 是 dev 依赖（范围匹配用）从 lock 顶层条目直接取包。
+      # 与 release.yml 的 pack-dsh-runtime 保持同一套准备步骤与方法注释；两处都漏过
+      # tar（2026-09-22 v0.7.7 事故），改一处时记得另一处。
+      - name: Install packing script prod deps
+        run: npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+
       - name: Restore semver for packing script
         shell: bash
         run: |
@@ -96,6 +102,11 @@ jobs:
           mkdir -p node_modules/semver
           curl -sfL "https://registry.npmjs.org/semver/-/semver-${VERSION}.tgz" | tar -xz -C node_modules/semver --strip-components=1
           node -e "console.log('semver', require('semver/package.json').version, 'ready')"
+
+      # 同样的自检：漏包时在这里红，而不是 6 个平台各自报 ERR_MODULE_NOT_FOUND。
+      - name: Verify packing script deps resolvable
+        shell: bash
+        run: node --input-type=module -e "await import('tar'); await import('semver'); console.log('packing script deps ok')"
 
       - name: Pack DSH runtime (cross)
         run: node scripts/pack-dsh-runtime.mjs --target-os ${{ matrix.os }} --target-arch ${{ matrix.arch }}
