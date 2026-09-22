@@ -3191,6 +3191,8 @@ export const enUS: Record<TranslationKey, string> = {
 	"settings.shortcuts.cycleModelDesc": "Cycles through the session's favorite models; the model shown in the bottom bar updates immediately. Default Ctrl+M (⌘⌥M on macOS).",
 	"settings.shortcuts.cycleThinkingLabel": "Cycle Thinking Level",
 	"settings.shortcuts.cycleThinkingDesc": "Cycles the thinking levels supported by the current model (off/minimal/low/medium/high/xhigh/max, trimmed to the model's capabilities). Default Ctrl+T (⌘⌥T on macOS).",
+	"settings.shortcuts.openQuickMessagesLabel": "Quick Messages",
+	"settings.shortcuts.openQuickMessagesDesc": "Opens the quick-message popover on the composer bar to insert or immediately send a preset phrase. Default Ctrl+Shift+M (⌘⇧M on macOS).",
 	"settings.shortcuts.toggleDevToolsLabel": "Developer Tools",
 	"settings.shortcuts.toggleDevToolsDesc": "Toggles the developer tools. Default F12; while it stays at the default, Ctrl+Shift+I / Ctrl+Shift+J (⌘⌥I / J on macOS) also work.",
 	"settings.shortcuts.change": "Change",

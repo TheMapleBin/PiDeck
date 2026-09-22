@@ -1709,6 +1709,15 @@ async function createWindow() {
 			mainWindow.webContents.send(ipcChannels.appShortcutTriggered, "cycleThinking");
 			return;
 		}
+		// 快捷消息浮层：目标是「当前聚焦会话」的输入框底栏，主进程只负责转发广播，
+		// 由渲染层按聚焦栏定位会话并唤出浮层（main 不持有会话上下文，见 renderer 的
+		// useQuickMessagePopover / ownsQuickMessageShortcut）。
+		// 注意本项不受「输入框聚焦时不触发」约束：它的用途就是打字途中插口令。
+		if (isShortcutInput("openQuickMessages", input)) {
+			event.preventDefault();
+			mainWindow.webContents.send(ipcChannels.appShortcutTriggered, "openQuickMessages");
+			return;
+		}
 		if (isShortcutInput("toggleDevTools", input)) {
 			event.preventDefault();
 			toggleMainWindowDevTools(mainWindow);

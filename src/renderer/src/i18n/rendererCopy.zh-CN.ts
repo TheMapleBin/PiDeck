@@ -3187,6 +3187,8 @@ export const zhCN = {
 	"settings.shortcuts.cycleModelDesc": "在当前会话的收藏模型之间循环切换，底栏模型名立即刷新。默认 Ctrl+M（macOS ⌘⌥M）。",
 	"settings.shortcuts.cycleThinkingLabel": "切换思考强度",
 	"settings.shortcuts.cycleThinkingDesc": "在当前模型支持的思考档位之间循环（off/minimal/low/medium/high/xhigh/max，随模型能力裁剪）。默认 Ctrl+T（macOS ⌘⌥T）。",
+	"settings.shortcuts.openQuickMessagesLabel": "快捷消息",
+	"settings.shortcuts.openQuickMessagesDesc": "打开输入框底栏的快捷消息浮层，插入或直接发送预设口令。默认 Ctrl+Shift+M（macOS ⌘⇧M）。",
 	"settings.shortcuts.toggleDevToolsLabel": "开发者工具",
 	"settings.shortcuts.toggleDevToolsDesc": "打开/关闭开发者工具。默认 F12，保持默认时还兼容 Ctrl+Shift+I / Ctrl+Shift+J（macOS ⌘⌥I / J）。",
 	"settings.shortcuts.change": "修改",
