@@ -10,6 +10,7 @@ import { ipcChannels } from "../../shared/ipc";
 import { isDshPermissionPreset } from "../../shared/types/agent";
 import { isRewindRestoreScope } from "../../shared/types/rewind";
 import { canonicalizeSessionPath } from "../../shared/sessionIdentity";
+import { createSessionModelPreference } from "../../shared/modelDisplayName";
 import type {
 	CreateSessionDraftInput,
 	CreateAnonymousSessionInput,
@@ -30,6 +31,7 @@ import type {
 	DshModelDiscoveryInput,
 	FetchedModel,
 	SessionMessagePage,
+	SessionModelPreference,
 	RewindCheckpointPageParams,
 	ResolveLaunchDefaultsInput,
 	ResolvedLaunchDefaults,
@@ -53,6 +55,15 @@ function isDshModelDiscoveryInput(input: unknown): input is DshModelDiscoveryInp
 
 function isRecord(input: unknown): input is Record<string, unknown> {
 	return typeof input === "object" && input !== null && !Array.isArray(input);
+}
+
+/** Normalize untrusted model input before it reaches the persisted catalog. */
+function normalizeSessionModelPreference(input: unknown): SessionModelPreference | undefined {
+	if (!isRecord(input) || typeof input.provider !== "string" || typeof input.modelId !== "string" || (input.modelName !== undefined && typeof input.modelName !== "string")) return undefined;
+	const provider = input.provider.trim();
+	const modelId = input.modelId.trim();
+	if (!provider || !modelId || provider.length > 128 || modelId.length > 256 || (typeof input.modelName === "string" && input.modelName.length > 256)) return undefined;
+	return createSessionModelPreference(provider, modelId, input.modelName);
 }
 /**
  * 已扫描过项目的集合（模块级）：决定 catalogList 走「首次同步扫描」还是
@@ -454,11 +465,11 @@ export function registerSessionIpc(deps: SessionIpcDeps): void {
 			const current = sessionCatalog.get(sessionId);
 			if (!current || current.backend === "dsh" || !current.filePath) return;
 			const patch: {
-				model?: { provider: string; modelId: string };
+				model?: SessionModelPreference;
 				thinkingLevel?: string;
 				updatedAt: number;
 			} = { updatedAt: current.updatedAt };
-			if (!current.model && metadata.model) patch.model = { ...metadata.model };
+			if (!current.model && metadata.model) patch.model = createSessionModelPreference(metadata.model.provider, metadata.model.modelId, undefined);
 			if (!current.thinkingLevel && metadata.thinkingLevel) {
 				patch.thinkingLevel = metadata.thinkingLevel;
 			}
@@ -561,14 +572,14 @@ export function registerSessionIpc(deps: SessionIpcDeps): void {
 		// DSH 后端不适用 pi 的模型配置（模型路由由 DSH host 自己的 settings 决定），
 		// 只跳过 model；思考档位值域与 DSH 兼容（off/high/max 等），新会话默认档位
 		// 同样填充——否则 DSH 新会话的思考按钮只显示「思考」而非实际默认档位。
-		let model = input.backend === "dsh" ? undefined : input.model;
+		let model = input.backend === "dsh" ? undefined : normalizeSessionModelPreference(input.model);
 		let thinkingLevel = input.thinkingLevel;
 		if ((input.backend !== "dsh" && !model) || !thinkingLevel) {
 			try {
 				const [settingsResult, modelsResult] = await Promise.all([configManager.getSettingsConfig(), configManager.getModelsConfig()]);
 				// 引导页/渲染层显式传入的模型（如欢迎页偏好）也可能指向已删除的供应商/模型：
-				// 校验其仍存在于 models.json，不存在则丢弃交给解析器兜底（lastUsed → 显式默认 → 第一个可用），
-				// 避免新会话带着幽灵模型启动（用户反馈「删了供应商/模型新建会话还是它」）。
+				// 校验其仍存在于 models.json，不存在则交给解析器按欢迎页点选 → 配置默认 →
+				// enabledModels → lastUsed 的顺序兜底，避免新会话带着幽灵模型启动。
 				if (input.backend !== "dsh" && model) {
 					if (
 						typeof model.provider !== "string" ||
@@ -584,8 +595,8 @@ export function registerSessionIpc(deps: SessionIpcDeps): void {
 				// 缺省填充与引导页展示共用同一解析器（launchDefaults），
 				// 保证「预选的默认」与「创建时真正套用的默认」永远同源。
 				// 欢迎页偏好（renderer localStorage）同样经主进程校验存在性后按
-				// 「显式默认 > 偏好 > 上次使用 > 空」参与解析；explicit model（用户主动
-				// 指名）仍优先于一切（input.model，见上方校验）。
+				// 「欢迎页点选 > 显式默认 > enabledModels > 上次使用 > 空」参与解析；
+				// explicit model（用户主动指名）仍优先于一切（input.model，见上方校验）。
 				const defaults = resolveLaunchDefaultOptions({
 					backend: input.backend,
 					settings: settingsResult.parsed,
@@ -656,6 +667,13 @@ export function registerSessionIpc(deps: SessionIpcDeps): void {
 		return result;
 	});
 	ipcMain.handle(ipcChannels.sessionsCatalogUpdate, async (_event, sessionId: string, patch: UpdateSessionRecordInput) => {
+		const normalizedModel = patch.model === undefined ? undefined : patch.model === null ? null : normalizeSessionModelPreference(patch.model);
+		if (patch.model !== undefined && patch.model !== null && !normalizedModel) {
+			throw new Error(mainCopy("session.invalidModel"));
+		}
+		if (patch.model !== undefined) {
+			patch = { ...patch, model: normalizedModel };
+		}
 		const entry = sessionCatalog.get(sessionId);
 		if (!entry) throw new Error(mainCopy("session.notFound"));
 		// 后端锁定（草稿期可改，激活后禁止）：pi 会话文件（JSONL）与 DSH 会话
@@ -1569,7 +1587,18 @@ export function registerSessionIpc(deps: SessionIpcDeps): void {
 		});
 	});
 	ipcMain.handle(ipcChannels.sessionsRuntimePrepareResend, (_event, target: SessionRuntimeTarget, messageId: string) => handleSessionCommandResult(appLogger, "prepareRuntimeResend", target, { messageId }, () => sessionRuntimeCoordinator.prepareRuntimeResend(target, messageId)));
-	ipcMain.handle(ipcChannels.sessionsRuntimeSetModel, (_event, target: SessionRuntimeTarget, provider: string, modelId: string) => sessionRuntimeCoordinator.setRuntimeModel(target, provider, modelId));
+	ipcMain.handle(ipcChannels.sessionsRuntimeSetModel, (_event, target: SessionRuntimeTarget, provider: unknown, modelId: unknown, modelName?: unknown) => {
+		if (typeof provider !== "string" || typeof modelId !== "string" || (modelName !== undefined && typeof modelName !== "string") || !provider.trim() || !modelId.trim() || provider.length > 128 || modelId.length > 256 || (typeof modelName === "string" && modelName.length > 256)) {
+			return Promise.resolve({
+				ok: false as const,
+				error: {
+					code: "SESSION_COMMAND_FAILED" as const,
+					debugDetails: "Invalid model selection",
+				},
+			});
+		}
+		return sessionRuntimeCoordinator.setRuntimeModel(target, provider.trim(), modelId.trim(), modelName);
+	});
 	ipcMain.handle(ipcChannels.sessionsRuntimeSetThinking, (_event, target: SessionRuntimeTarget, level: string) => sessionRuntimeCoordinator.setRuntimeThinking(target, level));
 	ipcMain.handle(ipcChannels.sessionsRuntimeSetPermission, (_event, target: SessionRuntimeTarget, preset: string) => {
 		// Renderer input is untrusted: reject values outside DSH's finite preset

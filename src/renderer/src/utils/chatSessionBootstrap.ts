@@ -1,4 +1,5 @@
 import type { AgentBackend, AvailableModel } from "../../../shared/types";
+import { createSessionModelPreference } from "../../../shared/modelDisplayName";
 
 export type ChatSessionBootstrapAction = { kind: "none" } | { kind: "load" } | { kind: "wait" };
 
@@ -32,15 +33,17 @@ export function readWelcomeBackendPreference(): AgentBackend | undefined {
 /** 读取欢迎页最后选择的模型偏好（无则 undefined）。 */
 export function readWelcomeModelPreference():
 	| {
-			model: { provider: string; modelId: string };
+			model: { provider: string; modelId: string; modelName?: string };
 	  }
 	| undefined {
 	try {
 		const raw = localStorage.getItem(WELCOME_MODEL_KEY);
 		if (!raw) return undefined;
-		const parsed = JSON.parse(raw) as { provider?: string; modelId?: string };
+		const parsed = JSON.parse(raw) as { provider?: string; modelId?: string; modelName?: unknown };
 		if (typeof parsed.provider === "string" && typeof parsed.modelId === "string") {
-			return { model: { provider: parsed.provider, modelId: parsed.modelId } };
+			return {
+				model: createSessionModelPreference(parsed.provider, parsed.modelId, parsed.modelName),
+			};
 		}
 	} catch {
 		// 解析失败视为无偏好

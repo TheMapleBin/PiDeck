@@ -1,6 +1,7 @@
 import { useStore } from "jotai";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { AvailableModel, ModelListReport, SessionRuntimeTarget } from "../../../shared/types";
+import type { AvailableModel, ModelListReport, SessionModelPreference, SessionRuntimeTarget } from "../../../shared/types";
+import { createSessionModelPreference } from "../../../shared/modelDisplayName";
 import { currentSessionIdAtom, sessionRuntimeByIdAtom } from "../atoms";
 import { useSessionPreferenceState } from "./useSessionPreferenceState";
 import { usePendingModelApply } from "./usePendingModelApply";
@@ -26,11 +27,11 @@ export type SessionPreferenceController = {
 	catalogLoading: boolean;
 	refreshing: boolean;
 	reloadCatalog: (force?: boolean) => void;
-	/** 当前生效模型（live state 优先，回退记录 / 引导页默认） */
+	/** 当前选择模型（SessionRecord / 引导页偏好） */
 	currentModel: { provider?: string; modelId?: string; modelName?: string };
 	/** 当前模型可用档位（与思考选择器同一份，含 runtime RPC 兜底） */
 	thinkingLevels: ThinkingPickerLevel[];
-	/** 当前生效档位（live 优先） */
+	/** 当前选择档位（SessionRecord / 引导页偏好） */
 	currentThinkingLevel: string | undefined;
 	/** 收藏 / 最近 / 隐藏供应商 / 隐藏模型：选择器展示 + 循环候选 */
 	favoriteModels: string[];
@@ -100,7 +101,7 @@ export function useSessionPreferenceController(options: {
 		defaultModel: options.defaultModel,
 		defaultThinkingLevel: options.defaultThinkingLevel,
 	});
-	const { record, runtime, runtimeLive, isDshSession, models, favoriteModels, favoritesLoaded, hiddenProviders, hiddenModels, modelPending, currentModel: resolvedLiveModel, thinkingLevels, currentThinkingLevel } = state;
+	const { record, runtime, isDshSession, models, favoriteModels, favoritesLoaded, hiddenProviders, hiddenModels, modelPending, currentModel: resolvedLiveModel, thinkingLevels, currentThinkingLevel } = state;
 	// 与 Tab 栏「重启」共用 App.restartActiveAgent：置 restartingAgentId，
 	// SessionView overlay（loader + 文案）才会亮。这里自己调 restartRuntime
 	// 能换进程，但不会驱动那套 UI 状态。
@@ -111,7 +112,20 @@ export function useSessionPreferenceController(options: {
 		agentId: string;
 		provider: string;
 		modelId: string;
+		modelName: string;
 	} | null>(null);
+	const recordRef = useRef(record);
+	recordRef.current = record;
+
+	function writeSelectedModelToState(model: SessionModelPreference) {
+		const current = recordRef.current;
+		if (!current) return;
+		state.upsertSession({
+			...current,
+			model,
+			updatedAt: Date.now(),
+		});
+	}
 
 	function currentHandle() {
 		return toSessionRuntimeTarget(sessionId, store.get(sessionRuntimeByIdAtom)[sessionId]);
@@ -126,19 +140,21 @@ export function useSessionPreferenceController(options: {
 		return error instanceof SessionCommandFailure && (error.code === "SESSION_RUNTIME_UNAVAILABLE" || error.code === "SESSION_RUNTIME_CHANGED");
 	}
 
+	function selectedModelPreference(model: AvailableModel) {
+		return createSessionModelPreference(model.provider, model.id, model.name);
+	}
+
 	async function applyModelToRecord(model: AvailableModel) {
 		const updated = await desktopApi.sessions.updateRecord(sessionId, {
-			model: { provider: model.provider, modelId: model.id },
+			model: selectedModelPreference(model),
 		});
 		state.upsertSession(updated);
 	}
 
 	function currentLiveModel() {
-		// pending「from」只取 live state / catalog，不掺欢迎页兜底，避免把草稿偏好当成已生效模型。
+		// pending「from」与底栏取同一份会话选择，不能被 runtime 的实际模型反向改写。
 		return resolveComposerLiveModel({
-			state: runtime?.state,
 			record: record?.model,
-			isLive: runtimeLive,
 		});
 	}
 
@@ -153,22 +169,19 @@ export function useSessionPreferenceController(options: {
 			state.setModelPending(undefined);
 			return;
 		}
+		const selected = selectedModelPreference(model);
 		state.setModelPending({
 			from,
-			to: {
-				provider: model.provider,
-				modelId: model.id,
-				modelName: model.name ?? model.id,
-			},
+			to: selected,
 		});
 	}
 
 	function offerModelRestart(handle: SessionRuntimeTarget, model: AvailableModel) {
 		onApplied();
+		const selected = selectedModelPreference(model);
 		restartIntentRef.current = {
 			agentId: handle.agentId,
-			provider: model.provider,
-			modelId: model.id,
+			...selected,
 		};
 		setRestartTarget({
 			handle,
@@ -180,7 +193,7 @@ export function useSessionPreferenceController(options: {
 		sessionId,
 		runtime,
 		modelPending,
-		applyRuntimeModelState: state.patchRuntimeState,
+		applySelectedModel: (model) => writeSelectedModelToState(createSessionModelPreference(model.provider, model.modelId, model.modelName)),
 		clearPending: () => state.setModelPending(undefined),
 		offerRestart: offerModelRestart,
 	});
@@ -212,13 +225,7 @@ export function useSessionPreferenceController(options: {
 		if (!record) {
 			if (!isDshSession) {
 				try {
-					localStorage.setItem(
-						WELCOME_MODEL_KEY,
-						JSON.stringify({
-							provider: model.provider,
-							modelId: model.id,
-						}),
-					);
+					localStorage.setItem(WELCOME_MODEL_KEY, JSON.stringify(selectedModelPreference(model)));
 				} catch {
 					// localStorage 不可用时静默；创建会话回退到 pi 默认模型
 				}
@@ -230,18 +237,12 @@ export function useSessionPreferenceController(options: {
 		try {
 			if (handle) {
 				try {
-					const result = requireSessionCommand(await desktopApi.sessions.setRuntimeModel(handle, model.provider, model.id));
-					// 模型目录已校验可选项，成功命令后的会话偏好由用户点选决定；不让 runtime
-					// 上报的 provider/id 覆盖它（运行时只负责执行状态刷新）。
-					state.upsertSession({
-						...record,
-						model: { provider: model.provider, modelId: model.id },
-						updatedAt: Date.now(),
-					});
+					const selected = selectedModelPreference(model);
+					// 命令响应只确认成功/失败；底栏立即写入用户点选的本地展示值，不读取
+					// 或合并 runtime get_state 回传。
+					requireSessionCommand(await desktopApi.sessions.setRuntimeModel(handle, selected.provider, selected.modelId, selected.modelName));
+					writeSelectedModelToState(selected);
 					state.setModelPending(undefined);
-					// runtime state 仍合并用于执行状态与同一模型的配置别名；底栏选择本身
-					// 已由上面的 SessionRecord 更新驱动，不等待异步 emitState。
-					state.patchRuntimeState(result.value);
 				} catch (error) {
 					if (error instanceof SessionCommandFailure && error.code === "SESSION_RUNTIME_BUSY") {
 						await pickModelWhileBusy(handle, model);
@@ -285,13 +286,13 @@ export function useSessionPreferenceController(options: {
 		try {
 			if (handle) {
 				try {
-					const result = requireSessionCommand(await desktopApi.sessions.setRuntimeThinking(handle, level));
-					const agentState = result.value;
-					// 思考档位的候选集已按当前模型能力验证；会话偏好保存用户点选值，
-					// runtime state 仅用于刷新执行状态，不反向改写选择。
-					state.upsertSession({ ...record, thinkingLevel: level, updatedAt: Date.now() });
-					// 合并非偏好类运行态；底栏档位由 SessionRecord 的用户选择立即驱动。
-					state.patchRuntimeState(agentState);
+					// 命令响应只确认成功/失败。记录和底栏统一保存用户点选档位，
+					// 不读取或合并 runtime get_state 回传。
+					requireSessionCommand(await desktopApi.sessions.setRuntimeThinking(handle, level));
+					const current = recordRef.current;
+					if (current) {
+						state.upsertSession({ ...current, thinkingLevel: level, updatedAt: Date.now() });
+					}
 				} catch (error) {
 					// 与模型选择同一策略：运行时不可用时降级为写记录，启动时生效
 					if (!isStaleRuntimeFailure(error)) throw error;
@@ -354,7 +355,7 @@ export function useSessionPreferenceController(options: {
 
 	/**
 	 * 快捷键循环：在当前模型可用档位里环绕（档位表与思考选择器同源）。
-	 * 应用后的档位以后端返回为准（pi 会按模型能力 clamp），因此底栏展示始终是真实生效值。
+	 * 应用后的档位由用户选择持久化；后端仅负责接受或拒绝命令，底栏不再使用回传值覆盖。
 	 */
 	const cycleThinking = useCallback(
 		async (direction: CycleDirection = "forward") => {
@@ -421,7 +422,11 @@ export function useSessionPreferenceController(options: {
 		setRestartTarget(null);
 		try {
 			const updated = await desktopApi.sessions.updateRecord(sessionId, {
-				model: { provider: intent.provider, modelId: intent.modelId },
+				model: {
+					provider: intent.provider,
+					modelId: intent.modelId,
+					modelName: intent.modelName,
+				},
 			});
 			state.upsertSession(updated);
 			state.setModelPending(undefined);

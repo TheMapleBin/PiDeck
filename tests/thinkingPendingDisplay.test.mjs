@@ -12,8 +12,7 @@ function assertDisplay(actual, expected) {
 }
 
 /**
- * 运行中切换思考强度：renderer 不预设“下一轮”语义，
- * 只展示后端返回的最新 runtime state；是否作用于当前回合由后端决定。
+ * 思考档位的展示与模型选择同源：会话/引导页偏好是唯一权威，运行态只负责执行。
  */
 test("computeThinkingDisplay: 有当前档位时展示当前档位", () => {
 	assertDisplay(computeThinkingDisplay("xhigh"), {
@@ -29,7 +28,7 @@ test("computeThinkingDisplay: 无任何档位信息时返回空序列", () => {
 	});
 });
 
-test("resolveComposerThinkingLevel: 会话保存的选择优先于 live runtime", () => {
+test("resolveComposerThinkingLevel: 会话保存的选择优先于 runtime 和 fallback", () => {
 	assert.equal(
 		resolveComposerThinkingLevel({
 			state: "xhigh",
@@ -41,15 +40,14 @@ test("resolveComposerThinkingLevel: 会话保存的选择优先于 live runtime"
 	);
 });
 
-test("resolveComposerThinkingLevel: 非 live 时忽略残留 state，展示 catalog", () => {
+test("resolveComposerThinkingLevel: 无会话记录时只使用引导页 fallback", () => {
 	assert.equal(
 		resolveComposerThinkingLevel({
 			state: "xhigh",
-			record: "max",
 			fallback: "off",
-			isLive: false,
+			isLive: true,
 		}),
-		"max",
+		"off",
 	);
 });
 

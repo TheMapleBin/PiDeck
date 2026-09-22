@@ -1,3 +1,5 @@
+import { resolveModelDisplayName } from "../../../shared/modelDisplayName";
+
 /**
  * 后端拒绝运行中模型切换时的 fallback 展示推导。
  *
@@ -41,22 +43,18 @@ export type ComposerLiveModelSource = {
 };
 
 /**
- * 底栏/选择器当前模型：会话保存的用户选择优先，runtime 只在没有选择时兜底。
+ * 底栏/选择器当前模型只读取 PiDeck 的选择偏好。
  *
- * 选项本身已由模型目录/运行时能力校验；pi get_state 反映执行状态，不应反向覆盖用户
- * 在 PiDeck 选定的 provider/id。展示名仅在 runtime 与选择一致时借用，避免旧 runtime
- * 的名称串到新选择上；否则回退 id。
+ * 已有会话取 `SessionRecord.model`，尚未创建会话的引导页取 `fallback`。运行时状态
+ * 仍用于流式、工具和统计，但绝不能参与名称或当前选择的决策；这样 Agent 启动前后
+ * 都展示同一份本地名称快照。
  */
-export function resolveComposerLiveModel(input: { state?: ComposerLiveModelSource; record?: { provider?: string; modelId?: string }; fallback?: ComposerLiveModelSource; isLive: boolean }): ModelPendingRef {
-	const runtime = input.isLive ? input.state : undefined;
-	const record = input.record?.provider && input.record.modelId ? input.record : undefined;
-	const source = record ?? runtime ?? input.fallback;
-	const runtimeMatches = runtime?.provider === source?.provider && runtime?.modelId === source?.modelId;
-	const fallbackMatches = input.fallback?.provider === source?.provider && input.fallback?.modelId === source?.modelId;
+export function resolveComposerLiveModel(input: { record?: { provider?: string; modelId?: string; modelName?: string }; fallback?: ComposerLiveModelSource }): ModelPendingRef {
+	const source = input.record?.provider && input.record.modelId ? input.record : input.fallback;
 	return {
 		provider: source?.provider ?? "",
 		modelId: source?.modelId ?? "",
-		modelName: (runtimeMatches ? runtime?.modelName : undefined) ?? (fallbackMatches ? input.fallback?.modelName : undefined) ?? source?.modelId,
+		modelName: resolveModelDisplayName(source?.modelName, source?.modelId ?? ""),
 	};
 }
 
@@ -77,7 +75,7 @@ export function resolveComposerLiveModel(input: { state?: ComposerLiveModelSourc
 export function resolveGuideDisplayModel(input: {
 	isDsh: boolean;
 	/** 引导页点选（已经过 isWelcomeModelLost 校验，失效时为 undefined）。 */
-	welcomeModel?: { provider: string; modelId: string };
+	welcomeModel?: { provider: string; modelId: string; modelName?: string };
 	/** 主进程解析出的预选默认（显式默认 / 切换列表 / 上次使用的折叠结果）。 */
 	defaultModel?: ComposerLiveModelSource;
 }): ComposerLiveModelSource | undefined {

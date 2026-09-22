@@ -1337,14 +1337,14 @@ export class DshAgentManager implements SessionAgentGateway {
 		});
 	}
 
-	async setThinking(agentId: string, level: string): Promise<unknown> {
+	async setThinking(agentId: string, level: string): Promise<void> {
 		// DSH 的思考档走 selectModel.reasoningEffort，没有独立 RPC。
 		const runtime = this.runtime(agentId);
 		const selected = runtime.model;
 		if (!selected) {
 			// 没有当前模型时 DSH 无法把档位落到 host；只作为草稿偏好由 catalog 保存，
 			// 不写入 runtime.thinkingLevel，否则后续换模型会误把它带过去。
-			return { accepted: true, thinkingLevel: level };
+			return;
 		}
 		// 不在 PiDeck 侧预先拒绝运行中的回合：如果 host 支持动态切换，
 		// 当前回合可以直接使用；如果 host 不支持，由 selectModel 返回 busy/error。
@@ -1369,7 +1369,6 @@ export class DshAgentManager implements SessionAgentGateway {
 				runtime.thinkingLevel = previous;
 				throw this.selectModelError(updated.result.error, selected.provider, selected.model);
 			}
-			return this.getRuntimeState(agentId);
 		} catch (error) {
 			runtime.thinkingLevel = previous;
 			throw error;

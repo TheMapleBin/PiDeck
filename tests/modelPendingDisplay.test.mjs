@@ -34,60 +34,42 @@ test("computeModelDisplay: 有待生效时展示 from→to", () => {
 	);
 });
 
-test("resolveComposerLiveModel: 会话保存的选择优先于 live runtime", () => {
-	assertDisplay(
-		resolveComposerLiveModel({
-			state: { provider: "openai", modelId: "old-model", modelName: "Old" },
-			record: { provider: "anthropic", modelId: "new-model" },
-			fallback: { provider: "welcome", modelId: "welcome-model" },
-			isLive: true,
-		}),
-		{ provider: "anthropic", modelId: "new-model", modelName: "new-model" },
-	);
+test("resolveComposerLiveModel: Agent 启动前后都保持会话保存的名称快照", () => {
+	const record = { provider: "router9", modelId: "qd/qfmodel", modelName: "qwen-3.8-flash" };
+	const beforeRuntimeStarts = resolveComposerLiveModel({
+		record,
+		fallback: { provider: "welcome", modelId: "welcome-model", modelName: "Welcome" },
+	});
+	const afterRuntimeStarts = resolveComposerLiveModel({
+		// JS 调用仍可携带历史 runtime 参数；纯函数必须忽略它们。
+		state: { provider: "router9", modelId: "qd/qfmodel", modelName: "runtime-raw-name" },
+		record,
+		fallback: { provider: "welcome", modelId: "welcome-model", modelName: "Welcome" },
+		isLive: true,
+	});
+	assertDisplay(beforeRuntimeStarts, { provider: "router9", modelId: "qd/qfmodel", modelName: "qwen-3.8-flash" });
+	assertDisplay(afterRuntimeStarts, beforeRuntimeStarts);
 });
 
-test("resolveComposerLiveModel: 选择与 runtime 身份一致时保留 PiDeck 映射的展示名", () => {
+test("resolveComposerLiveModel: 缺失名称时只回退保存的 ID，不借 runtime 名称", () => {
 	assertDisplay(
 		resolveComposerLiveModel({
 			state: { provider: "router9", modelId: "qd/qfmodel", modelName: "qwen-3.8-flash" },
-			record: { provider: "router9", modelId: "qd/qfmodel" },
+			record: { provider: "router9", modelId: "qd/qfmodel", modelName: "  " },
 			isLive: true,
 		}),
-		{ provider: "router9", modelId: "qd/qfmodel", modelName: "qwen-3.8-flash" },
+		{ provider: "router9", modelId: "qd/qfmodel", modelName: "qd/qfmodel" },
 	);
 });
 
-test("resolveComposerLiveModel: 非 live 时忽略残留 state，展示 catalog", () => {
-	assertDisplay(
-		resolveComposerLiveModel({
-			state: { provider: "openai", modelId: "old-model", modelName: "Old" },
-			record: { provider: "anthropic", modelId: "new-model" },
-			fallback: { provider: "welcome", modelId: "welcome-model" },
-			isLive: false,
-		}),
-		{ provider: "anthropic", modelId: "new-model", modelName: "new-model" },
-	);
-});
-
-test("resolveComposerLiveModel: 无会话选择时，live runtime 提供当前模型与展示名", () => {
+test("resolveComposerLiveModel: 引导页没有会话记录时只使用引导页偏好", () => {
 	assertDisplay(
 		resolveComposerLiveModel({
 			state: { provider: "openai", modelId: "gpt-5", modelName: "GPT-5" },
-			fallback: { provider: "welcome", modelId: "welcome-model" },
+			fallback: { provider: "router9", modelId: "qd/qfmodel", modelName: "qwen-3.8-flash" },
 			isLive: true,
 		}),
-		{ provider: "openai", modelId: "gpt-5", modelName: "GPT-5" },
-	);
-});
-
-test("resolveComposerLiveModel: 非 live 且无 record 时走 fallback", () => {
-	assertDisplay(
-		resolveComposerLiveModel({
-			state: { provider: "openai", modelId: "old-model" },
-			fallback: { provider: "welcome", modelId: "welcome-model", modelName: "Welcome" },
-			isLive: false,
-		}),
-		{ provider: "welcome", modelId: "welcome-model", modelName: "Welcome" },
+		{ provider: "router9", modelId: "qd/qfmodel", modelName: "qwen-3.8-flash" },
 	);
 });
 
@@ -111,7 +93,7 @@ test("契约: 运行中优先直接切换模型，后端 busy 时才排到下一
 
 	assert.match(area, /modelDisabled=\{composer\.isStarting\}/);
 	assert.match(area, /modelPending=\{modelPendingMap\[props\.sessionId\]\}/);
-	assert.match(area, /runtimeLive=\{isLiveRuntimeStatus\(composer\.runtime\?\.status\)\}/);
+	assert.doesNotMatch(area, /runtimeLive=/);
 	assert.match(components, /disabled=\{props\.modelDisabled \?\? props\.disabled\}/);
 	assert.match(components, /app\.modelPendingTitle/);
 	assert.match(components, /resolveComposerLiveModel/);

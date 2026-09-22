@@ -227,7 +227,7 @@ test("renderer picker flow shows restart confirm on needsRestart", () => {
 	assert.doesNotMatch(preferenceController, /desktopApi\.sessions\.restartRuntime/);
 	assert.doesNotMatch(pickerHost, /desktopApi\.sessions\.restartRuntime/);
 	// 确认时先写会话记录再重启：setRuntimeModel 失败路径不再写 catalog。
-	assert.match(preferenceController, /updateRecord\(sessionId, \{[\s\S]*?model: \{ provider: intent\.provider, modelId: intent\.modelId \}/);
+	assert.match(preferenceController, /updateRecord\(sessionId, \{[\s\S]*?model:\s*\{\s*provider:\s*intent\.provider,\s*modelId:\s*intent\.modelId,\s*modelName:\s*intent\.modelName/);
 	assert.match(pickerHost, /modelRestartTitle/);
 	assert.match(pickerHost, /modelRestartBody/);
 });

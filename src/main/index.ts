@@ -214,6 +214,7 @@ import { resolvePiAuthHostLaunch } from "./pi/auth/piAuthHostLaunch";
 import { testPiProxy } from "./pi/PiProxyTester";
 import { SessionScanner } from "./sessions/SessionScanner";
 import { resolveLaunchDefaultOptions, isModelInModelsConfig } from "./sessions/launchDefaults";
+import { createSessionModelPreference } from "../shared/modelDisplayName";
 import { SessionCatalog, canAttachRuntimeMetadata } from "./sessions/SessionCatalog";
 import { aggregateDshProxyMode, buildHostProxyEnvPatch, resolveDshHostProxyMode, resolveEffectiveSessionProxyMode } from "./sessions/sessionProxyPolicy";
 import { SessionRuntimeCoordinator, type SessionRuntimeBinding } from "./sessions/SessionRuntimeCoordinator";
@@ -584,12 +585,13 @@ async function createAnonymousSession(input: CreateAnonymousSessionInput): Promi
 
 	// Resolve pi-configured defaults so the composer bar shows the effective
 	// model / thinking level even before the anonymous Agent is fully started.
-	let model = input.model;
+	let model: CreateAnonymousSessionInput["model"] = input.model ? createSessionModelPreference(input.model.provider, input.model.modelId, input.model.modelName) : undefined;
 	let thinkingLevel = input.thinkingLevel;
 	try {
 		const [settingsResult, modelsResult] = await Promise.all([configManager.getSettingsConfig(), configManager.getModelsConfig()]);
 		// 渲染层/引导页显式传入的模型（欢迎页偏好等）也可能指向已删除条目：
-		// 校验仍存在于 models.json，不存在则丢弃交给解析器兜底（lastUsed → 显式默认 → 第一个可用）。
+		// 校验仍存在于 models.json，不存在则交给 launchDefaults 按配置默认 →
+		// enabledModels → lastUsed 的顺序兜底。
 		if (model && !isModelInModelsConfig(modelsResult.parsed, model)) {
 			model = undefined;
 		}
@@ -644,12 +646,12 @@ async function activateAnonymousRuntime(session: SessionRecord, project: Project
 		const runtime = sessionRuntimeCoordinator.bindAnonymousRuntime(session.id, tab.id);
 		// Anonymous Agent 使用 --no-session 创建，不会经过普通 activateRuntime 的恢复流程；
 		// 因此在绑定后显式应用引导页选择，确保 pi 不再按自身默认优先级启动。
-		if (input.model) {
-			const result = await sessionRuntimeCoordinator.setRuntimeModel(runtime, input.model.provider, input.model.modelId);
+		if (session.model) {
+			const result = await sessionRuntimeCoordinator.setRuntimeModel(runtime, session.model.provider, session.model.modelId, session.model.modelName);
 			if (!result.ok) throw new Error(result.error.code);
 		}
-		if (input.thinkingLevel) {
-			const result = await sessionRuntimeCoordinator.setRuntimeThinking(runtime, input.thinkingLevel);
+		if (session.thinkingLevel) {
+			const result = await sessionRuntimeCoordinator.setRuntimeThinking(runtime, session.thinkingLevel);
 			if (!result.ok) throw new Error(result.error.code);
 		}
 		emitReplacementState(runtime, true);
@@ -3682,7 +3684,7 @@ app
 					title: input.title?.trim() || mainCopy("session.newTitle"),
 					environment: settingsStore.get().wslEnabled ? "wsl" : "native",
 					titleLocked: false,
-					model: input.model,
+					model: input.model ? createSessionModelPreference(input.model.provider, input.model.modelId, input.model.modelName) : undefined,
 					thinkingLevel: input.thinkingLevel,
 				});
 			},
@@ -3704,6 +3706,7 @@ app
 				}
 				return sessionCatalog.update(sessionId, {
 					...patch,
+					...(patch.model ? { model: createSessionModelPreference(patch.model.provider, patch.model.modelId, patch.model.modelName) } : {}),
 					title: title || undefined,
 				});
 			},
@@ -3799,7 +3802,7 @@ app
 			getRewindCheckpointDiff: (target, checkpointId) => sessionRuntimeCoordinator.getRewindCheckpointDiff(target, checkpointId),
 			restoreRewindCheckpoint: (target, checkpointId, scope) => sessionRuntimeCoordinator.restoreRewindCheckpoint(target, checkpointId, scope),
 			prepareSessionRuntimeResend: (target, messageId) => sessionRuntimeCoordinator.prepareRuntimeResend(target, messageId),
-			setSessionRuntimeModel: (target, provider, modelId) => sessionRuntimeCoordinator.setRuntimeModel(target, provider, modelId),
+			setSessionRuntimeModel: (target, provider, modelId, modelName) => sessionRuntimeCoordinator.setRuntimeModel(target, provider, modelId, modelName),
 			setSessionRuntimeThinking: (target, level) => sessionRuntimeCoordinator.setRuntimeThinking(target, level),
 			setSessionRuntimePermission: (target, preset) => sessionRuntimeCoordinator.setRuntimePermission(target, preset),
 			cloneSessionRuntime: async (target) => {

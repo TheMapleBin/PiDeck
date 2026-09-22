@@ -19,7 +19,6 @@ import { ComposerStatsLine } from "./ComposerStatsLine";
 import { ComposerWidgetLayoutProvider, type ComposerWidgetCollapsedByKey, useComposerWidgetLayoutValue } from "./ComposerWidgetLayout";
 import type { GitBranchInfo } from "../../../../shared/types";
 import type { EnqueuePromptSnapshot } from "../../hooks/useSessionSend";
-import { isLiveRuntimeStatus } from "../../utils/sessionCommands";
 import { VoiceTranscriptionControls } from "./VoiceTranscriptionControls";
 
 export type ComposerAreaProps = {
@@ -199,7 +198,6 @@ export const ComposerArea = forwardRef<HTMLElement, ComposerAreaProps>(function 
 									<ComposerBottomBar
 										sessionId={props.sessionId}
 										state={composer.runtime?.state}
-										runtimeLive={isLiveRuntimeStatus(composer.runtime?.status)}
 										disabled={composer.isStarting}
 										branchDisabled={composer.isBusy || composer.isStarting}
 										thinkingDisabled={composer.isStarting}

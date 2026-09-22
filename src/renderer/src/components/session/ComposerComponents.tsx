@@ -245,10 +245,11 @@ export function ComposerBottomBar(props: {
 	onSwitchBranch?: (branch: string) => void;
 	/** Draft sessions do not have a runtime yet, so retain their persisted settings in the bar. */
 	record?: Pick<SessionRecord, "model" | "thinkingLevel">;
-	/** 当前绑定 runtime 仍 live（starting/idle/running）时，底栏才优先展示 state。 */
-	runtimeLive?: boolean;
-	/** DSH 部署默认模型/思考档位（settings.yaml agent-default-model）：草稿期展示默认值用，
-	 *  不写入记录（激活后 runtime state 覆盖）。 */
+	/**
+	 * 引导页模型与思考档位默认值；会话创建前作为唯一展示偏好。
+	 * DSH 部署默认模型/思考档位（settings.yaml agent-default-model）也仅在记录缺失时
+	 * 用作草稿展示，运行态不会覆盖用户已保存的选择。
+	 */
 	defaultModel?: { provider?: string; modelId?: string; modelName?: string };
 	defaultThinkingLevel?: string;
 	/** 当前会话后端（pi 缺省）。 */
@@ -331,18 +332,15 @@ export function ComposerBottomBar(props: {
 		welcomeModel: effectiveWelcomeModel,
 		defaultModel: props.defaultModel,
 	});
-	const runtimeLive = Boolean(props.runtimeLive);
 	// 用量查询链路随会话后端：DSH 会话走 dsh（$DSH_HOME 配置 + 凭据库），其余走 pi。
 	// 圆球面板必须与 DSH 卡片/选择器同一 backend，否则查的是另一条 usage-probes.json。
 	const usageBackend: UsageProbeBackend = isDsh ? "dsh" : "pi";
 	// DSH 草稿：记录未填默认时用部署默认（settings.yaml agent-default-model）兜底展示。
-	// 非 live runtime 的残留 state 不能盖住 catalog：Agent 未启动时改模型/思考档位要立刻反映在底栏。
+	// Composer 的选择文字只取记录或引导页偏好，不能由 runtime state 改写。
 	const currentThinkingLevel = resolveComposerThinkingLevel({
-		state: props.state?.thinkingLevel,
 		record: props.record?.thinkingLevel,
 		// 引导页显式点选优先；未选择时才回退主进程解析的配置默认档位。
 		fallback: welcomeThinking ?? props.defaultThinkingLevel,
-		isLive: runtimeLive,
 	});
 	const thinkingLevelLabel = (level: string) => {
 		const labelKey = THINKING_LEVELS.find((item) => item.value === level)?.labelKey;
@@ -363,10 +361,8 @@ export function ComposerBottomBar(props: {
 		onChange: props.onChangeMode,
 	});
 	const liveModel = resolveComposerLiveModel({
-		state: props.state,
 		record: props.record?.model,
 		fallback: guideDefaultModel,
-		isLive: runtimeLive,
 	});
 	const modelDisplay = computeModelDisplay(liveModel.modelId ? liveModel : undefined, props.modelPending);
 	const modelFrom = modelDisplay.from;

@@ -20,6 +20,7 @@ import type {
 	SessionCommandErrorCode,
 	SessionCommandResult,
 	SessionRecord,
+	SessionModelPreference,
 	SessionRuntimeEvent,
 	SessionRuntimeInfo,
 	SessionRuntimeReplacement,
@@ -29,6 +30,7 @@ import type {
 	AgentUiBatchQuestion,
 } from "../../shared/types";
 import { buildSessionOriginKey } from "../../shared/sessionIdentity";
+import { createSessionModelPreference } from "../../shared/modelDisplayName";
 import { isRewindCheckpointId, isRewindRestoreScope } from "../../shared/types";
 import type { SessionCatalogEntry } from "./SessionCatalog";
 import { sessionFileSizeMb } from "./sessionFileSizeCopy";
@@ -40,7 +42,7 @@ export interface SessionCatalogGateway {
 		sessionId: string,
 		patch: {
 			title?: string;
-			model?: { provider: string; modelId: string } | null;
+			model?: SessionModelPreference | null;
 			thinkingLevel?: string | null;
 			permissionPreset?: string | null;
 			backend?: AgentBackend;
@@ -208,14 +210,14 @@ function isInteractiveUiMethod(method: unknown): boolean {
 
 /** catalog 里会在激活后被用户改写的偏好；lastApplied 用这份快照判断要不要再 setModel。 */
 type AppliedSessionPreferences = {
-	model?: { provider: string; modelId: string };
+	model?: SessionModelPreference;
 	thinkingLevel?: string;
 	permissionPreset?: string;
 };
 
 function snapshotPreferences(entry: SessionCatalogEntry): AppliedSessionPreferences {
 	return {
-		...(entry.model ? { model: { provider: entry.model.provider, modelId: entry.model.modelId } } : {}),
+		...(entry.model ? { model: createSessionModelPreference(entry.model.provider, entry.model.modelId, entry.model.modelName) } : {}),
 		...(entry.thinkingLevel ? { thinkingLevel: entry.thinkingLevel } : {}),
 		...(entry.permissionPreset ? { permissionPreset: entry.permissionPreset } : {}),
 	};
@@ -657,15 +659,25 @@ export class SessionRuntimeCoordinator {
 		return this.runTargetCommand(target, (agentId) => this.agents.forkSession(agentId, entryId));
 	}
 
-	setRuntimeModel(target: SessionRuntimeTarget, provider: string, modelId: string): Promise<SessionCommandResult<SessionTargetedValue<AgentRuntimeState>>> {
+	setRuntimeModel(target: SessionRuntimeTarget, provider: string, modelId: string, modelName?: string): Promise<SessionCommandResult<SessionTargetedValue<SessionModelPreference>>> {
 		return this.runTargetCommand(target, async (agentId) => {
-			// 先调运行中 Agent；成功后再写 catalog。可选模型已由运行时目录校验，
-			// catalog 保存用户点选的 provider/id，不拿 runtime 回传值反向改写选择。
-			await this.agents.setModel(agentId, provider, modelId);
-			const runtimeState = await this.agents.getRuntimeState(agentId);
-			await this.catalog.update(target.sessionId, {
-				model: { provider, modelId },
+			const existing = this.catalog.get(target.sessionId);
+			const selectedModel = createSessionModelPreference(provider, modelId, modelName);
+			const last = this.lastAppliedBySession.get(target.sessionId);
+			const alreadyApplied = last?.agentId === agentId && last.preferences.model?.provider === provider && last.preferences.model.modelId === modelId;
+			if (alreadyApplied && existing?.model?.modelName === selectedModel.modelName) {
+				return selectedModel;
+			}
+			// 可选模型已由运行时目录校验。命令成功后保存用户点选值，选择路径不读取
+			// get_state；完整运行态仍由独立事件流在启动/流式等场景推送。
+			if (!alreadyApplied) await this.agents.setModel(agentId, provider, modelId);
+			const updated = await this.catalog.update(target.sessionId, {
+				model: selectedModel,
 				updatedAt: Date.now(),
+			});
+			this.lastAppliedBySession.set(target.sessionId, {
+				agentId,
+				preferences: snapshotPreferences(updated),
 			});
 			void this.logger?.info("session-runtime", "Runtime model changed", {
 				sessionId: target.sessionId,
@@ -673,26 +685,33 @@ export class SessionRuntimeCoordinator {
 				provider,
 				modelId,
 			});
-			return runtimeState;
+			return selectedModel;
 		});
 	}
 
-	setRuntimeThinking(target: SessionRuntimeTarget, level: string): Promise<SessionCommandResult<SessionTargetedValue<AgentRuntimeState>>> {
+	setRuntimeThinking(target: SessionRuntimeTarget, level: string): Promise<SessionCommandResult<SessionTargetedValue<{ thinkingLevel: string }>>> {
 		return this.runTargetCommand(target, async (agentId) => {
-			// 思考档位的可选集已按当前模型能力过滤；Agent 接受命令后，catalog 保存用户选择，
-			// 不用 runtime 回传档位覆盖它。runtime state 仍返回给调用方刷新执行状态。
+			const last = this.lastAppliedBySession.get(target.sessionId);
+			if (last?.agentId === agentId && last.preferences.thinkingLevel === level) {
+				return { thinkingLevel: level };
+			}
+			// 候选档位已按当前模型能力过滤。成功后保存用户选择，不读取 get_state
+			// 或用其回传档位覆盖选择；runtime 状态另由事件流更新。
 			await this.agents.setThinking(agentId, level);
-			const runtimeState = await this.agents.getRuntimeState(agentId);
-			await this.catalog.update(target.sessionId, {
+			const updated = await this.catalog.update(target.sessionId, {
 				thinkingLevel: level,
 				updatedAt: Date.now(),
+			});
+			this.lastAppliedBySession.set(target.sessionId, {
+				agentId,
+				preferences: snapshotPreferences(updated),
 			});
 			void this.logger?.info("session-runtime", "Runtime thinking changed", {
 				sessionId: target.sessionId,
 				agentId,
 				level,
 			});
-			return runtimeState;
+			return { thinkingLevel: level };
 		});
 	}
 
