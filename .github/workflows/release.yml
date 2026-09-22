@@ -289,30 +289,28 @@ jobs:
           node-version: 24.13.0
           cache: npm
 
-      # 交叉解析只需要 npm + package-lock.json，不需要完整 npm ci（闭包树由
-      # pack 脚本在隔离目录自行安装）。但脚本自己 import 的包必须齐：
-      #   tar   —— prod 依赖（写归档用），--omit=dev 只装这条 prod 树（本地 3 秒 /
-      #           92 包，远低于全量 ci 的 10 分钟+），无需碰 devDependencies；
-      #   semver —— dev 依赖（范围匹配用），从 lock 顶层条目直接取包。
-      # 2026-09-22 事故：只补了 semver 没补 tar，6 个平台的 runtime 归档全挂，
-      # 导致 v0.7.7 发布后缺 12 个资产再补发。下面两步的顺序（先 npm ci 后 curl）
-      # 不能颠倒——npm ci 会清空 node_modules。
-      - name: Install packing script prod deps
-        run: npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+      # 交叉解析本身只要 npm + package-lock.json（runtime 闭包由 pack 脚本在隔离
+      # 目录自装），但**不能**因此省掉完整 npm ci——pack 脚本还会做两件必须依赖 root
+      # node_modules 的事：
+      #   1) 裸 import tar（prod）/ semver（dev）：归档写入与范围匹配；
+      #   2) 构建仓库内的 file: 本地包 packages/dsh-tool-pwsh-persistent（dsh pwsh
+      #      工具）：需 tsc + @types/node，且其 src 直接 import @deepseek-ai/
+      #      {dsh-tools,dsh-timeout,schemastery,dsh-pwsh-local} 类型——这些只在 dev
+      #      树里，--omit=dev 装不到。
+      # 2026-09-22 两次事故都源于此：v0.7.7 发布时漏 tar → 12 个 runtime 资产全缺；
+      # 补发时又因 --omit=dev 缺 tsc/@deepseek-ai → 6 个平台再次全挂。
+      # 所以这里老老实实装完整依赖（ubuntu 约 45 秒），--ignore-scripts 跳过 electron
+      # 等原生后置脚本（本 job 不需要二进制）。不要再手工 curl 拼 node_modules。
+      - name: Install dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
 
-      - name: Restore semver for packing script
-        shell: bash
-        run: |
-          VERSION=$(node -p "require('./package-lock.json').packages['node_modules/semver'].version")
-          mkdir -p node_modules/semver
-          curl -sfL "https://registry.npmjs.org/semver/-/semver-${VERSION}.tgz" | tar -xz -C node_modules/semver --strip-components=1
-          node -e "console.log('semver', require('semver/package.json').version, 'ready')"
-
-      # 脚本的裸 import 必须在 pack 前就能解析：这一步失败 = 上面漏装了包，直接
-      # 给出人话错误，而不是让 6 个平台的 pack job 各自报 ERR_MODULE_NOT_FOUND。
+      # 依赖再被「优化」掉就在这里先红：覆盖上面两组历史缺包的裸 import / 构建工具链。
       - name: Verify packing script deps resolvable
         shell: bash
-        run: node --input-type=module -e "await import('tar'); await import('semver'); console.log('packing script deps ok')"
+        run: |
+          node --input-type=module -e "await import('tar'); await import('semver'); console.log('packing script deps ok')"
+          node -e "require.resolve('typescript'); require.resolve('@deepseek-ai/dsh-tools'); console.log('local package build deps ok')"
+          test -d node_modules/@types/node
 
       - name: Pack DSH runtime (cross)
         run: node scripts/pack-dsh-runtime.mjs --target-os ${{ matrix.os }} --target-arch ${{ matrix.arch }}
