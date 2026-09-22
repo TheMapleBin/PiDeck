@@ -427,4 +427,3 @@ export function commitBatchAnswer(draft: AskBatchDraft, questionId: string, valu
 	const customAnswerIds = wasCustom ? (draft.customAnswerIds.includes(questionId) ? draft.customAnswerIds : [...draft.customAnswerIds, questionId]) : draft.customAnswerIds.filter((id) => id !== questionId);
 	return { ...draft, answers: { ...draft.answers, [questionId]: value }, labels: { ...draft.labels, [questionId]: label }, customAnswerIds };
 }
-
