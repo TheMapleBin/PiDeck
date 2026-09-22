@@ -748,13 +748,13 @@ export function createPreviewApi(): PiDesktopApi {
 				ok: true,
 				value: { target, value: { text: "" } },
 			}),
-			setRuntimeModel: async (target) => ({
+			setRuntimeModel: async (target, provider, modelId, modelName) => ({
 				ok: true,
-				value: { target, value: {} },
+				value: { target, value: { provider, modelId, modelName: modelName?.trim() || modelId } },
 			}),
-			setRuntimeThinking: async (target) => ({
+			setRuntimeThinking: async (target, thinkingLevel) => ({
 				ok: true,
-				value: { target, value: {} },
+				value: { target, value: { thinkingLevel } },
 			}),
 			setRuntimePermission: async (target) => ({
 				ok: true,
