@@ -1,4 +1,4 @@
-## v0.7.7-beta - 2026-09-21
+## v0.7.7 - 2026-09-21
 
 ### 🚀 New Features
 - **Search workspace files by name (#215)** — The file drawer toolbar gains a search button that searches as you type (250ms debounce): the main process scans file names across the whole workspace (same ignore rules as the file tree, any depth), skips oversized directories one level at a time, and returns whatever it has collected once it hits the 200-result cap or the 8s timeout — huge monorepos get usable results in seconds instead of hanging or being rejected. Results are a flat list with the same Seti icons as the tree and highlighted matches; single-click previews, double-click opens permanently, and the right-click menu is shared with the file tree (reveal in folder / copy path work out of the box). While the debounce is pending, shortening the query filters the last full snapshot client-side for zero-latency feedback, and stale results from a slow scan are dropped by generation so they never overwrite newer input; Esc first clears the query, then closes back to the tree.

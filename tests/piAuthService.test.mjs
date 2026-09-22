@@ -11,7 +11,7 @@ import { PassThrough } from "node:stream";
 import { test } from "node:test";
 import { loadTsCommonJs } from "./helpers/loadTsCommonJs.mjs";
 
-const { PiAuthService } = loadTsCommonJs("src/main/pi/auth/PiAuthService.ts");
+const { PiAuthService, filterSupportedAuthProviders } = loadTsCommonJs("src/main/pi/auth/PiAuthService.ts");
 
 const OK_LAUNCH = { ok: true, nodeExe: "node", helperPath: "/tmp/pi-auth-host.mjs", sdkEntry: "/tmp/pi/dist/index.js", env: { PIDECK_PI_SDK_ENTRY: "/tmp/pi/dist/index.js" } };
 
@@ -84,6 +84,45 @@ test("listProviders: 写 list 指令、回读供应商、结束即回收进程",
 	assert.equal(latest().child.killed, true);
 	assert.equal(spawnCalls[0].command, "node");
 	assert.deepEqual(plain(spawnCalls[0].args), ["/tmp/pi-auth-host.mjs"]);
+});
+
+test("listProviders: 滤掉 models.json 自定义供应商，只留 pi 支持的", async () => {
+	const { service, latest } = createService();
+	const pending = service.listProviders();
+	latest().emitLine({
+		type: "providers",
+		// pi 的 getProviders() 把内置目录与本地自定义合成一份；自定义项自带 apiKey 认证描述，
+		// 如果没有 builtIn 标记就会淹没登录列表（正是用户反馈「怎么多了好多认证供应商」）。
+		providers: [
+			{ id: "anthropic", name: "Anthropic", builtIn: true, oauth: { label: "Anthropic (Claude Pro/Max)", isSubscription: true } },
+			{ id: "ai88", name: "ai88", builtIn: false, apiKey: { name: "API key", canLogin: true } },
+			{ id: "custom-gateway", name: "Custom Gateway", builtIn: false, apiKey: { name: "API key", canLogin: true } },
+		],
+	});
+	const result = await pending;
+	assert.equal(result.ok, true);
+	assert.deepEqual(plain(result.list.providers.map((provider) => provider.id)), ["anthropic"]);
+});
+
+test("filterSupportedAuthProviders: 只在明确非内置时丢弃，没有标记一律保留", () => {
+	const annotated = plain(
+		filterSupportedAuthProviders([
+			{ id: "builtin", name: "Builtin", builtIn: true, ambientOnly: false },
+			{ id: "custom", name: "Custom", builtIn: false, ambientOnly: false },
+		]),
+	);
+	assert.deepEqual(
+		annotated.map((provider) => provider.id),
+		["builtin"],
+	);
+
+	// 旧助手/pi 改了内部结构 → 没有 builtIn 字段：宁可多显示，不能把列表清空。
+	const unmarked = plain(filterSupportedAuthProviders([{ id: "kimi", name: "Kimi", ambientOnly: false }]));
+	assert.deepEqual(
+		unmarked.map((provider) => provider.id),
+		["kimi"],
+	);
+	assert.equal(unmarked.length, 1);
 });
 
 test("listProviders: 助手 fatal（SDK 加载失败）归类为 sdk-unavailable 并带上原因", async () => {

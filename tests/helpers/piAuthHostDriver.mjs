@@ -23,6 +23,9 @@ export const AUTH_HOST_PATH = join(REPO_ROOT, "resources", "pi-auth-host.mjs");
 export const FAKE_PI_SDK_SOURCE = `
 export const VERSION = "9.9.9-test";
 
+/** 运行时是否假装成「拿不到内置目录」的旧 pi：由 FAKE_PI_LEGACY=1 触发。 */
+const FAKE_LEGACY = process.env.FAKE_PI_LEGACY === "1";
+
 export const ModelRuntime = {
 	async create(options) {
 		return {
@@ -39,11 +42,27 @@ export const ModelRuntime = {
 					{ id: "cancel-provider", name: "Cancel Provider", auth: { oauth: { name: "Cancel OAuth", login: async () => {} } } },
 					{ id: "out-of-band-provider", name: "Out Of Band Provider", auth: { oauth: { name: "Out Of Band OAuth", login: async () => {} } } },
 					{ id: "fail-provider", name: "Fail Provider", auth: { oauth: { name: "Fail OAuth", login: async () => {} } } },
+					// 模拟 models.json 里用户自定义的供应商：pi 会为它兜底合成 apiKey 认证，
+					// 名字就是千篇一律的 "API key"（真实 runtime 的 defaultBuiltins 里没有它）。
+					{ id: "custom-models-json", name: "Custom Models JSON", auth: { apiKey: { name: "API key", login: async () => {} } } },
+					// 扩展注册的供应商：不在内置目录里，但 getRegisteredProviderIds 会报出来。
+					{ id: "ext-provider", name: "Extension Provider", auth: { oauth: { name: "Extension OAuth", login: async () => {} } } },
 				];
 			},
 			getProvider(providerId) {
 				return this.getProviders().find((provider) => provider.id === providerId);
 			},
+			// 与真实 ModelRuntime 一致：defaultBuiltins 是 pi 自己的内置供应商目录（普通字段），
+			// getRegisteredProviderIds 报出扩展注册的供应商。FAKE_PI_LEGACY=1 时两者都不给，
+			// 用来验证「宿主拿不到内置信息时不能凭空下结论」（见 piAuthHost.test.mjs）。
+			...(FAKE_LEGACY
+				? {}
+				: {
+						defaultBuiltins: new Map(["oauth-basic", "both", "key-only", "ambient-only", "no-auth", "device-provider", "cancel-provider", "out-of-band-provider", "fail-provider"].map((id) => [id, {}])),
+						getRegisteredProviderIds() {
+							return ["ext-provider"];
+						},
+					}),
 			// 与真实 ModelRuntime 一致：状态来自 auth.json，已登录 = configured
 			getProviderAuthStatus(providerId) {
 				return { configured: this.listCredentialsSync().some((entry) => entry.providerId === providerId) };

@@ -31,7 +31,7 @@ test("list 返回 pi 自带供应商描述、已登录状态，并过滤无认�
 		assert.equal(providersMessage.piVersion, "9.9.9-test");
 		// no-auth 没有任何认证方式，宿主无法渲染，必须过滤；其余按 name 排序（按名字比对，不锁死 locale 的排序细节）
 		const ids = providersMessage.providers.map((provider) => provider.id);
-		assert.deepEqual([...ids].sort(), ["ambient-only", "both", "cancel-provider", "device-provider", "fail-provider", "key-only", "oauth-basic", "out-of-band-provider"]);
+		assert.deepEqual([...ids].sort(), ["ambient-only", "both", "cancel-provider", "custom-models-json", "device-provider", "ext-provider", "fail-provider", "key-only", "oauth-basic", "out-of-band-provider"]);
 		const names = providersMessage.providers.map((provider) => provider.name);
 		assert.deepEqual(
 			names,
@@ -56,6 +56,27 @@ test("list 返回 pi 自带供应商描述、已登录状态，并过滤无认�
 		// 已登录状态由 pi 自己（auth.json）给出，不是宿主猜的
 		assert.deepEqual(both.credential, { type: "oauth" });
 		assert.deepEqual(providersMessage.providers.find((provider) => provider.id === "key-only").credential, { type: "api_key" });
+
+		// builtIn 用来让宿主滤掉 models.json 自定义供应商：内置目录里的为 true，
+		// 自定义的为 false；扩展注册的（getRegisteredProviderIds）同样算 pi 支持。
+		assert.equal(oauthBasic.builtIn, true);
+		assert.equal(providersMessage.providers.find((provider) => provider.id === "custom-models-json").builtIn, false);
+		assert.equal(providersMessage.providers.find((provider) => provider.id === "ext-provider").builtIn, true);
+	});
+});
+
+test("list：pi 运行时拿不到内置目录时不下 builtIn 结论（宿主按旧行为保留）", async () => {
+	await withFakePi(async (fake) => {
+		// FAKE_PI_LEGACY=1：假 runtime 不提供 defaultBuiltins / getRegisteredProviderIds，
+		// 模拟 pi 改了内部结构或旧版本的 pi。
+		const { messages } = await runAuthHost({ entry: fake.entry, env: { FAKE_PI_LEGACY: "1" }, commands: [{ cmd: "list" }] });
+		const providers = messagesOfType(messages, "providers").at(-1).providers;
+		assert.ok(providers.length > 0, "判不出内置与否时不能把列表清空");
+		// builtIn 判定不出来就不写该字段（JSON 会丢 undefined），宿主按「未知=保留」处理。
+		assert.ok(
+			providers.every((provider) => provider.builtIn === undefined),
+			"没有依据时不得凭空标记 builtIn",
+		);
 	});
 });
 

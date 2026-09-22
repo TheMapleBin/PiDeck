@@ -10,15 +10,21 @@
  * electron app... 之后直接结束」，退出码 127 —— 子进程创建失败，看起来像代码问题。
  * 本脚本把这类问题在开发一开始就点明，并提供一条命令的修复路径。
  *
- * 修复为什么可以直接删 dist：缓存 zip（%LOCALAPPDATA%/electron/Cache、~/.cache/electron、
- * ~/Library/Caches/electron）里是完整安装包，install.js 会本地解压、不重新下载；但 install.js
- * 见到 path.txt + dist/<binary> 存在会直接跳过，所以必须先删掉这两者。
- * 下载缓存也缺失时会退回联网下载，属于可接受的降级。
+ * 修复分两段，先走官方路径、再走本地兜底：
+ *   1) 删掉 install.js 判断「已安装」的两个标记（dist 与 path.txt）后跑 install.js —— 缓存 zip
+ *      命中时它本地解压、不联网（缓存 zip 在 %LOCALAPPDATA%/electron/Cache、~/.cache/electron、
+ *      ~/Library/Caches/electron 里）。
+ *   2) install.js 失败（典型：连不上 GitHub，`Error: Electron uninstall`）时，改用
+ *      scripts/electronCacheZip.mjs 直接从缓存 zip 还原 —— 见该模块顶部：@electron/get 的缓存
+ *      目录名是**下载 URL 的 sha256**，换过镜像的机器上 install.js 按 GitHub URL 算出的键永远
+ *      对不上自己那份缓存；按「文件名 + sha256」找则不受影响，所以这一步能离线救回来。
+ * 两段都失败才算修复失败，并把两段原因一起报出来。
  */
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { extractElectronFromCache } from "./electronCacheZip.mjs";
 import probeModule from "./electronBinaryProbe.js";
 
 const { formatProbeFailure, probeElectronBinary } = probeModule;
@@ -63,18 +69,30 @@ export function runElectronInstaller({ electronDir, nodeExecPath = process.execP
 	return { ok: true };
 }
 
-/** 一键修复：删标记 → 重解压 → 复检，任一步失败都返回可读原因。 */
-export function repairElectronBinary({ electronDir, requireFn, env, nodeExecPath, spawn, fs, log = console.log, probe = probeElectronBinary } = {}) {
+/**
+ * 一键修复：删标记 → install.js 重解压 →（失败则）本地缓存 zip 兜底 → 复检。
+ * 任一步失败都返回可读原因；`extractFallback` 是测试注入点（真实实现会碰磁盘）。
+ * 返回的 strategy 说明最终靠哪条路径还原（installer | cache-zip），供 CLI 提示用。
+ */
+export async function repairElectronBinary({ electronDir, requireFn, env, nodeExecPath, spawn, fs, log = console.log, probe = probeElectronBinary, extractFallback = extractElectronFromCache } = {}) {
 	const reset = resetElectronArtifacts({ electronDir, fs });
 	if (!reset.ok) return { ok: false, detail: reset.detail };
 	const installed = runElectronInstaller({ electronDir, nodeExecPath, spawn, fs, log });
-	if (!installed.ok) return { ok: false, detail: installed.detail };
-	const verdict = probe({ requireFn, env, spawn });
-	return verdict.ok ? { ok: true, binaryPath: verdict.binaryPath } : { ok: false, detail: verdict.detail, binaryPath: verdict.binaryPath };
+	let strategy = "installer";
+	if (!installed.ok) {
+		// 官方路径失败就不再重试同一件事（它本质上要联网），直接走不依赖 URL 缓存键的本地还原。
+		log(`[electron] install.js 未能完成（${installed.detail}），改从本地缓存 zip 还原 …`);
+		const fallback = await extractFallback({ electronDir, env, log });
+		if (!fallback.ok) return { ok: false, detail: `${installed.detail}；本地缓存兜底也失败：${fallback.detail}` };
+		strategy = "cache-zip";
+	}
+	// 探活的替身实现可能同步返回，await 对同步值与 Promise 都成立。
+	const verdict = await probe({ requireFn, env, spawn });
+	return verdict.ok ? { ok: true, binaryPath: verdict.binaryPath, strategy } : { ok: false, detail: verdict.detail, binaryPath: verdict.binaryPath, strategy };
 }
 
 /** CLI 主流程：体检 → 需要时修复 → 复检，返回进程退出码。 */
-export function runCli({ argv = process.argv.slice(2), projectRoot = join(dirname(fileURLToPath(import.meta.url)), ".."), probe = probeElectronBinary, repair = repairElectronBinary, log = console.log, warn = console.warn } = {}) {
+export async function runCli({ argv = process.argv.slice(2), projectRoot = join(dirname(fileURLToPath(import.meta.url)), ".."), probe = probeElectronBinary, repair = repairElectronBinary, log = console.log, warn = console.warn } = {}) {
 	const electronDir = join(projectRoot, "node_modules", "electron");
 	const repairRequested = argv.includes("--repair");
 	const version = readElectronVersion({ electronDir });
@@ -83,7 +101,7 @@ export function runCli({ argv = process.argv.slice(2), projectRoot = join(dirnam
 	if (!verdict.ok && repairRequested) {
 		for (const line of formatProbeFailure(verdict)) warn(line);
 		// repair 注入点：真实实现会删 dist/path.txt 并重解压，测试必须能替掉它。
-		const repaired = repair({ electronDir, log });
+		const repaired = await repair({ electronDir, log });
 		if (!repaired.ok) {
 			warn(`[electron] ✗ 修复失败：${repaired.detail}`);
 			return 1;
@@ -94,6 +112,8 @@ export function runCli({ argv = process.argv.slice(2), projectRoot = join(dirnam
 			warn("[electron]   换个角度：确认杀软/EDR 是否拦了 electron.exe，或直接重新 npm install electron");
 			return 1;
 		}
+		// 走了兜底路径时点明一句：它意味着 install.js 联网失败，本机下次装包还会遇到同样问题。
+		if (repaired.strategy === "cache-zip") log("[electron] 说明：install.js 无法联网，本次是从本地缓存 zip 直接还原的。");
 	}
 
 	if (!verdict.ok) {
@@ -107,5 +127,5 @@ export function runCli({ argv = process.argv.slice(2), projectRoot = join(dirnam
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-	process.exit(runCli());
+	process.exit(await runCli());
 }
