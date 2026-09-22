@@ -37,7 +37,9 @@ export function QuickMessageMenu(props: {
 }) {
 	const { items, loading, error, openFile, refresh } = useQuickMessages();
 	const openSettings = useSetAtom(openSettingsAtom);
-	const { open, setOpen } = useQuickMessagePopover({ sessionId: props.sessionId, refresh });
+	// useQuickMessages.refresh 返回快照（Promise<QuickMessagesSnapshot | null>），
+	// 而 hook 参数类型是 () => void | Promise<void>：包一层吞掉返回值，避免类型不兼容。
+	const { open, setOpen } = useQuickMessagePopover({ sessionId: props.sessionId, refresh: () => void refresh() });
 	// 按钮 tooltip 顺带展示当前生效键位（跟随设置页自定义），让快捷键可被发现。
 	// aria-keyshortcuts 要 ARIA 语法（Control+Shift+M），不能直接挂展示用的 "⌘⇧M"。
 	const { bindings, platform } = useShortcutBindings();
