@@ -290,8 +290,16 @@ jobs:
           cache: npm
 
       # 交叉解析只需要 npm + package-lock.json，不需要完整 npm ci（闭包树由
-      # pack 脚本在隔离目录自行安装）。semver 是脚本里范围匹配的依赖，从 lock
-      # 顶层条目直接取包，避免全量 npm ci（10 分钟+）。
+      # pack 脚本在隔离目录自行安装）。但脚本自己 import 的包必须齐：
+      #   tar   —— prod 依赖（写归档用），--omit=dev 只装这条 prod 树（本地 3 秒 /
+      #           92 包，远低于全量 ci 的 10 分钟+），无需碰 devDependencies；
+      #   semver —— dev 依赖（范围匹配用），从 lock 顶层条目直接取包。
+      # 2026-09-22 事故：只补了 semver 没补 tar，6 个平台的 runtime 归档全挂，
+      # 导致 v0.7.7 发布后缺 12 个资产再补发。下面两步的顺序（先 npm ci 后 curl）
+      # 不能颠倒——npm ci 会清空 node_modules。
+      - name: Install packing script prod deps
+        run: npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+
       - name: Restore semver for packing script
         shell: bash
         run: |
@@ -299,6 +307,12 @@ jobs:
           mkdir -p node_modules/semver
           curl -sfL "https://registry.npmjs.org/semver/-/semver-${VERSION}.tgz" | tar -xz -C node_modules/semver --strip-components=1
           node -e "console.log('semver', require('semver/package.json').version, 'ready')"
+
+      # 脚本的裸 import 必须在 pack 前就能解析：这一步失败 = 上面漏装了包，直接
+      # 给出人话错误，而不是让 6 个平台的 pack job 各自报 ERR_MODULE_NOT_FOUND。
+      - name: Verify packing script deps resolvable
+        shell: bash
+        run: node --input-type=module -e "await import('tar'); await import('semver'); console.log('packing script deps ok')"
 
       - name: Pack DSH runtime (cross)
         run: node scripts/pack-dsh-runtime.mjs --target-os ${{ matrix.os }} --target-arch ${{ matrix.arch }}
