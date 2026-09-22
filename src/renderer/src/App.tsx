@@ -29,7 +29,7 @@ import { buildSettingsCommands, type PaletteCommand } from "./utils/commandPalet
 import { CommandPalette } from "./components/overlays/CommandPalette";
 import { CommandPaletteOnboarding, markCommandPaletteOnboardingSeen } from "./components/overlays/CommandPaletteOnboarding";
 import { desktopApi as api, isLanWeb, missingElectronPreload } from "./desktopApi";
-import { turnFlowSettingsAtom, defaultAgentBackendAtom, effectiveAgentBackendAtom, busySendDeliveryAtom, imageGenConfigAtom, dshRuntimeStatusAtom, openSettingsAtom, openAutomationModalAtom, sessionRecordsAtom, bumpNewTurnCollapseTickAtom } from "./atoms";
+import { turnFlowSettingsAtom, defaultAgentBackendAtom, effectiveAgentBackendAtom, busySendDeliveryAtom, hiddenModulesAtom, imageGenConfigAtom, dshRuntimeStatusAtom, openSettingsAtom, openAutomationModalAtom, sessionRecordsAtom, bumpNewTurnCollapseTickAtom } from "./atoms";
 import { resolveBusySendDelivery } from "../../shared/busySendDelivery";
 import { SESSION_TAB_MAX_WIDTH_DEFAULT } from "../../shared/sessionTabWidth";
 import { FILE_TREE_ABSOLUTE_MAX_DEPTH } from "../../shared/fileTree";
@@ -756,6 +756,13 @@ export function App() {
 	useEffect(() => {
 		setBusySendDelivery(settings.busySendDelivery);
 	}, [settings.busySendDelivery, setBusySendDelivery]);
+
+	// 隐藏的功能模块同步给不持有 settings props 的消费方（ConfigModal Pi/DSH 分页、composer 后端下拉），
+	// 与 defaultAgentBackend 同一模式。
+	const setHiddenModules = useSetAtom(hiddenModulesAtom);
+	useEffect(() => {
+		setHiddenModules(settings.hiddenModules ?? []);
+	}, [settings.hiddenModules, setHiddenModules]);
 
 	// 启动预热：应用起来后把「已开启用量查询」的供应商各查一次（串行错峰），
 	// 打开模型/认证页即可直接看到徽章数值，不必先手动刷新。
@@ -3717,7 +3724,7 @@ export function App() {
 			});
 		}
 
-		commands.push(...buildSettingsCommands((target) => store.set(openSettingsAtom, target)));
+		commands.push(...buildSettingsCommands((target) => store.set(openSettingsAtom, target), settings.hiddenModules));
 		return commands;
 	})();
 

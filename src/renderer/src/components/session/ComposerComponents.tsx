@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect, useCallback, type ReactNode } from "react";
+import { useAtomValue } from "jotai";
+import { dshModuleHiddenAtom, imageGenModuleHiddenAtom } from "../../atoms";
 import { AlertCircle, Brain, Check, ChevronDown, ChevronLeft, ChevronRight, CornerDownLeft, Eye, EyeOff, FileText, GitBranch, ImageIcon, ListChecks, Loader2, Paperclip, Plus, RefreshCw, Sparkles, Star, Target, Wrench, X } from "lucide-react";
 import { t, type TranslationKey } from "../../i18n";
 import { Button } from "../ui-shadcn/button";
@@ -130,9 +132,15 @@ export function ExtensionWidgetCard(props: {
 	);
 }
 
-/** 输入框底栏的后端选择下拉（pi / dsh）：跟随会话后端（新建会话默认 pi，由设置项 defaultAgentBackend 决定）。
- * 触发区只显示当前后端 logo（不再带文字）；下拉选项保留文字便于选择时区分。 */
+/** 输入框底栏的后端选择下拉（pi / dsh / 生图）：跟随会话后端（新建会话默认 pi，由设置项 defaultAgentBackend 决定）。
+ * 触发区只显示当前后端 logo（不再带文字）；下拉选项保留文字便于选择时区分。
+ * 用户在设置里隐藏了 DSH / 生图模块时不列对应选项；但当前草稿已选中该后端时仍保留，
+ * 否则 Select 的当前值在列表里没有对应项，用户也无法看清自己选了什么。 */
 export function ComposerBackendPicker(props: { backend: AgentBackend; disabled?: boolean; onChangeBackend: (backend: AgentBackend) => void }) {
+	const dshHidden = useAtomValue(dshModuleHiddenAtom);
+	const imageGenHidden = useAtomValue(imageGenModuleHiddenAtom);
+	const showDsh = !dshHidden || props.backend === "dsh";
+	const showImageGen = !imageGenHidden || props.backend === "imagegen";
 	return (
 		<Select value={props.backend} disabled={props.disabled} onValueChange={(value) => props.onChangeBackend(value as AgentBackend)}>
 			<SelectTrigger size="sm" className="composer-bar-btn backend h-7 gap-1 rounded-md border-transparent px-1.5 text-control font-semibold text-foreground hover:bg-muted/60 [&_[data-slot='select-icon']]:hidden" title={t("session.backendPickerHint")}>
@@ -147,14 +155,18 @@ export function ComposerBackendPicker(props: { backend: AgentBackend; disabled?:
 					<PiLogo className="size-3.5 shrink-0" />
 					{t("sessionSource.pi")}
 				</SelectItem>
-				<SelectItem value="dsh">
-					<DshLogo className="size-3.5 shrink-0" />
-					{t("sessionBackend.dsh")}
-				</SelectItem>
-				<SelectItem value="imagegen">
-					<ImageIcon className="size-3.5 shrink-0 text-muted-foreground" />
-					{t("sessionBackend.imagegen")}
-				</SelectItem>
+				{showDsh ? (
+					<SelectItem value="dsh">
+						<DshLogo className="size-3.5 shrink-0" />
+						{t("sessionBackend.dsh")}
+					</SelectItem>
+				) : null}
+				{showImageGen ? (
+					<SelectItem value="imagegen">
+						<ImageIcon className="size-3.5 shrink-0 text-muted-foreground" />
+						{t("sessionBackend.imagegen")}
+					</SelectItem>
+				) : null}
 			</SelectContent>
 		</Select>
 	);
