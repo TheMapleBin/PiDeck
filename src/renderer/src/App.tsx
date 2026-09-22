@@ -98,6 +98,7 @@ import {
 	sessionSummariesByProjectIdAtomFamily,
 	sessionDraftByIdAtom,
 	promoteSessionComposerStateAtom,
+	promoteSessionMessagesCacheAtom,
 	setSessionAttachmentsAtom,
 	setSessionCatalogLoadStateAtom,
 	setSessionMessageLoadStateAtom,
@@ -203,6 +204,7 @@ export function App() {
 	const setSessionDraft = useSetAtom(setSessionDraftAtom);
 	const setSessionAttachments = useSetAtom(setSessionAttachmentsAtom);
 	const promoteSessionComposerState = useSetAtom(promoteSessionComposerStateAtom);
+	const promoteSessionMessagesCache = useSetAtom(promoteSessionMessagesCacheAtom);
 	const setSessionCatalogLoadState = useSetAtom(setSessionCatalogLoadStateAtom);
 	const setSessionMessageLoadState = useSetAtom(setSessionMessageLoadStateAtom);
 	// 会话消息区域遮罩（SessionSurfaceStage）：重启/停止/重载等运行时操作据此显示「正在…」加载动画
@@ -1589,14 +1591,11 @@ export function App() {
 				// 引导页发送时 useSessionSend 已把 user 消息乐观写入虚拟会话 cache；
 				// 提升时搬到真实会话——否则切页后新会话空态与引导页视觉相同，
 				// 要等 agent 启动、回复流入后页面才「动」，用户误以为发送没生效。
-				const bootstrapMessages = store.get(sessionMessagesCacheAtom)[GUIDE_BOOTSTRAP_SESSION_ID]?.messages;
-				if (bootstrapMessages?.length) {
-					setCacheMessages({
-						sessionId: session.id,
-						messages: bootstrapMessages,
-						source: "runtime",
-					});
-				}
+				// 虚拟会话的 cache 随之清空（见 promoteSessionMessagesCacheAtom）。
+				promoteSessionMessagesCache({
+					fromSessionId: GUIDE_BOOTSTRAP_SESSION_ID,
+					toSessionId: session.id,
+				});
 				promoteSessionComposerState({
 					fromSessionId: GUIDE_BOOTSTRAP_SESSION_ID,
 					toSessionId: session.id,
@@ -1612,7 +1611,7 @@ export function App() {
 				guideBootstrapPromotionRef.current = undefined;
 			}
 		},
-		[activeProjectId, projects, promoteSessionComposerState, selectSessionCommand, upsertSession, workspaceChrome, effectiveAgentBackend],
+		[activeProjectId, projects, promoteSessionComposerState, promoteSessionMessagesCache, selectSessionCommand, upsertSession, workspaceChrome, effectiveAgentBackend],
 	);
 
 	/** 有效命令名白名单：仅已知命令渲染为 chip */
