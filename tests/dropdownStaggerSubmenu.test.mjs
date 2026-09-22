@@ -25,11 +25,7 @@ test("dropdown-stagger animation excludes the Radix popper wrapper", () => {
 	assert.ok(animated.length > 0, "dropdown-stagger animation rule must exist");
 
 	for (const rule of animated) {
-		assert.match(
-			rule.selector,
-			/:not\(\s*\[data-radix-popper-content-wrapper\]\s*\)/,
-			`selector "${rule.selector}" animates the popper wrapper and breaks submenu positioning`,
-		);
+		assert.match(rule.selector, /:not\(\s*\[data-radix-popper-content-wrapper\]\s*\)/, `selector "${rule.selector}" animates the popper wrapper and breaks submenu positioning`);
 	}
 });
 
