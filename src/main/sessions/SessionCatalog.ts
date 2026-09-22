@@ -5,7 +5,7 @@ import type { AgentBackend, AgentTab, SessionEnvironment, SessionModelPreference
 import type { SessionProxyOverride } from "../../shared/types/session";
 import { getAppLogger } from "../logging/sharedLogger";
 import { renameWithRetry } from "../utils/fsRetry";
-import { buildSessionOriginKey, buildSummaryOriginKey, canonicalizeSessionPath, collectSessionSubtreeIds, getImportedSessionSourceId, getSessionEnvironment, isInSubagentArtifactsDir, looksLikePiSessionFileStem } from "../../shared/sessionIdentity";
+import { buildSessionOriginKey, buildSummaryOriginKey, canonicalizeSessionPath, collectSessionSubtreeIds, getImportedSessionSourceId, getSessionEnvironment, isInSubagentArtifactsDir, looksLikeCodexSessionFileStem, looksLikePiSessionFileStem } from "../../shared/sessionIdentity";
 import { looksLikeExpandedRefBlockTitle } from "../../shared/expandedRefBlocks";
 import { createSessionModelPreference } from "../../shared/modelDisplayName";
 
@@ -128,6 +128,10 @@ function isPlaceholderCatalogTitle(title: string | undefined): boolean {
 
 /** 缺省是旧 catalog：真实标题默认已由 PiDeck 确认；仅占位标题保留一次初始化机会。 */
 function isTitleLocked(entry: Pick<SessionCatalogEntry, "title" | "titleLocked">): boolean {
+	// 历史 Codex rollout 文件名标题（旧导入器拿不到会话名时的兑底产物）永远不算锁定：
+	// 即使旧 catalog 曾把它写成 locked=true，也要允许重导入后的真实标题覆盖，
+	// 否则存量脏标题（看起来就是一串会话 ID）永久无法修复。
+	if (looksLikeCodexSessionFileStem(entry.title)) return false;
 	return entry.titleLocked ?? !isPlaceholderCatalogTitle(entry.title);
 }
 
@@ -970,7 +974,9 @@ export class SessionCatalog {
 					const canInitializeTitle = !isTitleLocked(entry);
 					const initialTitle = catalogDisplayTitle(summary.name) || catalogDisplayTitle(fetchedTitle);
 					const nextTitle = (canInitializeTitle ? initialTitle : undefined) || catalogDisplayTitle(entry.title) || scannedFileStemTitle(summary.filePath);
-					const nextTitleLocked = canInitializeTitle && initialTitle ? true : entry.titleLocked;
+					// rollout 文件名标题（历史导入兑底）不锁定：留一次被真实标题覆盖的机会；
+					// 真实标题一旦落库即锁定，后续 pi /name 或 JSONL 变化不再反向改写。
+					const nextTitleLocked = looksLikeCodexSessionFileStem(nextTitle) ? false : canInitializeTitle && initialTitle ? true : entry.titleLocked;
 					// 父关系最终值：新探测值优先，缺失时保留旧值（轻量扫描恒缺省，不能清掉已持久化的父）。
 					const nextParent = summary.parentSessionPath ?? fetchedParent ?? entry.parentSessionPath;
 					// fork 标记同样只增补、不清空：未探测到（轻量扫描/普通会话）保留持久化值。
