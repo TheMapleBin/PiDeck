@@ -659,18 +659,12 @@ export class SessionRuntimeCoordinator {
 
 	setRuntimeModel(target: SessionRuntimeTarget, provider: string, modelId: string): Promise<SessionCommandResult<SessionTargetedValue<AgentRuntimeState>>> {
 		return this.runTargetCommand(target, async (agentId) => {
-			// 先调运行中 Agent；成功后再写 catalog。
-			// 若先写后失败：用户点「取消重启」时 catalog 已是新模型，下次启动会误套上；
-			// 且 ConfirmDialog 点确定也会走 onCancel，回滚与确认会互相踩。
-			// needsRestart 由渲染层在用户确认后再 updateRecord + 重启。
+			// 先调运行中 Agent；成功后再写 catalog。可选模型已由运行时目录校验，
+			// catalog 保存用户点选的 provider/id，不拿 runtime 回传值反向改写选择。
 			await this.agents.setModel(agentId, provider, modelId);
 			const runtimeState = await this.agents.getRuntimeState(agentId);
-			const appliedModel = runtimeState.provider && runtimeState.modelId ? { provider: runtimeState.provider, modelId: runtimeState.modelId } : { provider, modelId };
-			// 模型与思考档位是两项独立的用户选择。DSH/PI 的后端可自行规范化或拒绝
-			// reasoning effort，但中间层不能因目录元数据缺失而改写已保存的思考偏好；
-			// 否则用户切回支持该档位的模型时会丢失原选择。
 			await this.catalog.update(target.sessionId, {
-				model: appliedModel,
+				model: { provider, modelId },
 				updatedAt: Date.now(),
 			});
 			void this.logger?.info("session-runtime", "Runtime model changed", {
@@ -678,10 +672,6 @@ export class SessionRuntimeCoordinator {
 				agentId,
 				provider,
 				modelId,
-				requestedProvider: provider,
-				requestedModelId: modelId,
-				appliedProvider: appliedModel.provider,
-				appliedModelId: appliedModel.modelId,
 			});
 			return runtimeState;
 		});
@@ -689,24 +679,18 @@ export class SessionRuntimeCoordinator {
 
 	setRuntimeThinking(target: SessionRuntimeTarget, level: string): Promise<SessionCommandResult<SessionTargetedValue<AgentRuntimeState>>> {
 		return this.runTargetCommand(target, async (agentId) => {
-			// D13：与 setRuntimeModel 一致——先调运行中 Agent，成功后再写 catalog。
-			// 原先先写 catalog 再调 agent：DSH 无模型选中时 setThinking 只记内存不落 host，
-			// catalog 已更新但 host 未生效，重启/attach 后对账漂移。
+			// 思考档位的可选集已按当前模型能力过滤；Agent 接受命令后，catalog 保存用户选择，
+			// 不用 runtime 回传档位覆盖它。runtime state 仍返回给调用方刷新执行状态。
 			await this.agents.setThinking(agentId, level);
-			// DSH 的 selectModel 可能规范化或回退 reasoningEffort；runtime state 是
-			// host 接受后的权威值。没有当前模型时 DSH 不会产生 runtime thinking，
-			// 此时保留用户请求值作为下一次启动时应用的 catalog 偏好。
 			const runtimeState = await this.agents.getRuntimeState(agentId);
-			const appliedLevel = runtimeState.thinkingLevel ?? level;
 			await this.catalog.update(target.sessionId, {
-				thinkingLevel: appliedLevel,
+				thinkingLevel: level,
 				updatedAt: Date.now(),
 			});
 			void this.logger?.info("session-runtime", "Runtime thinking changed", {
 				sessionId: target.sessionId,
 				agentId,
-				requestedLevel: level,
-				appliedLevel,
+				level,
 			});
 			return runtimeState;
 		});

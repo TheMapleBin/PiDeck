@@ -231,15 +231,16 @@ export function useSessionPreferenceController(options: {
 			if (handle) {
 				try {
 					const result = requireSessionCommand(await desktopApi.sessions.setRuntimeModel(handle, model.provider, model.id));
-					const appliedModel = result.value.provider && result.value.modelId ? { provider: result.value.provider, modelId: result.value.modelId } : { provider: model.provider, modelId: model.id };
+					// 模型目录已校验可选项，成功命令后的会话偏好由用户点选决定；不让 runtime
+					// 上报的 provider/id 覆盖它（运行时只负责执行状态刷新）。
 					state.upsertSession({
 						...record,
-						model: appliedModel,
+						model: { provider: model.provider, modelId: model.id },
 						updatedAt: Date.now(),
 					});
 					state.setModelPending(undefined);
-					// 立即将返回的 AgentRuntimeState 合并到 runtime state atom，
-					// 使底部栏的模型名称、provider 即刻刷新，无需等待 emitState 事件
+					// runtime state 仍合并用于执行状态与同一模型的配置别名；底栏选择本身
+					// 已由上面的 SessionRecord 更新驱动，不等待异步 emitState。
 					state.patchRuntimeState(result.value);
 				} catch (error) {
 					if (error instanceof SessionCommandFailure && error.code === "SESSION_RUNTIME_BUSY") {
@@ -286,12 +287,10 @@ export function useSessionPreferenceController(options: {
 				try {
 					const result = requireSessionCommand(await desktopApi.sessions.setRuntimeThinking(handle, level));
 					const agentState = result.value;
-					// runtime state carries the host-confirmed effort (DSH may normalize it);
-					// fall back to the requested value only for runtimes without a selected model.
-					const appliedThinkingLevel = agentState.thinkingLevel ?? level;
-					state.upsertSession({ ...record, thinkingLevel: appliedThinkingLevel, updatedAt: Date.now() });
-					// 立即将返回的 AgentRuntimeState 合并到 runtime state atom，
-					// 使底部栏的思考强度即刻刷新
+					// 思考档位的候选集已按当前模型能力验证；会话偏好保存用户点选值，
+					// runtime state 仅用于刷新执行状态，不反向改写选择。
+					state.upsertSession({ ...record, thinkingLevel: level, updatedAt: Date.now() });
+					// 合并非偏好类运行态；底栏档位由 SessionRecord 的用户选择立即驱动。
 					state.patchRuntimeState(agentState);
 				} catch (error) {
 					// 与模型选择同一策略：运行时不可用时降级为写记录，启动时生效

@@ -33,6 +33,6 @@ test("name 带首尾空白：trim 后拼接", () => {
 	assert.equal(labelOf({ provider: "openai", id: "gpt-4o", name: " GPT-4o " }), "openai/GPT-4o");
 });
 
-test("name 与 id 相同：显示 provider/id（调用方据此省略 tooltip 后缀）", () => {
+test("name 与 id 相同：仍显示 provider/id", () => {
 	assert.equal(labelOf({ provider: "openai", id: "gpt-4o", name: "gpt-4o" }), "openai/gpt-4o");
 });

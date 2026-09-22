@@ -30,6 +30,7 @@ test("parsePiListModels parses table with provider/model/thinking", () => {
 	assert.equal(models.length, 2);
 	assert.equal(models[0].provider, "openai");
 	assert.equal(models[0].id, "gpt-5");
+	assert.equal(models[0].name, "gpt-5", "目录兜底名称只保留 id，由展示层统一加 provider");
 	assert.equal(models[0].reasoning, true);
 	assert.equal(models[1].provider, "deepseek");
 	assert.equal(models[1].reasoning, true);
@@ -147,6 +148,7 @@ test("modelsFromPiConfig flattens settings-page models.json", () => {
 	assert.equal(models[0].name, "Flash");
 	assert.equal(models[0].reasoning, true);
 	assert.equal(models[2].provider, "openai");
+	assert.equal(models[2].name, "gpt-4o");
 	assert.equal(models[2].images, true);
 	assert.equal(modelsFromPiConfig({ providers: {} }).length, 0);
 });

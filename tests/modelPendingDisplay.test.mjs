@@ -34,7 +34,7 @@ test("computeModelDisplay: 有待生效时展示 from→to", () => {
 	);
 });
 
-test("resolveComposerLiveModel: live 时优先 runtime state", () => {
+test("resolveComposerLiveModel: 会话保存的选择优先于 live runtime", () => {
 	assertDisplay(
 		resolveComposerLiveModel({
 			state: { provider: "openai", modelId: "old-model", modelName: "Old" },
@@ -42,7 +42,18 @@ test("resolveComposerLiveModel: live 时优先 runtime state", () => {
 			fallback: { provider: "welcome", modelId: "welcome-model" },
 			isLive: true,
 		}),
-		{ provider: "openai", modelId: "old-model", modelName: "Old" },
+		{ provider: "anthropic", modelId: "new-model", modelName: "new-model" },
+	);
+});
+
+test("resolveComposerLiveModel: 选择与 runtime 身份一致时保留 PiDeck 映射的展示名", () => {
+	assertDisplay(
+		resolveComposerLiveModel({
+			state: { provider: "router9", modelId: "qd/qfmodel", modelName: "qwen-3.8-flash" },
+			record: { provider: "router9", modelId: "qd/qfmodel" },
+			isLive: true,
+		}),
+		{ provider: "router9", modelId: "qd/qfmodel", modelName: "qwen-3.8-flash" },
 	);
 });
 
@@ -55,6 +66,17 @@ test("resolveComposerLiveModel: 非 live 时忽略残留 state，展示 catalog"
 			isLive: false,
 		}),
 		{ provider: "anthropic", modelId: "new-model", modelName: "new-model" },
+	);
+});
+
+test("resolveComposerLiveModel: 无会话选择时，live runtime 提供当前模型与展示名", () => {
+	assertDisplay(
+		resolveComposerLiveModel({
+			state: { provider: "openai", modelId: "gpt-5", modelName: "GPT-5" },
+			fallback: { provider: "welcome", modelId: "welcome-model" },
+			isLive: true,
+		}),
+		{ provider: "openai", modelId: "gpt-5", modelName: "GPT-5" },
 	);
 });
 
@@ -71,6 +93,10 @@ test("resolveComposerLiveModel: 非 live 且无 record 时走 fallback", () => {
 
 test("formatModelRef 带 provider", () => {
 	assert.equal(formatModelRef({ provider: "grok.weishiair.de copy", modelId: "grok-4.6" }), "grok.weishiair.de copy/grok-4.6");
+});
+
+test("formatModelRef: 自定义名称用于底栏 provider/名称", () => {
+	assert.equal(formatModelRef({ provider: "router9", modelId: "qd/qfmodel", modelName: "qwen-3.8-flash" }), "router9/qwen-3.8-flash");
 });
 
 test("契约: 运行中优先直接切换模型，后端 busy 时才排到下一轮", () => {

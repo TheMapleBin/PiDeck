@@ -41,16 +41,22 @@ export type ComposerLiveModelSource = {
 };
 
 /**
- * 底栏/选择器当前模型：只在 runtime 仍 live（starting/idle/running）时优先 state。
- * 已关闭/解绑残留的 state.model 不能盖住用户刚写入 catalog 的 record.model，
- * 否则「Agent 没启动时改模型」看起来像没改、发送后又跳回去。
+ * 底栏/选择器当前模型：会话保存的用户选择优先，runtime 只在没有选择时兜底。
+ *
+ * 选项本身已由模型目录/运行时能力校验；pi get_state 反映执行状态，不应反向覆盖用户
+ * 在 PiDeck 选定的 provider/id。展示名仅在 runtime 与选择一致时借用，避免旧 runtime
+ * 的名称串到新选择上；否则回退 id。
  */
 export function resolveComposerLiveModel(input: { state?: ComposerLiveModelSource; record?: { provider?: string; modelId?: string }; fallback?: ComposerLiveModelSource; isLive: boolean }): ModelPendingRef {
-	const liveState = input.isLive ? input.state : undefined;
+	const runtime = input.isLive ? input.state : undefined;
+	const record = input.record?.provider && input.record.modelId ? input.record : undefined;
+	const source = record ?? runtime ?? input.fallback;
+	const runtimeMatches = runtime?.provider === source?.provider && runtime?.modelId === source?.modelId;
+	const fallbackMatches = input.fallback?.provider === source?.provider && input.fallback?.modelId === source?.modelId;
 	return {
-		provider: liveState?.provider ?? input.record?.provider ?? input.fallback?.provider ?? "",
-		modelId: liveState?.modelId ?? input.record?.modelId ?? input.fallback?.modelId ?? "",
-		modelName: liveState?.modelName ?? input.record?.modelId ?? input.fallback?.modelName,
+		provider: source?.provider ?? "",
+		modelId: source?.modelId ?? "",
+		modelName: (runtimeMatches ? runtime?.modelName : undefined) ?? (fallbackMatches ? input.fallback?.modelName : undefined) ?? source?.modelId,
 	};
 }
 

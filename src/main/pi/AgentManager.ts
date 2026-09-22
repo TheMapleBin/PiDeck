@@ -2381,7 +2381,7 @@ export class AgentManager {
 		const cacheHitAveragePercent = clampPercent(fileHitStats.average);
 		const perf = this.lastPerfByAgent.get(agentId);
 		return {
-			modelName: model?.name ?? model?.id,
+			modelName: await this.resolveModelDisplayName(model?.provider, model?.id),
 			provider: model?.provider,
 			modelId: model?.id,
 			thinkingLevel: state?.thinkingLevel,
@@ -2570,6 +2570,24 @@ export class AgentManager {
 			return Boolean(config?.providers?.[provider]?.models?.some((model) => model.id === modelId));
 		} catch {
 			return false;
+		}
+	}
+
+	/**
+	 * 底栏/会话展示用的模型名：只认 PiDeck models.json 的用户配置。
+	 *
+	 * pi get_state 的 provider/id 是运行中实际生效模型的权威身份，但其 model.name
+	 * 可能是内部目录名或直接等于 id，不能覆盖用户配置的别名。名称字段为空才回退 id；
+	 * 不在本地 models.json 的官方/目录模型也自然按 id 显示。
+	 */
+	private async resolveModelDisplayName(provider: string | undefined, modelId: string | undefined): Promise<string | undefined> {
+		if (!provider || !modelId) return modelId;
+		try {
+			const config = (await this.configManager.getModelsConfig()).parsed;
+			const entry = config?.providers?.[provider]?.models?.find((model) => model.id === modelId);
+			return entry?.name?.trim() || modelId;
+		} catch {
+			return modelId;
 		}
 	}
 

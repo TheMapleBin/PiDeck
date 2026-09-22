@@ -1188,7 +1188,7 @@ test("runtime model preference is not persisted when AgentManager fails", async 
 	assert.equal(harness.calls.setModel, 1);
 });
 
-test("runtime thinking persists the backend-confirmed level in the session catalog", async () => {
+test("runtime thinking persists the user-selected level in the session catalog", async () => {
 	const { SessionRuntimeCoordinator } = loadCoordinator();
 	const harness = createHarness({
 		entry: { thinkingLevel: "off" },
@@ -1202,7 +1202,23 @@ test("runtime thinking persists the backend-confirmed level in the session catal
 
 	assert.equal(result.ok, true);
 	assert.equal(result.value.value.thinkingLevel, "max");
-	assert.equal(harness.entry.thinkingLevel, "max");
+	assert.equal(harness.entry.thinkingLevel, "high");
+});
+
+test("runtime model persists the user-selected model when runtime state differs", async () => {
+	const { SessionRuntimeCoordinator } = loadCoordinator();
+	const harness = createHarness({
+		tabs: [{ id: "agent-a", status: "idle", createdAt: 1 }],
+		runtimeState: { provider: "runtime", modelId: "fallback-model" },
+	});
+	const coordinator = new SessionRuntimeCoordinator(harness.catalog, harness.agents, harness.sender);
+	const runtimeGeneration = coordinator.bindExistingAgent("session-1", "agent-a");
+
+	const result = await coordinator.setRuntimeModel({ sessionId: "session-1", agentId: "agent-a", runtimeGeneration }, "router9", "qd/qfmodel");
+
+	assert.equal(result.ok, true);
+	assert.equal(harness.entry.model?.provider, "router9");
+	assert.equal(harness.entry.model?.modelId, "qd/qfmodel");
 });
 test("DSH model change preserves the recorded thinking preference", async () => {
 	// 模型和思考档位是独立选择。即使 host 此次返回了规范化后的 high，PiDeck 也不能

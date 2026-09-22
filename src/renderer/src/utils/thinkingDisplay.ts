@@ -16,9 +16,9 @@ export function computeThinkingDisplay(current: string | undefined): ThinkingDis
 }
 
 /**
- * 底栏/选择器当前思考档位：只在 runtime 仍 live 时优先 state。
- * 与 resolveComposerLiveModel 同一规则，避免残留 state.thinkingLevel 盖住 catalog。
+ * 底栏/选择器当前思考档位：会话保存的用户选择优先，runtime 仅在没有选择时兜底。
+ * 候选档位已由当前模型能力校验，pi/DSH 回传值用于执行状态而不是改写用户偏好。
  */
 export function resolveComposerThinkingLevel(input: { state?: string; record?: string; fallback?: string; isLive: boolean }): string | undefined {
-	return (input.isLive ? input.state : undefined) ?? input.record ?? input.fallback;
+	return input.record ?? (input.isLive ? input.state : undefined) ?? input.fallback;
 }
