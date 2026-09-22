@@ -261,7 +261,7 @@ import { toWslLinuxPath, toWindowsHostPath } from "./wsl/WslPaths";
 import { registerProjectsIpc } from "./ipc/projectsIpc";
 import { registerUsageStatsIpc } from "./ipc/usageStatsIpc";
 import { UsageStatsService } from "./usageStats/UsageStatsService";
-import { constrainWindowBoundsToWorkArea, MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH, readLastWindowBounds, saveLastWindowBounds } from "./windowState";
+import { constrainWindowBoundsToWorkArea, type LastWindowBounds, MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH, readLastWindowBounds, saveLastWindowBounds } from "./windowState";
 import { createRendererCrashRecoveryGuard } from "./window/rendererCrashRecovery";
 import { registerBackgroundImageProtocol, registerBackgroundsIpc } from "./ipc/backgroundsIpc";
 import { registerGitIpc } from "./ipc/gitIpc";
@@ -327,7 +327,7 @@ let mainWindow: BrowserWindow | null = null;
 // 本文件不再出现紧凑模式的激活判断、屏幕几何计算与「关闭=返回工作台」的拦截逻辑。
 const quickTaskChrome = new QuickTaskWindowChrome({
 	getWindow: () => mainWindow,
-	saveWorkbenchBounds: (size) => saveLastWindowBounds(app.getPath("userData"), size),
+	saveWorkbenchBounds: (bounds) => saveLastWindowBounds(app.getPath("userData"), bounds),
 });
 let tray: Tray | null = null;
 /** 标记是否由用户主动退出（托盘菜单「退出」），区别于窗口关闭隐藏到托盘 */
@@ -1489,14 +1489,17 @@ async function createWindow() {
 	const backgroundColor = isDark ? "#121212" : "#f8f8f5";
 
 	// 按外观设置的启动预设调整初始尺寸；隐藏态先 maximize/fullscreen，减少首帧跳动。
-	// startupWindowMode="last"：读上次关闭时的窗口大小；读不到（首次启动/记录损坏）顺延默认 maximized
+	// startupWindowMode="last"：读上次关闭时的窗口几何（位置/尺寸/是否最大化）；
+	// 读不到（首次启动/记录损坏）顺延默认 maximized。上次是最大化时先按记录的 normal 几何
+	// 建窗再 maximize，还原后回到原位置。
 	const requestedMode = settingsStore.get().startupWindowMode ?? "last";
 	let effectiveStartupMode = requestedMode;
-	let startupBounds: { width: number; height: number };
+	let startupBounds: LastWindowBounds;
 	if (requestedMode === "last") {
 		const last = readLastWindowBounds(app.getPath("userData"));
 		if (last) {
 			startupBounds = last;
+			if (last.maximized) effectiveStartupMode = "maximized";
 		} else {
 			effectiveStartupMode = "maximized";
 			startupBounds = resolveStartupWindowBounds("maximized");
@@ -1505,8 +1508,10 @@ async function createWindow() {
 		startupBounds = resolveStartupWindowBounds(requestedMode);
 	}
 
-	// x/y 未持久化时以主显示器为确定的恢复目标；纯逻辑同时收敛尺寸并在 workArea 内居中。
-	const startupWindowBounds = constrainWindowBoundsToWorkArea(startupBounds, screen.getPrimaryDisplay().workArea);
+	// 有记录位置时以该位置所在显示器为恢复目标（多屏下回到原来那块屏）；无位置（预设模式 /
+	// 旧版只存宽高的记录）以主显示器为确定目标并居中。纯逻辑负责裁尺寸、钳位置。
+	const targetDisplay = typeof startupBounds.x === "number" && typeof startupBounds.y === "number" ? screen.getDisplayMatching({ x: startupBounds.x, y: startupBounds.y, width: startupBounds.width, height: startupBounds.height }) : screen.getPrimaryDisplay();
+	const startupWindowBounds = constrainWindowBoundsToWorkArea(startupBounds, targetDisplay.workArea);
 
 	mainWindow = new BrowserWindow({
 		show: showMainWindowImmediately,

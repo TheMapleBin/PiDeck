@@ -3590,7 +3590,7 @@ export const zhCN = {
 	"settings.piRpcStartup": "Agent 启动诊断",
 	"settings.electronSandboxDesc": "控制 Electron 渲染进程沙箱（与 pi Agent 无关）。默认关闭以兼容 Windows 安全软件/旧 GPU 驱动；开启后需重启 PiDeck。若启动异常请改回关闭。",
 	"settings.electronSandbox": "启用 Chromium 沙箱",
-	"settings.startupWindow.last": "上次窗口大小",
+	"settings.startupWindow.last": "上次窗口位置和大小",
 	"settings.startupWindow.compact": "窗口 · 紧凑 (1100×720)",
 	"settings.startupWindow.medium": "窗口 · 中 (1280×840)",
 	"settings.startupWindow.large": "窗口 · 大 (1480×960)",
