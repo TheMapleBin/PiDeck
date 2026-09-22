@@ -81,9 +81,9 @@
 
 ## 📋 Changelog
 
-> **Latest: v0.7.7-beta** (2026-09-21)
+> **Latest: v0.7.7** (2026-09-21)
 
-### v0.7.7-beta Release Highlights
+### v0.7.7 Release Highlights
 - 🚀 **Search workspace files by name (#215)**
 - 🚀 **Import sessions from another directory (recover history after a move or rename)**
 - 🚀 **Import external resources (MCP / skills / prompt templates)**
