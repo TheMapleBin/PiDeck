@@ -3987,6 +3987,7 @@ export const enUS: Record<TranslationKey, string> = {
 	"activity.executionThinkingCount": "{count} thinking steps",
 	"activity.executionInterimCount": "{count} interim replies",
 	"activity.executionRetryCount": "{count} retries",
+	"activity.executionErrorCount": "{count} errors",
 	"thinking.expandAll": "Expand all",
 	"thinking.level.high": "Deeper reasoning for complex tasks",
 	"thinking.levelLabel.high": "High",

@@ -3977,6 +3977,7 @@ export const zhCN = {
 	"activity.executionThinkingCount": "{count}次思考",
 	"activity.executionInterimCount": "{count}段中间回复",
 	"activity.executionRetryCount": "{count}次重试",
+	"activity.executionErrorCount": "{count}个错误",
 	"thinking.expandAll": "展开全部",
 	"thinking.level.high": "更深推理，适合复杂任务",
 	"thinking.levelLabel.high": "high",
