@@ -152,11 +152,26 @@ test("resolveGuideDisplayModel: 无点选时用预选默认（显式默认/切�
 	);
 });
 
-test("resolveGuideDisplayModel: DSH 忽略 pi 点选偏好（模型路由归 host settings）", () => {
+test("resolveGuideDisplayModel: DSH 点选优先于部署默认（issue #253）", () => {
+	// 旧行为：dsh 分支直接返回 defaultModel，理由是「模型路由归 host settings」。
+	// 该理由已被证伪：host 提供 sessions.selectModel（DshAgentManager.setModel 在用），
+	// 运行中也能换模型；引导页点选因此同样有意义。需要隔离的只是「pi 偏好不得泄漏
+	// 到 DSH」，那由 WELCOME_DSH_MODEL_KEY 与 WELCOME_MODEL_KEY 分开存储保证——
+	// 调用方在 DSH 态传进来的已是 DSH 目录里的模型，不是 pi 的欢迎页偏好。
 	assertDisplay(
 		resolveGuideDisplayModel({
 			isDsh: true,
-			welcomeModel: { provider: "anthropic", modelId: "claude-opus-4-6" },
+			welcomeModel: { provider: "jiyuan", modelId: "deepseek-flash" },
+			defaultModel: { provider: "deepseek-official", modelId: "deepseek-flash" },
+		}),
+		{ provider: "jiyuan", modelId: "deepseek-flash" },
+	);
+});
+
+test("resolveGuideDisplayModel: DSH 无点选时回退部署默认", () => {
+	assertDisplay(
+		resolveGuideDisplayModel({
+			isDsh: true,
 			defaultModel: { provider: "dsh-host", modelId: "agent-default" },
 		}),
 		{ provider: "dsh-host", modelId: "agent-default" },

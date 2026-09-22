@@ -257,7 +257,8 @@ test("welcome page explicit model/thinking selections persist and are promoted i
 	// 无 record 的引导页仍是一个可交互 composer：用户点选必须覆盖静态默认值，
 	// 并同时贯通「选择后立即显示」与「首次发送创建真实会话」两条链路。
 	// setItem 的 key 实参可能被格式化换行：容忍 ( 与 key 之间的空白。
-	assert.match(picker, /localStorage\s*\.?\s*setItem\(\s*WELCOME_MODEL_KEY/);
+	// 模型偏好按后端写到各自的键（issue #253）：DSH 的 route 名不能进 pi 的偏好。
+	assert.match(picker, /localStorage\.setItem\(\s*isDshSession \? WELCOME_DSH_MODEL_KEY : WELCOME_MODEL_KEY/);
 	assert.match(picker, /localStorage\.setItem\(WELCOME_THINKING_KEY, level\)/);
 	assert.match(components, /readWelcomeThinkingPreference\(\)\?\.thinkingLevel/);
 	assert.match(components, /fallback: welcomeThinking \?\? props\.defaultThinkingLevel/);

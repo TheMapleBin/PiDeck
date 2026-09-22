@@ -1021,6 +1021,11 @@ export const enUS: Record<TranslationKey, string> = {
 	"notice.extensionsDisabledBySetting": '"Disable extensions on start" is on: this session loaded no extensions, so todo/plan/ask are unavailable. Turn the switch off in settings unless you are debugging extensions.',
 	"notice.extensionsDisabledFallback": "Extensions failed to load, so this run temporarily disables them (nothing was written to settings). Send this session's error details to the AI to troubleshoot.",
 	"notice.openDevExtensionsSettings": "Open settings",
+	// Toast for a rejected DSH model preference (applyPreferences degradation, the "picked but not applied" half of issue #253):
+	// the host is the final arbiter of model/effort capabilities; PiDeck only informs and keeps the preference for a retry.
+	// No placeholders: the agentsNotice channel's t() has no params support (same as app.abortSlow);
+	// the rejected model identity is shown via the caller-provided fallback message.
+	"notice.modelPreferenceIgnored": "The saved model preference could not be applied (the host rejected it); the current model is still in use. Pick a model again in the model selector.",
 	"common.delete": "Delete",
 	"common.paste": "Paste",
 	"common.deleteConfirm": "Confirm Delete",

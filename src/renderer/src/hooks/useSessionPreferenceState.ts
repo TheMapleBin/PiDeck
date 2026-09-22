@@ -20,7 +20,7 @@ import { isLiveRuntimeStatus } from "../utils/sessionCommands";
 import { resolveComposerLiveModel, resolveGuideDisplayModel, type ModelPending } from "../utils/modelPendingDisplay";
 import { resolveComposerThinkingLevel } from "../utils/thinkingDisplay";
 import { modelKey } from "../utils/preferenceCycle";
-import { GUIDE_BOOTSTRAP_SESSION_ID, WELCOME_MODEL_KEY, isWelcomeModelLost, readWelcomeBackendPreference, readWelcomeModelPreference, readWelcomeThinkingPreference, shouldClearWelcomePreference } from "../utils/chatSessionBootstrap";
+import { GUIDE_BOOTSTRAP_SESSION_ID, WELCOME_DSH_MODEL_KEY, WELCOME_MODEL_KEY, isWelcomeModelLost, readWelcomeBackendPreference, readWelcomeDshModelPreference, readWelcomeModelPreference, readWelcomeThinkingPreference, shouldClearWelcomePreference } from "../utils/chatSessionBootstrap";
 
 /**
  * 会话「模型 + 思考强度」的读侧状态：模型目录、收藏、当前模型与可用档位。
@@ -101,7 +101,10 @@ export function useSessionPreferenceState(options: {
 		projectId: record?.projectId,
 		enabled: catalogEnabled,
 	});
-	const welcomeModel = isDshSession ? undefined : readWelcomeModelPreference()?.model;
+	// 引导页点选按后端读各自的存储（issue #253）：DSH 的模型是 host route 名，
+	// 存在 WELCOME_DSH_MODEL_KEY；读错会拿到 pi 的 models.json 模型去高亮 DSH 目录。
+	const welcomeModel = isDshSession ? readWelcomeDshModelPreference()?.model : readWelcomeModelPreference()?.model;
+	const welcomeModelStorageKey = isDshSession ? WELCOME_DSH_MODEL_KEY : WELCOME_MODEL_KEY;
 	// welcome 偏好可能指向已删除的供应商/模型（models.json 已更新而 localStorage 残留）：
 	// 目录加载后校验存在性，失效则忽略该偏好，避免选择器/默认高亮落在幽灵模型上。
 	// 与 ComposerBottomBar 共用 isWelcomeModelLost 判定；目录未加载（models 为空）时不判定，
@@ -120,12 +123,12 @@ export function useSessionPreferenceState(options: {
 		// 失效偏好只清一次：下次引导页不再默认已删除的模型（创建时主进程也会兜底丢弃）。
 		if (clearWelcomePreference) {
 			try {
-				localStorage.removeItem(WELCOME_MODEL_KEY);
+				localStorage.removeItem(welcomeModelStorageKey);
 			} catch {
 				// localStorage 不可用时静默；展示层已忽略该偏好。
 			}
 		}
-	}, [clearWelcomePreference]);
+	}, [clearWelcomePreference, welcomeModelStorageKey]);
 	const effectiveWelcomeModel = welcomeModelLost ? undefined : welcomeModel;
 	// 引导页（无 record）模型高亮：与主进程创建解析同序（点选 > 显式默认 > 切换列表 > 上次使用）。
 	// 规则收拢到 resolveGuideDisplayModel，不再在本 hook 与 ComposerComponents 各写一份。

@@ -66,7 +66,7 @@ import { useSessionHistoryMutations } from "./hooks/useSessionHistoryMutations";
 import { useUserMessageEditReplay } from "./hooks/useUserMessageEditReplay";
 import { PromptDeliveryUnknownError } from "./utils/promptErrors";
 import { isLiveRuntimeStatus, requireSessionCommand, resolveSessionRunState, sessionRunCapabilities, SessionCommandFailure, sessionCommandFailureToast, toSessionRuntimeTarget, type SessionRunCapabilities, type SessionRunAction } from "./utils/sessionCommands";
-import { GUIDE_BOOTSTRAP_SESSION_ID, readWelcomeBackendPreference, readWelcomeModelPreference, readWelcomeThinkingPreference, resolveChatSessionBootstrap } from "./utils/chatSessionBootstrap";
+import { GUIDE_BOOTSTRAP_SESSION_ID, readWelcomeBackendPreference, readWelcomeDshModelPreference, readWelcomeModelPreference, readWelcomeThinkingPreference, resolveChatSessionBootstrap, resolveGuidePageBackend } from "./utils/chatSessionBootstrap";
 import { detectRendererPlatform } from "./lib/detectRendererPlatform";
 import { msUntilNextThemeBoundary } from "../../shared/themeSchedule";
 
@@ -1559,23 +1559,28 @@ export function App() {
 				// 引导页 picker 无 record 分支把显式选择存进 localStorage；创建时将模型交给
 				// 主进程校验、将思考档位作为启动偏好带入。底栏展示和真实会话创建读取同一份值，
 				// 避免出现「菜单看似切换，首次发送后又回到默认档位」。
-				const welcomeModel = readWelcomeModelPreference()?.model;
-				const welcomeThinking = readWelcomeThinkingPreference()?.thinkingLevel;
 				// 引导页底栏显式切换的后端（localStorage 偏好）优先于设置项默认；
 				// 选了 dsh 但 DSH runtime 不可用时按 effectiveAgentBackendAtom 同一条
 				// 钳制规则回落 pi，避免首次发送才在 createDraft 门控上抛错。
-				const welcomeBackend = readWelcomeBackendPreference();
-				const draftBackend = welcomeBackend === "dsh" && effectiveAgentBackend !== "dsh" ? "pi" : (welcomeBackend ?? effectiveAgentBackend);
+				// 与 ComposerArea 的展示用同一纯函数：展示的后端和创建的后端必须一致。
+				const draftBackend = resolveGuidePageBackend({ override: readWelcomeBackendPreference(), effectiveDefault: effectiveAgentBackend });
+				// 模型偏好按后端分开取（issue #253）：DSH 的模型是 host route 名，不在 models.json，
+				// 必须作为显式 model 直接带给 host；pi 的偏好走 welcomeModel（launchDefaults 会按
+				// models.json 校验存在性）。历史上 DSH 侧不读偏好，点选因此永远不生效。
+				const welcomeModel = draftBackend === "dsh" ? readWelcomeDshModelPreference()?.model : readWelcomeModelPreference()?.model;
+				const welcomeThinking = readWelcomeThinkingPreference()?.thinkingLevel;
 				// 统一创建 draft 会话（Chat 项目也走普通会话、可保存）：创建不拉 pi，
 				// selectSessionCommand 同步切页、立即进入会话页；匿名会话仅保留给侧栏
 				// 「新建临时对话」入口（createAnonymousSessionWithTab）。
 				// 默认后端跟随设置项（settings.defaultAgentBackend，默认 pi），
 				// 且经 DSH runtime 安装态钳制——runtime 不可用时不会尝试建 dsh 会话。
+				// 激活时 SessionRuntimeCoordinator.applyPreferences → DshAgentManager.setModel
+				// 会把这条显式 model 落到 host（host 拒绝时降级并告警，不让创建失败）。
 				const session = await api.sessions.createDraft({
 					projectId: project.id,
 					title: draftBackend === "dsh" ? `${project.name} DSH` : `${project.name} agent`,
 					backend: draftBackend,
-					...(welcomeModel ? { welcomeModel } : {}),
+					...(welcomeModel ? (draftBackend === "dsh" ? { model: welcomeModel } : { welcomeModel }) : {}),
 					...(welcomeThinking ? { thinkingLevel: welcomeThinking } : {}),
 				});
 				upsertSession(session);

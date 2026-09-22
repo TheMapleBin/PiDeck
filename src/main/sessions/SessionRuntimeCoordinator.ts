@@ -1425,7 +1425,11 @@ export class SessionRuntimeCoordinator {
 					modelId: entry.model.modelId,
 					error: errorMessage(error),
 				});
-				if (modelGoneOnPi) {
+				// 降级路径两侧行为一致：保留 catalog 偏好、沿用当前模型，并**告知用户**。
+				// DSH 不提示的话，引导页点选（已作为显式 model 带入，issue #253）会在 host
+				// 拒绝时静默失效——底栏显示用户选的模型，实际跑的是部署默认。pi 侧本来就有
+				// 会话内系统消息；DSH 的 gateway 实现走 agentsNotice toast。
+				if (modelGoneOnPi || isDsh) {
 					this.agents.notifyModelPreferenceIgnored?.(agentId, entry.model.provider, entry.model.modelId);
 				}
 			}

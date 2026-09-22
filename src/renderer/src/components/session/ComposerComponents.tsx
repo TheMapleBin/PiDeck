@@ -19,7 +19,7 @@ import { DshLogo, PiLogo } from "./SessionSourceBadge";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "../ui-shadcn/select";
 import { computeModelDisplay, formatModelRef, resolveComposerLiveModel, resolveGuideDisplayModel, type ModelPending } from "../../utils/modelPendingDisplay";
 import { resolveComposerThinkingLevel } from "../../utils/thinkingDisplay";
-import { WELCOME_MODEL_KEY, isWelcomeModelLost, readWelcomeModelPreference, readWelcomeThinkingPreference, shouldClearWelcomePreference } from "../../utils/chatSessionBootstrap";
+import { WELCOME_DSH_MODEL_KEY, WELCOME_MODEL_KEY, isWelcomeModelLost, readWelcomeDshModelPreference, readWelcomeModelPreference, readWelcomeThinkingPreference, shouldClearWelcomePreference } from "../../utils/chatSessionBootstrap";
 import { useBackendModelCatalog } from "../../hooks/useBackendModelCatalog";
 import { CommandPickerGroup, CommandPickerPanel, type CommandPickerFilter } from "../ui-shadcn/command-picker";
 import { THINKING_LEVELS, computeModelPickerDefaultExpanded, groupModelsByProvider, modelPickerSearchFilter, modelRowLabel, modelRowName, orderProviderGroups, resolveModelPickerBody } from "./sessionPickerOptions";
@@ -291,18 +291,19 @@ export function ComposerBottomBar(props: {
 	// 才读取 welcome localStorage。这样用户点选模型/思考档位后能立即看到结果，
 	// 首次发送再由 App.ensureSessionForSend 把同一显式选择带入真实会话。
 	// 该偏好可能指向已删除的模型（localStorage 残留，用户删除模型后底栏仍显示旧默认）：
-	// 引导页（无 record、pi 后端）常驻加载模型目录做存在性校验（与 ComposerPickerHost
-	// 同一判定 isWelcomeModelLost），失效则忽略偏好并清理缓存，显示回落到主进程解析的
-	// 启动默认 defaultModel（launchDefaults 已校验 models.json 存在性）。
-	// 目录命中主进程全局缓存（模型选择器同源），通常不会额外 fork pi。
+	// 引导页（无 record）模型目录：后端各自的目录都要加载，才能对各自的点选做存在性
+	// 校验（pi 读 models.json 列表，DSH 读 host catalog）。目录命中主进程全局缓存
+	//（模型选择器同源），通常不会额外 fork pi。
 	const isDsh = props.backend === "dsh";
-	const needsWelcomeCatalog = !props.record && !isDsh;
+	const needsWelcomeCatalog = !props.record;
 	const { models: welcomeCatalogModels, report: welcomeCatalogReport } = useBackendModelCatalog({
 		sessionId: props.sessionId,
 		backend: isDsh ? "dsh" : "pi",
 		enabled: needsWelcomeCatalog,
 	});
-	const welcomeModel = needsWelcomeCatalog ? readWelcomeModelPreference()?.model : undefined;
+	// 引导页点选按后端读各自的存储（issue #253）：DSH 的模型是 host route 名，
+	// 存在 WELCOME_DSH_MODEL_KEY；读错会拿到 pi 的 model 去校验 DSH 目录（必然「失效」）。
+	const welcomeModel = needsWelcomeCatalog ? (isDsh ? readWelcomeDshModelPreference()?.model : readWelcomeModelPreference()?.model) : undefined;
 	// 思考档位不依赖模型目录；无 record 时直接读取 picker 写入的显式选择。
 	const welcomeThinking = !props.record ? readWelcomeThinkingPreference()?.thinkingLevel : undefined;
 	const welcomeModelLost = isWelcomeModelLost(welcomeModel, welcomeCatalogModels);
@@ -318,14 +319,14 @@ export function ComposerBottomBar(props: {
 		// 失效偏好只清一次：下次引导页不再默认已删除的模型（创建时主进程也会兜底丢弃）。
 		if (clearWelcomePreference) {
 			try {
-				localStorage.removeItem(WELCOME_MODEL_KEY);
+				localStorage.removeItem(isDsh ? WELCOME_DSH_MODEL_KEY : WELCOME_MODEL_KEY);
 			} catch {
 				// localStorage 不可用时静默；展示层已忽略该偏好。
 			}
 		}
-	}, [clearWelcomePreference]);
+	}, [clearWelcomePreference, isDsh]);
 	const effectiveWelcomeModel = welcomeModelLost ? undefined : welcomeModel;
-	// 引导页（无 record、pi）默认模型展示：与主进程创建解析同序（点选 > 显式默认 > 切换列表 > 上次使用）。
+	// 引导页（无 record）默认模型展示：与各后端创建时的真实套用同序（点选 > 默认）。
 	// 规则收拢到 resolveGuideDisplayModel，与 ComposerPickerHost 共用一份，避免两侧各自演化。
 	const guideDefaultModel = resolveGuideDisplayModel({
 		isDsh,

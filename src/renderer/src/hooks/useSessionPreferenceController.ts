@@ -13,7 +13,7 @@ import { t } from "../i18n";
 import { SessionCommandFailure, requireSessionCommand, sessionCommandFailureToast, toSessionRuntimeTarget } from "../utils/sessionCommands";
 import { resolveComposerLiveModel } from "../utils/modelPendingDisplay";
 import { modelKey, pickCycleModel, pickCycleThinkingLevel, resolveFavoriteCycleCandidates, type CycleDirection } from "../utils/preferenceCycle";
-import { WELCOME_MODEL_KEY, WELCOME_THINKING_KEY } from "../utils/chatSessionBootstrap";
+import { WELCOME_DSH_MODEL_KEY, WELCOME_MODEL_KEY, WELCOME_THINKING_KEY } from "../utils/chatSessionBootstrap";
 
 /** 快捷键触发的循环目标（模型 / 思考档位）。 */
 type PendingCycle = "model" | "thinking";
@@ -220,15 +220,15 @@ export function useSessionPreferenceController(options: {
 
 	async function applyModel(model: AvailableModel) {
 		// 欢迎页/未启动 Agent（无 record）：把选择存本地偏好，点「启动 Agent」创建会话时应用。
-		// 引导页 dsh 态例外：DSH 模型由部署默认决定（applyPreferences 对 dsh 草稿的
-		// 模型偏好会优雅降级），不把 DSH 目录里的选择写进 pi 侧 welcome 偏好。
+		// 后端各自独立存储（issue #253）：DSH 目录的 provider 是 host route 名（不在
+		// models.json），写进 pi 的 WELCOME_MODEL_KEY 会被 launchDefaults 的存在性校验整条
+		// 丢弃；pi 的 models.json 模型写进 DSH 偏好也会被 host catalog 拒绝。历史上 DSH 态
+		// 直接 return（不写任何存储），点选因此完全丢失——用户表现为「切到 DSH 后模型换不了」。
 		if (!record) {
-			if (!isDshSession) {
-				try {
-					localStorage.setItem(WELCOME_MODEL_KEY, JSON.stringify(selectedModelPreference(model)));
-				} catch {
-					// localStorage 不可用时静默；创建会话回退到 pi 默认模型
-				}
+			try {
+				localStorage.setItem(isDshSession ? WELCOME_DSH_MODEL_KEY : WELCOME_MODEL_KEY, JSON.stringify(selectedModelPreference(model)));
+			} catch {
+				// localStorage 不可用时静默；创建会话回退到各后端自己的默认模型
 			}
 			onApplied();
 			return;

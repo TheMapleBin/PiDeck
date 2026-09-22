@@ -569,10 +569,18 @@ export function registerSessionIpc(deps: SessionIpcDeps): void {
 		}
 		// Auto-fill model / thinkingLevel from pi config when the caller hasn't
 		// provided them, so the composer bar shows the effective default.
-		// DSH 后端不适用 pi 的模型配置（模型路由由 DSH host 自己的 settings 决定），
-		// 只跳过 model；思考档位值域与 DSH 兼容（off/high/max 等），新会话默认档位
-		// 同样填充——否则 DSH 新会话的思考按钮只显示「思考」而非实际默认档位。
-		let model = input.backend === "dsh" ? undefined : normalizeSessionModelPreference(input.model);
+		// DSH 后端不适用 pi 的模型配置（模型路由由 DSH host 自己的 settings 决定）：
+		// **显式传入的 model 仍然接受**（issue #253）——引导页在 DSH 态下的点选必须带到会话上，
+		// 否则 host 只能用部署默认（settings.yaml 的 agent-default-model），用户表现为
+		// 「切到 DSH 后模型换不了」。与侧栏「新建会话后切 DSH 再选模型」走 updateRecord 的
+		// 既有链路保持一致：只做形状归一化，不用 models.json 校验（DSH 的 provider 是
+		// host route 名，不在 models.json 里，校验会把合法选择全丢掉）。模型是否被 host
+		// 接受由激活时的 applyPreferences → DshAgentManager.setModel 裁决（host 拒绝时
+		// 降级到部署默认并告警，不让创建失败）。
+		// 缺省模型仍不从 pi 配置解析：DSH 没有可读的启动默认解析器（部署默认由 host 自己决定）。
+		// 思考档位值域与 DSH 兼容（off/high/max 等），新会话默认档位同样填充——否则 DSH
+		// 新会话的思考按钮只显示「思考」而非实际默认档位。
+		let model = normalizeSessionModelPreference(input.model);
 		let thinkingLevel = input.thinkingLevel;
 		if ((input.backend !== "dsh" && !model) || !thinkingLevel) {
 			try {

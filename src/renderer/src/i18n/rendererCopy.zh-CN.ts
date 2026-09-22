@@ -1017,6 +1017,11 @@ export const zhCN = {
 	"notice.extensionsDisabledBySetting": "「禁用扩展启动」已开启：本次会话未加载任何扩展，todo/plan/ask 等能力不可用。不需要排查扩展时请去设置关闭该开关。",
 	"notice.extensionsDisabledFallback": "扩展加载失败，本次运行已临时禁用扩展（不会写入设置）。可把本会话的错误详情发给 AI 排查扩展问题。",
 	"notice.openDevExtensionsSettings": "去设置关闭",
+	// DSH 模型偏好被 host 拒绝的 toast（applyPreferences 降级路径，issue #253 的「选了但没生效」）：
+	// host 是模型/档位能力的最终裁决者，PiDeck 只能告知并保留偏好供重试。
+	// 注意：agentsNotice 通道的 t() 不支持占位符（与 app.abortSlow 等既有 key 同约定），
+	// 被拒绝的具体模型由调用方放在 message 里兜底展示。
+	"notice.modelPreferenceIgnored": "会话保存的模型偏好未能应用（host 未接受该选择），已沿用当前模型。请在模型选择器重新选择。",
 	"common.delete": "删除",
 	"common.paste": "粘贴",
 	"common.deleteConfirm": "确认删除",
