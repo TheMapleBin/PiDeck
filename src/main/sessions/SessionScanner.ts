@@ -93,10 +93,12 @@ function cleanScanTitle(value?: string): string | undefined {
  * session_info 名 > 旧版私有 sessionName > 首条 user 文本 > 首条 assistant 文本）。
  * 推断不出返回 undefined（空文件/只有 tool 消息），由调用方兜底 Untitled。
  *
- * @returns { name, fromSessionInfo }：fromSessionInfo 仅保留来源信息，供诊断与
+ * @returns { name, fromSessionInfo, fallbackName }：fromSessionInfo 仅保留来源信息，供诊断与
  * 首次发现标题推断使用。PiDeck catalog 已有记录后不再接受任何 JSONL 名称反向写入。
+ * fallbackName 是本文件的弱兜底候选（首条 user 文本，其次首条 assistant 文本），
+ * 与最终 name 取谁无关：#266 存量自愈要用它判断 catalog 里存的这一行是不是当年被误锁的首句。
  */
-function inferScanNameFromLines(lines: string[], extractText: (content: unknown) => string): { name?: string; fromSessionInfo: boolean } {
+function inferScanNameFromLines(lines: string[], extractText: (content: unknown) => string): { name?: string; fromSessionInfo: boolean; fallbackName?: string } {
 	let latestSessionInfoName: string | undefined;
 	let name: string | undefined;
 	let firstUserText = "";
@@ -127,11 +129,12 @@ function inferScanNameFromLines(lines: string[], extractText: (content: unknown)
 	// 取出 clean 前先保留来源标记：清洗后也可能是 timestamp/stem，
 	// 此时它不再能作为 session_info 标题使用。
 	const infoName = cleanScanTitle(latestSessionInfoName) || cleanScanTitle(name);
-	if (infoName) return { name: infoName, fromSessionInfo: true };
 	// 首条 user 可能是展开后的 `/模板名` / `&会话引用` 块：先剥块正文，只拿用户自己写的字当回退标题，
 	// 否则重开/扫描会把 `<prompt_template …>` 原文写回 catalog（与 inferTitleFromMessages 同一套清洗）。
+	// 弱兜底候选先算出来，权威名赢的时候也要带出去（#266 指纹修复的比对基准）。
 	const fallback = cleanScanTitle(textForSessionTitle(firstUserText)) || cleanScanTitle(firstAssistantText);
-	if (fallback) return { name: fallback, fromSessionInfo: false };
+	if (infoName) return { name: infoName, fromSessionInfo: true, fallbackName: fallback };
+	if (fallback) return { name: fallback, fromSessionInfo: false, fallbackName: fallback };
 	return { name: undefined, fromSessionInfo: false };
 }
 
@@ -1892,6 +1895,8 @@ export class SessionScanner {
 			filePath,
 			projectPath: projectPath ? this.canonicalProjectPath(projectPath, isWsl) : this.inferProjectPathFromFile(filePath),
 			name: inferredName,
+			// 无名称时的会话占位文案不是权威名；有名称时透传来源供 catalog 定所有权（#266）。
+			nameFromSessionInfo: inferred.name ? inferred.fromSessionInfo : undefined,
 			preview: preview.slice(0, 160),
 			updatedAt: info.mtimeMs,
 			messageCount,
@@ -1984,7 +1989,7 @@ export class SessionScanner {
 	 * `includeTitle=true` 时有界读取头尾，并在小会话中精确扫描最后一个 session_info。
 	 * `false` 时只读取有界头部，供已锁定 catalog 记录补结构元数据而不触碰标题窗口。
 	 */
-	private async readHeadAndInfer(filePath: string, includeTitle = true): Promise<{ raw: string; name: string | undefined; nameFromSessionInfo: boolean } | null> {
+	private async readHeadAndInfer(filePath: string, includeTitle = true): Promise<{ raw: string; name: string | undefined; nameFromSessionInfo: boolean; fallbackName?: string } | null> {
 		const isWsl = this.isWslPath(filePath);
 		try {
 			const windowBytes = SessionScanner.SUMMARY_NAME_WINDOW_BYTES;
@@ -2003,10 +2008,11 @@ export class SessionScanner {
 			if (version.size <= SessionScanner.SUMMARY_NAME_FULL_SCAN_MAX_BYTES && version.size > windowBytes) {
 				const latestSessionInfoName = await this.inferLatestSessionInfoFromSmallFile(filePath, version.size);
 				if (latestSessionInfoName) {
-					return { raw: head, name: latestSessionInfoName, nameFromSessionInfo: true };
+					// 权威名赢，但弱兜底候选仍要带出去（legacy 存量条目的指纹比对基准）。
+					return { raw: head, name: latestSessionInfoName, nameFromSessionInfo: true, fallbackName: inferred.fallbackName };
 				}
 			}
-			return { raw: head, name: inferred.name, nameFromSessionInfo: inferred.fromSessionInfo };
+			return { raw: head, name: inferred.name, nameFromSessionInfo: inferred.fromSessionInfo, fallbackName: inferred.fallbackName };
 		} catch {
 			// 读不到（权限/锁定/不存在）：返回 null，调用方按 best-effort 处理，不拒绝文件。
 			return null;
@@ -2062,12 +2068,12 @@ export class SessionScanner {
 	 * provisional 标题阶段采用该名称，后续 pi/TUI 改名不会覆盖 PiDeck 显示标题。
 	 * `includeTitle:false` 只返回头部有效性和结构元数据，不读取尾部或小文件全文。
 	 */
-	async inferSessionNameAndValidity(filePath: string, options: { includeTitle?: boolean } = {}): Promise<{ name?: string; nameFromSessionInfo?: boolean; valid?: boolean; parentSessionPath?: string; forked?: boolean }> {
+	async inferSessionNameAndValidity(filePath: string, options: { includeTitle?: boolean } = {}): Promise<{ name?: string; nameFromSessionInfo?: boolean; valid?: boolean; parentSessionPath?: string; forked?: boolean; fallbackName?: string }> {
 		const head = await this.readHeadAndInfer(filePath, options.includeTitle !== false);
 		if (!head) return {};
 		const parentSessionPath = await this.detectFlatSubagentParentFromHead(filePath, head.raw);
 		const forked = this.detectForkedFromHead(head.raw);
-		return { name: head.name, nameFromSessionInfo: head.nameFromSessionInfo, valid: isValidPiSessionFileHead(head.raw), parentSessionPath, forked: forked || undefined };
+		return { name: head.name, nameFromSessionInfo: head.nameFromSessionInfo, valid: isValidPiSessionFileHead(head.raw), parentSessionPath, forked: forked || undefined, fallbackName: head.fallbackName };
 	}
 
 	/**
