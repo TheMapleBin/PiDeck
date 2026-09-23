@@ -98,6 +98,8 @@ export const remarkLinkifyPaths = () => {
 					});
 					last = match.end;
 				}
+				// 保留最后一个路径匹配之后的文本，避免截断。
+				if (last < text.length) segs.push({ type: "text", value: text.slice(last) });
 				node.__segs = segs;
 				return;
 			}
