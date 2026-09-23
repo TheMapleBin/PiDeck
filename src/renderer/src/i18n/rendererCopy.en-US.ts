@@ -2557,7 +2557,7 @@ export const enUS: Record<TranslationKey, string> = {
 	"config.needsFix": "Needs fix",
 	"config.openFolder": "Open folder",
 	"config.providerNamePlaceholder": "Provider name, for example openai",
-	"config.providerNameRule": "Use 1–80 characters; Unicode, digits and spaces are allowed. No path separators, .., control characters or the reserved name __proto__.",
+	"config.providerNameRule": "Use 1–80 characters; Unicode, digits and spaces are allowed. No path separators, .., control characters, % or the reserved name __proto__.",
 	"config.providerNameDuplicate": "This provider already exists",
 	"config.addProviderDialogTitle": "Add Provider",
 	"config.editProviderDialogTitle": "Edit Provider",

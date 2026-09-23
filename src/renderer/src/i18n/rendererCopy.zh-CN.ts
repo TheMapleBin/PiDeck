@@ -2553,7 +2553,7 @@ export const zhCN = {
 	"config.needsFix": "需修复",
 	"config.openFolder": "打开目录",
 	"config.providerNamePlaceholder": "供应商名称，如 openai",
-	"config.providerNameRule": "名称须为 1–80 个字符，支持中文、数字和空格；不能包含路径分隔符、..、控制字符或保留名称 __proto__",
+	"config.providerNameRule": "名称须为 1–80 个字符，支持中文、数字和空格；不能包含路径分隔符、..、控制字符、% 或保留名称 __proto__",
 	"config.providerNameDuplicate": "该供应商已存在",
 	"config.addProviderDialogTitle": "添加供应商",
 	"config.editProviderDialogTitle": "编辑供应商",

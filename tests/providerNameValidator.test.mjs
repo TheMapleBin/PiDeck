@@ -17,6 +17,15 @@ test("provider names still reject empty, unsafe paths, controls and excessive le
 	}
 });
 
+// Windows 下 pi 常经 cmd.exe shim 启动（PiLocator 的 windowsVerbatimArguments 通道），而 cmd 的
+// %VAR% 展开不受引号影响（实测 "a%PATH%b" 仍被展开），供应商名会被原样送进 --provider
+// → pi 收到与配置不符的值。启动层无法转义，因此在校验层直接拒绝 %。
+test("provider names reject percent because cmd.exe expands %VAR% regardless of quoting", () => {
+	for (const name of ["100%", "a%PATH%b", "%PATH%", "50% 折扣"]) {
+		assert.equal(isValidProviderName(name), false, JSON.stringify(name));
+	}
+});
+
 test("provider names trim surrounding spaces without rejecting internal spaces", () => {
 	assert.equal(isValidProviderName("  openai  "), true);
 	assert.equal(isValidProviderName("  中文 名称  "), true);
