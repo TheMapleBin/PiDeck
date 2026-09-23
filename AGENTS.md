@@ -299,6 +299,7 @@ src/
 6. **半吊子 utility 比没写更糟**：组件上写了 `min-h-11`/`rounded-xl`/Button 默认 `h-9`，分层后会真生效并冲掉旧观感。改 UI 时 utility 必须「新学旧」对齐原视觉，再删掉同属性的冗余 legacy 声明。
 7. **排障**：utility「看不见」时用 DevTools 看胜出规则来自哪一层——unlayered / `!important` / 同属性旧选择器；先处理冲突源，再改 class。
 8. **`accent` 是「面」不是「字」**：Tailwind 主题里 `--color-accent` = `--color-bg-active`（悬停浅面色，对齐 shadcn 官方 accent 语义），所以 `text-accent` 与 `hover:bg-accent` 解析成同一个值——亮色（#dfe3e8 字 / #dfe3e8 底）、暗色（#333 字 / #333 底）都是「悬停后变色块、文字消失」。面上的正文一律 `text-accent-foreground`；要主题强调色的文字用 `text-primary`（= foundation 的 `--color-accent`）；legacy CSS 里的 `var(--color-accent)` 仍是强调色，不受此影响。回归守卫：`tests/storeSuggestionChipContrast.test.mjs`（扫全渲染层 `text-<面色 token>`）。
+9. **flex 列 + 限高容器里，子项必须先想清楚「会不会被压扁」**（2027-01 待办条排版事故）：`overflow-y-auto` + `max-h-*` 的 flex 列容器，子项默认 `flex-shrink:1`；子项一旦带 `overflow:hidden`，它的**自动最小尺寸**（`min-height:auto`，正常等于内容高）就被清零 → 内容超高时每行被线性压缩（实测 13 行 × 20px 压到 6.47px），文字被 `overflow-hidden` 切成横条、相邻行重叠，且 `scrollHeight` 收缩到与 `clientHeight` 相等 → 滚动条不出现、用户滚不动。解法是把溢出交还滚动容器：子项加 `shrink-0`（见 `SessionTodoStrip` 的行）。相邻同类容器（`SessionFilesStrip` / `SessionSubagentsStrip` 的限高 `ul`）行上没有 `overflow-hidden`，`min-height:auto` 仍保护行高，不受影响；但只要给它们加 `overflow-hidden`（例如为了裁旋转图标 AABB）就必须同步 `shrink-0`。回归守卫：`tests/sessionTodoStrip.test.mjs` + `e2e/todo-strip-scrollbar.spec.ts`。
 
 ### beUI 组件迁移（硬性）
 
