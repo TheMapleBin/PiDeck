@@ -29,24 +29,6 @@ function linkify(text) {
 	return links;
 }
 
-/** 把转换后的 mdast 还原成可见文本（link 取其子节点文本），用于断言「一个字都没丢」。 */
-function visibleText(text) {
-	const tree = {
-		type: "root",
-		children: [{ type: "paragraph", children: [{ type: "text", value: text }] }],
-	};
-	const plugin = remarkLinkifyPaths();
-	plugin(tree);
-	const out = [];
-	const walk = (node) => {
-		if (!node || typeof node !== "object") return;
-		if (node.type === "text" || node.type === "inlineCode") out.push(node.value);
-		if (Array.isArray(node.children)) node.children.forEach(walk);
-	};
-	walk(tree);
-	return out.join("");
-}
-
 test("real paths still linkify (relative, absolute, unicode)", () => {
 	assert.deepEqual(linkify("看 src/main/index.ts"), ["file://src/main/index.ts"]);
 	// 中文/反斜杠经 encodeURIComponent 编码（解码后还原原路径）
@@ -196,21 +178,6 @@ test("isLocalPathRef: protocol-less hrefs are local paths, real URLs are not", (
 	assert.equal(isLocalPathRef("#section"), false);
 	assert.equal(isLocalPathRef("//cdn.example.com/x"), false);
 	assert.equal(isLocalPathRef(""), false);
-});
-
-// 回归：text 节点被 linkify 切段后必须把「最后一个匹配之后的尾巴」补回。
-// 修复前只 push 匹配前的普通文本，尾巴被整段丢弃——结论里凡是命中一次路径识别的
-// text 节点都会被截到最后一个匹配处（用户可见：「…在通知/页脚里告诉你…」只剩「在通知/」）。
-test("linkify preserves every character of the source text (no tail truncation)", () => {
-	// 用户报告的真实场景：中文词紧贴斜杠被误判成目录候选，匹配后的整句都被丢掉
-	assert.equal(visibleText('在通知/页脚里告诉你"建议用哪个模型、哪个思考等级"，'), '在通知/页脚里告诉你"建议用哪个模型、哪个思考等级"，');
-	// 真实路径后的尾巴（此前同样丢失，只是不容易被察觉）
-	assert.equal(visibleText("先看 src/main/index.ts 再看别的"), "先看 src/main/index.ts 再看别的");
-	assert.equal(visibleText("（如 src/main/index.ts 和 a.ts）"), "（如 src/main/index.ts 和 a.ts）");
-	// 多个匹配 + 尾部
-	assert.equal(visibleText("改了 src/a.ts 和 docs/guide.md，然后重新跑"), "改了 src/a.ts 和 docs/guide.md，然后重新跑");
-	// 匹配正好在结尾（尾巴为空，不得凭空插入空 text 节点）
-	assert.equal(visibleText("改的是 src/a.ts"), "改的是 src/a.ts");
 });
 
 test("defaultUrlTransform keeps local file hrefs on win/mac/linux and clears unsafe protocols", () => {

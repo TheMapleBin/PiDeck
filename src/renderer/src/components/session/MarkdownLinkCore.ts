@@ -98,10 +98,7 @@ export const remarkLinkifyPaths = () => {
 					});
 					last = match.end;
 				}
-				// 尾部补回：循环只 push 「匹配之前的普通文本」，最后一个匹配之后的剩余
-				// 文本必须显式补上，否则该 text 节点的尾巴被整段丢弃（用户可见：结论里
-				// 凡是命中一次路径识别的节点都会被截到最后一个匹配处，如「在通知/页脚
-				// 里告诉你…」只剩「在通知/」）。
+				// 保留最后一个路径匹配之后的文本，避免截断。
 				if (last < text.length) segs.push({ type: "text", value: text.slice(last) });
 				node.__segs = segs;
 				return;
